@@ -155,9 +155,24 @@ docker exec -it trackid-postgres psql -U postgres -d trackid
 docker exec -it trackid-redis redis-cli
 ```
 
+## Research & Publications
+
+TrackID is built to support two complementary scientific contributions:
+
+1. **Paper 1 (Tactical / Forensic)**: Reducing cognitive bottlenecks in forensic video review via decision support systems and HITL compliance.
+   - Target: Decision Support Systems, Forensic Science International, IEEE Transactions on Human-Machine Systems.
+   - See: [docs/PAPER1_FORENSIC.md](docs/PAPER1_FORENSIC.md)
+
+2. **Paper 2 (Strategic / Intelligence)**: Revealing hidden organizational structures in criminal networks via spatio-temporal graph analysis.
+   - Target: Expert Systems with Applications, Knowledge-Based Systems, Network Science.
+   - See: [docs/PAPER2_INTELLIGENCE.md](docs/PAPER2_INTELLIGENCE.md)
+
+**Strategy Overview**: [docs/RESEARCH_STRATEGY.md](docs/RESEARCH_STRATEGY.md) — why and how these two papers are separated despite sharing a single codebase.
+
 ## Next Steps
 
 1. **Define database models** → `backend/app/models/`
 2. **Create API routes** → `backend/app/api/`
 3. **Build services** → `backend/app/services/`
 4. **Configure task queue** → Taskiq workers for video processing
+5. **Read research strategy** → `docs/RESEARCH_STRATEGY.md` to understand publication roadmap
