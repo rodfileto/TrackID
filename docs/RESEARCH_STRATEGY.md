@@ -25,23 +25,24 @@ Combining both problems in a single 8,000–10,000 word manuscript fails peer re
 
 **Core Problem**
 - Biological memory cannot scale with CCTV data volume.
-- Automation bias and cognitive bottlenecks in face-matching workflows.
-- FISWG (Facial Identification Scientific Working Group) compliance for legal defensibility.
+- **Automation bias**: Examiners rubber-stamp AI suggestions (System 1 thinking) instead of rigorously comparing (System 2).
+- FISWG (Facial Identification Scientific Working Group) compliance required for legal defensibility.
 
 **The Solution**
-- A Decision Support System combining 512-dimensional face embeddings with HNSW vector indexing.
-- A FISWG-compliant HITL interface reducing cognitive load and enforcing proper comparison protocols.
+- A Decision Support System (DSS) treating embeddings as a persistent, queryable memory store (not a validation tool).
+- A FISWG-compliant HITL interface that forces analytical (System 2) thinking to defeat automation bias.
+- **Critical**: InsightFace is a commodity black box. The novelty is the DSS wrapper, not the AI model.
 
-**Key Contributions**
-- Vector similarity thresholding (τ_low, τ_high) optimized for forensic recall/precision.
-- Candidate-reduction model: quantifying how many manual comparisons are eliminated.
-- Cognitive load reduction: timed UI walkthrough proof that HITL structure reduces decision time and error rate.
+**Key Contributions** (DSS-Focused, Not CV-Focused)
+- **Routing Efficiency**: How well the system routes candidates via uncertainty thresholds (τ_low, τ_high) while preserving ground truth.
+- **Automation Bias Mitigation**: FISWG-enforced checklist forces slower, more analytical review—trading time for accuracy.
+- **Workload Compression**: ~99% reduction in examiner decisions through candidate filtering (e.g., 500k frames → 3k HITL decisions).
 
-**Evaluation Metrics**
-- Recall rate at different similarity thresholds.
-- Number of false positives eliminated before HITL.
-- Time-per-decision reduction (FISWG-compliant vs. baseline).
-- Error rates (mismatches that HITL caught).
+**Evaluation Metrics** (NOT traditional CV metrics like mAP or Rank-1)
+- Routing efficiency (auto-accept %, auto-reject %, ground truth preservation).
+- Error rates with FISWG-compliant vs. unstructured review.
+- Decision time & examiner confidence (structured checklist vs. simple accept/reject).
+- Candidate reduction ratio: (raw frames) / (HITL decisions).
 
 **Target Journals**
 - Decision Support Systems
