@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.face_detection import router as face_detection_router
 from app.core.config import settings
 from app.core.ml_models import load_face_app
 
@@ -39,6 +40,9 @@ async def health_check():
 @app.get("/api/v1/health")
 async def api_health_check():
     return {"status": "ok", "version": "1.0"}
+
+
+app.include_router(face_detection_router)
 
 
 if __name__ == "__main__":
