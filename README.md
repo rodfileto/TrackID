@@ -157,17 +157,21 @@ docker exec -it trackid-redis redis-cli
 
 ## Research & Publications
 
-TrackID is built to support two complementary scientific contributions:
+TrackID is built to support three complementary scientific contributions, published in sequence:
 
-1. **Paper 1 (Tactical / Forensic)**: Reducing cognitive bottlenecks in forensic video review via decision support systems and HITL compliance.
-   - Target: Decision Support Systems, Forensic Science International, IEEE Transactions on Human-Machine Systems.
-   - See: [docs/PAPER1_FORENSIC.md](docs/PAPER1_FORENSIC.md)
+1. **Paper 1 (Tactical Case Linking)**: Asynchronous entity resolution across fragmented investigative silos via a decision support architecture — no human-subjects testing required (evaluated via simulation on public re-identification benchmarks).
+   - Target: Decision Support Systems, Expert Systems with Applications, Information Systems Frontiers.
+   - See: [docs/PAPER1_TACTICAL_LINKING.md](docs/PAPER1_TACTICAL_LINKING.md)
 
-2. **Paper 2 (Strategic / Intelligence)**: Revealing hidden organizational structures in criminal networks via spatio-temporal graph analysis.
+2. **Paper 2 (Strategic / Intelligence)**: Revealing hidden organizational structures in criminal networks via spatio-temporal graph analysis, built on Paper 1's linked cases.
    - Target: Expert Systems with Applications, Knowledge-Based Systems, Network Science.
    - See: [docs/PAPER2_INTELLIGENCE.md](docs/PAPER2_INTELLIGENCE.md)
 
-**Strategy Overview**: [docs/RESEARCH_STRATEGY.md](docs/RESEARCH_STRATEGY.md) — why and how these two papers are separated despite sharing a single codebase.
+3. **Paper 3 (Forensic Evidentiary Validation, future)**: The slow, court-admissible identification workflow — ACE-VR, FISWG compliance, automation-bias mitigation — layered above Paper 1's tactical leads.
+   - Target: Forensic Science International: Digital Investigation, IEEE Transactions on Human-Machine Systems.
+   - See: [docs/PAPER3_FORENSIC_EVIDENTIARY.md](docs/PAPER3_FORENSIC_EVIDENTIARY.md)
+
+**Strategy Overview**: [docs/RESEARCH_STRATEGY.md](docs/RESEARCH_STRATEGY.md) — why and how these three papers are separated despite sharing a single codebase.
 
 ## Next Steps
 
