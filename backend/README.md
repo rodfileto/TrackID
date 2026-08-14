@@ -61,6 +61,16 @@ backend/
   quality score, with an optional base64 JPEG crop) plus `all_faces` per
   track.
 
+  Runs in a background thread rather than blocking the request - the
+  response is just `{"job_id": "..."}`. Poll
+  `GET /api/v1/process-video/{job_id}` for progress (`frame_count`,
+  `expected_frames`, `percent`, `eta_seconds`) and, once
+  `status == "completed"`, the same response's `result` field holds the
+  tracks. Job state is in-memory only (see `app/core/video_jobs.py`) -
+  fine for a single-instance dev/testing setup, but won't survive a
+  restart or work across multiple workers; swap in the `taskiq` queue
+  already in `requirements.txt` if that's ever needed.
+
 ## Face quality scoring (MagFace)
 
 Face detection (`/api/v1/detect-faces`) can return a `quality_score` per

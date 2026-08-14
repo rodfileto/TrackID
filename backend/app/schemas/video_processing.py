@@ -24,3 +24,19 @@ class VideoTrack(BaseModel):
 class VideoProcessingResponse(BaseModel):
     tracks: list[VideoTrack]
     track_count: int
+
+
+class VideoJobCreated(BaseModel):
+    job_id: str
+
+
+class VideoJobStatus(BaseModel):
+    job_id: str
+    status: str  # "processing" | "completed" | "failed"
+    frame_count: int
+    expected_frames: int
+    percent: float
+    elapsed_seconds: float
+    eta_seconds: float | None = None
+    error: str | None = None
+    result: VideoProcessingResponse | None = None

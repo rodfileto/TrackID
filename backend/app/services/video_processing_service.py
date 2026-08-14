@@ -191,7 +191,7 @@ def _assign_lightweight_dets(
         ldet["cluster_id"] = best_cluster
 
 
-def _count_expected_frames(video_path: str, interval_seconds: float) -> int:
+def count_expected_frames(video_path: str, interval_seconds: float) -> int:
     cap = cv2.VideoCapture(video_path)
     try:
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -285,7 +285,7 @@ class VideoProcessingService:
         embed_counter = 0
         batch_accumulator: List[Dict] = []
 
-        expected_frames = _count_expected_frames(video_path, interval_seconds)
+        expected_frames = count_expected_frames(video_path, interval_seconds)
 
         logger.info("Processing video: %s", video_path)
         logger.info("Frame interval: %ss, Embed interval: %ss", interval_seconds, embed_interval_seconds)
