@@ -12,6 +12,8 @@ import numpy as np
 from insightface.app import FaceAnalysis
 from insightface.utils import face_align
 
+from app.services.quality_estimation_service import QualityEstimationService
+
 logger = logging.getLogger(__name__)
 
 
@@ -101,8 +103,13 @@ class FaceDetectionService:
     model.
     """
 
-    def __init__(self, face_app: FaceAnalysis):
+    def __init__(
+        self,
+        face_app: FaceAnalysis,
+        quality_service: Optional[QualityEstimationService] = None,
+    ):
         self.face_app = face_app
+        self.quality_service = quality_service
 
     def detect_faces(self, image: np.ndarray) -> List[dict]:
         """
@@ -118,12 +125,10 @@ class FaceDetectionService:
                 "estimated_gender": str,     # optional, M/F
                 "landmarks": [[x, y], ...],  # optional, 5 facial landmarks
                 "blur_score": float,         # optional
+                "quality_score": float,      # optional, requires MagFace model
             },
             ...
         ]
-
-        Note: quality_score (MagFace) is intentionally omitted here — it
-        will be added back once the quality estimation service is ported.
         """
         faces = self.face_app.get(image)
 
@@ -142,6 +147,7 @@ class FaceDetectionService:
             if estimated_gender:
                 result["estimated_gender"] = estimated_gender
 
+            aligned_face = None
             if hasattr(face, "kps") and face.kps is not None:
                 result["landmarks"] = face.kps.tolist()
                 try:
@@ -149,6 +155,11 @@ class FaceDetectionService:
                     result["blur_score"] = calculate_blur_score(aligned_face)
                 except Exception:
                     logger.exception("Failed to compute blur score for detected face")
+
+            if self.quality_service is not None and aligned_face is not None:
+                result["quality_score"] = self.quality_service.get_quality_from_aligned(
+                    aligned_face
+                )
 
             results.append(result)
 

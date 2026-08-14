@@ -4,8 +4,15 @@
     {
       "name": "frontend",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "cd /home/rodrigo/projects/trackid/frontend; export NVM_DIR=\"$HOME/.nvm\"; . \"$NVM_DIR/nvm.sh\"; nvm use --lts >/dev/null; npm run dev -- --host"],
-      "port": 5173
+      "runtimeArgs": ["-c", "cd /home/rodrigo/projects/trackid/frontend; export NVM_DIR=\"$HOME/.nvm\"; . \"$NVM_DIR/nvm.sh\"; nvm use --lts >/dev/null; npm run dev -- --host --port $PORT"],
+      "port": 5173,
+      "autoPort": true
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /home/rodrigo/projects/trackid/backend; source venv/bin/activate; export FACE_USE_GPU=true FACE_QUALITY_USE_GPU=true; python main.py"],
+      "port": 8000
     }
   ]
 }
