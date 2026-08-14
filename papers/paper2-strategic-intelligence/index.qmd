@@ -1,0 +1,41 @@
+---
+abstract: |
+  Criminal organizations exhibit hidden structural patterns not visible in
+  flat databases: choke points, operational cells, and temporal dynamics.
+  This paper presents a spatio-temporal heterogeneous graph constructed from
+  surveillance video faces and applies complex network analysis to reveal
+  organizational structure. Building upon a validated tactical case-linking
+  architecture (Paper 1: asynchronous entity resolution across fragmented
+  investigative silos), we demonstrate that community detection identifies
+  operational cells, betweenness centrality uncovers key persons, and
+  temporal decay modeling reveals relationship strength evolution.
+---
+
+<!--
+Content skeleton ported from docs/PAPER2_INTELLIGENCE.md — use that document
+as the source of truth for the full argument, metrics, and related work
+while drafting each section below.
+-->
+
+## Introduction
+
+## Related Work
+
+## Methodology
+
+### Graph Construction
+
+### Community Detection & Centrality
+
+## Evaluation Metrics
+
+## Results
+
+## Discussion
+
+## Conclusion
+
+## References
+
+::: {#refs}
+:::

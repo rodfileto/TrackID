@@ -1,0 +1,18 @@
+# Overrides for this paper only. Merged on top of ../_quarto.yml.
+title: "Breaking Investigative Silos: A Decision Support Architecture for Asynchronous Tactical Case Linking"
+subtitle: "Continuous Entity Resolution Across Fragmented Spatio-Temporal Events"
+
+keywords:
+  - decision support systems
+  - entity resolution
+  - tactical case linking
+  - spatio-temporal plausibility
+
+# Shared refs first, then this paper's own — later entries win on duplicate keys.
+bibliography:
+  - ../references.bib
+  - references.bib
+
+format:
+  pdf:
+    keep-tex: true
