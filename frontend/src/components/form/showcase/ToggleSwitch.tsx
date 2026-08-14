@@ -1,5 +1,5 @@
 import ComponentCard from "../../common/ComponentCard";
-import Switch from "../switch/Switch";
+import Switch from "../input/Switch";
 
 export default function ToggleSwitch() {
   const handleSwitchChange = (checked: boolean) => {
