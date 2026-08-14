@@ -8,13 +8,22 @@ import FileInput from "../components/form/input/FileInput";
 import Checkbox from "../components/form/input/Checkbox";
 import Button from "../components/ui/button/Button";
 import Alert from "../components/ui/alert/Alert";
+import ProgressBar from "../components/ui/progress-bar/ProgressBar";
 import {
   DEFAULT_VIDEO_PROCESSING_PARAMS,
   processVideo,
+  type VideoJobStatus,
   type VideoProcessingParams,
   type VideoProcessingResponse,
   type VideoTrack,
 } from "../types/videoProcessing";
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.ceil(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
+}
 
 export default function VideoProcessing() {
   const [file, setFile] = useState<File | null>(null);
@@ -22,6 +31,7 @@ export default function VideoProcessing() {
     DEFAULT_VIDEO_PROCESSING_PARAMS,
   );
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<VideoJobStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<VideoProcessingResponse | null>(null);
 
@@ -46,9 +56,10 @@ export default function VideoProcessing() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setProgress(null);
 
     try {
-      const response = await processVideo(file, params);
+      const response = await processVideo(file, params, setProgress);
       setResult(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to process video.");
@@ -196,10 +207,21 @@ export default function VideoProcessing() {
             </Button>
 
             {loading && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Sampling frames, detecting faces, and clustering — this can
-                take a while for longer videos.
-              </p>
+              <div>
+                <ProgressBar
+                  percent={progress?.percent ?? 0}
+                  label={
+                    progress
+                      ? `Frame ${progress.frame_count} / ${progress.expected_frames}`
+                      : "Starting..."
+                  }
+                />
+                <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">
+                  {progress && progress.eta_seconds !== null
+                    ? `~${formatDuration(progress.eta_seconds)} remaining`
+                    : "Sampling frames, detecting faces, and clustering — this can take a while for longer videos."}
+                </p>
+              </div>
             )}
 
             {error && (
