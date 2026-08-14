@@ -1,0 +1,40 @@
+---
+abstract: |
+  In public security operations, distinct incidents — a robbery in District A on Monday, a car theft in District B on Wednesday — are investigated in isolated case silos. Relational case-management systems have no mechanism to recognize that an unidentified suspect present in one case is the same person present in another. This paper presents TrackID's **Linkage Engine**, a Decision Support System (DSS) that treats faces as 512-dimensional vectors and continuously, asynchronously evaluates incoming surveillance data to propose linkages between otherwise   disconnected cases. The system applies spatio-temporal plausibility
+  constraints on top of vector similarity — rejecting matches that would
+  require physically impossible travel — and routes candidate pairs through
+  a **tripartite state machine**: Auto-Merge (high-confidence identity
+  fusion into a Global Trajectory), Tactical Queue (uncertain candidates
+  requiring a one-click human validation), and Auto-Reject (discarded before
+  reaching a human). Evaluation is fully simulated on a public multi-camera
+  person re-identification benchmark, requiring no human-subjects review.
+---
+
+<!--
+Content skeleton ported from docs/PAPER1_TACTICAL_LINKING.md — use that
+document as the source of truth for the full argument, metrics, and related
+work while drafting each section below.
+-->
+
+## Introduction
+
+## Related Work
+
+## Methodology
+
+### Problem Formulation
+
+### Technical Approach
+
+## Evaluation Strategy
+
+## Results
+
+## Discussion
+
+## Conclusion
+
+## References
+
+::: {#refs}
+:::

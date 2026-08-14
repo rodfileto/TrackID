@@ -34,6 +34,19 @@ npm run preview    # preview a production build
 
 There is no frontend test suite configured.
 
+### Papers (from `papers/`)
+
+The 3-paper research pipeline (see `docs/RESEARCH_STRATEGY.md`) is authored as Quarto (`.qmd`) articles under `papers/`, one subdirectory per paper. `papers/_quarto.yml` holds shared defaults (format, bibliography, author); each paper's own `_metadata.yml` overrides just what differs for that paper (title, keywords, journal-specific format tweaks) — see `papers/README.md` for how the merge works.
+
+Quarto CLI + TinyTeX are installed natively (not Docker — see `papers/README.md` for setup):
+
+```bash
+cd papers && quarto preview      # live reload
+cd papers && quarto render       # render all papers
+```
+
+The editor is desktop VS Code with the Quarto extension (`code --install-extension quarto.quarto`) — see `papers/README.md`.
+
 ### Full stack via Docker
 
 ```bash
