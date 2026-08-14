@@ -17,10 +17,16 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
-COPY requirements.txt .
+COPY requirements.txt requirements-gpu.txt ./
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies. Pass --build-arg GPU=1 to install the CUDA
+# build of onnxruntime instead of CPU (see requirements-gpu.txt / README).
+ARG GPU=0
+RUN pip install --no-cache-dir -r requirements.txt \
+    && if [ "$GPU" = "1" ]; then \
+         pip uninstall -y onnxruntime \
+         && pip install --no-cache-dir -r requirements-gpu.txt; \
+       fi
 
 # Copy app code
 COPY . .

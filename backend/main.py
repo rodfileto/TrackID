@@ -1,11 +1,18 @@
+from app.core.gpu_env import ensure_cuda_libs_on_path
+
+# Must run before onnxruntime is ever asked to create a CUDA session -
+# see app/core/gpu_env.py for why.
+ensure_cuda_libs_on_path()
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.face_detection import router as face_detection_router
+from app.api.video_processing import router as video_processing_router
 from app.core.config import settings
-from app.core.ml_models import load_face_app
+from app.core.ml_models import load_face_app, load_quality_service
 
 
 @asynccontextmanager
@@ -13,6 +20,7 @@ async def lifespan(app: FastAPI):
     # Load ML models once at startup so the first request doesn't pay the
     # cold-start cost (model download + init).
     load_face_app()
+    load_quality_service()
     yield
 
 
@@ -43,6 +51,7 @@ async def api_health_check():
 
 
 app.include_router(face_detection_router)
+app.include_router(video_processing_router)
 
 
 if __name__ == "__main__":

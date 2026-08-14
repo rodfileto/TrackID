@@ -9,6 +9,7 @@ class FaceDetectionResult(BaseModel):
     estimated_gender: str | None = None
     landmarks: list[list[float]] | None = None
     blur_score: float | None = None
+    quality_score: float | None = None
 
 
 class FaceDetectionResponse(BaseModel):

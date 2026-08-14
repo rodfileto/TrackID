@@ -19,8 +19,10 @@ aio-pika>=9.5
 
 # CV/AI
 insightface
+onnxruntime   # CPU. For GPU, see requirements-gpu.txt.
 opencv-python
 numpy
+scikit-learn  # DBSCAN clustering for video face tracking
 
 # Utilities
 python-multipart==0.0.7
