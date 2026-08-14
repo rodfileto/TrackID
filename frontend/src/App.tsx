@@ -14,6 +14,8 @@ import BarChart from "./pages/Charts/BarChart";
 import Calendar from "./pages/Calendar";
 import BasicTables from "./pages/Tables/BasicTables";
 import FormElements from "./pages/Forms/FormElements";
+import TabsPage from "./pages/Tabs";
+import VideoProcessing from "./pages/VideoProcessing";
 import Blank from "./pages/Blank";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
@@ -36,6 +38,12 @@ export default function App() {
 
             {/* Forms */}
             <Route path="/form-elements" element={<FormElements />} />
+
+            {/* Tabs */}
+            <Route path="/tabs" element={<TabsPage />} />
+
+            {/* Face Recognition */}
+            <Route path="/video-processing" element={<VideoProcessing />} />
 
             {/* Tables */}
             <Route path="/basic-tables" element={<BasicTables />} />

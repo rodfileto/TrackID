@@ -38,11 +38,15 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      # args:
+      #   GPU: "1"
     container_name: trackid-backend
     environment:
       DEBUG: "False"
       DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/trackid
       REDIS_URL: redis://redis:6379
+      # FACE_USE_GPU: "True"
+      # FACE_QUALITY_USE_GPU: "True"
     ports:
       - "8000:8000"
     depends_on:
@@ -53,6 +57,16 @@ services:
     volumes:
       - ./backend:/app
     command: python main.py
+    # Uncomment to enable GPU passthrough (requires the NVIDIA Container
+    # Toolkit on the host - see backend/README.md "Face quality scoring"
+    # section) and build with `docker build --build-arg GPU=1`.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
 
   # Frontend (React + Nginx)
   frontend:

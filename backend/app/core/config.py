@@ -29,5 +29,13 @@ class Settings(BaseSettings):
     FACE_DET_SIZE_HEIGHT: int = int(os.getenv("FACE_DET_SIZE_HEIGHT", "640"))
     FACE_DET_THRESH: float = float(os.getenv("FACE_DET_THRESH", "0.5"))
 
+    # Face quality estimation (MagFace). Optional - if the model file isn't
+    # present, quality_score is simply omitted from detection results.
+    FACE_QUALITY_MODEL_PATH: str = os.getenv(
+        "FACE_QUALITY_MODEL_PATH",
+        os.path.join(os.path.dirname(__file__), "..", "..", "models", "magface_iresnet50.onnx"),
+    )
+    FACE_QUALITY_USE_GPU: bool = os.getenv("FACE_QUALITY_USE_GPU", "False").lower() == "true"
+
 
 settings = Settings()
