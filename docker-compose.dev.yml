@@ -38,11 +38,15 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        GPU: "1"
     container_name: trackid-backend
     environment:
       DEBUG: "True"
       DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/trackid
       REDIS_URL: redis://redis:6379
+      FACE_USE_GPU: "True"
+      FACE_QUALITY_USE_GPU: "True"
     ports:
       - "8000:8000"
     depends_on:
@@ -53,6 +57,15 @@ services:
     volumes:
       - ./backend:/app
     command: python main.py
+    # Requires the NVIDIA Container Toolkit on the host (nvidia runtime
+    # registered with Docker) - see backend/README.md "GPU acceleration".
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
 volumes:
   postgres_data:

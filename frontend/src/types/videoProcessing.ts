@@ -47,10 +47,27 @@ export const DEFAULT_VIDEO_PROCESSING_PARAMS: VideoProcessingParams = {
   include_crops: true,
 };
 
-export async function processVideo(
+export interface VideoJobStatus {
+  job_id: string;
+  status: "processing" | "completed" | "failed";
+  frame_count: number;
+  expected_frames: number;
+  percent: number;
+  elapsed_seconds: number;
+  eta_seconds: number | null;
+  error: string | null;
+  result: VideoProcessingResponse | null;
+}
+
+async function parseErrorDetail(response: Response): Promise<string> {
+  const detail = await response.json().catch(() => null);
+  return detail?.detail || `Request failed with status ${response.status}`;
+}
+
+export async function startVideoProcessing(
   file: File,
   params: VideoProcessingParams,
-): Promise<VideoProcessingResponse> {
+): Promise<string> {
   const query = new URLSearchParams({
     interval_seconds: String(params.interval_seconds),
     embed_interval_seconds: String(params.embed_interval_seconds),
@@ -72,9 +89,44 @@ export async function processVideo(
   });
 
   if (!response.ok) {
-    const detail = await response.json().catch(() => null);
-    throw new Error(detail?.detail || `Request failed with status ${response.status}`);
+    throw new Error(await parseErrorDetail(response));
   }
 
+  const data: { job_id: string } = await response.json();
+  return data.job_id;
+}
+
+export async function fetchVideoJobStatus(jobId: string): Promise<VideoJobStatus> {
+  const response = await fetch(`/api/v1/process-video/${jobId}`);
+  if (!response.ok) {
+    throw new Error(await parseErrorDetail(response));
+  }
   return response.json();
+}
+
+/**
+ * Starts video processing, then polls until it completes or fails,
+ * reporting progress along the way.
+ */
+export async function processVideo(
+  file: File,
+  params: VideoProcessingParams,
+  onProgress?: (status: VideoJobStatus) => void,
+  pollIntervalMs = 700,
+): Promise<VideoProcessingResponse> {
+  const jobId = await startVideoProcessing(file, params);
+
+  while (true) {
+    const status = await fetchVideoJobStatus(jobId);
+    onProgress?.(status);
+
+    if (status.status === "completed" && status.result) {
+      return status.result;
+    }
+    if (status.status === "failed") {
+      throw new Error(status.error || "Video processing failed");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
 }

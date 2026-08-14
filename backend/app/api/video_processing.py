@@ -1,14 +1,21 @@
 import logging
 import os
 import tempfile
+import threading
+import time
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from starlette.concurrency import run_in_threadpool
 
+from app.core.video_jobs import VideoJobStore, get_video_job_store
 from app.dependencies.video_processing import get_video_processing_service
-from app.schemas.video_processing import VideoProcessingResponse
+from app.schemas.video_processing import (
+    VideoJobCreated,
+    VideoJobStatus,
+    VideoProcessingResponse,
+)
 from app.services.video_processing_service import (
     VideoProcessingService,
+    count_expected_frames,
     extract_face_crop_data_uri,
 )
 
@@ -17,7 +24,54 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["video-processing"])
 
 
-@router.post("/process-video", response_model=VideoProcessingResponse)
+def _run_job(
+    job_id: str,
+    job_store: VideoJobStore,
+    service: VideoProcessingService,
+    tmp_path: str,
+    interval_seconds: float,
+    embed_interval_seconds: float,
+    min_quality: float,
+    min_blur: float,
+    full_detection_every_frame: bool,
+    iou_threshold: float,
+    cluster_eps: float,
+    cluster_min_samples: int,
+    include_crops: bool,
+) -> None:
+    try:
+        tracks = service.process_video_for_best_faces(
+            video_path=tmp_path,
+            interval_seconds=interval_seconds,
+            min_quality=min_quality,
+            min_blur=min_blur,
+            embed_interval_seconds=embed_interval_seconds,
+            full_detection_every_frame=full_detection_every_frame,
+            iou_threshold=iou_threshold,
+            cluster_eps=cluster_eps,
+            cluster_min_samples=cluster_min_samples,
+            progress_callback=lambda frame_count, expected_frames, _queued, total_detections: (
+                job_store.update_progress(job_id, frame_count, expected_frames, total_detections)
+            ),
+        )
+
+        if include_crops:
+            for track in tracks:
+                best = track["best_face"]
+                if best.get("bbox") is not None:
+                    best["face_crop"] = extract_face_crop_data_uri(
+                        tmp_path, best["frame_number"], best["bbox"]
+                    )
+
+        job_store.complete(job_id, {"tracks": tracks, "track_count": len(tracks)})
+    except Exception as exc:
+        logger.exception("Video processing job %s failed", job_id)
+        job_store.fail(job_id, str(exc))
+    finally:
+        os.unlink(tmp_path)
+
+
+@router.post("/process-video", response_model=VideoJobCreated)
 async def process_video(
     file: UploadFile = File(...),
     interval_seconds: float = Query(0.5, gt=0, description="Seconds between sampled frames"),
@@ -32,7 +86,8 @@ async def process_video(
     cluster_min_samples: int = Query(2, ge=1, description="DBSCAN minimum samples to form a cluster"),
     include_crops: bool = Query(True, description="Include a base64 JPEG crop of each track's best face"),
     service: VideoProcessingService = Depends(get_video_processing_service),
-) -> VideoProcessingResponse:
+    job_store: VideoJobStore = Depends(get_video_job_store),
+) -> VideoJobCreated:
     if not file.content_type or not file.content_type.startswith("video/"):
         raise HTTPException(status_code=400, detail="File must be a video")
 
@@ -42,30 +97,66 @@ async def process_video(
         content = await file.read()
         tmp.write(content)
 
-    try:
-        tracks = await run_in_threadpool(
-            service.process_video_for_best_faces,
-            video_path=tmp_path,
+    expected_frames = count_expected_frames(tmp_path, interval_seconds)
+    if expected_frames <= 0:
+        os.unlink(tmp_path)
+        raise HTTPException(status_code=400, detail="Could not read this file as a video")
+
+    job = job_store.create(expected_frames=expected_frames)
+
+    thread = threading.Thread(
+        target=_run_job,
+        kwargs=dict(
+            job_id=job.job_id,
+            job_store=job_store,
+            service=service,
+            tmp_path=tmp_path,
             interval_seconds=interval_seconds,
+            embed_interval_seconds=embed_interval_seconds,
             min_quality=min_quality,
             min_blur=min_blur,
-            embed_interval_seconds=embed_interval_seconds,
             full_detection_every_frame=full_detection_every_frame,
             iou_threshold=iou_threshold,
             cluster_eps=cluster_eps,
             cluster_min_samples=cluster_min_samples,
-        )
+            include_crops=include_crops,
+        ),
+        daemon=True,
+    )
+    thread.start()
 
-        if include_crops:
-            for track in tracks:
-                best = track["best_face"]
-                if best.get("bbox") is not None:
-                    best["face_crop"] = extract_face_crop_data_uri(
-                        tmp_path, best["frame_number"], best["bbox"]
-                    )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    finally:
-        os.unlink(tmp_path)
+    return VideoJobCreated(job_id=job.job_id)
 
-    return VideoProcessingResponse(tracks=tracks, track_count=len(tracks))
+
+@router.get("/process-video/{job_id}", response_model=VideoJobStatus)
+async def get_video_processing_status(
+    job_id: str,
+    job_store: VideoJobStore = Depends(get_video_job_store),
+) -> VideoJobStatus:
+    job = job_store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    elapsed_seconds = (job.finished_at or time.monotonic()) - job.started_at
+
+    percent = 0.0
+    if job.expected_frames > 0:
+        percent = min(100.0, job.frame_count / job.expected_frames * 100)
+
+    eta_seconds = None
+    if job.status == "processing" and job.frame_count > 0 and job.expected_frames > job.frame_count:
+        rate = job.frame_count / elapsed_seconds if elapsed_seconds > 0 else 0
+        if rate > 0:
+            eta_seconds = (job.expected_frames - job.frame_count) / rate
+
+    return VideoJobStatus(
+        job_id=job.job_id,
+        status=job.status,
+        frame_count=job.frame_count,
+        expected_frames=job.expected_frames,
+        percent=percent,
+        elapsed_seconds=elapsed_seconds,
+        eta_seconds=eta_seconds,
+        error=job.error,
+        result=VideoProcessingResponse(**job.result) if job.result else None,
+    )
