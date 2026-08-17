@@ -21,6 +21,7 @@ export interface VideoTrack {
 export interface VideoProcessingResponse {
   tracks: VideoTrack[];
   track_count: number;
+  video_id: string | null;
 }
 
 export interface VideoProcessingParams {
@@ -46,6 +47,22 @@ export const DEFAULT_VIDEO_PROCESSING_PARAMS: VideoProcessingParams = {
   cluster_min_samples: 2,
   include_crops: true,
 };
+
+export interface VideoSummary {
+  video_id: string;
+  original_filename: string | null;
+  created_at: string;
+  track_count: number;
+  frame_count: number;
+  total_detections: number;
+}
+
+export interface VideoListResponse {
+  items: VideoSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+}
 
 export interface VideoJobStatus {
   job_id: string;
@@ -105,8 +122,44 @@ export async function fetchVideoJobStatus(jobId: string): Promise<VideoJobStatus
 }
 
 /**
+ * Lists previously processed videos (persisted to the database), newest
+ * first, one page at a time.
+ */
+export async function fetchVideoList(
+  page: number,
+  pageSize: number,
+): Promise<VideoListResponse> {
+  const query = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  const response = await fetch(`/api/v1/videos?${query.toString()}`);
+  if (!response.ok) {
+    throw new Error(await parseErrorDetail(response));
+  }
+  return response.json();
+}
+
+/**
+ * Fetches the persisted version of a completed video's results (from
+ * Postgres + object storage), which - unlike the in-memory job result -
+ * has a real crop image for every detection, not just each track's best
+ * face.
+ */
+export async function fetchPersistedVideo(videoId: string): Promise<VideoProcessingResponse> {
+  const response = await fetch(`/api/v1/videos/${videoId}`);
+  if (!response.ok) {
+    throw new Error(await parseErrorDetail(response));
+  }
+  return response.json();
+}
+
+/**
  * Starts video processing, then polls until it completes or fails,
- * reporting progress along the way.
+ * reporting progress along the way. Once complete, prefers the persisted
+ * (DB + object storage backed) version of the results over the ephemeral
+ * in-memory one - falling back to the in-memory result if persistence
+ * didn't happen (e.g. it failed server-side, or is still catching up).
  */
 export async function processVideo(
   file: File,
@@ -121,6 +174,16 @@ export async function processVideo(
     onProgress?.(status);
 
     if (status.status === "completed" && status.result) {
+      if (status.result.video_id) {
+        try {
+          return await fetchPersistedVideo(status.result.video_id);
+        } catch {
+          // Persistence may have failed server-side despite the job
+          // completing - fall back to the ephemeral result rather than
+          // failing the whole request.
+          return status.result;
+        }
+      }
       return status.result;
     }
     if (status.status === "failed") {
