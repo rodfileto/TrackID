@@ -3,9 +3,11 @@ import os
 import tempfile
 import threading
 import time
+import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
+from app.core.storage import get_media_storage
 from app.core.video_jobs import VideoJobStore, get_video_job_store
 from app.dependencies.video_processing import get_video_processing_service
 from app.schemas.video_processing import (
@@ -13,6 +15,8 @@ from app.schemas.video_processing import (
     VideoJobStatus,
     VideoProcessingResponse,
 )
+from app.services.media_storage_service import upload_video_and_crops
+from app.services.video_persistence_service import persist_video_result_sync
 from app.services.video_processing_service import (
     VideoProcessingService,
     count_expected_frames,
@@ -29,6 +33,8 @@ def _run_job(
     job_store: VideoJobStore,
     service: VideoProcessingService,
     tmp_path: str,
+    original_filename: str,
+    content_type: str,
     interval_seconds: float,
     embed_interval_seconds: float,
     min_quality: float,
@@ -54,6 +60,7 @@ def _run_job(
                 job_store.update_progress(job_id, frame_count, expected_frames, total_detections)
             ),
         )
+        frame_count, expected_frames, total_detections = _job_counts(job_store, job_id)
 
         if include_crops:
             for track in tracks:
@@ -63,12 +70,59 @@ def _run_job(
                         tmp_path, best["frame_number"], best["bbox"]
                     )
 
-        job_store.complete(job_id, {"tracks": tracks, "track_count": len(tracks)})
+        video_id = uuid.uuid4()
+        try:
+            video_storage_key, tracks = upload_video_and_crops(
+                get_media_storage(), video_id, tmp_path, content_type, tracks
+            )
+            persist_video_result_sync(
+                video_id=video_id,
+                job_id=job_id,
+                original_filename=original_filename,
+                content_type=content_type,
+                video_storage_key=video_storage_key,
+                params={
+                    "interval_seconds": interval_seconds,
+                    "embed_interval_seconds": embed_interval_seconds,
+                    "min_quality": min_quality,
+                    "min_blur": min_blur,
+                    "full_detection_every_frame": full_detection_every_frame,
+                    "iou_threshold": iou_threshold,
+                    "cluster_eps": cluster_eps,
+                    "cluster_min_samples": cluster_min_samples,
+                },
+                expected_frames=expected_frames,
+                frame_count=frame_count,
+                total_detections=total_detections,
+                tracks=tracks,
+            )
+        except Exception:
+            # Persistence is best-effort durability, not the user-facing
+            # contract - the in-memory job result below already satisfies
+            # the polling client regardless of whether this succeeded.
+            logger.exception("Failed to persist video processing results for job %s", job_id)
+            video_id = None
+
+        job_store.complete(
+            job_id,
+            {
+                "tracks": tracks,
+                "track_count": len(tracks),
+                "video_id": str(video_id) if video_id else None,
+            },
+        )
     except Exception as exc:
         logger.exception("Video processing job %s failed", job_id)
         job_store.fail(job_id, str(exc))
     finally:
         os.unlink(tmp_path)
+
+
+def _job_counts(job_store: VideoJobStore, job_id: str) -> tuple[int, int, int]:
+    job = job_store.get(job_id)
+    if job is None:
+        return 0, 0, 0
+    return job.frame_count, job.expected_frames, job.total_detections
 
 
 @router.post("/process-video", response_model=VideoJobCreated)
@@ -111,6 +165,8 @@ async def process_video(
             job_store=job_store,
             service=service,
             tmp_path=tmp_path,
+            original_filename=file.filename,
+            content_type=file.content_type,
             interval_seconds=interval_seconds,
             embed_interval_seconds=embed_interval_seconds,
             min_quality=min_quality,
