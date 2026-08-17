@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -24,6 +26,23 @@ class VideoTrack(BaseModel):
 class VideoProcessingResponse(BaseModel):
     tracks: list[VideoTrack]
     track_count: int
+    video_id: str | None = None
+
+
+class VideoSummary(BaseModel):
+    video_id: str
+    original_filename: str | None = None
+    created_at: datetime
+    track_count: int
+    frame_count: int
+    total_detections: int
+
+
+class VideoListResponse(BaseModel):
+    items: list[VideoSummary]
+    total: int
+    page: int
+    page_size: int
 
 
 class VideoJobCreated(BaseModel):
