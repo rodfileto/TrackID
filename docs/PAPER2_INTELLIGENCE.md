@@ -1,241 +1,44 @@
-# Paper 2: Strategic / Intelligence (Macro)
+# Paper 2: Situation/Network-Target Profiles
 
 ## Title (Working)
-**Revealing Hidden Organizational Structures in Criminal Networks via Spatio-Temporal Graph Analysis on Video-Derived Face Identities**
+**Situation/Network-Target Profiles: Composing Person-Target Identities into Organizational Structure via Spatio-Temporal Network Analysis**
 
-(or shorter: **Complex Network Analysis of Video-Derived Social Networks: Uncovering Organizational Hierarchy and Operational Patterns**)
+## Scope & Positioning
 
-## Abstract Skeleton
+Where Paper 1 recurses the target-centric model down to a single identity (a Person-Target Profile), this paper recurses it back up — one level of the target hierarchy above the individual. Here the target is a **situation**: a criminal series or an organizational structure, treated as a first-class entity composed from the Person-Target Profiles that Paper 1 produces. The paper assumes identity resolution has already happened and focuses entirely on what emerges when those resolved identities are related to one another in space and time.
 
-Criminal organizations exhibit hidden structural patterns not visible in flat databases: choke points, operational cells, and temporal dynamics. This paper presents a spatio-temporal heterogeneous graph constructed from surveillance video faces and applies complex network analysis to reveal organizational structure. Building upon a validated tactical case-linking architecture (Paper 1: asynchronous entity resolution across fragmented investigative silos), we demonstrate that (1) community detection identifies operational cells, (2) betweenness centrality uncovers key persons, and (3) temporal decay modeling reveals relationship strength evolution. Evaluation on [multi-event dataset] shows that graph-derived centrality rankings align with known organizational hierarchy (Spearman ρ = 0.87) and community detection recovers known cell structure (NMI = 0.79). The approach enables strategic intelligence generation from raw surveillance data.
+**Core problem**: flat databases of individually-linked identities don't reveal hidden structure — choke points, operational cells, key persons, how relationships evolve over time. That structure only becomes visible once person-level targets are composed into a network.
 
-## Key Contributions
+## Approach
 
-1. **Spatio-Temporal Graph Construction**: A heterogeneous graph model encoding identity (face embeddings), space (location), and time (co-occurrence timestamps).
-   - Nodes: unique suspects (resolved via vector matching).
-   - Edges: spatio-temporal co-occurrence (same place, overlapping time).
-   - Edge attributes: frequency, temporal proximity, location category.
+A heterogeneous spatio-temporal graph is built over the Person-Target Profiles from Paper 1: nodes are resolved identities, edges are spatio-temporal co-occurrence, and edge weight reflects frequency and temporal/spatial proximity. Standard network-analysis techniques are applied on top of this graph:
 
-2. **Community Detection in Dynamic Networks**: Discovering operational cells via modularity optimization.
-   - Louvain algorithm applied to time-windowed subgraphs.
-   - Temporal stability: communities persisting across time windows indicate structured organization.
-   - Modularity (Q) and Normalized Mutual Information (NMI) against ground truth.
+- **Community detection** (e.g. Louvain-style modularity optimization) to surface operational cells, including how stable those cells are across time windows.
+- **Centrality measures** (betweenness, eigenvector) to identify key persons — bottlenecks, bridges, and hubs.
+- **Temporal decay modeling** of edge weight, to characterize how relationship strength evolves and to support link prediction — forecasting future co-occurrence.
 
-3. **Centrality Ranking for Strategic Value**: Identifying key persons via multiple centrality measures.
-   - Betweenness centrality: bottlenecks and bridges.
-   - Eigenvector centrality: connection to influential others.
-   - Temporal evolution: how centrality changes as organization adapts.
+The novelty is not any individual network-science technique, but applying them specifically over a graph whose nodes are already-resolved, provenance-tracked Person-Target Profiles rather than raw, unlinked observations — i.e., treating the *situation* itself, not just the individual, as a first-class target that composes from person-level targets.
 
-4. **Spatio-Temporal Decay Modeling**: Quantifying how relationships weaken over time and distance.
-   - Exponential decay: λ_t (temporal), λ_d (spatial).
-   - Predicting future co-occurrence and link persistence.
+## Evaluation Register
 
-## Methodology
-
-### Problem Formulation
-
-**Input**: 
-- Video surveillance (faces, locations, timestamps).
-- Identity resolution (from Paper 1): known matches per suspect.
-
-**Output**: 
-- Graph of suspects + relationships.
-- Ranked suspects by centrality.
-- Detected operational communities.
-
-**Challenge**: Revealing organizational structure from raw observations requires integrating space, time, and identity simultaneously.
-
-### Technical Approach
-
-#### 1. Graph Construction
-
-**Nodes**:
-- Each unique suspect = 1 node.
-- Identified via face vector matching (Paper 1 methodology).
-
-**Edges**:
-- Suspects in same location + overlapping time → edge.
-- Edge weight: frequency of co-occurrence or inverse temporal distance.
-
-**Formalism**:
-```
-G = (V, E, A)
-where:
-  V = {v_1, v_2, ..., v_n}  (suspects)
-  E ⊆ V × V  (spatio-temporal co-occurrence)
-  A[i,j] = w_ij  (edge weight; frequency or temporal proximity)
-```
-
-**Edge Weight Function**:
-$$w_{ij} = \sum_{t=1}^{T} \exp(-\lambda_t \cdot |t_i - t_j|) \cdot \exp(-\lambda_d \cdot d_{ij})$$
-
-where:
-- λ_t: temporal decay rate.
-- λ_d: spatial decay rate.
-- |t_i - t_j|: time difference between co-occurrences.
-- d_ij: spatial distance (e.g., Euclidean or location category difference).
-
-#### 2. Community Detection
-
-**Algorithm**: Louvain method (modularity optimization).
-- Iterative greedy algorithm.
-- Multi-level resolution: detect communities at different scales.
-
-**Temporal Dynamics**:
-- Apply Louvain to time-windowed subgraphs (e.g., weekly windows).
-- Track community evolution: stable communities vs. transient clusters.
-- Stability metric: Adjusted Rand Index (ARI) between consecutive time windows.
-
-**Quality Metrics**:
-- **Modularity (Q)**: Q ∈ [-1, 1]; Q > 0.3 indicates strong community structure.
-- **Normalized Mutual Information (NMI)**: Agreement with ground truth (if available).
-  - NMI ∈ [0, 1]; NMI = 1 is perfect agreement.
-
-#### 3. Centrality Analysis
-
-**Betweenness Centrality**:
-$$C_B(v) = \sum_{s \neq v \neq t} \frac{\sigma_{st}(v)}{\sigma_{st}}$$
-
-where σ_st(v) = # shortest paths through v; σ_st = total # shortest paths.
-- High betweenness = bottleneck (removal would disconnect network).
-
-**Eigenvector Centrality**:
-$$C_E(v) \propto \sum_{t \in N(v)} C_E(t)$$
-
-- High eigenvector = connected to other high-centrality nodes (hubs).
-
-**Temporal Centrality**:
-- Compute centrality on time-windowed subgraphs.
-- Rank centrality evolution: rising (increasing influence) vs. stable vs. declining.
-
-#### 4. Spatio-Temporal Decay Modeling
-
-**Hypothesis**: Relationships decay over time and distance.
-
-**Model**:
-$$P(\text{future co-occurrence} | i, j) = w_{ij} = A \exp(-\lambda_t t - \lambda_d d)$$
-
-**Parameter Estimation**:
-- Fit λ_t and λ_d via maximum likelihood on historical data.
-- Predict future links: high-score pairs likely to co-occur again.
-
-**Application**:
-- Link prediction: who will appear together next?
-- Operational forecasting: when/where will organization reassemble?
-
-### Evaluation Design
-
-#### Datasets
-
-**Real-world Multi-Event Scenario**:
-- [Dataset descriptor]: e.g., "3 related criminal events over 6 months; 150 unique suspects; 10,000+ video frames with face detections."
-- Ground truth: investigator-confirmed cell structure and key persons.
-
-**Synthetic Stress-Test** (optional):
-- Erdős–Rényi random graphs + planted communities.
-- Validates that algorithms recover known structure.
-
-#### Metrics
-
-**Community Detection**:
-| Metric | Definition | Target |
-|--------|-----------|--------|
-| Modularity (Q) | Strength of community structure | Q > 0.3 |
-| NMI | Agreement with ground truth | NMI > 0.7 |
-| Stability (ARI) | Consistency across time windows | ARI > 0.6 |
-
-**Centrality Validation**:
-| Metric | Definition | Target |
-|--------|-----------|--------|
-| Spearman ρ | Correlation with known hierarchy | ρ > 0.8 |
-| Precision @ K | Fraction of top-K betweenness nodes known in organization | P@10 > 80% |
-| Kendall τ | Rank-order agreement | τ > 0.7 |
-
-**Link Prediction**:
-| Metric | Definition | Target |
-|--------|-----------|--------|
-| AUC-ROC | Discriminating true links from false | AUC > 0.85 |
-| Precision @ K | Fraction of predicted links that occur | P@5 > 60% |
-
-**Temporal Robustness**:
-- Re-compute graph weekly; assess consistency of top-ranked suspects.
-- Measure: Spearman ρ between consecutive rankings.
-
-#### Study Design
-- **Longitudinal**: multi-month surveillance dataset.
-- **Blinded Validation**: compare algorithmic rankings against investigator-identified hierarchy without revealing algorithm scores initially.
-- **Qualitative Interviews**: investigator feedback on discovered patterns (were they actionable?).
-
-### Results Structure
-
-**Table 1**: Community Detection Performance
-| Dataset | Events | Suspects | Modularity (Q) | NMI | Stability (ARI) |
-|---------|--------|----------|----------------|-----|-----------------|
-| Multi-Event A | 3 | 150 | 0.52 | 0.79 | 0.68 |
-| Multi-Event B | 5 | 320 | 0.48 | 0.74 | 0.65 |
-| Synthetic | 1 | 100 | 0.71 | 0.95 | 0.92 |
-
-**Table 2**: Centrality Ranking Validation
-| Measure | Spearman ρ | Kendall τ | P@10 |
-|---------|-----------|-----------|------|
-| Betweenness Centrality | 0.87 | 0.75 | 0.85 |
-| Eigenvector Centrality | 0.79 | 0.68 | 0.72 |
-| Temporal Betweenness | 0.83 | 0.71 | 0.80 |
-
-**Table 3**: Link Prediction Performance
-| Method | AUC-ROC | Precision@5 | Recall@10 |
-|--------|---------|-------------|-----------|
-| Louvain + Decay (λ_t, λ_d) | 0.88 | 0.64 | 0.72 |
-| Baseline (Random Forest on features) | 0.75 | 0.48 | 0.55 |
-
-**Figure 1**: Spatio-temporal graph visualization (time-windowed snapshots).
-**Figure 2**: Community detection over time (Sankey diagram showing cell evolution).
-**Figure 3**: Centrality ranking evolution (line plot; top suspects over time).
-**Figure 4**: Decay model fit (λ_t, λ_d estimated from data vs. prediction accuracy).
-
-## Literature Review (Outline)
-
-- **Complex Networks & Criminal Networks**: Xu & Ling, 2013 (criminal network analysis); Morselli, 2009 (structural patterns in organized crime).
-- **Community Detection**: Blondel et al., 2008 (Louvain algorithm); Lancichinetti et al., 2015 (evaluation).
-- **Centrality Measures**: Freeman, 1977 (betweenness); Bonacich, 1987 (eigenvector).
-- **Temporal Networks**: Holme & Ghoshal, 2016 (temporal network review); Interdonato et al., 2020 (temporal community detection).
-- **Link Prediction**: Lü & Zhou, 2011; Menon & Elkan, 2011.
-- **Video Surveillance + Intelligence**: Jain et al., 2015 (video analysis for intelligence); Vizzini et al., 2022 (face recognition in investigative contexts).
+This paper's evaluation register is graph-topological rather than IS/DSS or forensic — distinct from both Paper 1 and Paper 3. Community-detection quality is assessed against known or ground-truth cell structure (e.g. modularity, agreement with known grouping); centrality rankings are validated against known organizational hierarchy where available; temporal-decay/link-prediction quality is assessed via standard link-prediction metrics. Where real ground truth isn't available, a synthetic stress test (e.g. planted community structure) validates that the methods recover known structure before applying them to messier real data.
 
 ## Discussion Points
 
-1. **Causal vs. Associational**: Are co-occurrences truly indicative of collaboration, or coincidence?
-   - Answer: We treat as associational; ground truth validation required for causal claims.
-
-2. **Temporal Decay Parameters**: How sensitive are results to λ_t and λ_d?
-   - Answer: Sensitivity analysis; robustness tested across parameter ranges.
-
-3. **Privacy & Legal Admissibility**: Can graph discoveries be presented in court without compromising surveillance methods?
-   - Answer: Out of scope but discussed as policy implication.
-
-4. **False Identities**: Paper 1 assumes resolved identities; what if vector matching fails?
-   - Answer: Propagated error discussed; recommends confidence weighting.
+- **Associational, not causal**: co-occurrence is treated as evidence of association, not proof of collaboration; causal claims are out of scope.
+- **Dependence on Paper 1's output quality**: this paper assumes Person-Target Profiles are already resolved; errors in identity resolution propagate into the network, which motivates confidence-weighted edges rather than treating all resolved identities as equally certain.
+- **Privacy and legal admissibility**: network-level findings are discussed as intelligence products, not evidence — that distinction is exactly the gap Paper 3 addresses at the identity level, and applies analogously here.
 
 ## Limitations & Future Work
 
-- Assumes high-quality video with visible faces (no occlusion, extreme angles).
-- Does not account for false negatives in face detection (missed people).
-- Community detection validated on single organization type; generalization to other criminal structures unclear.
-- Temporal decay parameters estimated from single dataset; cross-domain validation needed.
-- Real-time graph updates not addressed (computational cost of incremental Louvain).
+Assumes reasonably complete identity resolution and reasonably clean co-occurrence data; does not address false negatives upstream in entity resolution, real-time/incremental graph updates, or generalization of community structure across different types of organizations. Cross-domain and cross-dataset validation of the decay/link-prediction model is left to future work.
 
 ## Conclusion
 
-This paper demonstrates that complex network analysis applied to video-derived identity graphs can reveal organizational structures invisible in flat databases. By integrating space, time, and identity, investigators can prioritize targets, identify operational cells, and forecast organizational behavior. The work opens a new frontier in intelligence-led law enforcement.
-
----
+This paper demonstrates that composing individually-resolved Person-Target Profiles into a spatio-temporal network makes organizational structure visible that no individual case file exposes — operationalizing the next level of target-centric recursion above the individual, and treating a "situation" as a target in its own right rather than an incidental grouping of unrelated people.
 
 ## Target Journals & Keywords
 
-**Primary Targets**:
-- Expert Systems with Applications
-- Knowledge-Based Systems
-- Network Science (or applied networks)
-- Computational Social Science
+Network-science and applied-AI venues whose audience expects graph-topological evaluation (community detection, centrality, link prediction) rather than DSS/IS or forensic framing.
 
-**Keywords**: criminal networks, complex networks, community detection, centrality, spatio-temporal graphs, surveillance analysis, link prediction, organizational structure, Louvain, betweenness centrality.
+**Keywords**: target-centric intelligence, criminal networks, community detection, centrality, spatio-temporal graphs, link prediction, organizational structure.
