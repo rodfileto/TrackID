@@ -2,216 +2,81 @@
 
 ## Overview
 
-TrackID is built to solve three complementary but distinct research problems, staged as three separate papers:
+TrackID's research program is organized around a single theoretical spine — the **target-centric approach to intelligence analysis** (Clark) — applied recursively across a hierarchy of targets. The central move is a recursion argument: a "target" in the target-centric sense need not be a large strategic object (an organization, a network); it can recurse all the way down to a single identity. Each paper in the arc operationalizes that recursion at a different level of the hierarchy, with its own evaluation register:
 
-1. **Paper 1 (Tactical Case Linking)**: The problem of asynchronous entity resolution across fragmented investigative silos — fast, DSS-focused, no human-subjects testing required.
-2. **Paper 2 (Strategic Intelligence)**: The macro-level challenge of revealing hidden relationships and organizational structures once cases are linked.
-3. **Paper 3 (Forensic Evidentiary Validation)**: The slow, court-admissible identification workflow — ACE-VR, FISWG compliance, automation-bias mitigation — requiring a human-subjects examiner study.
+1. **Paper 1 (Person-Target Profiles)**: the target is an individual identity. Built from face-based entity resolution, spatio-temporal plausibility, tripartite routing, and a multi-source evidence ledger. Fast, DSS-focused, no human-subjects testing required.
+2. **Paper 2 (Situation/Network-Target Profiles)**: the target is a criminal series or organizational structure, composed from the Person-Target Profiles Paper 1 produces by applying network/topology analysis over them. Introduces "situations" as first-class entities.
+3. **Paper 3 (Evidentiary-Grade Verification)**: addresses the forensic/legal gap explicitly deferred by Paper 1 — chain-of-custody, court-admissible identification, and examiner protocols for confirming a Person-Target Profile as legal evidence rather than a tactical lead.
 
-A single software platform supports all three papers, but they are published as separate, focused contributions to avoid the "Kitchen Sink Paper" trap.
+A single software platform supports all three papers, but they are published as separate, focused contributions to avoid the "kitchen sink paper" trap.
 
 ## Why Separate Papers?
 
 Combining these problems in a single manuscript fails peer review because:
 
-- **Schizophrenic Literature Review**: defending entity resolution, network science, and forensic/legal compliance simultaneously requires coverage of information retrieval, complex networks, cognitive psychology, and forensic protocol standards — reviewers flag as unfocused.
-- **Conflicting Evaluation Strategies**: Paper 1's claims are provable via simulation on public benchmarks (no ethics review needed). Paper 3's claims are behavioral and require a human-subjects examiner study (ethics review required). Paper 2's claims are graph-topological. A single methodology section cannot serve all three.
-- **Reviewer Mismatch**: a DSS/IS reviewer will ask you to cut the FISWG legal detail; a forensic-science reviewer will ask you to cut the graph math; a network-science reviewer will ask you to cut the UI. You cannot win.
+- **Schizophrenic literature review**: defending entity resolution, network science, and forensic/legal compliance simultaneously requires covering information retrieval, complex networks, cognitive psychology, and forensic protocol standards all at once — reviewers flag this as unfocused.
+- **Conflicting evaluation strategies**: Paper 1's claims are provable via simulation on public benchmarks (no ethics review needed). Paper 2's claims are graph-topological. Paper 3's claims are behavioral and require a human-subjects examiner study (ethics review required). A single methodology section can't serve all three registers — IS/DSS metrics, network/graph metrics, and forensic/legal validity criteria are genuinely different kinds of evidence.
+- **Reviewer mismatch**: a DSS/IS reviewer will ask you to cut the legal/forensic detail; a forensic-science reviewer will ask you to cut the graph math; a network-science reviewer will ask you to cut the workflow/UI discussion.
 
-**Solution**: Split into three papers, each with surgical depth in its domain, published in sequence.
+**Solution**: split into three papers, each with surgical depth in its domain, published in sequence, sharing one theoretical anchor.
 
-## Paper 1: Tactical Case Linking (Asynchronous Entity Resolution)
+## The Target Hierarchy
 
-**Scope**: A Decision Support architecture that continuously and asynchronously resolves identities across fragmented, siloed investigative cases — without requiring any human-subjects evaluation.
+Target-centric analysis (Clark) reframes intelligence work as the collaborative, continuous construction of a networked model of a target, rather than a linear collection → analysis → dissemination pipeline. This project's contribution is applying that same pattern recursively at three levels, where each level's resolved target becomes an input node for the next:
 
-**Core Problem**
-- Distinct incidents investigated in isolated case silos (different districts, different analysts, different days) never get cross-referenced unless a human happens to notice the connection.
-- Manually cross-referencing every suspect across every open case is an intractable N×(N−1)/2 combinatorial problem.
-- Vector similarity alone is blind to physical plausibility (an 85% match implying an impossible travel speed between two cameras is still nonsense).
+- **Identity level** (Paper 1): resolving *who* — fragmented biometric and documentary observations are fused into a single Person-Target Profile.
+- **Situation/network level** (Paper 2): resolving *how the identities relate* — Person-Target Profiles are composed, via co-occurrence and topology, into a Network-Target Profile describing a criminal series or organizational structure.
+- **Evidentiary level** (Paper 3): resolving *whether a specific identification can bear legal weight* — a Person-Target Profile is escalated from an operational lead to a court-admissible identification through a structured verification protocol.
 
-**The Solution**
-- Treat faces as 512-dimensional vectors indexed continuously as they arrive (InsightFace + pgvector/HNSW — commodity components, not the novelty).
-- Apply a spatio-temporal plausibility gate on top of vector similarity to reject physically impossible links.
-- Route every candidate pair through a **tripartite state machine**: Auto-Merge (high confidence, no human), Tactical Queue (uncertain, one-click human validation), Auto-Reject (low confidence, discarded silently).
+## Paper Summaries
 
-**Key Contributions** (DSS-Focused, Not CV-Focused)
-- The tripartite routing architecture itself — minimizing human involvement to only genuinely ambiguous candidates.
-- Spatio-temporal plausibility filtering as a physically-grounded complement to similarity thresholding.
-- **Silo-Breaking Rate**: how much of the true cross-case identity structure is recovered without any analyst looking for it.
-- **Workload Compression**: collapsing an O(N²) manual cross-referencing problem into a short, linear Tactical Queue (target: >99% reduction).
+### Paper 1: Person-Target Profiles
 
-**Evaluation Strategy — No Human Testing Required**
-Simulated fragmentation of a standard public multi-camera person re-identification benchmark (Market-1501, MSMT17): artificially partition known identities into isolated "cases" by camera/time block, discard the ground-truth linkage, then measure how well the Linkage Engine reconstructs it. This sidesteps any need for an ethics-reviewed human-subjects study, since the paper is proving a routing/entity-resolution architecture, not a forensic identification method.
+Individual identity as the target. A Decision Support System that continuously and asynchronously resolves identities across fragmented, siloed investigative data via face-based entity resolution, spatio-temporal plausibility filtering, tripartite confidence routing, and a multi-source evidence ledger (biometric auto-match, analyst validation, field-officer document confirmation). Scope is strictly the entity-resolution layer — evaluated via simulation, no human-subjects testing required. See `docs/PAPER1_TACTICAL_LINKING.md`.
 
-**Target Journals**
-- Decision Support Systems
-- Expert Systems with Applications
-- Information Systems Frontiers
-- IEEE Transactions on Human-Machine Systems (secondary)
+### Paper 2: Situation/Network-Target Profiles
 
-**What This Paper Includes**
-- Face detection & embedding extraction (InsightFace, treated as a black box).
-- Vector similarity and HNSW indexing (pgvector).
-- Spatio-temporal plausibility gating.
-- The Tactical Queue interface and tripartite routing state machine.
+A criminal series or organizational structure as the target. Applies network/topology analysis (community detection, centrality, temporal dynamics) over the Person-Target Profiles Paper 1 produces, treating "situations" — case clusters, series, operational structures — as first-class entities that compose from person-level targets. See `docs/PAPER2_INTELLIGENCE.md`.
 
-**What This Paper Explicitly Excludes**
-- "While TrackID includes a slow, evidentiary-grade verification tier (ACE-VR/FISWG) and downstream graph intelligence capabilities, the scope of this paper is strictly limited to the tactical case-linking architecture and its no-human-testing simulation evaluation."
+### Paper 3: Evidentiary-Grade Verification
 
----
+Whether a Person-Target Profile can stand as legal evidence, not merely a tactical lead, as the target. Addresses chain-of-custody, court-admissible identification, and structured examiner protocols, requiring a human-subjects examiner study. See `docs/PAPER3_FORENSIC_EVIDENTIARY.md`.
 
-## Paper 2: Strategic Intelligence & Complex Networks
+## Single Platform Strategy
 
-**Scope**: Revealing hidden structures and relationships in criminal networks via complex graph analysis over the cases and identities linked by Paper 1's engine.
-
-**Core Problem**
-- Flat databases of linked faces and cases do not reveal hidden connections — choke points, operational cells, key persons.
-- Spatio-temporal co-occurrence patterns reveal organizational hierarchy and operational dynamics that no individual case file exposes.
-
-**The Solution**
-- A heterogeneous spatio-temporal graph built on top of the vector-resolved identities produced by Paper 1.
-- Complex network analysis: Louvain community detection, betweenness/eigenvector centrality, temporal decay modeling.
-
-**Key Contributions**
-- Spatio-temporal graph construction from linked-case data (space + time + identity).
-- Community detection revealing operational cells; centrality measures revealing key persons; temporal decay modeling of relationship strength.
-
-**Evaluation Metrics**
-- Modularity (Q), Normalized Mutual Information (NMI) against ground-truth cell structure.
-- Centrality ranking correlation (Spearman ρ) against known organizational hierarchy.
-- Link prediction (AUC-ROC) via the fitted spatio-temporal decay model.
-
-**Target Journals**
-- Expert Systems with Applications
-- Knowledge-Based Systems
-- Network Science / Computational Social Science venues
-
-**What This Paper Includes**
-- Spatio-temporal graph construction and storage.
-- Community detection algorithms (Louvain, spectral clustering).
-- Centrality & importance measures, temporal dynamics.
-
-**What This Paper Explicitly Excludes**
-- "This paper assumes cases have already been linked via the tactical entity-resolution architecture validated in [Paper 1] and focuses on the macro-level graph intelligence those linkages enable."
-
----
-
-## Paper 3 (Future): Forensic Evidentiary Validation
-
-**Scope**: The slow, court-admissible identification workflow that sits *above* a Tactical Queue confirmation when a lead must become legal evidence — ACE-VR methodology, mandatory FISWG morphological checklist, blind dual-expert verification, and automation-bias mitigation grounded in Dual-Process Theory (Kahneman).
-
-**Core Problem**
-- A Tactical Queue confirmation (Paper 1) is fast and low-friction by design — appropriate for operational leads, not for evidence.
-- Automated suggestions risk automation bias: examiners rubber-stamping AI-suggested matches (System 1) instead of independently verifying them (System 2).
-- Legal defensibility requires FISWG-compliant structured comparison, full audit trails, and independent dual-expert sign-off.
-
-**The Solution**
-- A dedicated, deliberately slow verification tier: Analysis → Comparison (FISWG checklist, mandatory) → Evaluation → Verification (blind second expert), producing an immutable, digitally-signed Forensic Identification Report.
-
-**Key Contributions**
-- Full ACE-VR workflow enforcement as a DSS/UI contribution, not an algorithmic one.
-- Automation bias mitigation via structured friction — quantified via decision-time and false-positive error-rate shifts under FISWG enforcement vs. unstructured review.
-- A clean architectural/legal boundary between Paper 1's tactical leads and this tier's evidentiary output.
-
-**Evaluation Strategy — Requires Human-Subjects Testing**
-Unlike Papers 1 and 2, this paper's central claims are behavioral (does structured friction reduce automation bias and false-positive identification errors?) and require an IRB-governed examiner study (N ≥ 10 law-enforcement or trained examiners), comparing structured ACE-VR review against an unstructured baseline.
-
-**Target Journals**
-- Forensic Science International: Digital Investigation
-- IEEE Transactions on Human-Machine Systems
-- ACM Transactions on Computer-Human Interaction (ToCHI), if reframed as a behavioral/HCI intervention
-
-**What This Paper Includes**
-- The FISWG morphological checklist UI and mandatory-completion gating.
-- ACE-VR phase workflow (Analysis, Comparison, Evaluation, Verification).
-- Blind dual-expert review, digital sign-off, and immutable report generation.
-
-**What This Paper Explicitly Excludes**
-- Tactical Queue mechanics and the entity-resolution/routing architecture (covered by Paper 1); those are cited as the source of leads entering this tier, not re-litigated.
-
----
-
-## The Single Monorepo Strategy
-
-**You do not split the open-source code.**
-
-TrackID remains a single, powerful unified repository. The separation is **conceptual and publication-driven**, not architectural.
+**The code is not split.** The platform stays a single, unified codebase; the separation across papers is conceptual and publication-driven, not architectural.
 
 ### Citation Chain
 
-**In Paper 1**, cite TrackID but scope explicitly:
-> "While TrackID includes a slow, evidentiary-grade verification tier and downstream graph intelligence capabilities, the scope of this paper is strictly limited to the tactical case-linking architecture and its no-human-testing simulation evaluation."
+Each paper scopes itself explicitly and cites the others rather than re-litigating their contributions:
 
-**In Paper 2**, cite Paper 1:
-> "This paper assumes cases have already been linked via the tactical entity-resolution architecture validated in [Paper 1] and focuses on the macro-level graph intelligence those linkages enable."
-
-**In Paper 3**, cite Paper 1:
-> "This paper addresses the complementary problem to [Paper 1]: when a fast tactical lead must be escalated to a court-admissible identification, what verification architecture prevents automation bias while remaining tractable for practitioners?"
+- **Paper 1** scopes itself to identity-level entity resolution and notes the platform also supports network-level analysis and evidentiary verification, without claiming results for either.
+- **Paper 2** cites Paper 1 for the entity-resolution layer that produces its input Person-Target Profiles, and focuses on what composing them into networks reveals.
+- **Paper 3** cites Paper 1 for the tactical-lead escalation path, and addresses the complementary question of what verification a lead needs before it can become evidence.
 
 ### Code Coverage
 
-All three papers are embedded in the same codebase:
-
 | Component | Paper 1 | Paper 2 | Paper 3 |
 |-----------|---------|---------|---------|
-| Face Detection (InsightFace) | ✓ Core | ✓ Input | ✓ Input |
-| Vector Indexing (pgvector + HNSW) | ✓ Core | ✓ Used | ✗ Excluded |
-| Spatio-Temporal Plausibility Gate | ✓ Core | ✗ Excluded | ✗ Excluded |
-| Tactical Queue / Tripartite Routing | ✓ Core | ✗ Excluded | ✓ Input (leads) |
-| Spatio-Temporal Graph | ✗ Excluded | ✓ Core | ✗ Excluded |
-| Community Detection (Louvain) | ✗ Excluded | ✓ Core | ✗ Excluded |
-| Centrality Analysis | ✗ Excluded | ✓ Core | ✗ Excluded |
-| FISWG Checklist / ACE-VR Workflow | ✗ Excluded | ✗ Excluded | ✓ Core |
-| Blind Dual-Expert Verification | ✗ Excluded | ✗ Excluded | ✓ Core |
-
----
+| Face-based entity resolution | Core | Input | Input |
+| Spatio-temporal plausibility gate | Core | Excluded | Excluded |
+| Tripartite routing / evidence ledger | Core | Excluded | Input (leads) |
+| Network/topology analysis over Person-Target Profiles | Excluded | Core | Excluded |
+| Situation composition & community/centrality analysis | Excluded | Core | Excluded |
+| Chain-of-custody & examiner verification workflow | Excluded | Excluded | Core |
 
 ## Publication Roadmap
 
-### Phase 1: Paper 1 (Tactical Case Linking)
-- **Timeline**: Months 1–6
-- **Focus**: Tripartite routing, spatio-temporal plausibility, silo-breaking, workload compression
-- **Deliverables**: Manuscript + simulation code/config for public-benchmark evaluation (Market-1501/MSMT17 partitioning scripts)
-- **No ethics review required** — evaluation is fully simulated on public data
-- **Target**: Decision Support Systems or Expert Systems with Applications (8–12 week review cycle)
+Roughly sequential with overlap: Paper 1 first (simulation-only evaluation, shortest path to submission), Paper 2 in parallel once Paper 1's entity-resolution output is stable (its input depends on Paper 1's method, not its publication status), Paper 3 last, gated on IRB/ethics approval for the examiner study. Target venues differ by evaluation register — DSS/IS venues for Paper 1, network-science/applied-AI venues for Paper 2, forensic-science/HCI venues for Paper 3 — see each paper's own document for specifics.
 
-### Phase 2: Paper 2 (Strategic Intelligence)
-- **Timeline**: Months 4–12 (overlapping with Paper 1 review)
-- **Focus**: Graph construction, community detection, temporal analysis
-- **Deliverables**: Manuscript + Code (Louvain implementation, graph queries)
-- **Dependency**: Cite Paper 1 once accepted/published
-- **Target**: Expert Systems with Applications or similar (8–12 week review cycle)
-
-### Phase 3: Paper 3 (Forensic Evidentiary Validation)
-- **Timeline**: Months 9–18 (starts once ethics/IRB approval process is underway)
-- **Focus**: ACE-VR workflow, FISWG compliance, automation-bias mitigation, dual-expert verification
-- **Deliverables**: Manuscript + examiner study data (requires IRB approval, N ≥ 10 examiners)
-- **Dependency**: Cite Paper 1 for the Tactical Queue escalation path
-- **Target**: Forensic Science International: Digital Investigation (8–12 week review cycle)
-
-### Phase 4: Follow-up / Extension Papers (Optional)
-- Robustness of vector similarity under demographic variations
-- Real-time graph updates (incremental community detection)
-- Privacy-preserving graph compression for federated deployment
-- Cross-jurisdictional threshold catalogs for the tripartite routing state machine
-
----
+Follow-up work beyond the three-paper arc (robustness under demographic variation, real-time graph updates, privacy-preserving deployment, cross-jurisdictional calibration) is left open rather than pre-scoped.
 
 ## Key Messaging
 
-### For Reviewers (Paper 1)
-"This paper advances tactical decision support by proving that spatio-temporal-constrained vector matching plus tripartite uncertainty routing collapses an intractable cross-case search problem into a short validation queue — evaluated entirely via simulation on public benchmarks, without any human-subjects testing. The evidentiary/legal verification tier and graph intelligence capabilities are orthogonal and explicitly out of scope."
-
-### For Reviewers (Paper 2)
-"This paper demonstrates that complex network analysis applied to video-derived identity graphs can reveal operational structure in criminal networks. The underlying entity resolution (validated separately in Paper 1) enables scalable identity linkage; this work focuses on what those linked cases reveal."
-
-### For Reviewers (Paper 3)
-"This paper demonstrates that structured, FISWG-enforced ACE-VR review mitigates automation bias relative to unstructured review, via a human-subjects examiner study. It sits above the fast tactical triage validated in Paper 1, addressing what happens when a lead must become court-admissible evidence."
-
-### For Contributors & Users
-"TrackID solves three related but distinct problems with a single, integrated platform: fast tactical case linking, strategic network intelligence, and slow forensic-grade verification. Read the papers to understand the research depth; the code shows how tactical linkage feeds both intelligence analysis and evidentiary review."
-
----
+- **Paper 1**: proves that spatio-temporal-constrained entity resolution plus tripartite uncertainty routing turns an intractable cross-case search problem into a short validation queue, evaluated entirely by simulation. Network-level and evidentiary-level capabilities are orthogonal and out of scope.
+- **Paper 2**: demonstrates that network analysis applied to the identities Paper 1 resolves can reveal organizational structure that no individual case file exposes, treating situations as targets composed from person-level targets.
+- **Paper 3**: demonstrates that structured, protocol-enforced verification mitigates automation bias relative to unstructured review, addressing what happens when a Person-Target Profile must become court-admissible evidence.
+- **For contributors**: one platform, one theoretical spine (target-centric recursion), three levels of target — identity, situation/network, evidentiary record. Read the papers for research depth; the code shows how each level's output feeds the next.
 
 ## References & Related Work
 
