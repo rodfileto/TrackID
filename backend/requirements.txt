@@ -13,6 +13,9 @@ pgvector>=0.4
 # ORM & migrations
 alembic>=1.14
 
+# Object storage (S3-compatible / MinIO)
+boto3>=1.35
+
 # Task queue
 taskiq>=0.12
 aio-pika>=9.5
