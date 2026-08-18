@@ -1,4 +1,6 @@
-# Paper 1: Person-Target Profiles (Face-Based Entity Resolution)
+# Paper 1: Identity Tier Evaluation — Person-Target Profiles
+
+**This document describes the evaluation strategy for the identity-resolution tier of the DTID platform.** For full system context and architecture, see [`docs/DTID_ARCHITECTURE.md`](DTID_ARCHITECTURE.md). The identity tier is the foundational unit that higher tiers (network-level situation analysis in Paper 2, evidentiary verification in Paper 3) build upon; this paper evaluates its core claim via decision-support system (DSS) metrics and simulation-based testing.
 
 ## Title (Working)
 **Person-Target Profiles: A Target-Centric Decision Support Architecture for Continuous Entity Resolution Across Fragmented Investigative Data**
