@@ -1,19 +1,19 @@
 # Paper 2: Network Analysis — Surfacing a Target's Model of Functioning
 
-**This document describes the evaluation strategy for Paper 2: analysis of a Target's network of entities.** For full system context and architecture, see [`docs/DTID_ARCHITECTURE.md`](DTID_ARCHITECTURE.md). This paper is built on the `Person` entity resolution output from Paper 1; it evaluates the claim that analyzing the network of entities for a Target reveals that Target's **Model of Functioning** via graph-topological methods (community detection, centrality analysis, link prediction).
+**This document describes the evaluation strategy for Paper 2: analysis of a Target System's network of entities.** For full system context and architecture, see [`docs/DTID_ARCHITECTURE.md`](DTID_ARCHITECTURE.md). This paper is built on the `TargetPerson` resolution output from Paper 1; it evaluates the claim that analyzing the network of Target Entities for a Target System reveals that Target System's **Model of Functioning** via graph-topological methods (community detection, centrality analysis, link prediction).
 
 ## Title (Working)
 **Surfacing a Target's Model of Functioning: Network Analysis over Resolved Entities via Spatio-Temporal Graph Methods**
 
 ## Scope & Positioning
 
-Paper 1 resolves individual `Person` entities (Person Entity Profiles) from fragmented Event-level observations. This paper picks up where Paper 1 leaves off: given a Target's fully populated network of entities — the raw graph of resolved `Person` entities and their co-occurrence relationships across the Target's Situations and Events — what does analyzing that network reveal about *how the Target operates*? The paper assumes entity resolution has already happened and focuses entirely on the second of DTID's two derived representations: the **Model of Functioning**, built on top of the (already-existing) network of entities.
+Paper 1 resolves individual `TargetPerson` entities (Person Entity Profiles) from fragmented Event-level observations. This paper picks up where Paper 1 leaves off: given a Target System's fully populated network of entities — the raw graph of resolved `TargetPerson` entities and their co-occurrence relationships across the Target System's Situations and Events — what does analyzing that network reveal about *how the Target System operates*? The paper assumes entity resolution has already happened and focuses entirely on the second of DTID's two derived representations: the **Model of Functioning**, built on top of the (already-existing) network of entities.
 
 **Core problem**: a raw network of entities — nodes and co-occurrence edges — doesn't by itself reveal hidden structure: choke points, operational cells, key persons, how relationships evolve over time. That structure only becomes visible once network-analysis methods are applied on top of the raw graph, transforming "who was observed with whom" into "how does this operation actually function."
 
 ## Approach
 
-A heterogeneous spatio-temporal graph is built over the Person Entity Profiles that Paper 1 produces for a given Target: nodes are resolved `Person` entities, edges are spatio-temporal co-occurrence (derived from shared participation in the Target's Situations and Events), and edge weight reflects frequency and temporal/spatial proximity. Standard network-analysis techniques are applied on top of this graph to infer the Model of Functioning:
+A heterogeneous spatio-temporal graph is built over the Person Entity Profiles that Paper 1 produces for a given Target System: nodes are resolved `TargetPerson` entities, edges are spatio-temporal co-occurrence (derived from shared participation in the Target System's Situations and Events), and edge weight reflects frequency and temporal/spatial proximity. Standard network-analysis techniques are applied on top of this graph to infer the Model of Functioning:
 
 - **Community detection** (e.g. Louvain-style modularity optimization) to surface operational cells, including how stable those cells are across time windows.
 - **Centrality measures** (betweenness, eigenvector) to identify key persons — bottlenecks, bridges, and hubs.
