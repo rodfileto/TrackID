@@ -1,17 +1,17 @@
-# Paper 3 (Future): Evidentiary-Grade Verification
+# Paper 3: Evidentiary Verification
 
-> **Status**: Not started. Staged for after Paper 1 (Person-Target Profiles) and Paper 2 (Situation/Network-Target Profiles) are submitted. See `docs/RESEARCH_STRATEGY.md` for the overall pipeline rationale.
+**This document describes the evaluation strategy for Paper 3: evidentiary-grade verification.** For full system context and architecture, see [`docs/DTID_ARCHITECTURE.md`](DTID_ARCHITECTURE.md). This paper is the forensic/legal complement to Paper 1's fast operational architecture; it evaluates the claim that structured, protocol-enforced verification mitigates automation bias and produces defensible court-admissible identifications via behavioral (human-subjects examiner study) methods.
 
 ## Title (Working)
-**From Investigative Lead to Court-Admissible Evidence: A Structured Verification Layer for Person-Target Profiles**
+**From Investigative Lead to Court-Admissible Evidence: A Structured Verification Layer for Person Entity Profiles**
 
 ## Scope & Positioning
 
-Paper 1 builds a Person-Target Profile continuously and asynchronously from fragmented, multi-source evidence (biometric auto-match, analyst validation, field-officer document confirmation) — explicitly scoped as an *operational intelligence lead*, not evidence. This paper addresses the forensic/legal gap Paper 1 deliberately defers: what happens when a Person-Target Profile needs to become part of a court-admissible case file?
+Paper 1 builds a Person Entity Profile continuously and asynchronously from fragmented, multi-source evidence (biometric auto-match, analyst validation, field-officer document confirmation) — explicitly scoped as an *operational intelligence lead*, not evidence. This paper addresses the forensic/legal gap Paper 1 deliberately defers: what happens when a Person Entity Profile needs to become part of a court-admissible case file?
 
-It introduces a separate, deliberately slow and heavyweight verification tier — cognitively and procedurally the opposite of Paper 1's fast, low-friction routing — grounded in Dual-Process Theory (System 1 vs. System 2 cognition) and forensic facial-comparison protocol standards (e.g. FISWG, ACE-VR).
+It introduces a separate, deliberately slow and heavyweight verification workflow — cognitively and procedurally the opposite of Paper 1's fast, low-friction routing — grounded in Dual-Process Theory (System 1 vs. System 2 cognition) and forensic facial-comparison protocol standards (e.g. FISWG, ACE-VR).
 
-**Framing for reviewers**: "Paper 1 establishes a fast, low-friction target-centric architecture for constructing identity-level Person-Target Profiles, explicitly scoped to operational intelligence rather than evidentiary use. This paper addresses the complementary problem: when such a profile must be escalated to a court-admissible identification, what verification architecture prevents automation bias while remaining tractable for practitioners?"
+**Framing for reviewers**: "Paper 1 establishes a fast, low-friction target-centric architecture for constructing Person Entity Profiles, explicitly scoped to operational intelligence rather than evidentiary use. This paper addresses the complementary problem: when such a profile must be escalated to a court-admissible identification, what verification architecture prevents automation bias while remaining tractable for practitioners?"
 
 ## Core Problem
 
@@ -19,11 +19,11 @@ Automated facial-comparison suggestions risk automation bias — examiners rubbe
 
 ## Approach
 
-A dedicated verification workflow (Analysis → structured Comparison → Evaluation → blind second-expert Verification) that a Person-Target Profile must pass through before it can be treated as evidence rather than a lead. Key design commitments:
+A dedicated verification workflow (Analysis → structured Comparison → Evaluation → blind second-expert Verification) that a Person Entity Profile must pass through before it can be treated as evidence rather than a lead. Key design commitments:
 
 - **Structured, mandatory comparison**: a checklist-style protocol across anatomical/identifying features, enforced by the system rather than left to examiner discretion.
 - **Blind dual-expert review**: a second examiner repeats the process independently, without seeing the first examiner's conclusions; disagreements are flagged for resolution.
-- **Immutable, provenance-linked output**: the resulting report references the originating Person-Target Profile and its evidence ledger, but carries its own, separately-signed evidentiary status — the two tiers never share legal weight.
+- **Immutable, provenance-linked output**: the resulting report references the originating Person Entity Profile and its evidence ledger, but carries its own, separately-signed evidentiary status — the two workflows never share legal weight.
 
 ## Evaluation Register
 
@@ -32,8 +32,8 @@ Unlike Papers 1 and 2, this paper's central claims are behavioral — does struc
 ## Discussion Points
 
 - **Why structured friction works**: forcing examiners through an explicit protocol is hypothesized to override an automation-acceptance heuristic; tested via decision-time and error-rate shifts rather than assumed.
-- **Deskilling concern**: does relying on an upstream tactical layer (Paper 1) to surface candidates deskill examiners who now only verify curated suggestions? This tier still requires full independent analysis, not confirmation of the upstream suggestion.
-- **Where legal weight actually lives**: only this tier's signed-off output carries evidentiary weight; Paper 1's Person-Target Profile confirmations explicitly do not, and this boundary needs to stay legible to both technical and legal readers.
+- **Deskilling concern**: does relying on Paper 1's architecture to surface candidates deskill examiners who now only verify curated suggestions? This workflow still requires full independent analysis, not confirmation of the upstream suggestion.
+- **Where legal weight actually lives**: only this workflow's signed-off output carries evidentiary weight; Paper 1's Person Entity Profile confirmations explicitly do not, and this boundary needs to stay legible to both technical and legal readers.
 
 ## Limitations & Future Work
 
