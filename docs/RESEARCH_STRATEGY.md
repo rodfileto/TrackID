@@ -2,7 +2,7 @@
 
 ## DTID Architecture Overview
 
-**DTID** is a target-centric intelligence platform built on Clark's **target-centric approach to intelligence analysis**: a **Target** is simply the object of interest — a crime series, an organization, a scenario — represented as an instance of a small ontology (**Target → Situation → Event → Entity**) stored in a knowledge graph. Two distinct analytical representations are built on top of any given Target: a **network of entities** (the raw structure of who/what was involved and how they relate) and a **model of functioning** (a higher-level account of roles and operational pattern). Facial recognition is the mechanism the platform uses to resolve `Person` entities across the Events and Situations that make up a Target — which is what allows a suspect observed in one incident to be recognized as the same person observed in another.
+**DTID** is a target-centric intelligence platform built on Clark's **target-centric approach to intelligence analysis**: a **Target System** (Clark's macro target) is simply the object of interest — a crime series, an organization, a scenario — represented as an instance of a small ontology (**Target → Situation → Event → Target Entity**) stored in a knowledge graph. A **Target Entity** (micro target) is a specific node within that graph that field officers interact with operationally — `TargetPerson`, `Vehicle`, `PhoneNumber`. Keeping these two senses of "Target" distinct matters for reviewers: the platform is the software bridge between them, ingesting observations about discrete Target Entities and automatically constructing the broader Target System. Two distinct analytical representations are built on top of any given Target System: a **network of entities** (the raw structure of who/what was involved and how they relate) and a **model of functioning** (a higher-level account of roles and operational pattern). Facial recognition is the mechanism the platform uses to resolve `TargetPerson` entities across the Events and Situations that make up a Target System — which is what allows a suspect observed in one incident to be recognized as the same person observed in another.
 
 The platform uses a single knowledge graph (Memgraph/Cypher) + relational store (PostgreSQL + pgvector) architecture, with append-only immutability, confidence-gated entity resolution, dual-mode delivery (live alerts + static dossier snapshots), and governance baked into the schema (retention policies, cryptographic signing, jurisdictional compliance). See [`docs/DTID_ARCHITECTURE.md`](DTID_ARCHITECTURE.md) for full technical details.
 
@@ -28,19 +28,19 @@ The three papers require fundamentally different evaluation methodologies. Combi
 
 **Register**: Decision Support System (DSS) / Information Systems (IS) evaluation.
 
-Introduces the platform's general architecture: the Target/Situation/Event/Entity ontology, the knowledge-graph + relational storage design, and the confidence-gated entity-resolution workflow. The paper is **not** scoped narrowly to case-linking — case-linking is the demonstrated capability used to evaluate the architecture, via face-based `Person` entity resolution within a simulated Target (a synthetic bank-robbery series). Evaluation is simulation-based (public re-ID benchmark + synthetic Situation/Event overlay), no human-subjects testing required. Metrics: silo-breaking rate (precision/recall), routing accuracy (how well τ_high/τ_low separate candidates), workload compression (reduction in pairwise comparisons). See [`docs/PAPER1_TACTICAL_LINKING.md`](PAPER1_TACTICAL_LINKING.md).
+Introduces the platform's general architecture: the Target/Situation/Event/Target Entity ontology (including the Target System vs. Target Entity distinction), the knowledge-graph + relational storage design, and the confidence-gated entity-resolution workflow. The paper is **not** scoped narrowly to case-linking — case-linking is the demonstrated capability used to evaluate the architecture, via face-based `TargetPerson` resolution within a simulated Target System (a synthetic bank-robbery series). Evaluation is simulation-based (public re-ID benchmark + synthetic Situation/Event overlay), no human-subjects testing required. Metrics: silo-breaking rate (precision/recall), routing accuracy (how well τ_high/τ_low separate candidates), workload compression (reduction in pairwise comparisons). See [`docs/PAPER1_TACTICAL_LINKING.md`](PAPER1_TACTICAL_LINKING.md).
 
 ### Paper 2: Network Analysis — Surfacing a Target's Model of Functioning
 
 **Register**: Graph-topological (network-science / complex-systems) evaluation.
 
-Takes the network of entities that Paper 1's architecture produces for a Target and analyzes it (community detection, centrality, temporal decay, link prediction) to surface that Target's **Model of Functioning** — operational cells, key persons, and how the operation evolves over time. Evaluation is graph-topological — validating community detection, centrality measures, and link prediction against synthetic planted communities and known organizational structure. Metrics: modularity, centrality ranking agreement, link-prediction precision/recall. See [`docs/PAPER2_INTELLIGENCE.md`](PAPER2_INTELLIGENCE.md).
+Takes the network of Target Entities that Paper 1's architecture produces for a Target System and analyzes it (community detection, centrality, temporal decay, link prediction) to surface that Target System's **Model of Functioning** — operational cells, key persons, and how the operation evolves over time. Evaluation is graph-topological — validating community detection, centrality measures, and link prediction against synthetic planted communities and known organizational structure. Metrics: modularity, centrality ranking agreement, link-prediction precision/recall. See [`docs/PAPER2_INTELLIGENCE.md`](PAPER2_INTELLIGENCE.md).
 
 ### Paper 3: Evidentiary Verification
 
 **Register**: Behavioral / Human-Computer Interaction (HCI) / Forensic-Science evaluation.
 
-Addresses when a resolved `Person` entity's identification must be escalated from an operational lead to court-admissible evidence, via structured, protocol-enforced verification. Evaluation is behavioral — a human-subjects examiner study comparing structured review (checklist-driven, blind dual-expert) against an unstructured baseline. Metrics: automation-bias reduction (system suggestion acceptance shift), inter-examiner agreement (Cohen's kappa), false-positive error rate, decision time. Requires IRB/ethics approval. See [`docs/PAPER3_FORENSIC_EVIDENTIARY.md`](PAPER3_FORENSIC_EVIDENTIARY.md).
+Addresses when a resolved `TargetPerson`'s identification must be escalated from an operational lead to court-admissible evidence, via structured, protocol-enforced verification. Evaluation is behavioral — a human-subjects examiner study comparing structured review (checklist-driven, blind dual-expert) against an unstructured baseline. Metrics: automation-bias reduction (system suggestion acceptance shift), inter-examiner agreement (Cohen's kappa), false-positive error rate, decision time. Requires IRB/ethics approval. See [`docs/PAPER3_FORENSIC_EVIDENTIARY.md`](PAPER3_FORENSIC_EVIDENTIARY.md).
 
 ## Unified Platform, Separate Evaluation Registers
 
@@ -50,7 +50,7 @@ Addresses when a resolved `Person` entity's identification must be escalated fro
 
 Each paper scopes itself to one contribution and cites the others for what it depends on:
 
-- **Paper 1** evaluates the general architecture via `Person` entity resolution (confidence-gated routing, multi-source evidence ledger) using DSS metrics and simulation. It notes the platform also supports network analysis and evidentiary verification (Papers 2–3) but does not claim results for either.
+- **Paper 1** evaluates the general architecture via `TargetPerson` resolution (confidence-gated routing, multi-source evidence ledger) using DSS metrics and simulation. It notes the platform also supports network analysis and evidentiary verification (Papers 2–3) but does not claim results for either.
 - **Paper 2** cites Paper 1 for the Person Entity Profile outputs that populate the entity network; it focuses entirely on the graph-topological evaluation of that network and does not evaluate entity-resolution quality or evidentiary verification.
 - **Paper 3** cites Paper 1 for the operational-lead outputs that feed the verification workflow; it focuses on the behavioral/forensic evaluation of structured verification and does not evaluate entity resolution or network analysis.
 
@@ -58,8 +58,8 @@ Each paper scopes itself to one contribution and cites the others for what it de
 
 | Component | Paper 1 | Paper 2 | Paper 3 |
 |-----------|---------|---------|---------|
-| Target/Situation/Event/Entity ontology + knowledge graph | Core eval | Underlying | Underlying |
-| Face-based Person entity resolution + embedding | Core eval | Depends on | Depends on |
+| Target/Situation/Event/Target Entity ontology + knowledge graph | Core eval | Underlying | Underlying |
+| Face-based TargetPerson resolution + embedding | Core eval | Depends on | Depends on |
 | Spatio-temporal plausibility gate | Core eval | Not eval'd | Not eval'd |
 | Confidence-gated routing (τ_high, τ_low, queue) | Core eval | Not eval'd | Input (candidates) |
 | Multi-source evidence ledger (Person Entity Profile) | Core eval | Depends on | Depends on |
@@ -87,17 +87,17 @@ Target venues by evaluation register:
 - Real-time graph updates and query optimization for larger deployments
 - Privacy-preserving deployment (federated inference, differential privacy)
 - Cross-jurisdictional calibration (multi-agency threshold policy harmonization)
-- Additional Entity types and resolution modalities beyond `Person` (vehicles, gait, license plates)
+- Additional Target Entity types and resolution modalities beyond `TargetPerson` (vehicles, gait, license plates)
 
 ## Key Messaging
 
 **For Technical Audiences (Developers, Researchers)**:
-- **Paper 1 (General Architecture)**: Introduces the Target/Situation/Event/Entity ontology and confidence-gated entity-resolution workflow, evaluated via face-based `Person` entity resolution and cross-Situation case-linking. DSS metrics validate the claim; simulation evaluation; no human-subjects testing.
-- **Paper 2 (Network Analysis)**: Demonstrates that analyzing a Target's entity network surfaces its Model of Functioning — operational cells, key persons, relationship evolution — invisible in individual case files. Graph-topological evaluation validates the claim.
+- **Paper 1 (General Architecture)**: Introduces the Target/Situation/Event/Target Entity ontology and confidence-gated entity-resolution workflow, evaluated via face-based `TargetPerson` resolution and cross-Situation case-linking. DSS metrics validate the claim; simulation evaluation; no human-subjects testing.
+- **Paper 2 (Network Analysis)**: Demonstrates that analyzing a Target System's entity network surfaces its Model of Functioning — operational cells, key persons, relationship evolution — invisible in individual case files. Graph-topological evaluation validates the claim.
 - **Paper 3 (Evidentiary Verification)**: Demonstrates that structured, protocol-enforced verification (blind dual-expert review, checklist-driven comparison) mitigates automation bias and reduces false-positive identifications relative to unstructured review. Behavioral study (human-subjects examiner evaluation) validates the claim.
 
 **For Contributors & Operators**:
-- One platform (DTID), one ontology (Target/Situation/Event/Entity), two derived analytical layers per Target (network of entities; model of functioning).
+- One platform (DTID), one ontology (Target/Situation/Event/Target Entity), one Target System / Target Entity distinction, two derived analytical layers per Target System (network of entities; model of functioning).
 - Single knowledge graph (Memgraph) + relational store (PostgreSQL); all three papers evaluate parts of the same system.
 - Each paper has its own evaluation register, publication venue, and research audience — but they feed into one cohesive architecture.
 - Governance, retention policies, cryptographic signing, and jurisdictional compliance are baked into the data model, not bolted on.
