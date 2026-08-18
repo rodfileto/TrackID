@@ -1,40 +1,43 @@
 ---
+title: "Target-Centric Face Re-Identification: A Design Science Approach to Event-Source Intelligence Dossiers in Law Enforcement"
+author: Rodrigo Fileto Cuerci Maciel
 abstract: |
-  In public security operations, distinct incidents — a robbery in District A on Monday, a car theft in District B on Wednesday — are investigated in isolated case silos. Relational case-management systems have no mechanism to recognize that an unidentified suspect present in one case is the same person present in another. This paper presents TrackID's **Linkage Engine**, a Decision Support System (DSS) that treats faces as 512-dimensional vectors and continuously, asynchronously evaluates incoming surveillance data to propose linkages between otherwise   disconnected cases. The system applies spatio-temporal plausibility
-  constraints on top of vector similarity — rejecting matches that would
-  require physically impossible travel — and routes candidate pairs through
-  a **tripartite state machine**: Auto-Merge (high-confidence identity
-  fusion into a Global Trajectory), Tactical Queue (uncertain candidates
-  requiring a one-click human validation), and Auto-Reject (discarded before
-  reaching a human). Evaluation is fully simulated on a public multi-camera
-  person re-identification benchmark, requiring no human-subjects review.
+ Testing Abstract
 ---
 
-<!--
-Content skeleton ported from docs/PAPER1_TACTICAL_LINKING.md — use that
-document as the source of truth for the full argument, metrics, and related
-work while drafting each section below.
--->
+# Introduction
 
-## Introduction
+# Conceptual Framework and Literature Review
 
-## Related Work
+Forensic Intelligence bring the concept of trait
 
-## Methodology
+information as thing [@buckland1991] and information as evidence
 
-### Problem Formulation
+Further, the term “evidence” implies passiveness. Evidence, like information-as-thing, does not do anything actively. Human beings do things with it or to it. They examine it, describe it, and categorize it. They understand, misunderstand, interpret, summarize, or rebut it. They may even try to fake it, alter it, hide it, or destroy it. The essence of evidence is precisely that perception of it can lead to changes in what people believe that they know.
 
-### Technical Approach
+verifying this condition necessitates a better understanding on how traces can be collected from the scene, processed and interpreted within an intelligence-led policing strategy. This is what we call forensic intelligence [@ribaux2010]
 
-## Evaluation Strategy
+One form of delineate the general process of the intelligence is through the intelligence cycle metaphor. There are several versions in the literature covering five or more phases. The FBI version comprise five phases while @lowenthal2009 add two more.
 
-## Results
+The intelligence cycle is a good way to learn the components of the intelligence community [@cepik2003].
 
-## Discussion
+[@clark2006]
 
-## Conclusion
+# Design Science Research Methodology
 
-## References
+## Methodological Framework
+
+## Design Requirements
+
+# Artifact Architecture and System Design
+
+# Demonstration
+
+# Evaluation and Discussion
+
+# Conclusion
+
+# References
 
 ::: {#refs}
 :::
