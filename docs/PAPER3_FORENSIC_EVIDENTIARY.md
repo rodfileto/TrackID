@@ -1,6 +1,6 @@
-# Paper 3 (Future): Evidentiary-Grade Verification
+# Paper 3: Evidentiary Tier Evaluation — Evidentiary-Grade Verification
 
-> **Status**: Not started. Staged for after Paper 1 (Person-Target Profiles) and Paper 2 (Situation/Network-Target Profiles) are submitted. See `docs/RESEARCH_STRATEGY.md` for the overall pipeline rationale.
+**This document describes the evaluation strategy for the evidentiary-grade verification tier of the DTID platform.** For full system context and architecture, see [`docs/DTID_ARCHITECTURE.md`](DTID_ARCHITECTURE.md). The evidentiary tier is the forensic/legal complement to Paper 1's fast operational tier; this paper evaluates its core claim that structured, protocol-enforced verification mitigates automation bias and produces defensible court-admissible identifications via behavioral (human-subjects examiner study) methods.
 
 ## Title (Working)
 **From Investigative Lead to Court-Admissible Evidence: A Structured Verification Layer for Person-Target Profiles**
