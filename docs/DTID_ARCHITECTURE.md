@@ -1,236 +1,159 @@
-# DTID: Distributed Target-Centric Identity Platform — Architecture
+# DTID: Target-Centric Identity Platform — Architecture
 
 ## Overview
 
-**DTID** is a target-centric facial-recognition and case-linking platform that treats identity, networks, and evidentiary records as distinct, composable **targets** in the intelligence sense. Rather than a linear pipeline, DTID builds an event-sourced graph model where observations accumulate continuously, confidence gates route findings to appropriate decision-makers (automated commit, analyst queue, or discard), and the same immutable fact-set supports both rapid operational intelligence and rigorous forensic/legal verification.
+DTID is a target-centric intelligence platform built around Clark's **target-centric approach to intelligence analysis**. In this approach, a **Target** is simply the object of interest — it can be as broad as a criminal organization, a drug-trafficking network, or an assessment of a government's stability, or as narrow as a localized crime series. A Target is not an individual identity, and it is not a fixed hierarchy of "levels" — it is whatever scenario an investigation or analytical effort is organized around.
+
+DTID represents each Target as an instance of a small, explicit **ontology** — Target, Situation, Event, Entity — stored as a knowledge graph. Two distinct analytical representations are then built on top of that graph for any given Target: a **network of entities** (the raw structure of who/what was involved and how they relate) and a **model of functioning** (a higher-level account of how the target actually operates). Facial recognition is the platform's mechanism for resolving one specific Entity type — Person — across the Events and Situations that make up a Target, which is what allows a suspect observed in one incident to be recognized as the same person observed in another.
 
 The architecture is single-server deployable by default; federation and multi-agency capability are optional extensions, not day-one requirements.
 
-## Deployment Tiers
+## Core Ontology
 
-DTID composes three operational tiers, each a recursive instance of the target-centric model applied at different scales:
+DTID's knowledge graph is built from four classes:
 
-### 1. Identity Tier (Tactical)
-**Target**: a single individual's identity, continuously resolved from fragmented observations.
+### Target
+The object of interest (Clark's sense). Example: **"Bank robberies in region X"** — a crime series treated as a single analytical scope. A Target is the top-level container; everything else in the ontology exists in service of understanding one.
 
-Observations (face images from cameras, field notes, documentary evidence) arrive asynchronously from disconnected investigations. The system applies face-based entity resolution + spatio-temporal plausibility filtering to decide whether an observation belongs to an existing Person-Target Profile or creates a new one. A tripartite confidence gate routes the decision:
-- **τ_high** → auto-commit to the profile (operational lead confirmed)
-- **τ_low–τ_high** → enqueue for one-click analyst validation
-- **< τ_low** → discard (log only, no action)
+### Situation
+A descriptive account of one incident within a Target's scope. Example: one specific bank robbery is a Situation. A Target has many Situations.
 
-Output: Person-Target Profiles (continuously updated identity records), each with a multi-source evidence ledger (biometric auto-match, analyst validation, field-officer document confirmation) and full provenance chain.
+### Event
+A fine-grained occurrence within a Situation. Examples: "suspect entered the bank at 14:02," "camera 3 captured a face at 14:03," "getaway vehicle departed at 14:05." A Situation has many Events. Events are where raw observations — face captures, field notes, document scans — enter the system.
 
-### 2. Network Tier (Strategic)
-**Target**: a situation, criminal series, or organizational structure, composed from resolved identities.
+### Entity
+A typed participant referenced by Events and Situations: `Person`, `Bank`, `Vehicle`, and other domain-relevant types. Entities are not owned by a single Situation — the same `Person` entity can appear across multiple Situations within a Target (and, in principle, across Targets). Recognizing that recurrence is what breaks case silos: an unidentified suspect in one robbery and an unidentified suspect in another are only linkable once both are resolved to the same `Person` entity. Face-based entity resolution (InsightFace/ArcFace embeddings + confidence-gated matching) is how `Person` entities are resolved from Event-level observations; the platform's ontology is deliberately generic about other Entity types and other resolution modalities, so this is one instantiation of the pattern, not the whole of it.
 
-Once Person-Target Profiles exist, the network tier applies spatio-temporal graph analysis to reveal structure invisible in individual case files: operational cells (via community detection), key persons (via centrality), relationship evolution (via temporal decay), and link prediction for forecasting future co-occurrence. Nodes in this graph are the Person-Target Profiles from the identity tier; edges represent co-occurrence and its confidence.
+## Two Derived Representations per Target
 
-Output: Situation/Network-Target Profiles — intelligence products describing organizational structure, but explicitly not evidence (per the identity tier's legal boundary).
+Once a Target's Situations, Events, and Entities are populated, two distinct analytical layers can be built on top — these are **not the same artifact** and should not be conflated:
 
-### 3. Evidentiary Tier (Forensic)
-**Target**: a Person-Target Profile escalated to court-admissible evidence.
+### Network of Entities
+The raw knowledge graph itself: nodes are Entities (and, where useful, Situations/Events), edges are relationships — participation, co-occurrence (weighted by spatio-temporal proximity and frequency), and provenance. This is a structural, largely mechanical representation — it records *what* was observed and *how things relate*, without asserting *why*.
 
-When an identity-tier profile must support a legal proceeding, it enters a separate, deliberately slow verification workflow that mirrors forensic facial-comparison protocol standards (FISWG, ACE-VR). This tier enforces:
-- Structured, mandatory comparison checklist (anatomical features)
-- Blind dual-expert review (two examiners work independently)
-- Immutable, separately-signed output (never shares legal weight with the fast tactical tier)
-- Full chain-of-custody documentation
+### Model of Functioning
+A higher-level, interpretive account of *how the Target operates* — roles (e.g., driver, lookout, financier), operational workflow (e.g., reconnaissance → robbery → getaway), and how that structure evolves over time. The Model of Functioning is built **on top of** the Network of Entities (via community detection, centrality analysis, and temporal modeling — see Paper Mapping below) rather than being read directly off the raw graph. Two Targets can have structurally similar entity networks and very different models of functioning, or vice versa — the two representations answer different questions.
 
-Output: Evidentiary-grade identification reports, cryptographically signed and auditable.
+## Storage Architecture
 
-## System Architecture
+### Storage Model: Knowledge Graph + Relational
 
-### Storage Model: Event-Sourced Graph + Relational
+Two complementary data stores, logically coupled by UUID pointers:
 
-The platform uses two complementary data stores, logically coupled by UUID pointers:
+**Memgraph (Cypher graph database)** — the canonical ontology and relationship store
+- Node types: `Target`, `Situation`, `Event`, `Entity` (labeled by subtype: `Person`, `Bank`, `Vehicle`, ...), `AnalystAction`
+- Edge types: `HAS_SITUATION` (Target→Situation), `HAS_EVENT` (Situation→Event), `PARTICIPATES_IN` (Entity→Event/Situation), `CO_OCCURS_WITH` (Entity↔Entity, weighted), `AFFECTS` (AnalystAction→node), `CORRECTS` (node→prior node)
 
-**Memgraph (Cypher graph database)**
-- **Canonical relationship and provenance model**
-- Node types:
-  - `TargetPerson` — a resolved individual identity (Person-Target Profile)
-  - `ReIDObservation` — a single biometric/documentary observation (face image, field note, etc.)
-  - `AnalystAction` — a human decision or system action in the investigation (match confirmation, evidence escalation, etc.)
-  - `AnalysisContext` — a case, series, or investigation grouping observations and analysts
-- Edge types:
-  - Co-occurrence (spatio-temporal, weighted by frequency and proximity)
-  - Evidence-of (ReIDObservation → TargetPerson, confidence-tagged)
-  - Provenance (action → affected node)
-  - Temporal edges (for link prediction, decay modeling)
-
-**PostgreSQL (relational + pgvector)**
-- **Embeddings**: 512-d ArcFace vectors (cosine-normalized), indexed for similarity search
-- **Media blobs/references**: JPEG/PNG paths or S3 URIs for face images, field documents
-- **Case metadata**: investigation context, case number, jurisdiction, assigned investigators
-- **Retention timers**: purge-after dates and status for compliance with regional data-retention rules
-- **Audit blob storage**: signed AnalystAction payloads that are too large for the graph
+**PostgreSQL (relational + pgvector)** — artifacts and metadata
+- **Embeddings**: 512-d ArcFace vectors (cosine-normalized) for `Person` entity resolution, indexed for similarity search
+- **Media blobs/references**: face images, field documents (as paths or object-storage URIs)
+- **Case metadata**: jurisdiction, assigned investigators, Target-level administrative context
+- **Retention timers**: purge-after dates and status for compliance
+- **Audit blob storage**: signed `AnalystAction` payloads too large for the graph
 
 ### Linkage & Immutability
 
-- **UUID pointers only**: no duplication of embeddings, media, or large objects between stores. PostgreSQL holds the artifact; Memgraph references it by UUID.
-- **Append-only principle**: `ReIDObservation` and `AnalystAction` nodes are never updated. Corrections create new nodes with back-references (`corrects` edge) to the node being revised. This yields:
-  - Audit trail automatically (every change is a new node)
-  - Versioning without a separate history table
-  - Forensic snapshots frozen in time (point-in-time Cypher queries)
+- **UUID pointers only**: no duplication of embeddings, media, or large objects between stores — Postgres holds the artifact, Memgraph references it by UUID.
+- **Append-only principle**: `Event` and `AnalystAction` nodes are never updated. Corrections create new nodes with a `CORRECTS` edge back to the node being revised. This yields audit trail, versioning, and frozen forensic snapshots without a separate history system.
 
-## Confidence-Gated Workflow (DR2)
+## Confidence-Gated Entity Resolution (DR2)
 
-The confidence gate is the central control loop, not just Paper 1's feature. Every observation enters the gate; the gate decides the observation's fate:
+The confidence gate is how `Person` entities get resolved and linked across Events and Situations — it is the platform's central control loop, not a feature specific to one paper. Every observation-bearing Event enters the gate:
 
 ```
-Observation arrives
+Event arrives (e.g. a face capture)
    ↓
 [Entity Resolution + Plausibility Check]
    ↓
-Compute confidence τ (0 to 1)
+Compute confidence τ (0 to 1) against candidate Person entities
    ↓
 τ >= τ_high?
-  YES → Auto-commit to Person-Target Profile
+  YES → Auto-commit: attach Event to the existing Person entity
         Log AnalystAction (auto-match)
-        If identity is new, push WebSocket alert to field devices
+        If this creates a new cross-Situation link, push WebSocket alert to field devices
   NO → τ >= τ_low?
         YES → Enqueue for analyst review (tactical queue)
-              Notify analyst via dashboard
         NO → Discard / log only
-              (No alert, no queue entry)
 ```
 
-**Policy auditability**: every confidence decision is itself logged as an `AnalystAction` node referencing the observation. This makes the gate logic auditable, not opaque — investigators can see exactly why a match was auto-committed or queued.
+**Policy auditability**: every gate decision is itself logged as an `AnalystAction` node referencing the Event — the gate logic is auditable, not opaque.
 
-**Threshold tuning**: τ_high and τ_low are not fixed constants but **policy parameters** that can differ per investigation, target, or time window:
-- Conservative settings (τ_high = 0.9, τ_low = 0.7): high precision, longer analyst queues
-- Aggressive settings (τ_high = 0.7, τ_low = 0.4): faster tactical response, more false positives for review
-- Adaptive settings: thresholds adjusted based on target-profile age, source diversity, or investigative context
-
-This tuning is itself auditable — every threshold-change action is an `AnalystAction` node.
+**Threshold tuning**: τ_high and τ_low are policy parameters, not fixed constants — they can differ per Target, per Entity type, or per investigative context, and every threshold change is itself an `AnalystAction`.
 
 ## Dual-Mode Delivery (DR3)
 
 ### Live Mode: WebSocket/SSE to Field
-High-confidence auto-commits (τ >= τ_high) are pushed in real time to field devices via WebSocket or Server-Sent Events:
-- New match alerts (identity found)
-- Location/co-occurrence alerts (two watched identities appear together)
-- Status updates (analyst finished reviewing a queue item)
-
-No polling, no latency — field teams see new leads as they arrive.
+High-confidence auto-commits (τ >= τ_high) push in real time: new cross-Situation links, co-occurrence alerts (two watched entities appearing together), analyst queue resolutions.
 
 ### Static Mode: Dossier Snapshots
-At investigation close or on-demand, a point-in-time **dossier** is generated by running a Cypher query over the append-only graph and rendering it to PDF/Markdown:
+A **dossier** is a point-in-time Cypher query over a Target's Situations, Events, and Entities, rendered to PDF/Markdown:
 
 ```
-MATCH (p:TargetPerson {id: $target_uuid})
-RETURN p, 
-  [(p)<-[e:EVIDENCE_OF]-(obs:ReIDObservation) | obs],
-  [(p)-[co:COOCCURS_WITH]-(p2:TargetPerson) | {person: p2, confidence: co.weight}],
-  [(p)<-[pa:AFFECTS]-(action:AnalystAction) | action]
-UNION
-... [collect metadata, signatures, chain-of-custody records] ...
+MATCH (t:Target {id: $target_uuid})-[:HAS_SITUATION]->(s:Situation)-[:HAS_EVENT]->(e:Event)
+MATCH (p:Entity:Person)-[:PARTICIPATES_IN]->(e)
+OPTIONAL MATCH (p)-[co:CO_OCCURS_WITH]-(p2:Entity:Person)
+OPTIONAL MATCH (p)<-[:AFFECTS]-(action:AnalystAction)
+RETURN t, s, e, p, co, action
 ```
 
-The dossier is a **generated view**, not a separately maintained document. It captures the graph state at a single point in time and includes all evidence, actions, and metadata needed for legal or intelligence review. The PDF includes cryptographic signatures (from AnalystActions) and retention-policy stamps.
+The dossier is a **generated view**, not a separately maintained document — it captures graph state at a single point in time, including all evidence, actions, and cryptographic signatures needed for legal or intelligence review.
 
 ## Ingestion Consistency
 
-All observation ingestion is **idempotent**, keyed by observation UUID:
+Event ingestion is **idempotent**, keyed by Event UUID:
 
-1. Incoming observation arrives with UUID (generated client-side or server-side, depending on source)
-2. **Atomically**: write to PostgreSQL (`embeddings` table, `observations` table) AND write to Memgraph (`ReIDObservation` node) as a single logical transaction
-   - If Postgres succeeds but Memgraph fails, mark the Postgres record with a retry flag and re-attempt the Memgraph write asynchronously
-   - If both succeed, the observation is canonical in both stores
-3. Run confidence gate (happens inside or immediately after step 2)
-4. Log the gate decision as an `AnalystAction` node
+1. An Event arrives with a UUID (client- or server-generated)
+2. **Atomically**: write to PostgreSQL (embedding, media reference) AND write to Memgraph (`Event` node + `PARTICIPATES_IN`/`HAS_EVENT` edges) as one logical transaction
+   - Partial failure (e.g. Postgres succeeds, Memgraph fails) is marked for retry, not silently dropped
+3. Run the confidence gate
+4. Log the gate decision as an `AnalystAction`
 
-Idempotency means: if a client retries an observation ingestion (e.g., due to network loss), the UUID matches the one already in the database, and the system skips the write (returns 200 OK with "already present") rather than duplicating it.
+A retried Event with the same UUID is a no-op, not a duplicate.
 
 ## Governance & Compliance
 
-**Governance is schema, not policy** — baked into the data model, not enforced externally:
+Governance is schema, not policy — baked into the data model:
 
 ### Retention & Purge
-- Every `TargetPerson` and `ReIDObservation` node has a `retention_policy` field: a jurisdiction-specific purge rule (e.g., "GDPR_RIGHT_TO_BE_FORGOTTEN", "BIPA_KEEP_7_YEARS", "CALIFORNIA_DELETE_AFTER_180_DAYS").
-- A background purge job periodically scans for nodes that have exceeded their retention date and marks them for deletion (including their corresponding PostgreSQL records and media blobs).
-- The deletion itself is logged as an `AnalystAction` (system action) with a reason code and timestamp — no silent deletes.
+- `Target`, `Situation`, and `Entity` nodes carry a `retention_policy` field (jurisdiction-specific purge rule, e.g. "GDPR_RIGHT_TO_BE_FORGOTTEN," "BIPA_KEEP_7_YEARS").
+- A background purge job scans for expired nodes and removes them (graph node, Postgres record, media blob together); the deletion itself is logged as a system `AnalystAction` with a reason code — no silent deletes.
 
 ### Cryptographic Signing
-- Every `AnalystAction` node is signed with the analyst's private key (or, in high-security deployments, an HSM-managed key).
-- The signature is stored as a field on the node, making the action immutable — tampering with an action's content breaks the signature.
-- Dossiers include the chain of signatures, allowing legal reviewers to audit the full decision chain.
+- Every `AnalystAction` is signed with the analyst's key (or an HSM-managed key in high-security deployments); the signature is stored on the node, making tampering detectable.
+- Dossiers include the full signature chain for legal review.
 
 ### Jurisdictional Rules & Compliance
-- At observation ingestion, the system checks the observation's jurisdiction and enforces region-specific rules:
-  - **GDPR**: requires explicit consent for biometric processing; observations without consent are quarantined
-  - **BIPA**: Illinois state law requiring notice and consent for facial recognition
-  - **State/local rules**: varies by jurisdiction (California AB 701 bans certain uses, etc.)
-- Non-compliant observations are logged with a compliance flag but still stored (for audit/legal purposes); they are excluded from confidence-gate routing and intelligence queries until compliance is resolved.
-- This checking happens at the API boundary, not retrospectively.
+- At Event ingestion, region-specific rules are checked (GDPR consent, BIPA notice, state/local restrictions). Non-compliant Events are quarantined — stored for audit but excluded from confidence-gate routing and intelligence queries until resolved.
+- These rules vary by jurisdiction and change often; this check is a standing requirement, not a one-time gate before prototype sign-off.
 
 ## Instrumentation & Metrics
 
-Metrics are instrumented from day one, tied directly to evaluation goals:
+Instrumented from day one, tied directly to evaluation goals:
 
-### Query Latency
-- Cypher query execution time (p50, p99) for common patterns:
-  - Find all co-occurrence candidates for a face embedding: `MATCH (o:ReIDObservation {embedding_uuid: $uuid}) MATCH (p:TargetPerson) WHERE cosine_similarity(o.embedding, p.embedding) > 0.4 RETURN p`
-  - List all AnalystActions affecting a Person-Target Profile: `MATCH (p:TargetPerson {id: $uuid})<-[a:AFFECTS]-(action:AnalystAction) RETURN action ORDER BY action.timestamp DESC`
-  - Network analysis (community detection over co-occurrence edges) on graphs of varying sizes
-
-### Confidence-Gate Metrics
-- **Auto-commit rate**: fraction of observations routed to τ >= τ_high (operational intelligence shipped without human review)
-- **Manual-review rate**: fraction of observations in τ_low–τ_high (analyst queue size as a proxy for workload)
-- **Discard rate**: fraction < τ_low (tuning for signal-to-noise tradeoff)
-- **False-positive rate in queue**: analyst-reported "this match is wrong" / "correct" ratio (feedback loop to retrain thresholds)
-
-### Time-to-Alert
-- Latency from observation ingestion to WebSocket push for high-confidence matches (e-to-e wall-clock time)
-- Latency from analyst action (validation) to queue-update push
-
-### DSR (Design Science Research) Metrics
-- **Silo-breaking rate**: fraction of true cross-case identity links recovered (precision/recall)
-- **Routing accuracy**: how well τ_high/τ_low separate genuinely ambiguous candidates from confident decisions
-- **Workload compression**: reduction in analyst task complexity (ratio of pre-system to post-system pairwise comparisons)
-
-### Forensic Metrics (Evidentiary Tier)
-- **Examiner agreement**: inter-rater reliability (Cohen's kappa) for blind dual-expert review
-- **Decision time**: examiner time per verification decision (structured protocol vs. unstructured baseline)
-- **False-positive error rate**: number of wrong identifications agreed upon by both examiners
+- **Query latency** (p50/p99) for common Cypher patterns: candidate-match lookup for an incoming Event, `AnalystAction` history for an Entity, network analysis over a Target's entity graph.
+- **Confidence-gate metrics**: auto-commit rate, manual-review rate, discard rate, and analyst-reported false-positive rate in the review queue.
+- **Time-to-alert**: latency from Event ingestion to WebSocket push for high-confidence cross-Situation links.
+- **DSR metrics** (Paper 1): silo-breaking rate, routing accuracy, workload compression.
+- **Forensic metrics** (Paper 3): examiner agreement (Cohen's kappa), decision time, false-positive error rate under structured vs. unstructured review.
 
 ## Modularity for Small LEAs
 
-DTID is designed for single-server deployment; multi-agency federation is a later extension.
+- **Single-server default**: one Memgraph instance + one PostgreSQL instance on a single host, suitable for a mid-sized department or regional task force; scales vertically before requiring distribution.
+- **Pluggable Re-ID engine**: the embedding model behind `Person` entity resolution (currently InsightFace/ArcFace) sits behind a stable interface — swappable without touching the ontology or graph schema.
+- **Future federation** (out of scope for now): multiple DTID instances federated via a gateway for privacy-respecting cross-jurisdiction queries; no assumption of shared trust or infrastructure between agencies.
 
-### Single-Server Default
-- One Memgraph instance + one PostgreSQL instance on a single host (or co-located cluster)
-- No distributed consensus, no cross-server replication complexity
-- Suitable for a mid-sized city police department or regional task force
-- Scales vertically (bigger machines) before requiring horizontal distribution
+## Paper Mapping
 
-### Pluggable Re-ID Engine
-The embedding model (face detection + ArcFace vectors) is **swappable** behind a stable interface:
-- Current: InsightFace/ArcFace (commodity, fast, CPU/GPU flexible)
-- Alternative: proprietary model from vendor X, Y, or Z (drop-in replacement)
-- Custom: LEA trains its own embedding model (fine-tuned on local suspects or regional demographics)
+- **Paper 1 — General Architecture**: introduces the ontology (Target/Situation/Event/Entity), the knowledge-graph + relational storage architecture, and the confidence-gated entity-resolution workflow. The paper's evaluated capability is face-based `Person` entity resolution and cross-Situation case-linking within a simulated Target ("a synthetic bank-robbery series") — this is the demonstration vehicle for the architecture, not a scope limit on the platform.
+- **Paper 2 — Network Analysis / Model of Functioning**: takes the network of entities that Paper 1's architecture produces for a Target and analyzes it (community detection, centrality, temporal decay, link prediction) to surface that Target's Model of Functioning — operational cells, key persons, and how the operation evolves over time.
+- **Paper 3 — Evidentiary Verification**: addresses when a `Person` entity's resolved identification must be escalated from an operational lead to court-admissible evidence, via a structured, protocol-enforced verification workflow.
 
-The graph schema and confidence-gate logic are independent of the embedding model — changing models requires only recomputing embeddings for existing observations, not schema changes.
-
-### Future Federation (Out of Scope)
-- Multiple DTID instances in different jurisdictions can be federated via a gateway service
-- Gateway performs privacy-respecting cross-jurisdiction queries (e.g., does suspect X appear in any other agency's database?)
-- No assumption of trust or shared infrastructure between agencies
-- Details deferred to a later architecture doc
-
-## Migration from Papers 1–3
-
-The three research papers describe evaluation strategies for each tier:
-
-- **Paper 1 (Identity Tier Evaluation)**: DSS/IS evaluation register (silo-breaking rate, routing accuracy, workload compression) — validates the identity-level tier's core claim
-- **Paper 2 (Network Tier Evaluation)**: Graph-topological evaluation register (community detection, centrality, link prediction) — validates that composing profiles into networks reveals organizational structure
-- **Paper 3 (Evidentiary Tier Evaluation)**: Behavioral/HCI evaluation register (examiner study: automation-bias reduction, inter-rater agreement, false-positive errors) — validates that structured verification mitigates legal/forensic risks
-
-All three tiers are production-ready in the codebase; papers evaluate them independently, but they coexist and share the same event-sourced graph.
+All three papers evaluate one platform; they are published separately because their evaluation registers (DSS/IS, graph-topological, behavioral/forensic) are incompatible within a single methodology section — see `docs/RESEARCH_STRATEGY.md`.
 
 ## References
 
-- Clark, R. M. (2013). *Intelligence Analysis: A Target-Centric Approach*. CQ Press. — theoretical anchor for target-centric recursion
-- JDL data fusion model (Level 1 object refinement) — fusion methodology for identity-level observations
+- Clark, R. M. (2013). *Intelligence Analysis: A Target-Centric Approach*. CQ Press. — theoretical anchor for the Target/Situation/Event/Entity ontology
+- JDL data fusion model (Level 1 object refinement) — fusion methodology for Entity-level observations
 - Memgraph documentation — graph database schema and Cypher query optimization
 - PostgreSQL pgvector extension — embedding storage and similarity search
 - FISWG (Facial Identification Scientific Working Group), ACE-VR (Analysis, Comparison, Evaluation, Verification, Review) — forensic facial-comparison protocol standards
