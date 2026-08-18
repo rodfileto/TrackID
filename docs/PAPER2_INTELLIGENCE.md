@@ -1,4 +1,6 @@
-# Paper 2: Situation/Network-Target Profiles
+# Paper 2: Network Tier Evaluation — Situation/Network-Target Profiles
+
+**This document describes the evaluation strategy for the network-analysis tier of the DTID platform.** For full system context and architecture, see [`docs/DTID_ARCHITECTURE.md`](DTID_ARCHITECTURE.md). The network tier is built on the identity-resolution output from Paper 1; this paper evaluates its core claim that composing Person-Target Profiles into spatio-temporal networks reveals organizational structure via graph-topological methods (community detection, centrality analysis, link prediction).
 
 ## Title (Working)
 **Situation/Network-Target Profiles: Composing Person-Target Identities into Organizational Structure via Spatio-Temporal Network Analysis**
