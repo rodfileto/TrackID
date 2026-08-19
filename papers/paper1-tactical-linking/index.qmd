@@ -1,11 +1,17 @@
 ---
-title: "Target-Centric Face Re-Identification: A Design Science Approach to Event-Source Intelligence Dossiers in Law Enforcement"
+title: "VITRAL: A target centric system for knowledge management in conflict environments"
 author: Rodrigo Fileto Cuerci Maciel
 abstract: |
  Testing Abstract
 ---
 
 # Introduction
+
+Amount of data
+
+cooperation in the intelligence work
+
+build knowledge
 
 # Conceptual Framework and Literature Review
 
@@ -29,7 +35,7 @@ The intelligence cycle is a good way to learn the components of the intelligence
 
 ## Design Requirements
 
-# Artifact Architecture and System Design
+the architecture's entity-resolution layer is embedding-model-agnostic by design; a comparative evaluation of alternative open-weight models is left to future work.Artifact Architecture and System Design
 
 # Demonstration
 
