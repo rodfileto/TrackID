@@ -17,6 +17,7 @@ import FormElements from "./pages/Forms/FormElements";
 import TabsPage from "./pages/Tabs";
 import VideoProcessing from "./pages/VideoProcessing";
 import ModelComparison from "./pages/ModelComparison";
+import TemplateBuilder from "./pages/TemplateBuilder";
 import Blank from "./pages/Blank";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
@@ -46,6 +47,7 @@ export default function App() {
             {/* Face Recognition */}
             <Route path="/video-processing" element={<VideoProcessing />} />
             <Route path="/model-comparison" element={<ModelComparison />} />
+            <Route path="/template-builder" element={<TemplateBuilder />} />
 
             {/* Tables */}
             <Route path="/basic-tables" element={<BasicTables />} />
