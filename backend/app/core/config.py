@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     # Redis (for task queue)
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
 
+    # Memgraph (knowledge graph - Target/Situation/Event/Target Entity
+    # ontology, see docs/DTID_ARCHITECTURE.md). No auth by default in
+    # Memgraph Community, so no credentials here yet.
+    MEMGRAPH_URI: str = os.getenv("MEMGRAPH_URI", "bolt://localhost:7687")
+
     # Object storage (S3-compatible / MinIO locally, swappable to real AWS S3
     # in prod by changing endpoint/credentials only)
     # Host port shifted to 9010 for local (non-docker) dev - see
@@ -52,6 +57,16 @@ class Settings(BaseSettings):
         os.path.join(os.path.dirname(__file__), "..", "..", "models", "magface_iresnet50.onnx"),
     )
     FACE_QUALITY_USE_GPU: bool = os.getenv("FACE_QUALITY_USE_GPU", "False").lower() == "true"
+
+    # Confidence-gated face resolution (app/services/entity_resolution_service.py).
+    # Defaults match TARGET_PERSON.default_tau_high/low in
+    # app/ontology/entity_types/builtin.py - kept in sync manually until
+    # EntityTypeDefinition is graph-backed and per-type overrides are wired
+    # through (a pre-existing, separately tracked gap, not solved here).
+    RESOLUTION_TAU_HIGH: float = float(os.getenv("RESOLUTION_TAU_HIGH", "0.75"))
+    RESOLUTION_TAU_LOW: float = float(os.getenv("RESOLUTION_TAU_LOW", "0.50"))
+    RESOLUTION_CANDIDATE_POOL_SIZE: int = int(os.getenv("RESOLUTION_CANDIDATE_POOL_SIZE", "200"))
+    RESOLUTION_TOP_K: int = int(os.getenv("RESOLUTION_TOP_K", "5"))
 
 
 settings = Settings()
