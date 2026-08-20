@@ -53,6 +53,11 @@ const navItems: NavItem[] = [
     path: "/model-comparison",
   },
   {
+    icon: <VideoIcon />,
+    name: "Template Builder",
+    path: "/template-builder",
+  },
+  {
     name: "Forms",
     icon: <ListIcon />,
     subItems: [{ name: "Form Elements", path: "/form-elements", pro: false }],

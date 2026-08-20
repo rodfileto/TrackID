@@ -10,10 +10,18 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.cases import router as cases_router
+from app.api.entities import router as entities_router
+from app.api.events import router as events_router
 from app.api.face_detection import router as face_detection_router
+from app.api.identities import router as identities_router
+from app.api.ontology import router as ontology_router
+from app.api.resolution import router as resolution_router
+from app.api.targets import participations_router, router as targets_router
 from app.api.video_processing import router as video_processing_router
 from app.api.videos import router as videos_router
 from app.core.config import settings
+from app.core.graph import close_graph, connect_graph
 from app.core.ml_models import load_face_app, load_quality_service
 from app.core.storage import get_media_storage
 
@@ -34,7 +42,17 @@ async def lifespan(app: FastAPI):
         # video-processing persistence needs it, and that fails loudly on
         # its own when it actually runs.
         logger.warning("Could not reach object storage at startup - bucket not verified", exc_info=True)
+
+    driver = connect_graph()
+    try:
+        await driver.verify_connectivity()
+    except Exception:
+        # Non-fatal, same reasoning as MinIO above - only the /targets
+        # endpoints need Memgraph, and they fail loudly on their own.
+        logger.warning("Could not reach Memgraph at startup - graph connectivity not verified", exc_info=True)
+
     yield
+    await close_graph()
 
 
 app = FastAPI(
@@ -63,7 +81,15 @@ async def api_health_check():
     return {"status": "ok", "version": "1.0"}
 
 
+app.include_router(cases_router)
+app.include_router(entities_router)
+app.include_router(events_router)
 app.include_router(face_detection_router)
+app.include_router(identities_router)
+app.include_router(ontology_router)
+app.include_router(resolution_router)
+app.include_router(targets_router)
+app.include_router(participations_router)
 app.include_router(video_processing_router)
 app.include_router(videos_router)
 

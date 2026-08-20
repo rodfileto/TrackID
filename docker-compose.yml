@@ -33,6 +33,22 @@ services:
       timeout: 5s
       retries: 5
 
+  # Memgraph - knowledge graph store for the Target/Situation/Event/Target
+  # Entity ontology (see docs/DTID_ARCHITECTURE.md). Bolt protocol on 7687,
+  # same port the neo4j Python driver defaults to.
+  memgraph:
+    image: memgraph/memgraph:latest
+    container_name: trackid-memgraph
+    ports:
+      - "7687:7687"
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'RETURN 0;' | mgconsole --host 127.0.0.1 --port 7687 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   # MinIO - S3-compatible object storage for persisted videos + face crops
   minio:
     image: minio/minio:latest
@@ -74,6 +90,7 @@ services:
       S3_BUCKET_NAME: trackid-media
       # FACE_USE_GPU: "True"
       # FACE_QUALITY_USE_GPU: "True"
+      MEMGRAPH_URI: bolt://memgraph:7687
     ports:
       - "8000:8000"
     depends_on:
@@ -82,6 +99,8 @@ services:
       redis:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      memgraph:
         condition: service_healthy
     volumes:
       - ./backend:/app
@@ -114,3 +133,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  memgraph_data:
