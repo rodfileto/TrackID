@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 MIN_CROP_DIMENSION = 224
 
 
-def _crop_face_from_frame(frame: np.ndarray, bbox: list) -> Optional[np.ndarray]:
+def crop_face_from_frame(frame: np.ndarray, bbox: list) -> Optional[np.ndarray]:
     x1, y1, x2, y2 = map(int, bbox)
     height, width = frame.shape[:2]
     face_width = x2 - x1
@@ -66,7 +66,7 @@ def extract_face_crop_bytes_from_capture(
     if not ret:
         return None
 
-    face_img = _crop_face_from_frame(frame, bbox)
+    face_img = crop_face_from_frame(frame, bbox)
     if face_img is None:
         return None
 
