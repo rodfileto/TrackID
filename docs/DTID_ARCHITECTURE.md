@@ -19,7 +19,7 @@ Framed this way, DTID is the software bridge between the two levels: it ingests 
 
 ## Core Ontology
 
-DTID's knowledge graph is built from four classes:
+DTID's knowledge graph is built from four **instance-layer** classes, plus two **schema-layer** classes that make the instance layer's types registrable and extensible rather than a closed, hardcoded set.
 
 ### Target
 The Target System (Clark's sense, macro): the object of interest. Example: **"Bank robberies in region X"** — a crime series treated as a single analytical scope. A Target is the top-level container; everything else in the ontology exists in service of understanding one.
@@ -33,6 +33,14 @@ A fine-grained occurrence within a Situation. Examples: "suspect entered the ban
 ### Target Entity
 A typed participant referenced by Events and Situations — the micro-target sense from above: `TargetPerson`, `Vehicle`, `PhoneNumber`, and other domain-relevant types. Target Entities are not owned by a single Situation — the same `TargetPerson` can appear across multiple Situations within a Target (and, in principle, across Targets). Recognizing that recurrence is what breaks case silos: an unidentified suspect in one robbery and an unidentified suspect in another are only linkable once both are resolved to the same `TargetPerson`. Face-based entity resolution (InsightFace/ArcFace embeddings + confidence-gated matching) is how `TargetPerson` entities are resolved from Event-level observations; the platform's ontology is deliberately generic about other Target Entity types and other resolution modalities, so this is one instantiation of the pattern, not the whole of it.
 
+### EntityTypeDefinition (schema layer)
+A registrable **type** for Target Entities — what makes `TargetPerson`, `Vehicle`, and `PhoneNumber` a starter template rather than a hardcoded, closed list. Each `EntityTypeDefinition` carries a `name`, a `description`, a set of `property_hints` (typical/suggested properties — e.g. `Vehicle` hints at `plate_number`, `make`, `model` — **not enforced**, matching how property graphs naturally work rather than adding a rigid validation layer), and a `source` (`"builtin"` or `"user-defined"`, with `created_by` for the latter). Instance nodes are still typed by graph label, exactly as before — an `EntityTypeDefinition` doesn't change how `:TargetPerson` nodes work, it's queryable metadata describing what that label means and what it's expected to carry. The built-in starter set is `TargetPerson`, `Vehicle`, `Place`, `PhoneNumber`, `Organization`, `FinancialAccount` — a starting proposal, not a closed list; analysts can register new types (e.g. `CryptoWallet`, `VesselIMO`) for domains the starter set doesn't cover.
+
+### TargetTypeTemplate & Concept (schema layer)
+A registrable **type for Target Systems themselves**, carrying its own internal network of thematic concepts. A `TargetTypeTemplate` (e.g. "Bank Robbery," "Drug Trafficking Network") has a `name`, `description`, and `source`, same builtin/user-defined split as `EntityTypeDefinition`. A `Target` instance references **exactly one** `TargetTypeTemplate` via an `OF_TYPE` edge, declaring what kind of investigation it is — no multi-template composition or inheritance for now, deferred until a concrete case demands it.
+
+Within a template, a `Concept` is one operational/thematic category — for "Bank Robbery," that might be `Reconnaissance`, `Logistics`, `Violent Actions`, `Money Laundering`, `Getaway`. Concepts belong to their template via `HAS_CONCEPT` and relate to *each other* via a generic `RELATES_TO` edge — this is the "network of general concepts" a target type is built from, distinct from the network of Target Entities described below. Instance-layer nodes — an `Event`, sometimes a `Situation` — can be tagged to a `Concept` via an `INSTANTIATES` edge, recording an analyst's judgment that a specific piece of evidence supports that concept for this Target. That's how a top-down template accumulates bottom-up evidence over an investigation's life — see "Conceptual Framework vs. Model of Functioning" below for how this relates to the platform's other derived representation.
+
 ## Two Derived Representations per Target
 
 Once a Target System's Situations, Events, and Target Entities are populated, two distinct analytical layers can be built on top — these are **not the same artifact** and should not be conflated:
@@ -43,6 +51,9 @@ The raw knowledge graph itself: nodes are Target Entities (and, where useful, Si
 ### Model of Functioning
 A higher-level, interpretive account of *how the Target System operates* — roles (e.g., driver, lookout, financier), operational workflow (e.g., reconnaissance → robbery → getaway), and how that structure evolves over time. The Model of Functioning is built **on top of** the Network of Entities (via community detection, centrality analysis, and temporal modeling — see Paper Mapping below) rather than being read directly off the raw graph. Two Target Systems can have structurally similar entity networks and very different models of functioning, or vice versa — the two representations answer different questions.
 
+### Conceptual Framework vs. Model of Functioning
+The `TargetTypeTemplate`/`Concept` network (Core Ontology, above) is a **third**, distinct representation, easy to confuse with the Model of Functioning since both describe "how a target operates" — the difference is direction. The Conceptual Framework is **deductive**: a starting hypothesis space declared before evidence accumulates — "here is what a Bank Robbery typically involves." The Model of Functioning is **inductive**: derived from whatever the actual entity network turns out to contain, via network analysis. They're meant to be compared, not merged: does the Model of Functioning's community-detection output confirm the `Concept`s an analyst has tagged evidence against, extend them, or reveal structure the template didn't anticipate — motivating a template edit rather than a data problem? Paper 2 (which produces the Model of Functioning) is the natural place to make this comparison explicit.
+
 ## Storage Architecture
 
 ### Storage Model: Knowledge Graph + Relational
@@ -50,8 +61,10 @@ A higher-level, interpretive account of *how the Target System operates* — rol
 Two complementary data stores, logically coupled by UUID pointers:
 
 **Memgraph (Cypher graph database)** — the canonical ontology and relationship store
-- Node types: `Target`, `Situation`, `Event`, Target Entity types (`TargetPerson`, `Vehicle`, `PhoneNumber`, ...), `AnalystAction`
-- Edge types: `HAS_SITUATION` (Target→Situation), `HAS_EVENT` (Situation→Event), `PARTICIPATES_IN` (Target Entity→Event/Situation), `CO_OCCURS_WITH` (Target Entity↔Target Entity, weighted), `AFFECTS` (AnalystAction→node), `CORRECTS` (node→prior node)
+- Instance-layer node types: `Target`, `Situation`, `Event`, Target Entity types (`TargetPerson`, `Vehicle`, `PhoneNumber`, ...), `AnalystAction`
+- Schema-layer node types: `EntityTypeDefinition`, `TargetTypeTemplate`, `Concept` — kept as clearly distinct labels from the instance layer above, in the same graph, so schema queries ("what entity types exist") and investigative queries ("what happened in this Target") stay cleanly separable without a cross-store lookup
+- Instance-layer edge types: `HAS_SITUATION` (Target→Situation), `HAS_EVENT` (Situation→Event), `PARTICIPATES_IN` (Target Entity→Event/Situation), `CO_OCCURS_WITH` (Target Entity↔Target Entity, weighted), `AFFECTS` (AnalystAction→node), `CORRECTS` (node→prior node)
+- Schema-layer edge types: `OF_TYPE` (Target→TargetTypeTemplate), `HAS_CONCEPT` (TargetTypeTemplate→Concept), `RELATES_TO` (Concept↔Concept), `INSTANTIATES` (Event/Situation→Concept)
 
 **PostgreSQL (relational + pgvector)** — artifacts and metadata
 - **Embeddings**: 512-d ArcFace vectors (cosine-normalized) for `TargetPerson` resolution, indexed for similarity search
@@ -87,7 +100,7 @@ Compute confidence τ (0 to 1) against candidate TargetPerson entities
 
 **Policy auditability**: every gate decision is itself logged as an `AnalystAction` node referencing the Event — the gate logic is auditable, not opaque.
 
-**Threshold tuning**: τ_high and τ_low are policy parameters, not fixed constants — they can differ per Target System, per Target Entity type, or per investigative context, and every threshold change is itself an `AnalystAction`.
+**Threshold tuning**: τ_high and τ_low are policy parameters, not fixed constants — they can differ per Target System, per Target Entity type, or per investigative context, and every threshold change is itself an `AnalystAction`. Per-type defaults live as `default_tau_high`/`default_tau_low` properties directly on the relevant `EntityTypeDefinition` node (Core Ontology, above) — e.g. `TargetPerson` and `Vehicle` can ship with different default thresholds, reflecting that face-based resolution and plate-based resolution carry different baseline confidence characteristics — rather than floating as an unplaced policy concept.
 
 ## Dual-Mode Delivery (DR3)
 
