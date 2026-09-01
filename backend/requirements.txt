@@ -30,5 +30,8 @@ opencv-python
 numpy
 scikit-learn  # DBSCAN clustering for video face tracking
 
+# Ontology (BFO + CCO import)
+rdflib>=7.0
+
 # Utilities
 python-multipart==0.0.7
