@@ -6,26 +6,53 @@ abstract: |
 ---
 
 # Introduction
+
 Small and medium-sized law enforcement agencies face severe operational friction when reconciling evidence collected across fragmented intake channels—such as CCTV footage, call detail records, and automated license plate scans. Rather than a lack of raw information, the primary bottleneck is cognitive overload caused by static, siloed database systems that force analysts to manually connect disparate data points. Grounded in Robert M. Clark’s Target-Centric Intelligence paradigm, this paper addresses this challenge by presenting an open-source reference software architecture and micro-ontology. The system decouples event ingestion from core graph representation, organizing incoming observational data into a dynamic, target-centric knowledge graph without requiring proprietary software licenses or complex infrastructure.
 
 # Theoretical Foundations and Related Work
-Modern intelligence-led policing requires shifting from traditional entity-centric tracking—which focuses on isolated suspects—to target-system modeling, which captures the broader web of relationships, assets, and operational nodes. While relational databases enforce rigid schemas that break when new data types are introduced, graph-based knowledge representations provide the flexibility needed to model complex, evolving criminal networks. This section reviews the convergence of intelligence frameworks and semantic graph technologies, identifying a key gap in current systems: the lack of a lightweight, open-source reference architecture that bridges multi-source event ingestion with a standardized, auditable micro-ontology for local law enforcement.
+
+Modern intelligence-led policing requires shifting from traditional entity-centric tracking—which focuses on isolated suspects—to target-system modeling, which captures the broader web of relationships, assets, and operational nodes. While relational databases enforce rigid schema that break when new data types are introduced, graph-based knowledge representations provide the flexibility needed to model complex, evolving criminal networks. This section reviews the convergence of intelligence frameworks and semantic graph technologies, identifying a key gap in current systems: the lack of a lightweight, open-source reference architecture that bridges multi-source event ingestion with a standardized, auditable micro-ontology for local law enforcement.
+
+## Conceptual knowledge management in intelligence
+
+Our first block will consider conceptual models of knowledge management in the intelligence. We borrow mainly the US perspective. The classical work in this sense is given by Sherman Kent. When defining the intelligence Sherman Kent separated in three facets: as knowledge, as activity and as organization. "*Intelligence is Knowledge"* is the first chapter in his classical work @kent1966 where the intelligence knowledge is organized in three elements:
+
+1.  *Basic-Descriptive*: which brings the characteristic of a encyclopedia with description of entities of interest of the intelligence community. The CIA World Factbook which was curated and made available openly by this agency until February 2026 is a example of the descriptive knowledge;
+
+2.  *Current report*: Concerned with the report of ongoing facts or events. This kind of knowledge would update update the basic-descriptive element and also inform policymakers or operators of recent developments which could demand immediate action.
+
+3.  *Estimative intelligence*: Considered as the "most important and most complicated element of strategic intelligence" [@kent1966, p.39], this knowledge element would evaluate and build deep knowledge about the objects of interest for the intelligence community in order to detect trends and carry out predictive studies.
+
+A more recent perspective is brought by @clark2006 with the *target-centric approach*. Here, the target is a system which should be viewed as a network system or even as a complex network system having a intricate web of relationships. Then, the focus of the intelligence service is to understand strutcture, function and process of the target with the assumption that the target is always evolving either by adding or excluding new nodes to the network or adapting news and old relationships.
+
+The target-centric approach has been very influential in law enforcement contexts given light to the *Intelligence-led Policing* which "emphasises analysis and intelligence as pivotal to an objective, decision-making framework that prioritises crime hot spots, repeat victims, prolific offenders and criminal groups" [@ratcliffe2016, p 67]. The concept defines the shift from reactive policing to proactive, data-driven intelligence operations.
+
+## Knowledge Graphs and intelligence systems
+
+the IC deployed collaborative platforms like **Intellipedia** [@andrus2005] and DoDTechipedia [@schwalb2013]. This era focused on flattening hierarchies and crowdsourcing knowledge across agencies, shifting the prevailing culture from "need-to-know" to "need-to-share."
 
 # Design Science Research Methodology
+
 This research follows the Design Science Research Methodology (DSRM) for information systems, aiming to design, instantiate, and evaluate a software artifact that solves a defined operational problem. Based on operational requirements identified in municipal police workflows, we formulate five core Design Requirements ($\text{DR}_1$–$\text{DR}_5$): target-centric graph structuring, source-agnostic intake, confidence-gated event filtering, dual operational modality (asynchronous batch and synchronous streaming), and immutable provenance tracking. These requirements directly govern the structural design and technical evaluation of the reference architecture.
 
 # The Reference Architecture & Micro-Ontology
+
 The core artifact consists of an event-driven reference architecture centered on an extensible RDF/Turtle micro-ontology. To ensure schema flexibility across varied sensors, all incoming data is abstracted into a core tid:Observation class, which links ephemeral events (e.g., visual detections, license plate captures, telecommunication logs) to persistent entity nodes (tid:TargetPerson, tid:Vehicle, tid:PhoneNumber). The architecture incorporates a confidence-gated mechanism ($\tau_{\text{high}}, \tau_{\text{low}}$) that automatically commits high-confidence observations to the primary graph while routing ambiguous events to a human-in-the-loop verification queue, preserving graph cleanliness and evidentiary chain-of-custody.
 
 # System Instantiation
+
 To demonstrate the feasibility of the reference architecture, we developed a functional open-source prototype using an asynchronous Python backend. The system combines an API ingestion layer (FastAPI), an event queue manager (Redis/Celery) for background processing, and a graph storage engine executing openCypher queries over an in-memory graph database (Memgraph). This decoupled stack allows small police forces to deploy the system on standard, low-cost hardware while maintaining the capability to scale background workers as incoming video or log files increase.
 
-# Synthetic Demonstration & EvaluationEvaluating the system without ethical review constraints requires a fully non-human, deterministic testbed. We map the multi-camera perspectives of the publicly available Market-1501 benchmark dataset to spatial sensor nodes within the graph, supplementing them with synthetic license plate and call detail records tied to the dataset's identities. The evaluation benchmarks system ingestion throughput, graph query response latency across multi-hop traversals, and the mathematical efficiency of the confidence-gating engine in reducing analyst queue volume.
+# Synthetic Demonstration & Evaluation
+
+Evaluating the system without ethical review constraints requires a fully non-human, deterministic testbed. We map the multi-camera perspectives of the publicly available Market-1501 benchmark dataset to spatial sensor nodes within the graph, supplementing them with synthetic license plate and call detail records tied to the dataset's identities. The evaluation benchmarks system ingestion throughput, graph query response latency across multi-hop traversals, and the mathematical efficiency of the confidence-gating engine in reducing analyst queue volume.
 
 # Discussion and Operational Boundaries
+
 The evaluation results confirm that the reference architecture satisfies the initial design requirements, offering a scalable substrate for target-centric intelligence analysis. By abstracting data intake into standardized event structures, the platform significantly reduces manual data handling for analysts while maintaining a strict audit trail of automated commits and manual edits. This section also discusses operational boundary conditions, including hardware constraints in small departments, dependency on feature extractor quality, and the deliberate exclusion of complex automated analytics from this baseline architecture.
 
 # Conclusion and Future Research
+
 This paper contributes an open-source, target-centric reference architecture and micro-ontology designed to streamline intelligence management for resource-constrained law enforcement agencies. By providing a standardized blueprint for event ingestion and graph-based target representation, the artifact offers a flexible foundation for modern intelligence-led policing. Future work will extend this baseline architecture by introducing specialized analytics modules, including complex network metrics for structural network disruption and automated cross-jurisdictional graph federation.
 
 # Introduction
