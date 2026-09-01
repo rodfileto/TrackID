@@ -15,7 +15,6 @@ from app.api.entities import router as entities_router
 from app.api.events import router as events_router
 from app.api.face_detection import router as face_detection_router
 from app.api.identities import router as identities_router
-from app.api.ontology import router as ontology_router
 from app.api.resolution import router as resolution_router
 from app.api.targets import participations_router, router as targets_router
 from app.api.video_processing import router as video_processing_router
@@ -23,6 +22,7 @@ from app.api.videos import router as videos_router
 from app.core.config import settings
 from app.core.graph import close_graph, connect_graph
 from app.core.ml_models import load_face_app, load_quality_service
+from app.core.ontology import seed_taxonomy
 from app.core.storage import get_media_storage
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,8 @@ async def lifespan(app: FastAPI):
     driver = connect_graph()
     try:
         await driver.verify_connectivity()
+        async with driver.session() as session:
+            await seed_taxonomy(session)
     except Exception:
         # Non-fatal, same reasoning as MinIO above - only the /targets
         # endpoints need Memgraph, and they fail loudly on their own.
@@ -86,7 +88,6 @@ app.include_router(entities_router)
 app.include_router(events_router)
 app.include_router(face_detection_router)
 app.include_router(identities_router)
-app.include_router(ontology_router)
 app.include_router(resolution_router)
 app.include_router(targets_router)
 app.include_router(participations_router)

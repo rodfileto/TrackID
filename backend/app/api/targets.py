@@ -16,8 +16,6 @@ from app.graph.service import (
     get_target,
     list_targets,
 )
-from app.ontology.templates.registry import get_builtin_template
-from app.ontology.templates.store import get_created_template
 from app.schemas.graph import (
     CreateParticipationRequest,
     CreateSituationRequest,
@@ -26,10 +24,6 @@ from app.schemas.graph import (
 )
 
 router = APIRouter(prefix="/api/v1/targets", tags=["targets"])
-
-
-def _template_exists(name: str) -> bool:
-    return get_builtin_template(name) is not None or get_created_template(name) is not None
 
 
 @router.get("", response_model=TargetListResponse)
@@ -44,11 +38,8 @@ async def create_target_endpoint(
     body: CreateTargetRequest,
     session: AsyncSession = Depends(get_graph_session),
 ) -> Target:
-    if not _template_exists(body.target_type):
-        raise HTTPException(
-            status_code=422,
-            detail=f"target_type {body.target_type!r} does not match any known TargetTypeTemplate",
-        )
+    # target_type is currently a free string - the BFO domain registry
+    # (app/ontology/domain) will re-add validation when it is wired in.
     return await create_target(session, body.name, body.description, body.target_type)
 
 

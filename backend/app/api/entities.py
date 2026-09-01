@@ -11,7 +11,6 @@ from neo4j import AsyncSession
 from app.core.graph import get_graph_session
 from app.graph.schemas import TargetEntity, TargetEntityDetail
 from app.graph.service import create_entity, get_entity_detail, list_entities
-from app.ontology.entity_types.registry import get_builtin_entity_type
 from app.schemas.graph import CreateEntityRequest, EntityListResponse
 
 router = APIRouter(prefix="/api/v1/entities", tags=["entities"])
@@ -30,14 +29,8 @@ async def create_entity_endpoint(
     body: CreateEntityRequest,
     session: AsyncSession = Depends(get_graph_session),
 ) -> TargetEntity:
-    # Only built-ins exist right now - no user-defined EntityTypeDefinition
-    # storage/API yet (same gap noted in app/ontology/entity_types/, this
-    # just inherits it rather than papering over it).
-    if get_builtin_entity_type(body.entity_type) is None:
-        raise HTTPException(
-            status_code=422,
-            detail=f"entity_type {body.entity_type!r} does not match any known EntityTypeDefinition",
-        )
+    # entity_type is currently a free string - the BFO domain registry
+    # (app/ontology/domain) will re-add validation when it is wired in.
     return await create_entity(session, body.entity_type, body.name, body.properties)
 
 
