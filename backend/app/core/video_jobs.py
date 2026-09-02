@@ -27,6 +27,10 @@ class VideoJob:
     finished_at: Optional[float] = None
     result: Optional[dict] = None
     error: Optional[str] = None
+    # Phase 1: id of the corresponding job on the ML sidecar. The
+    # orchestration layer polls the sidecar for progress and persists the
+    # result once it completes.
+    sidecar_job_id: Optional[str] = None
 
 
 class VideoJobStore:
