@@ -3,35 +3,13 @@ uvicorn[standard]>=0.32
 python-dotenv>=1.0
 pydantic>=2.10
 pydantic-settings>=2.7
-httpx>=0.28
 
-# Database
-sqlalchemy>=2.0
-asyncpg>=0.30
-pgvector>=0.4
-
-# Knowledge graph (Memgraph, Bolt-protocol compatible with the neo4j driver)
-neo4j>=5.26
-
-# ORM & migrations
-alembic>=1.14
-
-# Object storage (S3-compatible / MinIO)
-boto3>=1.35
-
-# Task queue
-taskiq>=0.12
-aio-pika>=9.5
-
-# CV/AI
+# CV/AI (ML sidecar)
 insightface
 onnxruntime   # CPU. For GPU, see requirements-gpu.txt.
 opencv-python
 numpy
 scikit-learn  # DBSCAN clustering for video face tracking
-
-# Ontology (BFO + CCO import)
-rdflib>=7.0
 
 # Utilities
 python-multipart==0.0.7

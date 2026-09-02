@@ -1,3 +1,5 @@
+import { authHeaders } from "../auth";
+
 export interface VideoFaceDetection {
   frame_number: number;
   timestamp_seconds: number;
@@ -102,6 +104,7 @@ export async function startVideoProcessing(
 
   const response = await fetch(`/api/v1/process-video?${query.toString()}`, {
     method: "POST",
+    headers: authHeaders(),
     body: formData,
   });
 
@@ -114,7 +117,9 @@ export async function startVideoProcessing(
 }
 
 export async function fetchVideoJobStatus(jobId: string): Promise<VideoJobStatus> {
-  const response = await fetch(`/api/v1/process-video/${jobId}`);
+  const response = await fetch(`/api/v1/process-video/${jobId}`, {
+    headers: authHeaders(),
+  });
   if (!response.ok) {
     throw new Error(await parseErrorDetail(response));
   }
@@ -133,7 +138,9 @@ export async function fetchVideoList(
     page: String(page),
     page_size: String(pageSize),
   });
-  const response = await fetch(`/api/v1/videos?${query.toString()}`);
+  const response = await fetch(`/api/v1/videos?${query.toString()}`, {
+    headers: authHeaders(),
+  });
   if (!response.ok) {
     throw new Error(await parseErrorDetail(response));
   }
@@ -147,7 +154,9 @@ export async function fetchVideoList(
  * face.
  */
 export async function fetchPersistedVideo(videoId: string): Promise<VideoProcessingResponse> {
-  const response = await fetch(`/api/v1/videos/${videoId}`);
+  const response = await fetch(`/api/v1/videos/${videoId}`, {
+    headers: authHeaders(),
+  });
   if (!response.ok) {
     throw new Error(await parseErrorDetail(response));
   }

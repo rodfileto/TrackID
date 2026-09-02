@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     # Memgraph Community, so no credentials here yet.
     MEMGRAPH_URI: str = os.getenv("MEMGRAPH_URI", "bolt://localhost:7687")
 
+    # ML sidecar (ml_sidecar/main.py) — the separate Python process that
+    # owns InsightFace/MagFace/video processing (Phase 1 of the Rust
+    # transition). The orchestration layer calls it over HTTP.
+    ML_SIDECAR_URL: str = os.getenv("ML_SIDECAR_URL", "http://localhost:8001")
+
     # Object storage (S3-compatible / MinIO locally, swappable to real AWS S3
     # in prod by changing endpoint/credentials only)
     # Host port shifted to 9010 for local (non-docker) dev - see

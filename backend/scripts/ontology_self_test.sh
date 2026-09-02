@@ -38,7 +38,7 @@ write_tid() {
   cat > "$TID_DIR/face-record.ttl" <<EOF
 @prefix obo:  <http://purl.obolibrary.org/obo/> .
 @prefix cco:  <https://www.commoncoreontologies.org/> .
-@prefix tid:  <https://trackid.example.org/ontology/> .
+@prefix tid:  <https://github.com/rodfileto/TrackID/ontology/> .
 @prefix owl:  <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 
