@@ -71,60 +71,27 @@ services:
       timeout: 5s
       retries: 5
 
-  # Rust backend (axum) — orchestration + API (replaces the retired FastAPI app).
-  rust-backend:
+  # Go backend (gin) — orchestration + API + in-process face detection/
+  # embedding/video-processing (onnxruntime, CUDA-accelerated). Replaces the
+  # retired Rust backend and Python ML sidecar.
+  go-backend:
     build:
-      context: ./backend-rust
+      context: ./backend-go
       dockerfile: Dockerfile
-    container_name: trackid-rust-backend
+    container_name: trackid-go-backend
     environment:
-      DEBUG: "True"
       DATABASE_URL: postgres://postgres:password@postgres:5432/trackid
-      ML_SIDECAR_URL: http://ml-sidecar:8001
-      MEMGRAPH_URI: bolt://memgraph:7687
-      S3_ENDPOINT_URL: http://minio:9000
-      S3_PUBLIC_URL: http://localhost:9010
-      S3_ACCESS_KEY_ID: minioadmin
-      S3_SECRET_ACCESS_KEY: minioadmin
-      S3_BUCKET_NAME: trackid-media
-      S3_REGION_NAME: us-east-1
-      ONTOLOGY_DIR: /ontology
       JWT_SECRET: dev-secret-change-me
+      SESSION_SECRET: dev-session-secret-change-me
+      FRONTEND_URL: http://localhost:5173
+      BASE_URL: http://localhost:8000
       BIND: 0.0.0.0:8000
+      VISION_USE_GPU: "true"
     ports:
       - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
-      memgraph:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      ml-sidecar:
-        condition: service_started
-    volumes:
-      - ./backend/app/ontology/vendor:/ontology:ro
-
-  # ML sidecar - the separate Python process that owns InsightFace/MagFace
-  # and video frame processing (Phase 1 of the Rust transition, see
-  # docs/RUST_TRANSITION_PLAN.md). The backend service calls it over HTTP
-  # at ML_SIDECAR_URL.
-  ml-sidecar:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        GPU: "1"
-    container_name: trackid-ml-sidecar
-    environment:
-      DEBUG: "True"
-      FACE_USE_GPU: "True"
-      FACE_QUALITY_USE_GPU: "True"
-    ports:
-      - "8001:8001"
-    volumes:
-      - ./backend:/app
-    command: uvicorn ml_sidecar.main:app --host 0.0.0.0 --port 8001
     deploy:
       resources:
         reservations:
