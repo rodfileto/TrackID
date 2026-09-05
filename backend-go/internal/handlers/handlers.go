@@ -12,8 +12,8 @@ import (
 	"trackid-backend/internal/db"
 	"trackid-backend/internal/jobs"
 	"trackid-backend/internal/oauth"
-	"trackid-backend/internal/videoproc"
-	"trackid-backend/internal/vision"
+	"github.com/rodfileto/trackid-vision/videoproc"
+	"github.com/rodfileto/trackid-vision/vision"
 )
 
 type Deps struct {
