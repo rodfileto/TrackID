@@ -9,7 +9,7 @@ require (
 	github.com/gorilla/sessions v1.4.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/markbates/goth v1.82.0
-	github.com/yalue/onnxruntime_go v1.24.0
+	github.com/rodfileto/trackid-vision v0.1.0
 	golang.org/x/crypto v0.56.0
 )
 
@@ -45,6 +45,7 @@ require (
 	github.com/quic-go/quic-go v0.59.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
+	github.com/yalue/onnxruntime_go v1.24.0 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	golang.org/x/arch v0.22.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
