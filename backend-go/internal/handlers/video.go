@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"trackid-backend/internal/videoproc"
+	"github.com/rodfileto/trackid-vision/videoproc"
 )
 
 func resolveVideoOptions(c *gin.Context) videoproc.Options {
