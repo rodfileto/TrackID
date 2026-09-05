@@ -33,27 +33,75 @@ services:
       timeout: 5s
       retries: 5
 
-  # FastAPI backend
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: trackid-backend
+  # Memgraph - knowledge graph store for the Target/Situation/Event/Target
+  # Entity ontology (see docs/DTID_ARCHITECTURE.md). Bolt protocol on 7687,
+  # same port the neo4j Python driver defaults to.
+  memgraph:
+    image: memgraph/memgraph:latest
+    container_name: trackid-memgraph
+    ports:
+      - "7687:7687"
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'RETURN 0;' | mgconsole --host 127.0.0.1 --port 7687 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MinIO - S3-compatible object storage for persisted videos + face crops
+  minio:
+    image: minio/minio:latest
+    container_name: trackid-minio
+    command: server /data --console-address ":9001"
     environment:
-      DEBUG: "True"
-      DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/trackid
-      REDIS_URL: redis://redis:6379
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      # Host ports shifted off the 9000/9001 default - already bound by
+      # another project's MinIO container on this machine. Internal
+      # container-to-container traffic (backend -> minio:9000) is unaffected.
+      - "9010:9000"
+      - "9011:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Go backend (gin) — orchestration + API + in-process face detection/
+  # embedding/video-processing (onnxruntime, CUDA-accelerated). Replaces the
+  # retired Rust backend and Python ML sidecar.
+  go-backend:
+    build:
+      context: ./backend-go
+      dockerfile: Dockerfile
+    container_name: trackid-go-backend
+    environment:
+      DATABASE_URL: postgres://postgres:password@postgres:5432/trackid
+      JWT_SECRET: dev-secret-change-me
+      SESSION_SECRET: dev-session-secret-change-me
+      FRONTEND_URL: http://localhost:5173
+      BASE_URL: http://localhost:8000
+      BIND: 0.0.0.0:8000
+      VISION_USE_GPU: "true"
     ports:
       - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./backend:/app
-    command: python main.py
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
 volumes:
   postgres_data:
   redis_data:
+  minio_data:
+  memgraph_data:

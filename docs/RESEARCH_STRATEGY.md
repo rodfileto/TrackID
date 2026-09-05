@@ -1,218 +1,111 @@
-# TrackID Research & Publication Strategy
+# DTID Research & Publication Strategy
 
-## Overview
+## DTID Architecture Overview
 
-TrackID is built to solve three complementary but distinct research problems, staged as three separate papers:
+**DTID** is a target-centric intelligence platform built on Clark's **target-centric approach to intelligence analysis**: a **Target System** (Clark's macro target) is simply the object of interest — a crime series, an organization, a scenario — represented as an instance of a small ontology (**Target → Situation → Event → Target Entity**) stored in a knowledge graph. A **Target Entity** (micro target) is a specific node within that graph that field officers interact with operationally — `TargetPerson`, `Vehicle`, `PhoneNumber`. Keeping these two senses of "Target" distinct matters for reviewers: the platform is the software bridge between them, ingesting observations about discrete Target Entities and automatically constructing the broader Target System. Two distinct analytical representations are built on top of any given Target System: a **network of entities** (the raw structure of who/what was involved and how they relate) and a **model of functioning** (a higher-level account of roles and operational pattern). Facial recognition is the mechanism the platform uses to resolve `TargetPerson` entities across the Events and Situations that make up a Target System — which is what allows a suspect observed in one incident to be recognized as the same person observed in another.
 
-1. **Paper 1 (Tactical Case Linking)**: The problem of asynchronous entity resolution across fragmented investigative silos — fast, DSS-focused, no human-subjects testing required.
-2. **Paper 2 (Strategic Intelligence)**: The macro-level challenge of revealing hidden relationships and organizational structures once cases are linked.
-3. **Paper 3 (Forensic Evidentiary Validation)**: The slow, court-admissible identification workflow — ACE-VR, FISWG compliance, automation-bias mitigation — requiring a human-subjects examiner study.
+The platform uses a single knowledge graph (Memgraph/Cypher) + relational store (PostgreSQL + pgvector) architecture, with append-only immutability, confidence-gated entity resolution, dual-mode delivery (live alerts + static dossier snapshots), and governance baked into the schema (retention policies, cryptographic signing, jurisdictional compliance). See [`docs/DTID_ARCHITECTURE.md`](DTID_ARCHITECTURE.md) for full technical details.
 
-A single software platform supports all three papers, but they are published as separate, focused contributions to avoid the "Kitchen Sink Paper" trap.
+The platform runs as a single codebase; three papers evaluate different parts of it separately to avoid the "kitchen sink paper" trap.
 
-## Why Separate Papers?
+## Evaluation Registers: Why Separate Papers?
 
-Combining these problems in a single manuscript fails peer review because:
+The three papers require fundamentally different evaluation methodologies. Combining them in a single manuscript fails peer review:
 
-- **Schizophrenic Literature Review**: defending entity resolution, network science, and forensic/legal compliance simultaneously requires coverage of information retrieval, complex networks, cognitive psychology, and forensic protocol standards — reviewers flag as unfocused.
-- **Conflicting Evaluation Strategies**: Paper 1's claims are provable via simulation on public benchmarks (no ethics review needed). Paper 3's claims are behavioral and require a human-subjects examiner study (ethics review required). Paper 2's claims are graph-topological. A single methodology section cannot serve all three.
-- **Reviewer Mismatch**: a DSS/IS reviewer will ask you to cut the FISWG legal detail; a forensic-science reviewer will ask you to cut the graph math; a network-science reviewer will ask you to cut the UI. You cannot win.
+- **Schizophrenic literature review & methodology**: Entity resolution, network science, and forensic/legal compliance require defending information retrieval, complex networks, cognitive psychology, and forensic protocol standards simultaneously — incompatible in a single literature review and methodology section.
+- **Conflicting evaluation criteria**:
+  - Paper 1's architecture claims are provable via **DSS/IS metrics** on public benchmarks (silo-breaking rate, routing accuracy, workload compression); no ethics review needed.
+  - Paper 2's network-analysis claims require **graph-topological validation** (community detection quality, centrality ranking, link-prediction metrics).
+  - Paper 3's verification claims require a **behavioral human-subjects study** (examiner automation-bias reduction, inter-rater agreement, false-positive error rates); IRB/ethics approval required.
+  - A single paper cannot credibly serve all three registers.
+- **Reviewer mismatch**: a DSS/IS reviewer asks to cut legal/forensic detail; a forensic-science reviewer asks to cut the graph math; a network-science reviewer asks to cut the workflow discussion.
 
-**Solution**: Split into three papers, each with surgical depth in its domain, published in sequence.
+**Solution**: three focused papers, each with surgical depth in its domain, sharing one theoretical anchor (the target-centric ontology). All three evaluate one platform; publication separation is strategic, not architectural.
 
-## Paper 1: Tactical Case Linking (Asynchronous Entity Resolution)
+## Paper Scopes & Evaluation Registers
 
-**Scope**: A Decision Support architecture that continuously and asynchronously resolves identities across fragmented, siloed investigative cases — without requiring any human-subjects evaluation.
+### Paper 1: General Architecture — Person Entity Resolution & Case-Linking
 
-**Core Problem**
-- Distinct incidents investigated in isolated case silos (different districts, different analysts, different days) never get cross-referenced unless a human happens to notice the connection.
-- Manually cross-referencing every suspect across every open case is an intractable N×(N−1)/2 combinatorial problem.
-- Vector similarity alone is blind to physical plausibility (an 85% match implying an impossible travel speed between two cameras is still nonsense).
+**Register**: Decision Support System (DSS) / Information Systems (IS) evaluation.
 
-**The Solution**
-- Treat faces as 512-dimensional vectors indexed continuously as they arrive (InsightFace + pgvector/HNSW — commodity components, not the novelty).
-- Apply a spatio-temporal plausibility gate on top of vector similarity to reject physically impossible links.
-- Route every candidate pair through a **tripartite state machine**: Auto-Merge (high confidence, no human), Tactical Queue (uncertain, one-click human validation), Auto-Reject (low confidence, discarded silently).
+Introduces the platform's general architecture: the Target/Situation/Event/Target Entity ontology (including the Target System vs. Target Entity distinction), the knowledge-graph + relational storage design, and the confidence-gated entity-resolution workflow. The paper is **not** scoped narrowly to case-linking — case-linking is the demonstrated capability used to evaluate the architecture, via face-based `TargetPerson` resolution within a simulated Target System (a synthetic bank-robbery series). Evaluation is simulation-based (public re-ID benchmark + synthetic Situation/Event overlay), no human-subjects testing required. Metrics: silo-breaking rate (precision/recall), routing accuracy (how well τ_high/τ_low separate candidates), workload compression (reduction in pairwise comparisons). See [`docs/PAPER1_TACTICAL_LINKING.md`](PAPER1_TACTICAL_LINKING.md).
 
-**Key Contributions** (DSS-Focused, Not CV-Focused)
-- The tripartite routing architecture itself — minimizing human involvement to only genuinely ambiguous candidates.
-- Spatio-temporal plausibility filtering as a physically-grounded complement to similarity thresholding.
-- **Silo-Breaking Rate**: how much of the true cross-case identity structure is recovered without any analyst looking for it.
-- **Workload Compression**: collapsing an O(N²) manual cross-referencing problem into a short, linear Tactical Queue (target: >99% reduction).
+### Paper 2: Network Analysis — Surfacing a Target's Model of Functioning
 
-**Evaluation Strategy — No Human Testing Required**
-Simulated fragmentation of a standard public multi-camera person re-identification benchmark (Market-1501, MSMT17): artificially partition known identities into isolated "cases" by camera/time block, discard the ground-truth linkage, then measure how well the Linkage Engine reconstructs it. This sidesteps any need for an ethics-reviewed human-subjects study, since the paper is proving a routing/entity-resolution architecture, not a forensic identification method.
+**Register**: Graph-topological (network-science / complex-systems) evaluation.
 
-**Target Journals**
-- Decision Support Systems
-- Expert Systems with Applications
-- Information Systems Frontiers
-- IEEE Transactions on Human-Machine Systems (secondary)
+Takes the network of Target Entities that Paper 1's architecture produces for a Target System and analyzes it (community detection, centrality, temporal decay, link prediction) to surface that Target System's **Model of Functioning** — operational cells, key persons, and how the operation evolves over time. Evaluation is graph-topological — validating community detection, centrality measures, and link prediction against synthetic planted communities and known organizational structure. Metrics: modularity, centrality ranking agreement, link-prediction precision/recall. See [`docs/PAPER2_INTELLIGENCE.md`](PAPER2_INTELLIGENCE.md).
 
-**What This Paper Includes**
-- Face detection & embedding extraction (InsightFace, treated as a black box).
-- Vector similarity and HNSW indexing (pgvector).
-- Spatio-temporal plausibility gating.
-- The Tactical Queue interface and tripartite routing state machine.
+### Paper 3: Evidentiary Verification
 
-**What This Paper Explicitly Excludes**
-- "While TrackID includes a slow, evidentiary-grade verification tier (ACE-VR/FISWG) and downstream graph intelligence capabilities, the scope of this paper is strictly limited to the tactical case-linking architecture and its no-human-testing simulation evaluation."
+**Register**: Behavioral / Human-Computer Interaction (HCI) / Forensic-Science evaluation.
 
----
+Addresses when a resolved `TargetPerson`'s identification must be escalated from an operational lead to court-admissible evidence, via structured, protocol-enforced verification. Evaluation is behavioral — a human-subjects examiner study comparing structured review (checklist-driven, blind dual-expert) against an unstructured baseline. Metrics: automation-bias reduction (system suggestion acceptance shift), inter-examiner agreement (Cohen's kappa), false-positive error rate, decision time. Requires IRB/ethics approval. See [`docs/PAPER3_FORENSIC_EVIDENTIARY.md`](PAPER3_FORENSIC_EVIDENTIARY.md).
 
-## Paper 2: Strategic Intelligence & Complex Networks
+## Unified Platform, Separate Evaluation Registers
 
-**Scope**: Revealing hidden structures and relationships in criminal networks via complex graph analysis over the cases and identities linked by Paper 1's engine.
-
-**Core Problem**
-- Flat databases of linked faces and cases do not reveal hidden connections — choke points, operational cells, key persons.
-- Spatio-temporal co-occurrence patterns reveal organizational hierarchy and operational dynamics that no individual case file exposes.
-
-**The Solution**
-- A heterogeneous spatio-temporal graph built on top of the vector-resolved identities produced by Paper 1.
-- Complex network analysis: Louvain community detection, betweenness/eigenvector centrality, temporal decay modeling.
-
-**Key Contributions**
-- Spatio-temporal graph construction from linked-case data (space + time + identity).
-- Community detection revealing operational cells; centrality measures revealing key persons; temporal decay modeling of relationship strength.
-
-**Evaluation Metrics**
-- Modularity (Q), Normalized Mutual Information (NMI) against ground-truth cell structure.
-- Centrality ranking correlation (Spearman ρ) against known organizational hierarchy.
-- Link prediction (AUC-ROC) via the fitted spatio-temporal decay model.
-
-**Target Journals**
-- Expert Systems with Applications
-- Knowledge-Based Systems
-- Network Science / Computational Social Science venues
-
-**What This Paper Includes**
-- Spatio-temporal graph construction and storage.
-- Community detection algorithms (Louvain, spectral clustering).
-- Centrality & importance measures, temporal dynamics.
-
-**What This Paper Explicitly Excludes**
-- "This paper assumes cases have already been linked via the tactical entity-resolution architecture validated in [Paper 1] and focuses on the macro-level graph intelligence those linkages enable."
-
----
-
-## Paper 3 (Future): Forensic Evidentiary Validation
-
-**Scope**: The slow, court-admissible identification workflow that sits *above* a Tactical Queue confirmation when a lead must become legal evidence — ACE-VR methodology, mandatory FISWG morphological checklist, blind dual-expert verification, and automation-bias mitigation grounded in Dual-Process Theory (Kahneman).
-
-**Core Problem**
-- A Tactical Queue confirmation (Paper 1) is fast and low-friction by design — appropriate for operational leads, not for evidence.
-- Automated suggestions risk automation bias: examiners rubber-stamping AI-suggested matches (System 1) instead of independently verifying them (System 2).
-- Legal defensibility requires FISWG-compliant structured comparison, full audit trails, and independent dual-expert sign-off.
-
-**The Solution**
-- A dedicated, deliberately slow verification tier: Analysis → Comparison (FISWG checklist, mandatory) → Evaluation → Verification (blind second expert), producing an immutable, digitally-signed Forensic Identification Report.
-
-**Key Contributions**
-- Full ACE-VR workflow enforcement as a DSS/UI contribution, not an algorithmic one.
-- Automation bias mitigation via structured friction — quantified via decision-time and false-positive error-rate shifts under FISWG enforcement vs. unstructured review.
-- A clean architectural/legal boundary between Paper 1's tactical leads and this tier's evidentiary output.
-
-**Evaluation Strategy — Requires Human-Subjects Testing**
-Unlike Papers 1 and 2, this paper's central claims are behavioral (does structured friction reduce automation bias and false-positive identification errors?) and require an IRB-governed examiner study (N ≥ 10 law-enforcement or trained examiners), comparing structured ACE-VR review against an unstructured baseline.
-
-**Target Journals**
-- Forensic Science International: Digital Investigation
-- IEEE Transactions on Human-Machine Systems
-- ACM Transactions on Computer-Human Interaction (ToCHI), if reframed as a behavioral/HCI intervention
-
-**What This Paper Includes**
-- The FISWG morphological checklist UI and mandatory-completion gating.
-- ACE-VR phase workflow (Analysis, Comparison, Evaluation, Verification).
-- Blind dual-expert review, digital sign-off, and immutable report generation.
-
-**What This Paper Explicitly Excludes**
-- Tactical Queue mechanics and the entity-resolution/routing architecture (covered by Paper 1); those are cited as the source of leads entering this tier, not re-litigated.
-
----
-
-## The Single Monorepo Strategy
-
-**You do not split the open-source code.**
-
-TrackID remains a single, powerful unified repository. The separation is **conceptual and publication-driven**, not architectural.
+**The code is not split.** The platform is a single, unified codebase; the separation across papers is evaluation-register-driven, not architectural. All three papers evaluate parts of the same knowledge graph + relational infrastructure.
 
 ### Citation Chain
 
-**In Paper 1**, cite TrackID but scope explicitly:
-> "While TrackID includes a slow, evidentiary-grade verification tier and downstream graph intelligence capabilities, the scope of this paper is strictly limited to the tactical case-linking architecture and its no-human-testing simulation evaluation."
+Each paper scopes itself to one contribution and cites the others for what it depends on:
 
-**In Paper 2**, cite Paper 1:
-> "This paper assumes cases have already been linked via the tactical entity-resolution architecture validated in [Paper 1] and focuses on the macro-level graph intelligence those linkages enable."
+- **Paper 1** evaluates the general architecture via `TargetPerson` resolution (confidence-gated routing, multi-source evidence ledger) using DSS metrics and simulation. It notes the platform also supports network analysis and evidentiary verification (Papers 2–3) but does not claim results for either.
+- **Paper 2** cites Paper 1 for the Person Entity Profile outputs that populate the entity network; it focuses entirely on the graph-topological evaluation of that network and does not evaluate entity-resolution quality or evidentiary verification.
+- **Paper 3** cites Paper 1 for the operational-lead outputs that feed the verification workflow; it focuses on the behavioral/forensic evaluation of structured verification and does not evaluate entity resolution or network analysis.
 
-**In Paper 3**, cite Paper 1:
-> "This paper addresses the complementary problem to [Paper 1]: when a fast tactical lead must be escalated to a court-admissible identification, what verification architecture prevents automation bias while remaining tractable for practitioners?"
-
-### Code Coverage
-
-All three papers are embedded in the same codebase:
+### Deployment in DTID Architecture
 
 | Component | Paper 1 | Paper 2 | Paper 3 |
 |-----------|---------|---------|---------|
-| Face Detection (InsightFace) | ✓ Core | ✓ Input | ✓ Input |
-| Vector Indexing (pgvector + HNSW) | ✓ Core | ✓ Used | ✗ Excluded |
-| Spatio-Temporal Plausibility Gate | ✓ Core | ✗ Excluded | ✗ Excluded |
-| Tactical Queue / Tripartite Routing | ✓ Core | ✗ Excluded | ✓ Input (leads) |
-| Spatio-Temporal Graph | ✗ Excluded | ✓ Core | ✗ Excluded |
-| Community Detection (Louvain) | ✗ Excluded | ✓ Core | ✗ Excluded |
-| Centrality Analysis | ✗ Excluded | ✓ Core | ✗ Excluded |
-| FISWG Checklist / ACE-VR Workflow | ✗ Excluded | ✗ Excluded | ✓ Core |
-| Blind Dual-Expert Verification | ✗ Excluded | ✗ Excluded | ✓ Core |
-
----
+| Target/Situation/Event/Target Entity ontology + knowledge graph | Core eval | Underlying | Underlying |
+| Face-based TargetPerson resolution + embedding | Core eval | Depends on | Depends on |
+| Spatio-temporal plausibility gate | Core eval | Not eval'd | Not eval'd |
+| Confidence-gated routing (τ_high, τ_low, queue) | Core eval | Not eval'd | Input (candidates) |
+| Multi-source evidence ledger (Person Entity Profile) | Core eval | Depends on | Depends on |
+| Memgraph + PostgreSQL architecture | Underlying | Underlying | Underlying |
+| Network-of-entities analysis (community/centrality/decay) | Not eval'd | Core eval | Not eval'd |
+| Model-of-functioning inference | Not eval'd | Core eval | Not eval'd |
+| Structured verification protocol & dual-expert review | Not eval'd | Not eval'd | Core eval |
+| Chain-of-custody & evidentiary signing | Not eval'd | Not eval'd | Core eval |
 
 ## Publication Roadmap
 
-### Phase 1: Paper 1 (Tactical Case Linking)
-- **Timeline**: Months 1–6
-- **Focus**: Tripartite routing, spatio-temporal plausibility, silo-breaking, workload compression
-- **Deliverables**: Manuscript + simulation code/config for public-benchmark evaluation (Market-1501/MSMT17 partitioning scripts)
-- **No ethics review required** — evaluation is fully simulated on public data
-- **Target**: Decision Support Systems or Expert Systems with Applications (8–12 week review cycle)
+Submission sequence follows evaluation-register dependencies and ethics gatekeeping:
 
-### Phase 2: Paper 2 (Strategic Intelligence)
-- **Timeline**: Months 4–12 (overlapping with Paper 1 review)
-- **Focus**: Graph construction, community detection, temporal analysis
-- **Deliverables**: Manuscript + Code (Louvain implementation, graph queries)
-- **Dependency**: Cite Paper 1 once accepted/published
-- **Target**: Expert Systems with Applications or similar (8–12 week review cycle)
+1. **Paper 1 (General Architecture)** — submitted first (simulation-only, fastest path to completion).
+2. **Paper 2 (Network Analysis)** — submitted in parallel with Paper 1's submission (depends on the entity-resolution methodology, not its publication; can be developed concurrently).
+3. **Paper 3 (Evidentiary Verification)** — submitted last (gated on IRB/ethics approval for the human-subjects examiner study; significant review timeline).
 
-### Phase 3: Paper 3 (Forensic Evidentiary Validation)
-- **Timeline**: Months 9–18 (starts once ethics/IRB approval process is underway)
-- **Focus**: ACE-VR workflow, FISWG compliance, automation-bias mitigation, dual-expert verification
-- **Deliverables**: Manuscript + examiner study data (requires IRB approval, N ≥ 10 examiners)
-- **Dependency**: Cite Paper 1 for the Tactical Queue escalation path
-- **Target**: Forensic Science International: Digital Investigation (8–12 week review cycle)
+Target venues by evaluation register:
+- **Paper 1**: DSS/IS/MIS conferences and journals (Decision Support Systems, Journal of Information Systems, etc.)
+- **Paper 2**: Network-science, complex-systems, and applied-AI venues (Social Network Analysis and Mining, Applied Network Science, etc.)
+- **Paper 3**: Forensic-science and HCI venues (Forensic Science International, Journal of Forensic Sciences, ACM CHI, etc.)
 
-### Phase 4: Follow-up / Extension Papers (Optional)
-- Robustness of vector similarity under demographic variations
-- Real-time graph updates (incremental community detection)
-- Privacy-preserving graph compression for federated deployment
-- Cross-jurisdictional threshold catalogs for the tripartite routing state machine
-
----
+**Future directions** (beyond the three-paper arc, not pre-scoped):
+- Robustness under demographic variation (fairness, bias mitigation across geographic/demographic groups)
+- Real-time graph updates and query optimization for larger deployments
+- Privacy-preserving deployment (federated inference, differential privacy)
+- Cross-jurisdictional calibration (multi-agency threshold policy harmonization)
+- Additional Target Entity types and resolution modalities beyond `TargetPerson` (vehicles, gait, license plates)
 
 ## Key Messaging
 
-### For Reviewers (Paper 1)
-"This paper advances tactical decision support by proving that spatio-temporal-constrained vector matching plus tripartite uncertainty routing collapses an intractable cross-case search problem into a short validation queue — evaluated entirely via simulation on public benchmarks, without any human-subjects testing. The evidentiary/legal verification tier and graph intelligence capabilities are orthogonal and explicitly out of scope."
+**For Technical Audiences (Developers, Researchers)**:
+- **Paper 1 (General Architecture)**: Introduces the Target/Situation/Event/Target Entity ontology and confidence-gated entity-resolution workflow, evaluated via face-based `TargetPerson` resolution and cross-Situation case-linking. DSS metrics validate the claim; simulation evaluation; no human-subjects testing.
+- **Paper 2 (Network Analysis)**: Demonstrates that analyzing a Target System's entity network surfaces its Model of Functioning — operational cells, key persons, relationship evolution — invisible in individual case files. Graph-topological evaluation validates the claim.
+- **Paper 3 (Evidentiary Verification)**: Demonstrates that structured, protocol-enforced verification (blind dual-expert review, checklist-driven comparison) mitigates automation bias and reduces false-positive identifications relative to unstructured review. Behavioral study (human-subjects examiner evaluation) validates the claim.
 
-### For Reviewers (Paper 2)
-"This paper demonstrates that complex network analysis applied to video-derived identity graphs can reveal operational structure in criminal networks. The underlying entity resolution (validated separately in Paper 1) enables scalable identity linkage; this work focuses on what those linked cases reveal."
-
-### For Reviewers (Paper 3)
-"This paper demonstrates that structured, FISWG-enforced ACE-VR review mitigates automation bias relative to unstructured review, via a human-subjects examiner study. It sits above the fast tactical triage validated in Paper 1, addressing what happens when a lead must become court-admissible evidence."
-
-### For Contributors & Users
-"TrackID solves three related but distinct problems with a single, integrated platform: fast tactical case linking, strategic network intelligence, and slow forensic-grade verification. Read the papers to understand the research depth; the code shows how tactical linkage feeds both intelligence analysis and evidentiary review."
-
----
+**For Contributors & Operators**:
+- One platform (DTID), one ontology (Target/Situation/Event/Target Entity), one Target System / Target Entity distinction, two derived analytical layers per Target System (network of entities; model of functioning).
+- Single knowledge graph (Memgraph) + relational store (PostgreSQL); all three papers evaluate parts of the same system.
+- Each paper has its own evaluation register, publication venue, and research audience — but they feed into one cohesive architecture.
+- Governance, retention policies, cryptographic signing, and jurisdictional compliance are baked into the data model, not bolted on.
+- Read the papers for research-register depth; read [`docs/DTID_ARCHITECTURE.md`](DTID_ARCHITECTURE.md) for full system context.
 
 ## References & Related Work
 
-See `docs/PAPER1_TACTICAL_LINKING.md`, `docs/PAPER2_INTELLIGENCE.md`, and `docs/PAPER3_FORENSIC_EVIDENTIARY.md` for detailed literature reviews, methodology, and metrics for each paper.
+For detailed literature reviews, methodology, and evaluation metrics, see:
+- [`docs/PAPER1_TACTICAL_LINKING.md`](PAPER1_TACTICAL_LINKING.md) — DSS/IS literature, entity-resolution methods, decision-support evaluation
+- [`docs/PAPER2_INTELLIGENCE.md`](PAPER2_INTELLIGENCE.md) — Network-science literature, community detection, centrality, link prediction
+- [`docs/PAPER3_FORENSIC_EVIDENTIARY.md`](PAPER3_FORENSIC_EVIDENTIARY.md) — Forensic-science literature, dual-process theory, automation bias, examiner protocols

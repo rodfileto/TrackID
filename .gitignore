@@ -5,6 +5,9 @@ backend/__pycache__/
 backend/*.egg-info/
 backend/dist/
 backend/build/
+backend/experiments/**/venv*/
+backend/experiments/**/crops_*/
+backend/experiments/**/*_result.json
 
 # Frontend
 frontend/node_modules/
@@ -28,3 +31,12 @@ logs/
 
 # Temporary reference repo (source for CV/InsightFace service extraction)
 autonid/
+
+# Quarto (papers/)
+papers/.quarto/
+papers/**/.quarto/
+papers/**/*_files/
+papers/**/*.pdf
+papers/**/*.docx
+papers/**/*.html
+papers/**/*.tex

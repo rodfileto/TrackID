@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 MIN_CROP_DIMENSION = 224
 
 
-def _crop_face_from_frame(frame: np.ndarray, bbox: list) -> Optional[np.ndarray]:
+def crop_face_from_frame(frame: np.ndarray, bbox: list) -> Optional[np.ndarray]:
     x1, y1, x2, y2 = map(int, bbox)
     height, width = frame.shape[:2]
     face_width = x2 - x1
@@ -66,7 +66,7 @@ def extract_face_crop_bytes_from_capture(
     if not ret:
         return None
 
-    face_img = _crop_face_from_frame(frame, bbox)
+    face_img = crop_face_from_frame(frame, bbox)
     if face_img is None:
         return None
 
@@ -191,7 +191,7 @@ def _assign_lightweight_dets(
         ldet["cluster_id"] = best_cluster
 
 
-def _count_expected_frames(video_path: str, interval_seconds: float) -> int:
+def count_expected_frames(video_path: str, interval_seconds: float) -> int:
     cap = cv2.VideoCapture(video_path)
     try:
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -285,7 +285,7 @@ class VideoProcessingService:
         embed_counter = 0
         batch_accumulator: List[Dict] = []
 
-        expected_frames = _count_expected_frames(video_path, interval_seconds)
+        expected_frames = count_expected_frames(video_path, interval_seconds)
 
         logger.info("Processing video: %s", video_path)
         logger.info("Frame interval: %ss, Embed interval: %ss", interval_seconds, embed_interval_seconds)

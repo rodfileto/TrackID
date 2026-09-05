@@ -1,0 +1,98 @@
+@prefix obo:  <http://purl.obolibrary.org/obo/> .
+@prefix cco:  <https://www.commoncoreontologies.org/> .
+@prefix tid:  <https://github.com/rodfileto/TrackID/ontology/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# ── Analytical layer (digital) ────────────────────────────────────────────
+tid:TargetSystem a owl:Class ;
+    rdfs:subClassOf cco:ont00000958 ;   # cco:Information Content Entity
+    rdfs:label "Target System"@en ;
+    skos:definition "The analytical scope an investigation is organized around (Clark's macro target); the access/sharing boundary for its content."@en .
+
+tid:Situation a owl:Class ;
+    rdfs:subClassOf cco:ont00000958 ;   # cco:Information Content Entity
+    rdfs:label "Situation"@en ;
+    skos:definition "An analyst's discursive narrative that explains a set of incidents (e.g. 'the negotiations and weapons supply')."@en .
+
+# ── Real-world layer (occurrent) ──────────────────────────────────────────
+tid:Incident a owl:Class ;
+    rdfs:subClassOf obo:BFO_0000015 ;   # bfo:process
+    rdfs:label "Incident"@en ;
+    skos:definition "A real-world occurrence (a meeting, a transfer, a robbery) evidenced by observations."@en .
+
+tid:Observation a owl:Class ;
+    rdfs:subClassOf obo:BFO_0000015 ;   # bfo:process
+    rdfs:label "Observation"@en ;
+    skos:definition "An atomic raw capture (a face seen, a plate read) that produces a digital record."@en .
+
+# ── Relations ─────────────────────────────────────────────────────────────
+# occurrent → target system. Direct and provisional assignment is intended:
+# the future automatic recommendation of incidents/observations to
+# situations/target systems (based on data similarity) rides on this edge.
+tid:tracked_in a owl:ObjectProperty ;
+    rdfs:domain obo:BFO_0000015 ;
+    rdfs:range tid:TargetSystem ;
+    rdfs:label "tracked in"@en .
+
+tid:tracks a owl:ObjectProperty ;
+    owl:inverseOf tid:tracked_in ;
+    rdfs:domain tid:TargetSystem ;
+    rdfs:range obo:BFO_0000015 ;
+    rdfs:label "tracks"@en .
+
+tid:explains a owl:ObjectProperty ;
+    rdfs:domain tid:Situation ;
+    rdfs:range tid:Incident ;
+    rdfs:label "explains"@en .
+
+tid:explained_by a owl:ObjectProperty ;
+    owl:inverseOf tid:explains ;
+    rdfs:domain tid:Incident ;
+    rdfs:range tid:Situation ;
+    rdfs:label "explained by"@en .
+
+tid:organized_under a owl:ObjectProperty ;
+    rdfs:domain tid:Situation ;
+    rdfs:range tid:TargetSystem ;
+    rdfs:label "organized under"@en .
+
+tid:organizes a owl:ObjectProperty ;
+    owl:inverseOf tid:organized_under ;
+    rdfs:domain tid:TargetSystem ;
+    rdfs:range tid:Situation ;
+    rdfs:label "organizes"@en .
+
+tid:has_observation a owl:ObjectProperty ;
+    rdfs:domain tid:Incident ;
+    rdfs:range tid:Observation ;
+    rdfs:label "has observation"@en .
+
+tid:observation_of a owl:ObjectProperty ;
+    owl:inverseOf tid:has_observation ;
+    rdfs:domain tid:Observation ;
+    rdfs:range tid:Incident ;
+    rdfs:label "observation of"@en .
+
+tid:produces a owl:ObjectProperty ;
+    rdfs:domain tid:Observation ;
+    rdfs:range tid:FaceRecord ;
+    rdfs:label "produces"@en .
+
+tid:produced_by a owl:ObjectProperty ;
+    owl:inverseOf tid:produces ;
+    rdfs:domain tid:FaceRecord ;
+    rdfs:range tid:Observation ;
+    rdfs:label "produced by"@en .
+
+tid:is_owned_by a owl:ObjectProperty ;
+    rdfs:domain tid:TargetSystem ;
+    rdfs:range cco:ont00001180 ;   # cco:Organization
+    rdfs:label "is owned by"@en .
+
+tid:owns a owl:ObjectProperty ;
+    owl:inverseOf tid:is_owned_by ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range tid:TargetSystem ;
+    rdfs:label "owns"@en .

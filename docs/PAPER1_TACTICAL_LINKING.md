@@ -1,206 +1,86 @@
-# Paper 1: Tactical Case Linking (Asynchronous Entity Resolution)
+# Paper 1: General Architecture — Person Entity Resolution & Case-Linking
+
+**This document describes the evaluation strategy for Paper 1: the platform's general architecture.** For full system context, see [`docs/DTID_ARCHITECTURE.md`](DTID_ARCHITECTURE.md). Paper 1 introduces the Target/Situation/Event/Target Entity ontology and the confidence-gated entity-resolution workflow that the rest of the platform builds on; its evaluated capability is face-based `TargetPerson` resolution and cross-Situation case-linking, which serves as the demonstration vehicle for the architecture rather than the paper's scope limit.
 
 ## Title (Working)
-**Breaking Investigative Silos: A Decision Support Architecture for Asynchronous Tactical Case Linking**
+**Target-Centric Architecture for Continuous Entity Resolution Across Fragmented Investigative Data**
 
-(or shorter: **Tactical Case Linking: Continuous Entity Resolution Across Fragmented Spatio-Temporal Events**)
+## 1. Introduction
 
-## Abstract Skeleton
+**Problem**: In public security operations, distinct incidents — a robbery in District A on Monday, a car theft in District B on Wednesday — are investigated in isolated case silos. Relational case-management systems have no mechanism to recognize that an unidentified suspect present in one case is the same person present in another. Manually cross-referencing every suspect across every open case is an intractable combinatorial problem, and vector similarity alone is blind to physical plausibility.
 
-In public security operations, distinct incidents — a robbery in District A on Monday, a car theft in District B on Wednesday — are investigated in isolated case silos. Relational case-management systems have no mechanism to recognize that an unidentified suspect present in one case is the same person present in another. This paper presents TrackID's **Linkage Engine**, a Decision Support System (DSS) that treats faces as 512-dimensional vectors and continuously, asynchronously evaluates incoming surveillance data to propose linkages between otherwise disconnected cases. The system applies spatio-temporal plausibility constraints on top of vector similarity — rejecting matches that would require physically impossible travel — and routes candidate pairs through a **tripartite state machine**: Auto-Merge (high-confidence identity fusion into a Global Trajectory), Tactical Queue (uncertain candidates requiring a one-click human validation), and Auto-Reject (discarded before reaching a human). Because this paper targets an information-systems contribution rather than a forensic-evidence one, evaluation requires no human subjects: we simulate fragmented investigations by artificially partitioning a standard multi-camera person re-identification dataset (e.g., Market-1501 or MSMT17) into isolated "incidents" by camera and time block, then measure how well the Linkage Engine reconstructs the underlying identities. Results show (1) **Silo-Breaking Rate**: X% of true cross-case identity links are recovered via Auto-Merge and Tactical Queue routing combined, at Y% precision; (2) **Workload Compression**: the engine collapses an O(N²) manual cross-referencing problem across 100 simulated cases into a linear sequence of Z tactical proposals, a >99% reduction in required human comparisons. The contribution is a DSS architecture for continuous, asynchronous entity resolution across fragmented data — not a forensic identification method.
+**Positioning**: This paper presents TrackID's general architecture for target-centric intelligence: a knowledge graph built from an explicit ontology — **Target** (the object of interest, e.g. a crime series), **Situation** (a descriptive account of one incident within it), **Event** (a fine-grained occurrence within a Situation), and **Target Entity** (a typed participant, e.g. `TargetPerson`). The paper's evaluated capability is a **Person Entity Profile** — a continuously and collaboratively assembled representation of a single individual identity, fused from fragmented biometric and documentary observations arriving asynchronously as Events across otherwise disconnected Situations. This demonstrates the architecture's core mechanism — confidence-gated entity resolution — without requiring the rest of the platform's capabilities (network analysis in Paper 2, evidentiary verification in Paper 3) to be evaluated here.
 
-## Key Contributions
+**Scoping statement**: This paper covers **the general architecture, plus face-based entity resolution and Person Entity Profile construction** — the ontology, storage design, and the layer that decides which fragmented Event-level observations belong to the same `TargetPerson` and with what confidence. It does not address network-of-entities analysis or model-of-functioning inference (Paper 2) or court-admissible evidentiary verification (Paper 3).
 
-This paper contributes to **Information Systems / Decision Support Systems**, not computer vision. The novelty is the linkage architecture and routing logic that sits on top of a commodity embedding model (InsightFace/ArcFace), not the embedding model itself.
+## 2. Theoretical Positioning
 
-1. **The Tripartite Routing State Machine** (Core DSS Contribution):
-   - **Auto-Merge** (high confidence): candidate pairs above the upper threshold and spatio-temporally plausible are fused automatically into a single Global Trajectory — no human in the loop.
-   - **Tactical Queue** (uncertainty band): candidate pairs in the ambiguous zone are surfaced as a **Proposed Link** between two cases, requiring only a one-second human click to confirm or dismiss.
-   - **Auto-Reject**: candidate pairs below the lower threshold, or that fail spatio-temporal plausibility regardless of vector similarity, are discarded before ever reaching a human — preventing database bloat and alert fatigue.
-   - **Novelty**: most entity-resolution systems expose a flat "is this a match?" decision. The tripartite design explicitly separates *machine-confident* fusion from *machine-uncertain* triage from *machine-confident* rejection, minimizing human involvement to only the genuinely ambiguous cases.
+The paper's theoretical anchor is Clark's **target-centric approach** to intelligence analysis: rather than a linear collection → analysis → dissemination pipeline, analysts collaboratively build and continuously refine a networked model of a target.
 
-2. **Spatio-Temporal Plausibility as a Filter on Vector Similarity** (Academic/Methodological Contribution):
-   - Problem: cosine similarity alone is blind to physical reality — two embeddings can be an 85% match yet correspond to sightings 500 km apart, 5 minutes apart, which is physically impossible.
-   - Solution: a spatio-temporal decay/bounding term that discounts or hard-rejects candidate links implying implausible travel speed between camera locations.
-   - **Metric**: reduction in false-positive Auto-Merges attributable to spatio-temporal filtering vs. vector similarity alone.
-   - **Novelty**: combines a standard IR/vector-retrieval technique with a lightweight physical plausibility model, without requiring any additional sensing modality.
+**Target System vs. Target Entity**: to prevent conflating two different levels of abstraction, this paper distinguishes them explicitly, following the platform's architecture (see `docs/DTID_ARCHITECTURE.md`):
 
-3. **Asynchronous Silo-Breaking Without Administrative Overhead** (Organizational Problem Solved):
-   - Problem: analysts in District 1, District 2, and District 3 investigate independently; a shared suspect across their cases stays invisible unless someone happens to notice.
-   - Solution: the Linkage Engine continuously indexes every embedding as it arrives and proposes cross-case links automatically — no meetings, no manual cross-referencing, no shared awareness required between analysts.
-   - **Metric**: Silo-Breaking Rate — the fraction of true cross-case identity links recovered by the system without any analyst having looked for them.
-   - **Novelty**: reframes entity resolution as a continuous background process over a fragmented case database, rather than a query-time lookup a human must initiate.
+- **Target System (Clark's macro target)**: the overarching problem domain — e.g. "Bank robberies in region X" — represented digitally by the entire DTID knowledge graph built for that investigation (its Situations, Events, and Target Entities together).
+- **Target Entity (micro target)**: a specific node within that graph that field officers interact with operationally — `TargetPerson`, `Vehicle`, `PhoneNumber`. A Target Entity is a participant in a Target System, not a Target System itself.
 
-4. **Workload Compression via Combinatorial Reduction** (Quantified DSS Value):
-   - Problem: manually cross-referencing every suspect across every open case is an N×(N−1)/2 combinatorial explosion, intractable at scale.
-   - Solution: thresholded routing collapses this into a small, linear set of Tactical Queue proposals that require only rapid validation, not search.
-   - **Metric**: Workload Compression Ratio — pairwise comparisons implied by brute-force manual review vs. Tactical Queue proposals actually generated.
-   - **Novelty**: quantifies the DSS's triage value independent of its raw matching accuracy — a system can be valuable even before considering how *accurate* its proposals are, simply because of what it removes from human attention.
+Framed this way, the artifact this paper presents is the software bridge between the two levels: it ingests observations about discrete Target Entities and automatically constructs the broader Target System required for strategic, intelligence-led policing. Person entity resolution — this paper's evaluated capability — operates entirely at the Target Entity level: a Person Entity Profile is the continuously-refined record of one `TargetPerson` as it recurs across a Target System's Situations and Events.
 
-## Methodology
+This is briefly grounded in two supporting frames rather than developed as separate literatures:
 
-### Problem Formulation
+- **JDL data fusion (Level 1 — object refinement)**: the entity-resolution problem this paper solves is a Level 1 fusion problem — combining Event-level observations of an object (a person) into a single, refined estimate of that object's identity and attributes.
+- **Forensic intelligence**: the broader field concerned with using investigative-grade information to link cases and generate leads, as distinct from courtroom-grade evidence. This paper operates entirely in that forensic-intelligence register; the evidentiary register is the explicit gap this paper defers to Paper 3.
 
-**Input**: A stream of face embeddings extracted from surveillance video, each tagged with a case ID, camera ID, location, and timestamp. Cases are treated as isolated silos — no shared identifiers exist across them a priori.
+Together, these frame the paper's contribution: a target-centric architecture with Level 1 fusion as its entity-resolution mechanism and forensic intelligence (not forensic evidence) as its register.
 
-**Output**: (a) A set of Auto-Merged Global Trajectories linking embeddings across cases; (b) a ranked Tactical Queue of Proposed Links between cases, awaiting one-click human validation; (c) an implicit Auto-Reject set, never surfaced.
+## 3. Related Work
 
-**Challenge**: No analyst can be assumed to know, or to check, whether a suspect in their case also appears in someone else's. The system must perform this resolution continuously and asynchronously, without waiting for a human query.
+**Primary**: entity resolution and record linkage (probabilistic record linkage; data-matching surveys; entity resolution at scale) and Decision Support System / Design Science Research methodology (DSS design frameworks; DSR methodology for building and evaluating information-systems artifacts) — these are covered in depth, since they are the paper's actual methodological home.
 
-### Technical Approach
+**Secondary**: a short pass over existing systems — commercial OSINT/link-analysis platforms and investigative case-management tools — establishing that, while tools exist for manual link analysis, no open, theoretically-grounded system represents investigative data as an explicit target-centric ontology (Target/Situation/Event/Target Entity) or is designed to support analysis beyond entity resolution alone. This is a positioning pass, not a competing deep-dive literature track.
 
-#### Face Embedding as a Commodity Component
+## 4. System Design: Person Entity Profile Construction
 
-Facial embeddings are generated using **InsightFace (ArcFace)** [Cite: Deng et al.], a well-established convolutional network whose accuracy has been exhaustively benchmarked in the computer vision literature. **Validating the embedding model itself is out of scope.** This paper treats the 512-dimensional embedding ($\vec{v}$) as a standardized input and focuses entirely on the downstream Decision Support System: how it indexes vectors, filters them against physical plausibility, and routes uncertainty to minimize human workload.
+The system builds a Person Entity Profile through a pipeline that is deliberately generic about its inputs, so that future entity-resolution modalities (gait, license plates, other biometrics) — and future Target Entity types beyond `TargetPerson` — could plug into the same architecture without redesign:
 
-**Note on Evaluation Scope**: This paper does not measure mAP, Rank-1 accuracy, or pose/lighting invariance of the underlying embedding model. Evaluation is confined to the information-systems layer — routing correctness, silo-breaking recall/precision, and workload compression.
+1. **Face-based Entity Resolution Module (ERM)**: facial embeddings (currently InsightFace/ArcFace, treated as a commodity component) are extracted from incoming Events (face-capture observations) and indexed for similarity search as they arrive.
+2. **Spatio-temporal plausibility**: candidate matches are filtered against a physical plausibility constraint — a match implying an impossible travel speed between two Event locations is discounted or rejected regardless of embedding similarity.
+3. **Tripartite routing**: surviving candidates are routed by confidence — auto-merged into the Person Entity Profile at high confidence, queued for a one-click analyst validation at intermediate confidence, or silently discarded at low confidence.
+4. **Multi-source evidence ledger**: a Person Entity Profile is not the output of a single match type but an accumulating ledger of evidence from distinct sources — biometric auto-match (system-generated), analyst validation (human-confirmed tactical queue resolution), and field-officer document confirmation (an officer confirming identity against a physical document at the point of contact). Each entry is provenance-tagged; the profile's overall confidence reflects the combination of evidence it has accumulated, not a single score.
+5. **Resulting Person Entity Profile**: the continuously-updated record for one `TargetPerson`, referenced by every Event and Situation it participates in, that other analyses of the platform (network-of-entities analysis, evidentiary escalation) consume as an input.
 
-#### The Linkage Engine Architecture
+## 5. Simulation & Evaluation Design
 
-1. **Vector Ingestion & Indexing**
-   - InsightFace produces a 512-d normalized embedding per detected face.
-   - Embeddings are indexed with HNSW (pgvector in PostgreSQL) for O(log N) approximate nearest-neighbor retrieval as new observations arrive.
-   - Each embedding is tagged with its originating case, camera, and timestamp — the silo boundary is metadata, not a separate database.
+Because this paper's claims are about a routing/entity-resolution architecture rather than a piece of forensic evidence, evaluation is simulation-based and requires no human subjects or ethics review.
 
-2. **Spatio-Temporal Heuristics**
-   - Raw candidate similarity: $s_{ij} = \cos(e_i, e_j)$.
-   - Physical plausibility check: given camera locations and timestamps for observations $i$ and $j$, compute the implied minimum travel speed $v_{ij} = d_{ij} / |t_i - t_j|$, where $d_{ij}$ is the great-circle (or road-network) distance between camera sites.
-   - **Plausibility gate**: if $v_{ij} > v_{\max}$ (a configurable maximum plausible travel speed), the pair is rejected regardless of $s_{ij}$.
-   - **Soft decay** (alternative to a hard cutoff): $w_{ij} = \exp(-\lambda \cdot \max(0,\, v_{ij} - v_{\max}))$, applied as a multiplicative discount on similarity: $s'_{ij} = s_{ij} \cdot w_{ij}$.
-   - This is a simple bounding/decay model, not a full trajectory model — it deliberately trades sophistication for auditability and speed.
+**Layered synthetic scenario**: the simulation instantiates the ontology directly — a synthetic **Target System** ("a bank-robbery series in region X"), composed of synthetic **Situations** (individual robberies), each with several **Events** (camera captures, field notes) referencing **Target Entities** (`TargetPerson` suspects, `Bank` locations). This is built in three layers to stress-test entity resolution and routing specifically — it does not attempt to validate the resulting entity network's structure, which is left to Paper 2:
 
-3. **The Tripartite Routing State Machine**
-   - $s'_{ij} \geq \tau_{\text{high}}$: **Auto-Merge** — the two observations are fused into a single Global Trajectory; the underlying cases are automatically linked and logged for audit.
-   - $\tau_{\text{low}} \leq s'_{ij} < \tau_{\text{high}}$: **Tactical Queue** — a Proposed Link is surfaced between the two cases; any analyst may resolve it with a one-second accept/reject click, and the resolution merges or discards the candidate.
-   - $s'_{ij} < \tau_{\text{low}}$: **Auto-Reject** — discarded silently; never presented to a human, preventing queue bloat from false candidates.
+- **Target Entity layer**: real identities and observations drawn from a standard public multi-camera person re-identification benchmark (Market-1501 or MSMT17), providing ground-truth identity labels for the `TargetPerson` entities.
+- **Situation layer**: a synthetic robbery series (the Target) is overlaid on the entity layer, with individual robberies as Situations — used to structure the simulation into realistic case groupings, not to claim any network- or functioning-level result.
+- **Event / spatial-temporal layer**: camera locations and timestamps are synthesized as Events to drive the spatio-temporal plausibility gate.
 
-4. **Global Trajectory / Cluster Graph Management**
-   - The system maintains an in-database cluster graph: embedding → identity cluster → linked case IDs.
-   - Auto-Merges and Tactical Queue confirmations both update this graph, so the Global Trajectory grows monotonically as more evidence arrives — this is the mechanism of asynchronous silo-breaking.
+Observations are fragmented into isolated Situations and fed to the system asynchronously, as if arriving from independent investigations; the system's Auto-Merge / Tactical Queue / Auto-Reject output and resulting evidence ledger are compared against the withheld ground truth.
 
-### Evaluation Design (No Human Testing Required)
+## 6. Results
 
-#### Simulating Fragmented Investigations
+Reported along three axes, all identity-level:
 
-Because this paper evaluates a DSS routing architecture rather than a piece of forensic evidence, it does not require an examiner study or IRB-governed human subjects. Instead, we construct a controlled simulation from a standard public multi-camera person re-identification benchmark (e.g., **Market-1501** or **MSMT17**), which already provides multiple identities observed across multiple cameras and time periods with ground-truth identity labels.
+- **Silo-breaking rate**: the fraction of true cross-case identity links recovered (via auto-merge and tactical-queue routing combined), with precision/recall broken out by routing tier.
+- **Routing accuracy**: how well the tripartite routing separates genuinely ambiguous candidates from confident merges and confident rejections.
+- **Workload compression**: the reduction from an intractable pairwise comparison problem to a short, linear queue of proposals requiring human validation.
+- **Threshold sensitivity**: all of the above repeated across conservative/moderate/aggressive threshold settings, showing threshold choice is a tunable policy trade-off rather than a fixed optimum.
 
-**Simulation procedure**:
-1. Select $K$ unique identities and their observations across the dataset's cameras/timestamps.
-2. Artificially partition observations into $N$ "isolated cases" by grouping on camera ID and time block, discarding the ground-truth identity linkage between groups (simulating independent investigations that don't share information).
-3. Feed all case observations into the Linkage Engine as if arriving asynchronously over time.
-4. Compare the engine's Auto-Merge/Tactical Queue/Auto-Reject output against the withheld ground truth to measure whether the true cross-case identity links were recovered.
+## 7. Discussion
 
-#### Metric 1: Silo-Breaking Rate (Entity Resolution Accuracy)
+**DSS-centric interpretation**: the paper's central claim is architectural, not about raw matching accuracy — it changes the shape of the analyst's task from an intractable search problem into a short validation queue, and does so by fusing evidence from multiple sources rather than trusting any single similarity score.
 
-- **Setup**: 100 simulated isolated incidents constructed from 20 true unique identities.
-- **Measurement**: 
-  - **Auto-Merge Precision/Recall**: of the true cross-case links, what fraction were correctly Auto-Merged, and of all Auto-Merges, what fraction were correct?
-  - **Tactical Queue Recall**: of the true cross-case links *not* Auto-Merged, what fraction were correctly routed to the Tactical Queue (i.e., not silently Auto-Rejected)?
-  - **Auto-Reject Leakage**: what fraction of true links were incorrectly Auto-Rejected and permanently lost?
-- **Result target**: high Auto-Merge precision (>95%) with near-zero Auto-Reject leakage of true links (<2%), demonstrating that uncertainty is pushed to the Tactical Queue rather than silently discarded.
+**Toward an Integrated Platform**: this section is explicitly bounded to preview, not claim, the rest of the platform's capability. The Person Entity Profiles this paper produces populate the entity network for a Target — the input that Paper 2 analyzes via network/topology methods to surface a Model of Functioning — and are the object that a separate, deliberately slower verification tier can escalate into court-admissible evidence (Paper 3). Neither claim is evaluated here.
 
-#### Metric 2: Workload Compression (The Triage Metric)
+## 8. Limitations & Future Work
 
-- **Setup**: the same 100-case simulation. A traditional analyst would need to manually compare suspects across all 100 cases — $\binom{100}{2} = 4{,}950$ pairwise comparisons in the worst case (more, if multiple suspects per case).
-- **Measurement**: count the number of Tactical Queue proposals actually generated (e.g., 45) and compute the **Workload Compression Ratio**: 
-$$\text{WCR} = 1 - \frac{|\text{Tactical Queue proposals}|}{\binom{N_{\text{total observations}}}{2}}$$
-- **Result target**: WCR > 99%, demonstrating that the engine converts an intractable combinatorial search into a short, linear list of high-probability proposals requiring only rapid validation.
+- Evaluation uses a public re-identification benchmark plus a synthetic Target/Situation/Event overlay as a proxy for real fragmented investigations, not an operational deployment.
+- The multi-source evidence ledger currently combines biometric auto-match, analyst validation, and field-officer document confirmation; other evidence sources are left for future extension.
+- This paper does not evaluate whether the resulting network of entities supports accurate model-of-functioning inference — that hand-off is explicitly Paper 2's contribution.
+- This paper does not address chain-of-custody, court-admissible identification, or examiner protocols for treating a Person Entity Profile as legal evidence — that hand-off is explicitly Paper 3's contribution.
 
-#### Threshold Sensitivity
+## 9. Conclusion
 
-- Repeat both metrics across conservative/moderate/aggressive $(\tau_{\text{low}}, \tau_{\text{high}})$ settings and $v_{\max}$ values, to show threshold choice is a tunable policy trade-off (recall vs. queue size), not a fixed optimum.
-
-### Results Structure
-
-**Table 1**: Routing Distribution Across Threshold Settings
-| Threshold Set | Auto-Reject % | Auto-Merge % | Tactical Queue % | True-Link Recall | Notes |
-|---|---|---|---|---|---|
-| Conservative | 55% | 10% | 35% | 99.5% | Larger queue, safer |
-| Moderate | 78% | 30% | 12% | 97.8% | Recommended balance |
-| Aggressive | 90% | 55% | 5% | 92.0% | Small queue, risk of silent loss |
-
-**Table 2**: Silo-Breaking Performance (Entity Resolution Accuracy)
-| Metric | Result | Target |
-|---|---|---|
-| Auto-Merge Precision | — | >95% |
-| Auto-Merge Recall | — | >85% |
-| Tactical Queue Recall (of remaining true links) | — | >95% |
-| Auto-Reject Leakage (true links lost) | — | <2% |
-
-**Table 3**: Workload Compression
-| Scenario | Cases | Total Observations | Brute-Force Comparisons | Tactical Queue Proposals | WCR |
-|---|---|---|---|---|---|
-| Simulated Investigation | 100 | ~500 | ~124,750 | 45 | >99.9% |
-
-**Figure 1**: The Tripartite Routing State Machine (diagram: Auto-Merge / Tactical Queue / Auto-Reject decision flow).
-
-**Figure 2**: Spatio-temporal plausibility gate — scatter plot of implied travel speed vs. vector similarity, showing rejected vs. accepted candidate pairs.
-
-**Figure 3**: Workload Compression — brute-force comparisons vs. Tactical Queue proposals as case count scales (log-scale bar/line chart).
-
-**Figure 4**: Screenshot of the Tactical Queue interface (one-click Proposed Link validation).
-
-## Literature Review (Outline)
-
-**Primary Focus: Decision Support Systems, Entity Resolution, Information Systems**
-
-- **Entity Resolution / Record Linkage**: Fellegi & Sunter, 1969 (foundational probabilistic record linkage); Christen, 2012 (data matching survey); Getoor & Machanavajjhala, 2012 (entity resolution in big data).
-- **Decision Support System Design**: Sprague & Watson, 1993 (DSS frameworks); Arnott & Pervan, 2014 (DSS in organizations); Shim et al., 2002 (past, present, future of DSS).
-- **Human-in-the-Loop Triage / Uncertainty Routing**: Amershi et al., 2019 (guidelines for human-AI interaction); Green & Chen, 2019 (human-AI decision-making in the loop).
-- **Organizational Silos & Information Sharing in Public Safety**: Bharosa et al., 2010 (information sharing in emergency management); Zheng et al., 2014 (inter-organizational information sharing barriers).
-
-**Secondary Focus: Technical Implementation (Commodity, Not Novel)**
-
-- **Facial Embeddings**: Deng et al., 2019 (ArcFace — treated as black box).
-- **Person Re-Identification Benchmarks**: Zheng et al., 2015 (Market-1501); Wei et al., 2018 (MSMT17).
-- **HNSW / Approximate Nearest Neighbor Search**: Malkov & Yashunin, 2018; pgvector documentation.
-- **Spatio-Temporal Constraint Modeling**: Yuan et al., 2011 (trajectory pattern mining); Zheng, 2015 (trajectory data mining survey).
-
-## Discussion Points (DSS-Centric)
-
-1. **Threshold Calibration as Policy, Not Optimization**: $\tau_{\text{low}}$, $\tau_{\text{high}}$, and $v_{\max}$ jointly define a trade-off between queue size and recall of true links. There is no single "correct" setting — an agency prioritizing thoroughness over analyst time will tune differently than one prioritizing speed.
-
-2. **Why Spatio-Temporal Filtering Matters More Than Threshold Tuning**: raising $\tau_{\text{high}}$ alone to reduce false Auto-Merges trades away true-positive recall; the spatio-temporal gate removes a specific, physically-groundable class of false positives without that trade-off, making it a more efficient lever than similarity-threshold tuning alone.
-
-3. **From Combinatorial Search to Linear Validation**: the paper's central practical claim is not that the system is a highly accurate matcher — it is that it changes the *shape* of the analyst's task, from an intractable search problem to a short validation list. This value exists even under conservative thresholds that produce larger queues.
-
-4. **Asynchronous Collaboration Without Coordination**: because Auto-Merge and Tactical Queue proposals are generated purely from data as it arrives, two analysts who never communicate can have their cases linked automatically — the DSS substitutes for organizational coordination overhead that would otherwise require deliberate cross-referencing.
-
-5. **Generalization Beyond Faces**: the tripartite routing + spatio-temporal plausibility architecture is agnostic to the embedding source; it would apply equally to license plates, gait signatures, or other biometric/behavioral vectors, though this paper scopes evaluation to face embeddings only.
-
-## Limitations & Future Work
-
-- Evaluation uses a public person re-identification benchmark as a proxy for real fragmented investigations; camera geolocations and time blocks are simulated, not drawn from an operational deployment.
-- The spatio-temporal plausibility model uses a simple bounding/decay function on straight-line or road-network distance; it does not model real-world travel constraints (traffic, transit schedules, terrain).
-- The Tactical Queue's "one-second validation click" is not evaluated with real analysts in this paper — usability and actual validation latency are deferred to a future human-subjects study, since this paper's contribution is architectural, not behavioral.
-- Threshold values are dataset-specific; cross-agency and cross-dataset calibration is left to future work.
-- This paper explicitly does not address court-admissible identification, chain-of-custody, or forensic examiner protocols — those are the subject of a planned follow-up (Paper 3).
-
-## Conclusion
-
-This paper demonstrates that a lightweight Decision Support architecture — combining vector similarity, spatio-temporal plausibility, and tripartite uncertainty routing — can perform continuous, asynchronous entity resolution across fragmented investigative silos without requiring any change to how individual cases are managed, and without requiring human-subjects evaluation. By simulating fragmented investigations on a standard public re-identification benchmark, we show the Linkage Engine recovers a high fraction of true cross-case identity links while compressing the analyst's workload from an intractable combinatorial search into a short, linear validation queue.
-
-**Not About AI, But About Routing**: the novelty is not the embedding model (a commodity), but the architecture that decides, automatically, which candidate pairs need a human at all.
-
-**Quantified Impact** (illustrative targets, to be replaced with measured results):
-- **Silo-Breaking Rate**: >95% Auto-Merge precision with <2% true-link leakage into Auto-Reject.
-- **Workload Compression**: >99% reduction in required pairwise comparisons vs. brute-force manual cross-referencing.
-
-Future work extends this architecture in two directions: applying network topology over the resulting linked cases to surface organizational structure (Paper 2), and layering a slow, evidentiary-grade verification tier on top of Tactical Queue confirmations for court-admissible identification (Paper 3).
-
----
-
-## Target Journals & Keywords
-
-**Primary Targets** (Ranked by fit):
-1. **Decision Support Systems** — Highest fit. Explicitly seeks DSS architecture, uncertainty routing, and organizational workflow contributions.
-2. **Expert Systems with Applications** — Strong fit. Applied entity resolution / triage systems with quantified workload metrics.
-3. **Information Systems Frontiers** — Possible fit. Organizational information-sharing and silo-breaking framing.
-4. **IEEE Transactions on Human-Machine Systems** — Secondary fit if reframed around the human-in-the-loop triage design.
-
-**Keywords**: 
-- **DSS/Systems**: decision support systems, entity resolution, record linkage, information systems, uncertainty routing, human-in-the-loop.
-- **Domain**: tactical intelligence, case linking, investigative silos, public security, criminal investigation support.
-- **Technical (Commodity)**: vector indexing, embeddings, HNSW, spatio-temporal constraints, candidate reduction, threshold policy.
-
-**Avoid Framing As**: face recognition validation, facial matching accuracy, forensic identification, legal/evidentiary compliance, deep learning optimization.
+This paper demonstrates that a target-centric architecture — an explicit ontology of Target, Situation, Event, and Target Entity, stored as a knowledge graph — can continuously and asynchronously construct Person Entity Profiles from fragmented, multi-source investigative data via confidence-gated entity resolution, evaluated entirely by simulation. The Person Entity Profile is positioned as the foundational building block the rest of the platform uses: its entity network is analyzed for a Model of Functioning in Paper 2, and its identifications are escalated to evidentiary-grade status in Paper 3.
