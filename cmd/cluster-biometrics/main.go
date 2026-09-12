@@ -1,6 +1,6 @@
-// cluster-biometrics groups criminal-case evidence into biometric clusters by
-// modality, reading comparison records from Postgres and writing
-// BiometricCluster nodes to Neo4j. See cluster.Run.
+// cluster-biometrics groups biometric features into same-modality clusters,
+// reading biometric_decisions from Postgres and writing BiometricCluster nodes
+// to Neo4j. See cluster.Run.
 //
 // Defaults to a dry run that only reports counts. Pass -commit to write, which
 // requires NEO4J_URL (and NEO4J_PASSWORD; NEO4J_USERNAME defaults to "neo4j").

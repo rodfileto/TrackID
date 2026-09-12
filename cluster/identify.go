@@ -6,22 +6,25 @@ import (
 	"fmt"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/rodfileto/trackid/graph"
 )
 
-// identificationRow is one identification resolved through the identity chain
-// (register -> document -> person) and to the trace's current cluster.
+// identificationRow is one IDENTIFIED_AS edge to write: a cluster resolved to a
+// person via a POSITIVE decision linking a QUESTIONED feature to a KNOWN one.
 type identificationRow struct {
-	clusterID       int64
-	personID        string
-	confidence      sql.NullFloat64
-	responsibleUser sql.NullString
+	clusterID      int64
+	personID       string
+	confidence     *float64
+	identifiedBy   string
 }
 
 // Identify writes IDENTIFIED_AS edges from clusters to persons, derived from the
-// identifications table. It reads only from Postgres and rebuilds the edges each
-// run, so it is idempotent and consistent with the persisted clusters.
+// biometric_decisions log: a CONFIRMED decision linking a QUESTIONED feature to
+// a KNOWN feature resolves the QUESTIONED feature's cluster to the KNOWN
+// feature's person. It reads only from Postgres and rebuilds the edges each run,
+// so it is idempotent and consistent with the persisted clusters.
 func Identify(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext) (int, error) {
-	rows, err := loadIdentifications(ctx, db)
+	rows, err := loadIdentificationRows(ctx, db)
 	if err != nil {
 		return 0, err
 	}
@@ -29,18 +32,14 @@ func Identify(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext) (
 	params := make([]map[string]any, 0, len(rows))
 	for _, r := range rows {
 		var confidence any
-		if r.confidence.Valid {
-			confidence = r.confidence.Float64
-		}
-		var responsibleUser any
-		if r.responsibleUser.Valid {
-			responsibleUser = r.responsibleUser.String
+		if r.confidence != nil {
+			confidence = *r.confidence
 		}
 		params = append(params, map[string]any{
-			"clusterId":       fmt.Sprintf("CLUSTER-%d", r.clusterID),
-			"personId":        r.personID,
-			"confidence":      confidence,
-			"responsibleUser": responsibleUser,
+			"clusterId":     fmt.Sprintf("CLUSTER-%d", r.clusterID),
+			"personId":      r.personID,
+			"confidence":    confidence,
+			"identifiedBy":  r.identifiedBy,
 		})
 	}
 
@@ -64,38 +63,100 @@ func Identify(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext) (
 
 // IdentifyPlan returns how many identifications Identify would write.
 func IdentifyPlan(ctx context.Context, db *sql.DB) (int, error) {
-	rows, err := loadIdentifications(ctx, db)
+	rows, err := loadIdentificationRows(ctx, db)
 	return len(rows), err
 }
 
-const identificationsQuery = `
-SELECT m.cluster_id, p.person_id, i.confidence, i.responsible_user
-FROM identifications i
-JOIN identity_register r ON r.id = i.identity_register_id
+// knownFeaturePersonsQuery maps each KNOWN feature's graph id (the bare
+// identity_file.id) to its person, via the identity chain.
+const knownFeaturePersonsQuery = `
+SELECT p.person_id, f.id
+FROM biometricfeature bf
+JOIN identity_file f ON f.id = bf.identity_file_id
+JOIN identity_register r ON r.id = f.register_id
 JOIN identity_document d ON d.id = r.document_id
 JOIN person p ON p.id = d.person_id
-JOIN cluster_members m ON m.evidence_id = i.trace_id
-ORDER BY m.cluster_id, p.person_id
+WHERE bf.provenance = 'KNOWN'
 `
 
-func loadIdentifications(ctx context.Context, db *sql.DB) ([]identificationRow, error) {
+// loadIdentificationRows resolves confirmed QUESTIONED<->KNOWN decisions into
+// cluster->person edges. It is a pure function of the three loads (decisions,
+// known-feature persons, cluster membership).
+func loadIdentificationRows(ctx context.Context, db *sql.DB) ([]identificationRow, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database is not configured")
 	}
-	rows, err := db.QueryContext(ctx, identificationsQuery)
+
+	pairs, err := loadConfirmedPairs(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
+	knownPerson := map[string]string{}
+	rows, err := db.QueryContext(ctx, knownFeaturePersonsQuery)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var personID string
+		var fileID int64
+		if err := rows.Scan(&personID, &fileID); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		knownPerson[graph.KnownFeatureID(fileID)] = personID
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	memberCluster := map[string]int64{}
+	rows, err = db.QueryContext(ctx, membersQuery)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []identificationRow
 	for rows.Next() {
-		var r identificationRow
-		if err := rows.Scan(&r.clusterID, &r.personID, &r.confidence, &r.responsibleUser); err != nil {
+		var clusterID int64
+		var featureID string
+		if err := rows.Scan(&clusterID, &featureID); err != nil {
 			return nil, err
 		}
-		out = append(out, r)
+		memberCluster[featureID] = clusterID
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var out []identificationRow
+	for _, pair := range pairs {
+		personA, aKnown := knownPerson[pair.featureA]
+		personB, bKnown := knownPerson[pair.featureB]
+		if aKnown == bKnown {
+			// Both known (dedup) or both questioned (linkage) — not an
+			// identification.
+			continue
+		}
+		var questionedFeature, person string
+		if aKnown {
+			questionedFeature = pair.featureB
+			person = personA
+		} else {
+			questionedFeature = pair.featureA
+			person = personB
+		}
+		clusterID, ok := memberCluster[questionedFeature]
+		if !ok {
+			continue
+		}
+		out = append(out, identificationRow{
+			clusterID:    clusterID,
+			personID:     person,
+			confidence:   pair.confidence,
+			identifiedBy: pair.identifiedBy,
+		})
+	}
+	return out, nil
 }
 
 const deleteIdentifiedAsQuery = `
@@ -107,5 +168,5 @@ UNWIND $identifications AS i
 MATCH (c:BiometricCluster {clusterId: i.clusterId})
 MERGE (p:Person {personId: i.personId})
 MERGE (c)-[r:IDENTIFIED_AS]->(p)
-ON CREATE SET r.confidence = i.confidence, r.identifiedBy = i.responsibleUser, r.identifiedAt = datetime()
+ON CREATE SET r.confidence = i.confidence, r.identifiedBy = i.identifiedBy, r.identifiedAt = datetime()
 `

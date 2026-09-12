@@ -1,5 +1,7 @@
-// identify materializes the identity graph: Person nodes from the person table
-// and IDENTIFIED_AS edges from identifications. It reads only from Postgres.
+// identify materializes IDENTIFIED_AS edges in the Neo4j graph: for every
+// confirmed biometric_decisions pair linking a QUESTIONED feature to a KNOWN
+// feature, the QUESTIONED feature's cluster is linked to the KNOWN feature's
+// person. It reads only from Postgres; see cluster.Identify.
 //
 // Defaults to a dry run that only reports counts. Pass -commit to write, which
 // requires NEO4J_URL (and NEO4J_PASSWORD; NEO4J_USERNAME defaults to "neo4j").
@@ -35,15 +37,11 @@ func main() {
 
 	ctx := context.Background()
 	if !*commit {
-		persons, err := graph.SyncIdentityPlan(ctx, db)
-		if err != nil {
-			log.Fatal(err)
-		}
 		identifications, err := cluster.IdentifyPlan(ctx, db)
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("dry run: %d person(s), %d identification(s) would be written", persons, identifications)
+		log.Printf("dry run: %d identification(s) would be written", identifications)
 		return
 	}
 
@@ -53,15 +51,11 @@ func main() {
 	}
 	defer driver.Close(ctx)
 
-	persons, err := graph.SyncIdentity(ctx, db, driver)
-	if err != nil {
-		log.Fatal(err)
-	}
 	identifications, err := cluster.Identify(ctx, db, driver)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("identify complete: %d person(s), %d identification(s) written", persons, identifications)
+	log.Printf("identify complete: %d identification(s) written", identifications)
 }
 
 func neo4jURL() string {

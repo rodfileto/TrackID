@@ -1,10 +1,23 @@
 -- +goose Up
-CREATE TABLE identity_document (
+-- The enrollment (KNOWN) hierarchy: person -< identity_document -< identity_register -<
+-- identity_file. See MODEL.md section 2.1.
+CREATE TABLE person (
     id BIGSERIAL PRIMARY KEY,
-    document_number TEXT NOT NULL,
-    document_type TEXT NOT NULL,
+    person_id TEXT NOT NULL UNIQUE,
+    meta JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE identity_document (
+    id BIGSERIAL PRIMARY KEY,
+    person_id BIGINT REFERENCES person(id),
+    document_number TEXT NOT NULL,
+    document_type TEXT NOT NULL,
+    cpf TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT identity_document_type_number_key UNIQUE (document_type, document_number)
 );
 
 CREATE TABLE gender (
@@ -20,17 +33,33 @@ INSERT INTO gender (code, label) VALUES
 
 CREATE TABLE identity_register (
     id BIGSERIAL PRIMARY KEY,
-    document_id BIGINT NOT NULL,
-    register_id TEXT NOT NULL,
-    register_number TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    document_id BIGINT NOT NULL REFERENCES identity_document(id),
+    register_number TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     parent_1_name TEXT NOT NULL,
-    parent_1_gender VARCHAR(1) NOT NULL,
+    parent_1_gender VARCHAR(1) NOT NULL REFERENCES gender(code),
     parent_2_name TEXT NOT NULL,
-    parent_2_gender VARCHAR(1) NOT NULL,
-    CONSTRAINT identity_register_document_id_fkey FOREIGN KEY (document_id) REFERENCES identity_document(id),
-    CONSTRAINT identity_register_parent_1_gender_fkey FOREIGN KEY (parent_1_gender) REFERENCES gender(code),
-    CONSTRAINT identity_register_parent_2_gender_fkey FOREIGN KEY (parent_2_gender) REFERENCES gender(code)
+    parent_2_gender VARCHAR(1) NOT NULL REFERENCES gender(code),
+    data_nascimento TEXT,
+    meta JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- The raw files produced by one enrollment event: a photo (-> a FACE_RECORD feature) and/or
+-- a nist (-> a FINGERPRINT_TEMPLATE feature), distinguished by file_type + sequence.
+CREATE TABLE identity_file (
+    id BIGSERIAL PRIMARY KEY,
+    register_id BIGINT NOT NULL REFERENCES identity_register(id),
+    file_type TEXT NOT NULL,
+    sequence SMALLINT NOT NULL DEFAULT 1,
+    source_path TEXT NOT NULL,
+    storage_ref TEXT NOT NULL,
+    content_type TEXT,
+    size_bytes BIGINT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT identity_file_register_type_sequence_key UNIQUE (register_id, file_type, sequence)
+);
+
+CREATE INDEX identity_file_register_id_idx ON identity_file (register_id);

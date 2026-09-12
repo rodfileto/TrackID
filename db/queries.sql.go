@@ -136,41 +136,136 @@ func (q *Queries) GetUserByMatricula(ctx context.Context, matricula string) (Get
 	return i, err
 }
 
-const listComparisons = `-- name: ListComparisons :many
-SELECT evidence_a, evidence_b, case_type, comparison_type, responsible_user
-FROM comparisons
-ORDER BY evidence_a, evidence_b
-LIMIT $1 OFFSET $2
+const insertBiometricDecision = `-- name: InsertBiometricDecision :one
+INSERT INTO biometric_decisions
+    (feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes, decided_at, created_at
 `
 
-type ListComparisonsParams struct {
-	Limit  int32 `db:"limit" json:"limit"`
-	Offset int32 `db:"offset" json:"offset"`
+type InsertBiometricDecisionParams struct {
+	FeatureAID   string          `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID   string          `db:"feature_b_id" json:"feature_b_id"`
+	Modality     string          `db:"modality" json:"modality"`
+	Role         string          `db:"role" json:"role"`
+	Decision     string          `db:"decision" json:"decision"`
+	SystemSource sql.NullString  `db:"system_source" json:"system_source"`
+	Username     sql.NullString  `db:"username" json:"username"`
+	Confidence   sql.NullFloat64 `db:"confidence" json:"confidence"`
+	Threshold    sql.NullFloat64 `db:"threshold" json:"threshold"`
+	Notes        sql.NullString  `db:"notes" json:"notes"`
 }
 
-type ListComparisonsRow struct {
-	EvidenceA       string         `db:"evidence_a" json:"evidence_a"`
-	EvidenceB       string         `db:"evidence_b" json:"evidence_b"`
-	CaseType        string         `db:"case_type" json:"case_type"`
-	ComparisonType  string         `db:"comparison_type" json:"comparison_type"`
-	ResponsibleUser sql.NullString `db:"responsible_user" json:"responsible_user"`
+func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometricDecisionParams) (BiometricDecision, error) {
+	row := q.db.QueryRowContext(ctx, insertBiometricDecision,
+		arg.FeatureAID,
+		arg.FeatureBID,
+		arg.Modality,
+		arg.Role,
+		arg.Decision,
+		arg.SystemSource,
+		arg.Username,
+		arg.Confidence,
+		arg.Threshold,
+		arg.Notes,
+	)
+	var i BiometricDecision
+	err := row.Scan(
+		&i.ID,
+		&i.FeatureAID,
+		&i.FeatureBID,
+		&i.Modality,
+		&i.Role,
+		&i.Decision,
+		&i.SystemSource,
+		&i.Username,
+		&i.Confidence,
+		&i.Threshold,
+		&i.Notes,
+		&i.DecidedAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
-func (q *Queries) ListComparisons(ctx context.Context, arg ListComparisonsParams) ([]ListComparisonsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listComparisons, arg.Limit, arg.Offset)
+const listBiometricDecisions = `-- name: ListBiometricDecisions :many
+SELECT feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence
+FROM biometric_decisions
+ORDER BY feature_a_id, feature_b_id, decided_at
+`
+
+type ListBiometricDecisionsRow struct {
+	FeatureAID   string          `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID   string          `db:"feature_b_id" json:"feature_b_id"`
+	Modality     string          `db:"modality" json:"modality"`
+	Role         string          `db:"role" json:"role"`
+	Decision     string          `db:"decision" json:"decision"`
+	SystemSource sql.NullString  `db:"system_source" json:"system_source"`
+	Username     sql.NullString  `db:"username" json:"username"`
+	Confidence   sql.NullFloat64 `db:"confidence" json:"confidence"`
+}
+
+func (q *Queries) ListBiometricDecisions(ctx context.Context) ([]ListBiometricDecisionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBiometricDecisions)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListComparisonsRow
+	var items []ListBiometricDecisionsRow
 	for rows.Next() {
-		var i ListComparisonsRow
+		var i ListBiometricDecisionsRow
 		if err := rows.Scan(
-			&i.EvidenceA,
-			&i.EvidenceB,
-			&i.CaseType,
-			&i.ComparisonType,
-			&i.ResponsibleUser,
+			&i.FeatureAID,
+			&i.FeatureBID,
+			&i.Modality,
+			&i.Role,
+			&i.Decision,
+			&i.SystemSource,
+			&i.Username,
+			&i.Confidence,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBiometricFeatures = `-- name: ListBiometricFeatures :many
+SELECT id, feature_type, provenance, identity_file_id, case_trace_id
+FROM biometricfeature
+ORDER BY id
+`
+
+type ListBiometricFeaturesRow struct {
+	ID             int64         `db:"id" json:"id"`
+	FeatureType    string        `db:"feature_type" json:"feature_type"`
+	Provenance     string        `db:"provenance" json:"provenance"`
+	IdentityFileID sql.NullInt64 `db:"identity_file_id" json:"identity_file_id"`
+	CaseTraceID    sql.NullInt64 `db:"case_trace_id" json:"case_trace_id"`
+}
+
+func (q *Queries) ListBiometricFeatures(ctx context.Context) ([]ListBiometricFeaturesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBiometricFeatures)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBiometricFeaturesRow
+	for rows.Next() {
+		var i ListBiometricFeaturesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FeatureType,
+			&i.Provenance,
+			&i.IdentityFileID,
+			&i.CaseTraceID,
 		); err != nil {
 			return nil, err
 		}
@@ -226,84 +321,202 @@ func (q *Queries) ListCriminalCases(ctx context.Context, arg ListCriminalCasesPa
 	return items, nil
 }
 
-const rejectComparison = `-- name: RejectComparison :exec
-UPDATE comparisons SET status = 'rejected', updated_at = NOW()
-WHERE evidence_a = $1 AND evidence_b = $2
-`
-
-type RejectComparisonParams struct {
-	EvidenceA string `db:"evidence_a" json:"evidence_a"`
-	EvidenceB string `db:"evidence_b" json:"evidence_b"`
-}
-
-func (q *Queries) RejectComparison(ctx context.Context, arg RejectComparisonParams) error {
-	_, err := q.db.ExecContext(ctx, rejectComparison, arg.EvidenceA, arg.EvidenceB)
-	return err
-}
-
-const upsertCodification = `-- name: UpsertCodification :exec
-INSERT INTO codifications (trace_id, format, version, payload_ref)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (trace_id, format, version) DO UPDATE SET
-    payload_ref = EXCLUDED.payload_ref,
+const upsertBiometricFeatureFromCaseTrace = `-- name: UpsertBiometricFeatureFromCaseTrace :one
+INSERT INTO biometricfeature (feature_type, provenance, case_trace_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (case_trace_id) DO UPDATE SET
+    feature_type = EXCLUDED.feature_type,
+    provenance = EXCLUDED.provenance,
     updated_at = NOW()
+RETURNING id
 `
 
-type UpsertCodificationParams struct {
-	TraceID    string         `db:"trace_id" json:"trace_id"`
-	Format     string         `db:"format" json:"format"`
-	Version    string         `db:"version" json:"version"`
-	PayloadRef sql.NullString `db:"payload_ref" json:"payload_ref"`
+type UpsertBiometricFeatureFromCaseTraceParams struct {
+	FeatureType string        `db:"feature_type" json:"feature_type"`
+	Provenance  string        `db:"provenance" json:"provenance"`
+	CaseTraceID sql.NullInt64 `db:"case_trace_id" json:"case_trace_id"`
 }
 
-func (q *Queries) UpsertCodification(ctx context.Context, arg UpsertCodificationParams) error {
-	_, err := q.db.ExecContext(ctx, upsertCodification,
+func (q *Queries) UpsertBiometricFeatureFromCaseTrace(ctx context.Context, arg UpsertBiometricFeatureFromCaseTraceParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertBiometricFeatureFromCaseTrace, arg.FeatureType, arg.Provenance, arg.CaseTraceID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertBiometricFeatureFromIdentityFile = `-- name: UpsertBiometricFeatureFromIdentityFile :one
+INSERT INTO biometricfeature (feature_type, provenance, identity_file_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (identity_file_id) DO UPDATE SET
+    feature_type = EXCLUDED.feature_type,
+    provenance = EXCLUDED.provenance,
+    updated_at = NOW()
+RETURNING id
+`
+
+type UpsertBiometricFeatureFromIdentityFileParams struct {
+	FeatureType    string        `db:"feature_type" json:"feature_type"`
+	Provenance     string        `db:"provenance" json:"provenance"`
+	IdentityFileID sql.NullInt64 `db:"identity_file_id" json:"identity_file_id"`
+}
+
+func (q *Queries) UpsertBiometricFeatureFromIdentityFile(ctx context.Context, arg UpsertBiometricFeatureFromIdentityFileParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertBiometricFeatureFromIdentityFile, arg.FeatureType, arg.Provenance, arg.IdentityFileID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertCaseCodification = `-- name: UpsertCaseCodification :one
+INSERT INTO case_codifications (trace_id, sequence, codification_type)
+VALUES ($1, $2, $3)
+ON CONFLICT (trace_id, sequence) DO UPDATE SET
+    codification_type = EXCLUDED.codification_type,
+    updated_at = NOW()
+RETURNING id
+`
+
+type UpsertCaseCodificationParams struct {
+	TraceID          int64  `db:"trace_id" json:"trace_id"`
+	Sequence         int16  `db:"sequence" json:"sequence"`
+	CodificationType string `db:"codification_type" json:"codification_type"`
+}
+
+func (q *Queries) UpsertCaseCodification(ctx context.Context, arg UpsertCaseCodificationParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertCaseCodification,
 		arg.TraceID,
-		arg.Format,
-		arg.Version,
-		arg.PayloadRef,
+		arg.Sequence,
+		arg.CodificationType,
 	)
-	return err
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
-const upsertComparison = `-- name: UpsertComparison :exec
-INSERT INTO comparisons
-    (evidence_a, evidence_b, case_type, comparison_type, responsible_user)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (evidence_a, evidence_b) DO UPDATE SET
-    case_type = EXCLUDED.case_type,
-    comparison_type = EXCLUDED.comparison_type,
-    responsible_user = EXCLUDED.responsible_user,
+const upsertCaseEvidence = `-- name: UpsertCaseEvidence :one
+INSERT INTO case_evidences (criminal_case_id, sequence, case_file_id, description)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (criminal_case_id, sequence) DO UPDATE SET
+    case_file_id = EXCLUDED.case_file_id,
+    description = EXCLUDED.description,
     updated_at = NOW()
+RETURNING id
 `
 
-type UpsertComparisonParams struct {
-	EvidenceA       string         `db:"evidence_a" json:"evidence_a"`
-	EvidenceB       string         `db:"evidence_b" json:"evidence_b"`
-	CaseType        string         `db:"case_type" json:"case_type"`
-	ComparisonType  string         `db:"comparison_type" json:"comparison_type"`
-	ResponsibleUser sql.NullString `db:"responsible_user" json:"responsible_user"`
+type UpsertCaseEvidenceParams struct {
+	CriminalCaseID int64          `db:"criminal_case_id" json:"criminal_case_id"`
+	Sequence       int16          `db:"sequence" json:"sequence"`
+	CaseFileID     sql.NullInt64  `db:"case_file_id" json:"case_file_id"`
+	Description    sql.NullString `db:"description" json:"description"`
 }
 
-func (q *Queries) UpsertComparison(ctx context.Context, arg UpsertComparisonParams) error {
-	_, err := q.db.ExecContext(ctx, upsertComparison,
-		arg.EvidenceA,
-		arg.EvidenceB,
-		arg.CaseType,
-		arg.ComparisonType,
-		arg.ResponsibleUser,
+func (q *Queries) UpsertCaseEvidence(ctx context.Context, arg UpsertCaseEvidenceParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertCaseEvidence,
+		arg.CriminalCaseID,
+		arg.Sequence,
+		arg.CaseFileID,
+		arg.Description,
 	)
-	return err
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
-const upsertCriminalCase = `-- name: UpsertCriminalCase :exec
-INSERT INTO criminal_cases
-    (case_id, case_type, description)
+const upsertCaseFile = `-- name: UpsertCaseFile :one
+INSERT INTO case_files (criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (criminal_case_id, category, hash_id) DO UPDATE SET
+    media_type = EXCLUDED.media_type,
+    filename = EXCLUDED.filename,
+    source_path = EXCLUDED.source_path,
+    storage_ref = EXCLUDED.storage_ref,
+    content_type = EXCLUDED.content_type,
+    size_bytes = EXCLUDED.size_bytes,
+    updated_at = NOW()
+RETURNING id
+`
+
+type UpsertCaseFileParams struct {
+	CriminalCaseID int64          `db:"criminal_case_id" json:"criminal_case_id"`
+	Category       string         `db:"category" json:"category"`
+	MediaType      sql.NullString `db:"media_type" json:"media_type"`
+	HashID         sql.NullString `db:"hash_id" json:"hash_id"`
+	Filename       sql.NullString `db:"filename" json:"filename"`
+	SourcePath     sql.NullString `db:"source_path" json:"source_path"`
+	StorageRef     sql.NullString `db:"storage_ref" json:"storage_ref"`
+	ContentType    sql.NullString `db:"content_type" json:"content_type"`
+	SizeBytes      sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
+}
+
+func (q *Queries) UpsertCaseFile(ctx context.Context, arg UpsertCaseFileParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertCaseFile,
+		arg.CriminalCaseID,
+		arg.Category,
+		arg.MediaType,
+		arg.HashID,
+		arg.Filename,
+		arg.SourcePath,
+		arg.StorageRef,
+		arg.ContentType,
+		arg.SizeBytes,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertCaseTrace = `-- name: UpsertCaseTrace :one
+INSERT INTO case_traces (evidence_id, sequence, trace_type, box_x1, box_y1, box_x2, box_y2, detection_score, case_file_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (evidence_id, sequence) DO UPDATE SET
+    trace_type = EXCLUDED.trace_type,
+    box_x1 = EXCLUDED.box_x1,
+    box_y1 = EXCLUDED.box_y1,
+    box_x2 = EXCLUDED.box_x2,
+    box_y2 = EXCLUDED.box_y2,
+    detection_score = EXCLUDED.detection_score,
+    case_file_id = EXCLUDED.case_file_id,
+    updated_at = NOW()
+RETURNING id
+`
+
+type UpsertCaseTraceParams struct {
+	EvidenceID     int64           `db:"evidence_id" json:"evidence_id"`
+	Sequence       int16           `db:"sequence" json:"sequence"`
+	TraceType      string          `db:"trace_type" json:"trace_type"`
+	BoxX1          sql.NullFloat64 `db:"box_x1" json:"box_x1"`
+	BoxY1          sql.NullFloat64 `db:"box_y1" json:"box_y1"`
+	BoxX2          sql.NullFloat64 `db:"box_x2" json:"box_x2"`
+	BoxY2          sql.NullFloat64 `db:"box_y2" json:"box_y2"`
+	DetectionScore sql.NullFloat64 `db:"detection_score" json:"detection_score"`
+	CaseFileID     sql.NullInt64   `db:"case_file_id" json:"case_file_id"`
+}
+
+func (q *Queries) UpsertCaseTrace(ctx context.Context, arg UpsertCaseTraceParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertCaseTrace,
+		arg.EvidenceID,
+		arg.Sequence,
+		arg.TraceType,
+		arg.BoxX1,
+		arg.BoxY1,
+		arg.BoxX2,
+		arg.BoxY2,
+		arg.DetectionScore,
+		arg.CaseFileID,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertCriminalCase = `-- name: UpsertCriminalCase :one
+INSERT INTO criminal_cases (case_id, case_type, description)
 VALUES ($1, $2, $3)
 ON CONFLICT (case_id) DO UPDATE SET
     case_type = EXCLUDED.case_type,
     description = EXCLUDED.description,
     updated_at = NOW()
+RETURNING id
 `
 
 type UpsertCriminalCaseParams struct {
@@ -312,41 +525,48 @@ type UpsertCriminalCaseParams struct {
 	Description string `db:"description" json:"description"`
 }
 
-func (q *Queries) UpsertCriminalCase(ctx context.Context, arg UpsertCriminalCaseParams) error {
-	_, err := q.db.ExecContext(ctx, upsertCriminalCase, arg.CaseID, arg.CaseType, arg.Description)
-	return err
+func (q *Queries) UpsertCriminalCase(ctx context.Context, arg UpsertCriminalCaseParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertCriminalCase, arg.CaseID, arg.CaseType, arg.Description)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
-const upsertIdentification = `-- name: UpsertIdentification :exec
-INSERT INTO identifications (trace_id, identity_register_id, trace_codification_id, confidence, responsible_user, source)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (trace_id, identity_register_id) DO UPDATE SET
-    trace_codification_id = EXCLUDED.trace_codification_id,
-    confidence = EXCLUDED.confidence,
-    responsible_user = EXCLUDED.responsible_user,
-    source = EXCLUDED.source,
+const upsertIdentityFile = `-- name: UpsertIdentityFile :one
+INSERT INTO identity_file (register_id, file_type, sequence, source_path, storage_ref, content_type, size_bytes)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (register_id, file_type, sequence) DO UPDATE SET
+    source_path = EXCLUDED.source_path,
+    storage_ref = EXCLUDED.storage_ref,
+    content_type = EXCLUDED.content_type,
+    size_bytes = EXCLUDED.size_bytes,
     updated_at = NOW()
+RETURNING id
 `
 
-type UpsertIdentificationParams struct {
-	TraceID             string          `db:"trace_id" json:"trace_id"`
-	IdentityRegisterID  int64           `db:"identity_register_id" json:"identity_register_id"`
-	TraceCodificationID sql.NullInt64   `db:"trace_codification_id" json:"trace_codification_id"`
-	Confidence          sql.NullFloat64 `db:"confidence" json:"confidence"`
-	ResponsibleUser     sql.NullString  `db:"responsible_user" json:"responsible_user"`
-	Source              sql.NullString  `db:"source" json:"source"`
+type UpsertIdentityFileParams struct {
+	RegisterID  int64          `db:"register_id" json:"register_id"`
+	FileType    string         `db:"file_type" json:"file_type"`
+	Sequence    int16          `db:"sequence" json:"sequence"`
+	SourcePath  string         `db:"source_path" json:"source_path"`
+	StorageRef  string         `db:"storage_ref" json:"storage_ref"`
+	ContentType sql.NullString `db:"content_type" json:"content_type"`
+	SizeBytes   sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
 }
 
-func (q *Queries) UpsertIdentification(ctx context.Context, arg UpsertIdentificationParams) error {
-	_, err := q.db.ExecContext(ctx, upsertIdentification,
-		arg.TraceID,
-		arg.IdentityRegisterID,
-		arg.TraceCodificationID,
-		arg.Confidence,
-		arg.ResponsibleUser,
-		arg.Source,
+func (q *Queries) UpsertIdentityFile(ctx context.Context, arg UpsertIdentityFileParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertIdentityFile,
+		arg.RegisterID,
+		arg.FileType,
+		arg.Sequence,
+		arg.SourcePath,
+		arg.StorageRef,
+		arg.ContentType,
+		arg.SizeBytes,
 	)
-	return err
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const upsertPerson = `-- name: UpsertPerson :exec

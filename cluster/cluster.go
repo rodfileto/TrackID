@@ -1,6 +1,7 @@
-// Package cluster groups criminal-case evidence into biometric clusters by
-// modality. Clusters are persisted in Postgres with stable, sequential ids and
-// updated incrementally (extend/merge/split), then materialized to Neo4j.
+// Package cluster groups biometric features into same-modality clusters driven
+// by biometric_decisions: a POSITIVE decision that settles to CONFIRMED links
+// two features. Clusters are persisted in Postgres with stable, sequential ids
+// and updated incrementally (extend/merge/split), then materialized to Neo4j.
 package cluster
 
 import (
@@ -24,22 +25,39 @@ type Stats struct {
 	Merged   int
 }
 
-// Run reconciles the confirmed comparisons against the persisted clusters and
+// Run reconciles the confirmed decisions against the persisted clusters and
 // materializes the result to Neo4j. It reads only from Postgres.
 func Run(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext) (Stats, error) {
 	if db == nil {
 		return Stats{}, fmt.Errorf("database is not configured")
 	}
-	caseTypes, edges, existing, memberCluster, err := load(ctx, db)
+
+	featureInfos, err := loadFeatures(ctx, db)
 	if err != nil {
 		return Stats{}, err
 	}
+	edges, err := loadConfirmedEdges(ctx, db)
+	if err != nil {
+		return Stats{}, err
+	}
+	existing, memberCluster, err := loadClusters(ctx, db)
+	if err != nil {
+		return Stats{}, err
+	}
+
+	caseTypes := make(map[string]string, len(featureInfos))
+	featureTypes := make(map[string]string, len(featureInfos))
+	for id, fi := range featureInfos {
+		caseTypes[id] = fi.caseType
+		featureTypes[id] = fi.featureType
+	}
+
 	p := reconcile(caseTypes, edges, existing)
 
 	if err := apply(ctx, db, p, memberCluster, existing); err != nil {
 		return Stats{}, err
 	}
-	if err := materialize(ctx, db, driver); err != nil {
+	if err := materialize(ctx, db, driver, featureTypes); err != nil {
 		return Stats{}, err
 	}
 	return stats(p), nil
@@ -50,9 +68,23 @@ func Plan(ctx context.Context, db *sql.DB) (Stats, error) {
 	if db == nil {
 		return Stats{}, fmt.Errorf("database is not configured")
 	}
-	caseTypes, edges, existing, _, err := load(ctx, db)
+
+	featureInfos, err := loadFeatures(ctx, db)
 	if err != nil {
 		return Stats{}, err
+	}
+	edges, err := loadConfirmedEdges(ctx, db)
+	if err != nil {
+		return Stats{}, err
+	}
+	existing, _, err := loadClusters(ctx, db)
+	if err != nil {
+		return Stats{}, err
+	}
+
+	caseTypes := make(map[string]string, len(featureInfos))
+	for id, fi := range featureInfos {
+		caseTypes[id] = fi.caseType
 	}
 	return stats(reconcile(caseTypes, edges, existing)), nil
 }
@@ -73,67 +105,67 @@ func stats(p plan) Stats {
 	}
 }
 
-// load reads everything a run needs: case types, confirmed edges, and the
-// persisted clusters and memberships.
-func load(ctx context.Context, db *sql.DB) (map[string]string, []edge, map[int64]clusterState, map[string]int64, error) {
-	caseTypes, err := loadCaseTypes(ctx, db)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	edges, err := loadConfirmedEdges(ctx, db)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	existing, memberCluster, err := loadClusters(ctx, db)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	return caseTypes, edges, existing, memberCluster, nil
+// featureInfo is a biometricfeature's modality (case type) and graph feature type.
+type featureInfo struct {
+	caseType    string
+	featureType string
 }
 
-const caseTypesQuery = `
-SELECT case_id, case_type
-FROM criminal_cases
+const featuresQuery = `
+SELECT identity_file_id, case_trace_id, feature_type
+FROM biometricfeature
+ORDER BY id
 `
 
-func loadCaseTypes(ctx context.Context, db *sql.DB) (map[string]string, error) {
-	rows, err := db.QueryContext(ctx, caseTypesQuery)
+// loadFeatures reads every biometricfeature and maps its graph feature id to its
+// case type and feature type. Feature ids follow graph.KnownFeatureID /
+// graph.QuestionedFeatureID, the single source of truth for those conventions.
+func loadFeatures(ctx context.Context, db *sql.DB) (map[string]featureInfo, error) {
+	rows, err := db.QueryContext(ctx, featuresQuery)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[string]string{}
+
+	out := map[string]featureInfo{}
 	for rows.Next() {
-		var id, caseType string
-		if err := rows.Scan(&id, &caseType); err != nil {
+		var fileID, traceID sql.NullInt64
+		var featureType string
+		if err := rows.Scan(&fileID, &traceID, &featureType); err != nil {
 			return nil, err
 		}
-		out[id] = caseType
+		caseType, ok := graph.CaseTypeForFeatureType(featureType)
+		if !ok {
+			continue
+		}
+		var featureID string
+		if fileID.Valid {
+			featureID = graph.KnownFeatureID(fileID.Int64)
+		} else {
+			featureID = graph.QuestionedFeatureID(traceID.Int64)
+		}
+		out[featureID] = featureInfo{caseType: caseType, featureType: featureType}
 	}
 	return out, rows.Err()
 }
 
-const edgesQuery = `
-SELECT evidence_a, evidence_b, case_type
-FROM comparisons
-WHERE status = 'confirmed'
-`
-
+// loadConfirmedEdges reads biometric_decisions and returns the edges whose
+// derived status is CONFIRMED. The decision modality (FACE/FINGERPRINT) is
+// mapped onto the clusters table's case_type vocabulary (FACIAL/FINGERPRINT).
 func loadConfirmedEdges(ctx context.Context, db *sql.DB) ([]edge, error) {
-	rows, err := db.QueryContext(ctx, edgesQuery)
+	pairs, err := loadConfirmedPairs(ctx, db)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []edge
-	for rows.Next() {
-		var e edge
-		if err := rows.Scan(&e.left, &e.right, &e.modality); err != nil {
-			return nil, err
-		}
-		out = append(out, e)
+	edges := make([]edge, 0, len(pairs))
+	for _, p := range pairs {
+		edges = append(edges, edge{
+			left:     p.featureA,
+			right:    p.featureB,
+			modality: caseTypeForModality(p.modality),
+		})
 	}
-	return out, rows.Err()
+	return edges, nil
 }
 
 const clustersQuery = `
@@ -143,7 +175,7 @@ ORDER BY id
 `
 
 const membersQuery = `
-SELECT cluster_id, evidence_id
+SELECT cluster_id, feature_id
 FROM cluster_members
 `
 
@@ -174,14 +206,14 @@ func loadClusters(ctx context.Context, db *sql.DB) (map[int64]clusterState, map[
 	defer rows.Close()
 	for rows.Next() {
 		var clusterID int64
-		var evidenceID string
-		if err := rows.Scan(&clusterID, &evidenceID); err != nil {
+		var featureID string
+		if err := rows.Scan(&clusterID, &featureID); err != nil {
 			return nil, nil, err
 		}
 		cs := existing[clusterID]
-		cs.members = append(cs.members, evidenceID)
+		cs.members = append(cs.members, featureID)
 		existing[clusterID] = cs
-		memberCluster[evidenceID] = clusterID
+		memberCluster[featureID] = clusterID
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
@@ -216,17 +248,17 @@ func apply(ctx context.Context, db *sql.DB, p plan, memberCluster map[string]int
 		}
 	}
 
-	for evidence, finalID := range final {
-		currentID, ok := memberCluster[evidence]
+	for featureID, finalID := range final {
+		currentID, ok := memberCluster[featureID]
 		if ok && currentID == finalID {
 			continue
 		}
 		if ok {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM cluster_members WHERE evidence_id = $1`, evidence); err != nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM cluster_members WHERE feature_id = $1`, featureID); err != nil {
 				return err
 			}
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO cluster_members (cluster_id, evidence_id) VALUES ($1, $2)`, finalID, evidence); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO cluster_members (cluster_id, feature_id) VALUES ($1, $2)`, finalID, featureID); err != nil {
 			return err
 		}
 	}
@@ -241,7 +273,7 @@ func apply(ctx context.Context, db *sql.DB, p plan, memberCluster map[string]int
 	}
 
 	for _, m := range p.merges {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO cluster_merges (from_cluster_id, to_cluster_id, reason) VALUES ($1, $2, $3)`, m.from, m.to, "comparison_merge"); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO cluster_merges (from_cluster_id, to_cluster_id, reason) VALUES ($1, $2, $3)`, m.from, m.to, "decision_merge"); err != nil {
 			return err
 		}
 	}
@@ -251,13 +283,14 @@ func apply(ctx context.Context, db *sql.DB, p plan, memberCluster map[string]int
 
 // materialize reads the persisted clusters and memberships and writes the
 // BiometricCluster nodes and IN_CLUSTER edges to Neo4j. It rebuilds IN_CLUSTER
-// edges from the DB each run but never touches cluster nodes or IDENTIFIED_AS.
-func materialize(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext) error {
+// edges from the DB each run but never touches IDENTIFIED_AS. Evidence and
+// feature nodes are created by Sync/SyncIdentity, not here.
+func materialize(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext, featureTypes map[string]string) error {
 	rows, err := db.QueryContext(ctx, `
-SELECT c.id, c.case_type, m.evidence_id
+SELECT c.id, c.case_type, m.feature_id
 FROM clusters c
 JOIN cluster_members m ON m.cluster_id = c.id
-ORDER BY c.id, m.evidence_id`)
+ORDER BY c.id, m.feature_id`)
 	if err != nil {
 		return err
 	}
@@ -271,8 +304,8 @@ ORDER BY c.id, m.evidence_id`)
 	byID := map[int64]*clusterData{}
 	for rows.Next() {
 		var id int64
-		var caseType, evidenceID string
-		if err := rows.Scan(&id, &caseType, &evidenceID); err != nil {
+		var caseType, featureID string
+		if err := rows.Scan(&id, &caseType, &featureID); err != nil {
 			return err
 		}
 		c, ok := byID[id]
@@ -281,7 +314,7 @@ ORDER BY c.id, m.evidence_id`)
 			byID[id] = c
 			order = append(order, id)
 		}
-		c.members = append(c.members, evidenceID)
+		c.members = append(c.members, featureID)
 	}
 	if err := rows.Err(); err != nil {
 		return err
@@ -300,16 +333,13 @@ ORDER BY c.id, m.evidence_id`)
 		members := make([]map[string]any, 0, len(c.members))
 		for _, m := range c.members {
 			members = append(members, map[string]any{
-				"evidenceId": m,
-				"featureId":  graph.FeatureID(m),
+				"featureId":   m,
+				"featureType": featureTypes[m],
 			})
 		}
 		params = append(params, map[string]any{
 			"clusterId":    clusterID,
 			"clusterLabel": mapping.ClusterLabel,
-			"evidenceType": mapping.EvidenceType,
-			"featureType":  mapping.FeatureType,
-			"featureLabel": mapping.FeatureLabel,
 			"members":      members,
 		})
 	}
@@ -354,11 +384,7 @@ FOREACH (_ IN CASE WHEN cluster.clusterLabel = 'Fingerprint' THEN [1] ELSE [] EN
 FOREACH (_ IN CASE WHEN cluster.clusterLabel = 'Face' THEN [1] ELSE [] END | SET c:Face)
 WITH c, cluster
 UNWIND cluster.members AS member
-MERGE (e:Object:Evidence {evidenceId: member.evidenceId})
 MERGE (f:Object:BiometricFeature {featureId: member.featureId})
-ON CREATE SET f.featureType = cluster.featureType
-FOREACH (_ IN CASE WHEN cluster.featureLabel = 'FingerprintLift' THEN [1] ELSE [] END | SET f:FingerprintLift)
-FOREACH (_ IN CASE WHEN cluster.featureLabel = 'FaceCapture' THEN [1] ELSE [] END | SET f:FaceCapture)
-MERGE (e)-[:HAS_FEATURE]->(f)
+SET f.featureType = member.featureType
 MERGE (f)-[:IN_CLUSTER]->(c)
 `
