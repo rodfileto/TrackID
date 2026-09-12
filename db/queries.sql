@@ -31,12 +31,38 @@ FROM criminal_cases
 ORDER BY case_id
 LIMIT $1 OFFSET $2;
 
--- name: UpsertPerson :exec
+-- name: UpsertPerson :one
 INSERT INTO person (person_id, meta)
 VALUES ($1, $2)
 ON CONFLICT (person_id) DO UPDATE SET
     meta = EXCLUDED.meta,
-    updated_at = NOW();
+    updated_at = NOW()
+RETURNING id;
+
+-- name: UpsertIdentityDocument :one
+INSERT INTO identity_document (person_id, document_number, document_type, cpf)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (document_type, document_number) DO UPDATE SET
+    person_id = EXCLUDED.person_id,
+    cpf = EXCLUDED.cpf,
+    updated_at = NOW()
+RETURNING id;
+
+-- name: UpsertIdentityRegister :one
+INSERT INTO identity_register
+    (document_id, register_number, name, parent_1_name, parent_1_gender, parent_2_name, parent_2_gender, data_nascimento, meta)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (register_number) DO UPDATE SET
+    document_id = EXCLUDED.document_id,
+    name = EXCLUDED.name,
+    parent_1_name = EXCLUDED.parent_1_name,
+    parent_1_gender = EXCLUDED.parent_1_gender,
+    parent_2_name = EXCLUDED.parent_2_name,
+    parent_2_gender = EXCLUDED.parent_2_gender,
+    data_nascimento = EXCLUDED.data_nascimento,
+    meta = EXCLUDED.meta,
+    updated_at = NOW()
+RETURNING id;
 
 -- name: UpsertIdentityFile :one
 INSERT INTO identity_file (register_id, file_type, sequence, source_path, storage_ref, content_type, size_bytes)
