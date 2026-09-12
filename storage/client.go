@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/minio/minio-go/v7"
@@ -54,4 +55,19 @@ func (client *Client) Upload(ctx context.Context, objectKey string, content []by
 		return "", err
 	}
 	return client.bucket + "/" + objectKey, nil
+}
+
+// Download fetches the content behind a "<bucket>/<objectKey>" reference previously returned by
+// Upload.
+func (client *Client) Download(ctx context.Context, storageRef string) ([]byte, error) {
+	objectKey := strings.TrimPrefix(storageRef, client.bucket+"/")
+	if objectKey == storageRef {
+		return nil, fmt.Errorf("storage ref %q does not belong to bucket %q", storageRef, client.bucket)
+	}
+	object, err := client.minio.GetObject(ctx, client.bucket, objectKey, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer object.Close()
+	return io.ReadAll(object)
 }

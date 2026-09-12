@@ -122,6 +122,31 @@ func (q *Queries) FindNearestFeatureEmbeddings(ctx context.Context, arg FindNear
 	return items, nil
 }
 
+const getCriminalCaseByCaseID = `-- name: GetCriminalCaseByCaseID :one
+SELECT id, case_id, case_type, description
+FROM criminal_cases
+WHERE case_id = $1
+`
+
+type GetCriminalCaseByCaseIDRow struct {
+	ID          int64  `db:"id" json:"id"`
+	CaseID      string `db:"case_id" json:"case_id"`
+	CaseType    string `db:"case_type" json:"case_type"`
+	Description string `db:"description" json:"description"`
+}
+
+func (q *Queries) GetCriminalCaseByCaseID(ctx context.Context, caseID string) (GetCriminalCaseByCaseIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getCriminalCaseByCaseID, caseID)
+	var i GetCriminalCaseByCaseIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.CaseID,
+		&i.CaseType,
+		&i.Description,
+	)
+	return i, err
+}
+
 const getUserByID = `-- name: GetUserByID :one
 SELECT id, nome, ultimo_nome, matricula, cargo, username, email
 FROM users
@@ -531,6 +556,21 @@ WHERE id = $1
 
 func (q *Queries) MarkFeatureEmbeddingMatched(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, markFeatureEmbeddingMatched, id)
+	return err
+}
+
+const updateCriminalCaseDescription = `-- name: UpdateCriminalCaseDescription :exec
+UPDATE criminal_cases SET description = $2, updated_at = NOW()
+WHERE id = $1
+`
+
+type UpdateCriminalCaseDescriptionParams struct {
+	ID          int64  `db:"id" json:"id"`
+	Description string `db:"description" json:"description"`
+}
+
+func (q *Queries) UpdateCriminalCaseDescription(ctx context.Context, arg UpdateCriminalCaseDescriptionParams) error {
+	_, err := q.db.ExecContext(ctx, updateCriminalCaseDescription, arg.ID, arg.Description)
 	return err
 }
 
