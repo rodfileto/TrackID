@@ -464,6 +464,87 @@ func (q *Queries) ListCaseDecisionsByCriminalCase(ctx context.Context, criminalC
 	return items, nil
 }
 
+const listCaseFilesByCriminalCase = `-- name: ListCaseFilesByCriminalCase :many
+SELECT id, criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes
+FROM case_files
+WHERE criminal_case_id = $1
+ORDER BY id
+`
+
+type ListCaseFilesByCriminalCaseRow struct {
+	ID             int64          `db:"id" json:"id"`
+	CriminalCaseID int64          `db:"criminal_case_id" json:"criminal_case_id"`
+	Category       string         `db:"category" json:"category"`
+	MediaType      sql.NullString `db:"media_type" json:"media_type"`
+	HashID         sql.NullString `db:"hash_id" json:"hash_id"`
+	Filename       sql.NullString `db:"filename" json:"filename"`
+	SourcePath     sql.NullString `db:"source_path" json:"source_path"`
+	StorageRef     sql.NullString `db:"storage_ref" json:"storage_ref"`
+	ContentType    sql.NullString `db:"content_type" json:"content_type"`
+	SizeBytes      sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
+}
+
+func (q *Queries) ListCaseFilesByCriminalCase(ctx context.Context, criminalCaseID int64) ([]ListCaseFilesByCriminalCaseRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCaseFilesByCriminalCase, criminalCaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCaseFilesByCriminalCaseRow
+	for rows.Next() {
+		var i ListCaseFilesByCriminalCaseRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CriminalCaseID,
+			&i.Category,
+			&i.MediaType,
+			&i.HashID,
+			&i.Filename,
+			&i.SourcePath,
+			&i.StorageRef,
+			&i.ContentType,
+			&i.SizeBytes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCriminalCaseIDsByType = `-- name: ListCriminalCaseIDsByType :many
+SELECT case_id FROM criminal_cases WHERE case_type = $1 ORDER BY case_id
+`
+
+func (q *Queries) ListCriminalCaseIDsByType(ctx context.Context, caseType string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listCriminalCaseIDsByType, caseType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var case_id string
+		if err := rows.Scan(&case_id); err != nil {
+			return nil, err
+		}
+		items = append(items, case_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCriminalCases = `-- name: ListCriminalCases :many
 SELECT case_id, case_type, description
 FROM criminal_cases
