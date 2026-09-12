@@ -12,10 +12,10 @@ import (
 	"log"
 	"os"
 
-	"github.com/rodrigorfcm/trackid/cluster"
-	"github.com/rodrigorfcm/trackid/database"
-	"github.com/rodrigorfcm/trackid/env"
-	"github.com/rodrigorfcm/trackid/graph"
+	"github.com/rodfileto/trackid/cluster"
+	"github.com/rodfileto/trackid/database"
+	"github.com/rodfileto/trackid/env"
+	"github.com/rodfileto/trackid/graph"
 )
 
 func main() {
@@ -40,7 +40,8 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("dry run: %d comparison(s), %d cluster(s) would be written", stats.Comparisons, stats.Clusters)
+		log.Printf("dry run: %d cluster(s) over %d evidence item(s); %d would be created, %d merged",
+			stats.Clusters, stats.Evidence, stats.Created, stats.Merged)
 		return
 	}
 
@@ -54,7 +55,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("clustering complete: %d comparison(s), %d cluster(s) written", stats.Comparisons, stats.Clusters)
+	log.Printf("clustering complete: %d cluster(s) over %d evidence item(s); %d created, %d merged",
+		stats.Clusters, stats.Evidence, stats.Created, stats.Merged)
 }
 
 func neo4jURL() string {

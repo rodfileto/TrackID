@@ -1,0 +1,29 @@
+-- +goose Up
+-- Stable biometric clusters. The id is a sequential number assigned once and never
+-- reused (BIGSERIAL), so reports can cite it. cluster_merges is an append-only audit
+-- trail with no FK: a merged-away cluster's row is deleted, but its number is kept here
+-- so old citations resolve to the surviving cluster.
+CREATE TABLE clusters (
+    id BIGSERIAL PRIMARY KEY,
+    case_type TEXT NOT NULL CHECK (case_type IN ('FACIAL', 'FINGERPRINT')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE cluster_members (
+    cluster_id BIGINT NOT NULL REFERENCES clusters(id),
+    evidence_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT cluster_members_evidence_key UNIQUE (evidence_id)
+);
+
+CREATE INDEX cluster_members_cluster_id_idx ON cluster_members (cluster_id);
+
+CREATE TABLE cluster_merges (
+    id BIGSERIAL PRIMARY KEY,
+    from_cluster_id BIGINT NOT NULL,
+    to_cluster_id BIGINT NOT NULL,
+    merged_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    merged_by TEXT,
+    reason TEXT
+);

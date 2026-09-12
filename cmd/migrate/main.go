@@ -6,9 +6,9 @@ import (
 	"os"
 
 	"github.com/pressly/goose/v3"
-	"github.com/rodrigorfcm/trackid/database"
-	"github.com/rodrigorfcm/trackid/db/migrations"
-	"github.com/rodrigorfcm/trackid/env"
+	"github.com/rodfileto/trackid/database"
+	"github.com/rodfileto/trackid/db/migrations"
+	"github.com/rodfileto/trackid/env"
 )
 
 func main() {

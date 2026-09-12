@@ -14,10 +14,11 @@ in this repository.
 The package is deliberately split into two halves:
 
 - **Core (this repository):**
-  - the Postgres schema (users, criminal cases, identity, comparisons) and the Neo4j
-    schema (identity enrollment, forensic evidence, biometric clusters);
+  - the Postgres schema (users, criminal cases, identity, comparisons, clusters) and the
+    Neo4j schema (identity enrollment, forensic evidence, biometric clusters);
   - the non-import logic: authentication, the `cases` read API, the Postgres → Neo4j
-    graph sync, and biometric clustering by modality;
+    graph sync, biometric clustering by modality (with stable cluster ids), and
+    identified-person linkage;
   - the base frontend (auth + app layout).
 - **Organization layer (built by each agency):** the import commands that read their
   specific files or systems and write normalized records into the core schema, plus any
@@ -41,17 +42,19 @@ reuse the full core unchanged regardless of their source formats.
 ## Structure
 
 - `cmd/` — command-line tools: `migrate` (Postgres schema), `trackid` (API server),
-  `sync-graph` (Postgres → Neo4j), `cluster-biometrics` (biometric clustering)
+  `sync-graph` (evidence/decisions → Neo4j), `cluster-biometrics` (stable clustering),
+  `identify` (persons + `IDENTIFIED_AS` → Neo4j)
 - `api/` — the HTTP router: health, auth, and the core `cases` endpoint, plus a
   route-registration hook for integrations
 - `auth/` — user registration/login, JWT issuance and middleware
 - `cases/` — read API for the `criminal_cases` table
-- `cluster/` — biometric clustering by modality, reading Postgres and writing Neo4j
+- `cluster/` — biometric clustering by modality (persisted, stable ids; extend/merge/
+  split) and identified-person linkage, reading Postgres and writing Neo4j
 - `config/`, `database/`, `env/` — configuration, connection, and dotenv loading
 - `db/` — sqlc queries and models for the core Postgres schema (`queries.sql`) and the
   goose migrations (`db/migrations`)
-- `graph/` — embedded Neo4j (Cypher) schema migrations, their applier, and the
-  Postgres → Neo4j sync of evidence and decisions
+- `graph/` — embedded Neo4j (Cypher) schema migrations, their applier, the
+  Postgres → Neo4j sync of evidence and decisions, and person materialization
 - `storage/` — MinIO/S3 object-storage client
 - `frontend/` — React + Vite, based on the [TailAdmin React](https://github.com/TailAdmin/free-react-tailwind-admin-dashboard)
   template
@@ -63,10 +66,11 @@ reuse the full core unchanged regardless of their source formats.
 
 To integrate with this package, an organization:
 
-1. depends on `github.com/rodrigorfcm/trackid`;
+1. depends on `github.com/rodfileto/trackid`;
 2. writes import commands that read its own formats and write into the core tables —
-   `criminal_cases` (evidence items) and `comparisons` (evidence-to-evidence edges),
-   via the queries declared in `db/queries.sql`;
+   `criminal_cases` (evidence items), `comparisons` (evidence-to-evidence edges), and
+   the identity tables (`person`, `codifications`, `identifications`), via the queries
+   declared in `db/queries.sql`;
 3. optionally registers extra routes through the `api.Dependencies.Register` hook and
    copies the base frontend to add its own pages.
 
@@ -75,3 +79,14 @@ To integrate with this package, an organization:
 ```sh
 scripts/start_dev.sh   # starts the stack, migrates, and runs the API + frontend
 ```
+
+## Not yet in scope
+
+- Per-organization distribution modules, their import commands, and external-system
+  integrations (built in each organization's own project).
+- Frontend theming beyond the shared template.
+- Person↔person merge — reconciling two civil identities that are the same real
+  individual (a later, auditable step, distinct from cluster merge).
+- Full identity-enrollment materialization — only `Person` is materialized to Neo4j
+  today; the `Identity → IdentityRegister → BiometricTrait` chain is wired in the schema
+  but not yet synced.

@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rodrigorfcm/trackid/auth"
-	"github.com/rodrigorfcm/trackid/cases"
-	"github.com/rodrigorfcm/trackid/database"
+	"github.com/rodfileto/trackid/auth"
+	"github.com/rodfileto/trackid/cases"
+	"github.com/rodfileto/trackid/database"
 )
 
 // Dependencies are the integrations NewRouter wires into the API.

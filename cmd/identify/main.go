@@ -1,6 +1,5 @@
-// sync-graph materializes criminal_cases from Postgres into the Neo4j forensic
-// graph (Evidence, BiometricFeature, and Decision nodes). It reads only from
-// the database; see graph.Sync.
+// identify materializes the identity graph: Person nodes from the person table
+// and IDENTIFIED_AS edges from identifications. It reads only from Postgres.
 //
 // Defaults to a dry run that only reports counts. Pass -commit to write, which
 // requires NEO4J_URL (and NEO4J_PASSWORD; NEO4J_USERNAME defaults to "neo4j").
@@ -12,6 +11,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/rodfileto/trackid/cluster"
 	"github.com/rodfileto/trackid/database"
 	"github.com/rodfileto/trackid/env"
 	"github.com/rodfileto/trackid/graph"
@@ -35,11 +35,15 @@ func main() {
 
 	ctx := context.Background()
 	if !*commit {
-		stats, err := graph.SyncPlan(ctx, db)
+		persons, err := graph.SyncIdentityPlan(ctx, db)
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("dry run: %d case(s), %d decision(s) would be materialized", stats.Cases, stats.Decisions)
+		identifications, err := cluster.IdentifyPlan(ctx, db)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("dry run: %d person(s), %d identification(s) would be written", persons, identifications)
 		return
 	}
 
@@ -49,11 +53,15 @@ func main() {
 	}
 	defer driver.Close(ctx)
 
-	stats, err := graph.Sync(ctx, db, driver)
+	persons, err := graph.SyncIdentity(ctx, db, driver)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("sync complete: %d case(s), %d decision(s) materialized", stats.Cases, stats.Decisions)
+	identifications, err := cluster.Identify(ctx, db, driver)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("identify complete: %d person(s), %d identification(s) written", persons, identifications)
 }
 
 func neo4jURL() string {

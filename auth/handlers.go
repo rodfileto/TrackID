@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/rodrigorfcm/trackid/db"
+	"github.com/rodfileto/trackid/db"
 )
 
 type UserProfile struct {

@@ -11,6 +11,38 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+type Cluster struct {
+	ID        int64     `db:"id" json:"id"`
+	CaseType  string    `db:"case_type" json:"case_type"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
+}
+
+type ClusterMember struct {
+	ClusterID  int64     `db:"cluster_id" json:"cluster_id"`
+	EvidenceID string    `db:"evidence_id" json:"evidence_id"`
+	CreatedAt  time.Time `db:"created_at" json:"created_at"`
+}
+
+type ClusterMerge struct {
+	ID            int64          `db:"id" json:"id"`
+	FromClusterID int64          `db:"from_cluster_id" json:"from_cluster_id"`
+	ToClusterID   int64          `db:"to_cluster_id" json:"to_cluster_id"`
+	MergedAt      time.Time      `db:"merged_at" json:"merged_at"`
+	MergedBy      sql.NullString `db:"merged_by" json:"merged_by"`
+	Reason        sql.NullString `db:"reason" json:"reason"`
+}
+
+type Codification struct {
+	ID         int64          `db:"id" json:"id"`
+	TraceID    string         `db:"trace_id" json:"trace_id"`
+	Format     string         `db:"format" json:"format"`
+	Version    string         `db:"version" json:"version"`
+	PayloadRef sql.NullString `db:"payload_ref" json:"payload_ref"`
+	CreatedAt  time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt  time.Time      `db:"updated_at" json:"updated_at"`
+}
+
 type Comparison struct {
 	ID              int64          `db:"id" json:"id"`
 	EvidenceA       string         `db:"evidence_a" json:"evidence_a"`
@@ -20,6 +52,7 @@ type Comparison struct {
 	ResponsibleUser sql.NullString `db:"responsible_user" json:"responsible_user"`
 	CreatedAt       time.Time      `db:"created_at" json:"created_at"`
 	UpdatedAt       time.Time      `db:"updated_at" json:"updated_at"`
+	Status          string         `db:"status" json:"status"`
 }
 
 type CriminalCase struct {
@@ -36,6 +69,18 @@ type Gender struct {
 	Label string `db:"label" json:"label"`
 }
 
+type Identification struct {
+	ID                  int64           `db:"id" json:"id"`
+	TraceID             string          `db:"trace_id" json:"trace_id"`
+	IdentityRegisterID  int64           `db:"identity_register_id" json:"identity_register_id"`
+	TraceCodificationID sql.NullInt64   `db:"trace_codification_id" json:"trace_codification_id"`
+	Confidence          sql.NullFloat64 `db:"confidence" json:"confidence"`
+	ResponsibleUser     sql.NullString  `db:"responsible_user" json:"responsible_user"`
+	Source              sql.NullString  `db:"source" json:"source"`
+	CreatedAt           time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt           time.Time       `db:"updated_at" json:"updated_at"`
+}
+
 type IdentityDocument struct {
 	ID             int64          `db:"id" json:"id"`
 	DocumentNumber string         `db:"document_number" json:"document_number"`
@@ -43,6 +88,7 @@ type IdentityDocument struct {
 	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
 	UpdatedAt      time.Time      `db:"updated_at" json:"updated_at"`
 	Cpf            sql.NullString `db:"cpf" json:"cpf"`
+	PersonID       sql.NullInt64  `db:"person_id" json:"person_id"`
 }
 
 type IdentityRegister struct {
@@ -60,6 +106,14 @@ type IdentityRegister struct {
 	NistPath       sql.NullString        `db:"nist_path" json:"nist_path"`
 	StorageRef     sql.NullString        `db:"storage_ref" json:"storage_ref"`
 	Meta           pqtype.NullRawMessage `db:"meta" json:"meta"`
+}
+
+type Person struct {
+	ID        int64                 `db:"id" json:"id"`
+	PersonID  string                `db:"person_id" json:"person_id"`
+	Meta      pqtype.NullRawMessage `db:"meta" json:"meta"`
+	CreatedAt time.Time             `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time             `db:"updated_at" json:"updated_at"`
 }
 
 type User struct {

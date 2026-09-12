@@ -157,6 +157,7 @@ func loadCaseRows(ctx context.Context, db *sql.DB) ([]caseRow, error) {
 const comparisonRowsQuery = `
 SELECT evidence_a, evidence_b, case_type, comparison_type, responsible_user
 FROM comparisons
+WHERE status = 'confirmed'
 ORDER BY evidence_a, evidence_b
 `
 
