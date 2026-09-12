@@ -12,9 +12,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/rodrigorfcm/trackid/database"
-	"github.com/rodrigorfcm/trackid/env"
-	"github.com/rodrigorfcm/trackid/graph"
+	"github.com/rodfileto/trackid/database"
+	"github.com/rodfileto/trackid/env"
+	"github.com/rodfileto/trackid/graph"
 )
 
 func main() {

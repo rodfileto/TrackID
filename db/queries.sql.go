@@ -8,6 +8,8 @@ package db
 import (
 	"context"
 	"database/sql"
+
+	"github.com/sqlc-dev/pqtype"
 )
 
 const countCriminalCases = `-- name: CountCriminalCases :one
@@ -224,6 +226,46 @@ func (q *Queries) ListCriminalCases(ctx context.Context, arg ListCriminalCasesPa
 	return items, nil
 }
 
+const rejectComparison = `-- name: RejectComparison :exec
+UPDATE comparisons SET status = 'rejected', updated_at = NOW()
+WHERE evidence_a = $1 AND evidence_b = $2
+`
+
+type RejectComparisonParams struct {
+	EvidenceA string `db:"evidence_a" json:"evidence_a"`
+	EvidenceB string `db:"evidence_b" json:"evidence_b"`
+}
+
+func (q *Queries) RejectComparison(ctx context.Context, arg RejectComparisonParams) error {
+	_, err := q.db.ExecContext(ctx, rejectComparison, arg.EvidenceA, arg.EvidenceB)
+	return err
+}
+
+const upsertCodification = `-- name: UpsertCodification :exec
+INSERT INTO codifications (trace_id, format, version, payload_ref)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (trace_id, format, version) DO UPDATE SET
+    payload_ref = EXCLUDED.payload_ref,
+    updated_at = NOW()
+`
+
+type UpsertCodificationParams struct {
+	TraceID    string         `db:"trace_id" json:"trace_id"`
+	Format     string         `db:"format" json:"format"`
+	Version    string         `db:"version" json:"version"`
+	PayloadRef sql.NullString `db:"payload_ref" json:"payload_ref"`
+}
+
+func (q *Queries) UpsertCodification(ctx context.Context, arg UpsertCodificationParams) error {
+	_, err := q.db.ExecContext(ctx, upsertCodification,
+		arg.TraceID,
+		arg.Format,
+		arg.Version,
+		arg.PayloadRef,
+	)
+	return err
+}
+
 const upsertComparison = `-- name: UpsertComparison :exec
 INSERT INTO comparisons
     (evidence_a, evidence_b, case_type, comparison_type, responsible_user)
@@ -272,5 +314,55 @@ type UpsertCriminalCaseParams struct {
 
 func (q *Queries) UpsertCriminalCase(ctx context.Context, arg UpsertCriminalCaseParams) error {
 	_, err := q.db.ExecContext(ctx, upsertCriminalCase, arg.CaseID, arg.CaseType, arg.Description)
+	return err
+}
+
+const upsertIdentification = `-- name: UpsertIdentification :exec
+INSERT INTO identifications (trace_id, identity_register_id, trace_codification_id, confidence, responsible_user, source)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (trace_id, identity_register_id) DO UPDATE SET
+    trace_codification_id = EXCLUDED.trace_codification_id,
+    confidence = EXCLUDED.confidence,
+    responsible_user = EXCLUDED.responsible_user,
+    source = EXCLUDED.source,
+    updated_at = NOW()
+`
+
+type UpsertIdentificationParams struct {
+	TraceID             string          `db:"trace_id" json:"trace_id"`
+	IdentityRegisterID  int64           `db:"identity_register_id" json:"identity_register_id"`
+	TraceCodificationID sql.NullInt64   `db:"trace_codification_id" json:"trace_codification_id"`
+	Confidence          sql.NullFloat64 `db:"confidence" json:"confidence"`
+	ResponsibleUser     sql.NullString  `db:"responsible_user" json:"responsible_user"`
+	Source              sql.NullString  `db:"source" json:"source"`
+}
+
+func (q *Queries) UpsertIdentification(ctx context.Context, arg UpsertIdentificationParams) error {
+	_, err := q.db.ExecContext(ctx, upsertIdentification,
+		arg.TraceID,
+		arg.IdentityRegisterID,
+		arg.TraceCodificationID,
+		arg.Confidence,
+		arg.ResponsibleUser,
+		arg.Source,
+	)
+	return err
+}
+
+const upsertPerson = `-- name: UpsertPerson :exec
+INSERT INTO person (person_id, meta)
+VALUES ($1, $2)
+ON CONFLICT (person_id) DO UPDATE SET
+    meta = EXCLUDED.meta,
+    updated_at = NOW()
+`
+
+type UpsertPersonParams struct {
+	PersonID string                `db:"person_id" json:"person_id"`
+	Meta     pqtype.NullRawMessage `db:"meta" json:"meta"`
+}
+
+func (q *Queries) UpsertPerson(ctx context.Context, arg UpsertPersonParams) error {
+	_, err := q.db.ExecContext(ctx, upsertPerson, arg.PersonID, arg.Meta)
 	return err
 }
