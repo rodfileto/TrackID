@@ -31,6 +31,15 @@ FROM criminal_cases
 ORDER BY case_id
 LIMIT $1 OFFSET $2;
 
+-- name: GetCriminalCaseByCaseID :one
+SELECT id, case_id, case_type, description
+FROM criminal_cases
+WHERE case_id = $1;
+
+-- name: UpdateCriminalCaseDescription :exec
+UPDATE criminal_cases SET description = $2, updated_at = NOW()
+WHERE id = $1;
+
 -- name: UpsertPerson :one
 INSERT INTO person (person_id, meta)
 VALUES ($1, $2)
