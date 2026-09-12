@@ -5,38 +5,43 @@ import (
 	"database/sql"
 )
 
-// decisionRole identifies who — or what — recorded one biometric_decisions row.
-type decisionRole string
+// Role identifies who — or what — recorded one biometric_decisions row.
+type Role string
 
 const (
-	roleSystem        decisionRole = "SYSTEM"
-	roleVerificator   decisionRole = "VERIFICATOR"
-	roleReviewer      decisionRole = "REVIEWER"
-	roleInconsistence decisionRole = "INCONSISTENCE"
+	RoleSystem        Role = "SYSTEM"
+	RoleVerificator   Role = "VERIFICATOR"
+	RoleReviewer      Role = "REVIEWER"
+	RoleInconsistence Role = "INCONSISTENCE"
 )
 
-// decision is the call one biometric_decisions row makes.
-type decision string
+// Decision is the call one biometric_decisions row makes.
+type Decision string
 
 const (
-	decisionPositive     decision = "POSITIVE"
-	decisionNegative     decision = "NEGATIVE"
-	decisionInconclusive decision = "INCONCLUSIVE"
+	DecisionPositive     Decision = "POSITIVE"
+	DecisionNegative     Decision = "NEGATIVE"
+	DecisionInconclusive Decision = "INCONCLUSIVE"
 )
+
+// EdgeStatus is a pair's derived state, per DeriveEdgeStatus.
+type EdgeStatus string
 
 // Edge statuses derived from a pair's decision chain.
 const (
-	edgeStatusPendingReview = "PENDING_REVIEW"
-	edgeStatusConfirmed     = "CONFIRMED"
-	edgeStatusDisputed      = "DISPUTED"
-	edgeStatusRejected      = "REJECTED"
+	EdgeStatusPendingReview EdgeStatus = "PENDING_REVIEW"
+	EdgeStatusConfirmed     EdgeStatus = "CONFIRMED"
+	EdgeStatusDisputed      EdgeStatus = "DISPUTED"
+	EdgeStatusRejected      EdgeStatus = "REJECTED"
 )
 
-// chainEntry is the minimal shape of one biometric_decisions row DeriveEdgeStatus
-// needs (role + decision).
-type chainEntry struct {
-	role     decisionRole
-	decision decision
+// ChainEntry is the minimal shape of one biometric_decisions row DeriveEdgeStatus
+// needs (role + decision). Exported so any caller -- an API handler recording an
+// analyst decision, an import command seeding a SYSTEM one -- can derive or
+// validate a pair's status without duplicating this package's sequencing rules.
+type ChainEntry struct {
+	Role     Role
+	Decision Decision
 }
 
 // DeriveEdgeStatus is a pure function mapping a pair's full decision chain to its
@@ -51,45 +56,45 @@ type chainEntry struct {
 //   - VERIFICATOR alone is always PENDING_REVIEW.
 //   - SYSTEM alone is CONFIRMED for a POSITIVE score, PENDING_REVIEW for
 //     INCONCLUSIVE, or REJECTED for an explicit NEGATIVE.
-func DeriveEdgeStatus(chain []chainEntry) (status string, ok bool) {
-	var system, verificator, reviewer, inconsistence *decision
+func DeriveEdgeStatus(chain []ChainEntry) (status EdgeStatus, ok bool) {
+	var system, verificator, reviewer, inconsistence *Decision
 	for i := range chain {
-		switch chain[i].role {
-		case roleSystem:
-			system = &chain[i].decision
-		case roleVerificator:
-			verificator = &chain[i].decision
-		case roleReviewer:
-			reviewer = &chain[i].decision
-		case roleInconsistence:
-			inconsistence = &chain[i].decision
+		switch chain[i].Role {
+		case RoleSystem:
+			system = &chain[i].Decision
+		case RoleVerificator:
+			verificator = &chain[i].Decision
+		case RoleReviewer:
+			reviewer = &chain[i].Decision
+		case RoleInconsistence:
+			inconsistence = &chain[i].Decision
 		}
 	}
 
 	if inconsistence != nil {
-		return decisionOutcome(*inconsistence, edgeStatusDisputed), true
+		return decisionOutcome(*inconsistence, EdgeStatusDisputed), true
 	}
 	if verificator != nil && reviewer != nil {
 		if *verificator == *reviewer {
-			return decisionOutcome(*verificator, edgeStatusPendingReview), true
+			return decisionOutcome(*verificator, EdgeStatusPendingReview), true
 		}
-		return edgeStatusDisputed, true
+		return EdgeStatusDisputed, true
 	}
 	if verificator != nil {
-		return edgeStatusPendingReview, true
+		return EdgeStatusPendingReview, true
 	}
 	if system != nil {
-		return decisionOutcome(*system, edgeStatusPendingReview), true
+		return decisionOutcome(*system, EdgeStatusPendingReview), true
 	}
 	return "", false
 }
 
-func decisionOutcome(d decision, inconclusive string) string {
+func decisionOutcome(d Decision, inconclusive EdgeStatus) EdgeStatus {
 	switch d {
-	case decisionPositive:
-		return edgeStatusConfirmed
-	case decisionNegative:
-		return edgeStatusRejected
+	case DecisionPositive:
+		return EdgeStatusConfirmed
+	case DecisionNegative:
+		return EdgeStatusRejected
 	default:
 		return inconclusive
 	}
@@ -163,12 +168,12 @@ func loadConfirmedPairs(ctx context.Context, db *sql.DB) ([]confirmedPair, error
 	var pairs []confirmedPair
 	for _, k := range order {
 		rowsForPair := chains[k]
-		chain := make([]chainEntry, len(rowsForPair))
+		chain := make([]ChainEntry, len(rowsForPair))
 		for i, r := range rowsForPair {
-			chain[i] = chainEntry{role: decisionRole(r.role), decision: decision(r.decision)}
+			chain[i] = ChainEntry{Role: Role(r.role), Decision: Decision(r.decision)}
 		}
 		status, ok := DeriveEdgeStatus(chain)
-		if !ok || status != edgeStatusConfirmed {
+		if !ok || status != EdgeStatusConfirmed {
 			continue
 		}
 		pairs = append(pairs, confirmedPair{
