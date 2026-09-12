@@ -119,10 +119,10 @@ type ClusterMerge struct {
 type CriminalCase struct {
 	ID          int64     `db:"id" json:"id"`
 	CaseID      string    `db:"case_id" json:"case_id"`
+	CaseType    string    `db:"case_type" json:"case_type"`
 	Description string    `db:"description" json:"description"`
 	CreatedAt   time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt   time.Time `db:"updated_at" json:"updated_at"`
-	CaseType    string    `db:"case_type" json:"case_type"`
 }
 
 type Gender struct {
@@ -132,12 +132,12 @@ type Gender struct {
 
 type IdentityDocument struct {
 	ID             int64          `db:"id" json:"id"`
+	PersonID       sql.NullInt64  `db:"person_id" json:"person_id"`
 	DocumentNumber string         `db:"document_number" json:"document_number"`
 	DocumentType   string         `db:"document_type" json:"document_type"`
+	Cpf            sql.NullString `db:"cpf" json:"cpf"`
 	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
 	UpdatedAt      time.Time      `db:"updated_at" json:"updated_at"`
-	Cpf            sql.NullString `db:"cpf" json:"cpf"`
-	PersonID       sql.NullInt64  `db:"person_id" json:"person_id"`
 }
 
 type IdentityFile struct {
@@ -157,8 +157,6 @@ type IdentityRegister struct {
 	ID             int64                 `db:"id" json:"id"`
 	DocumentID     int64                 `db:"document_id" json:"document_id"`
 	RegisterNumber string                `db:"register_number" json:"register_number"`
-	CreatedAt      time.Time             `db:"created_at" json:"created_at"`
-	UpdatedAt      time.Time             `db:"updated_at" json:"updated_at"`
 	Name           string                `db:"name" json:"name"`
 	Parent1Name    string                `db:"parent_1_name" json:"parent_1_name"`
 	Parent1Gender  string                `db:"parent_1_gender" json:"parent_1_gender"`
@@ -166,6 +164,8 @@ type IdentityRegister struct {
 	Parent2Gender  string                `db:"parent_2_gender" json:"parent_2_gender"`
 	DataNascimento sql.NullString        `db:"data_nascimento" json:"data_nascimento"`
 	Meta           pqtype.NullRawMessage `db:"meta" json:"meta"`
+	CreatedAt      time.Time             `db:"created_at" json:"created_at"`
+	UpdatedAt      time.Time             `db:"updated_at" json:"updated_at"`
 }
 
 type Person struct {

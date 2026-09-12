@@ -383,11 +383,7 @@ type UpsertCaseCodificationParams struct {
 }
 
 func (q *Queries) UpsertCaseCodification(ctx context.Context, arg UpsertCaseCodificationParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, upsertCaseCodification,
-		arg.TraceID,
-		arg.Sequence,
-		arg.CodificationType,
-	)
+	row := q.db.QueryRowContext(ctx, upsertCaseCodification, arg.TraceID, arg.Sequence, arg.CodificationType)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
@@ -532,6 +528,35 @@ func (q *Queries) UpsertCriminalCase(ctx context.Context, arg UpsertCriminalCase
 	return id, err
 }
 
+const upsertIdentityDocument = `-- name: UpsertIdentityDocument :one
+INSERT INTO identity_document (person_id, document_number, document_type, cpf)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (document_type, document_number) DO UPDATE SET
+    person_id = EXCLUDED.person_id,
+    cpf = EXCLUDED.cpf,
+    updated_at = NOW()
+RETURNING id
+`
+
+type UpsertIdentityDocumentParams struct {
+	PersonID       sql.NullInt64  `db:"person_id" json:"person_id"`
+	DocumentNumber string         `db:"document_number" json:"document_number"`
+	DocumentType   string         `db:"document_type" json:"document_type"`
+	Cpf            sql.NullString `db:"cpf" json:"cpf"`
+}
+
+func (q *Queries) UpsertIdentityDocument(ctx context.Context, arg UpsertIdentityDocumentParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertIdentityDocument,
+		arg.PersonID,
+		arg.DocumentNumber,
+		arg.DocumentType,
+		arg.Cpf,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const upsertIdentityFile = `-- name: UpsertIdentityFile :one
 INSERT INTO identity_file (register_id, file_type, sequence, source_path, storage_ref, content_type, size_bytes)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -569,12 +594,59 @@ func (q *Queries) UpsertIdentityFile(ctx context.Context, arg UpsertIdentityFile
 	return id, err
 }
 
-const upsertPerson = `-- name: UpsertPerson :exec
+const upsertIdentityRegister = `-- name: UpsertIdentityRegister :one
+INSERT INTO identity_register
+    (document_id, register_number, name, parent_1_name, parent_1_gender, parent_2_name, parent_2_gender, data_nascimento, meta)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (register_number) DO UPDATE SET
+    document_id = EXCLUDED.document_id,
+    name = EXCLUDED.name,
+    parent_1_name = EXCLUDED.parent_1_name,
+    parent_1_gender = EXCLUDED.parent_1_gender,
+    parent_2_name = EXCLUDED.parent_2_name,
+    parent_2_gender = EXCLUDED.parent_2_gender,
+    data_nascimento = EXCLUDED.data_nascimento,
+    meta = EXCLUDED.meta,
+    updated_at = NOW()
+RETURNING id
+`
+
+type UpsertIdentityRegisterParams struct {
+	DocumentID     int64                 `db:"document_id" json:"document_id"`
+	RegisterNumber string                `db:"register_number" json:"register_number"`
+	Name           string                `db:"name" json:"name"`
+	Parent1Name    string                `db:"parent_1_name" json:"parent_1_name"`
+	Parent1Gender  string                `db:"parent_1_gender" json:"parent_1_gender"`
+	Parent2Name    string                `db:"parent_2_name" json:"parent_2_name"`
+	Parent2Gender  string                `db:"parent_2_gender" json:"parent_2_gender"`
+	DataNascimento sql.NullString        `db:"data_nascimento" json:"data_nascimento"`
+	Meta           pqtype.NullRawMessage `db:"meta" json:"meta"`
+}
+
+func (q *Queries) UpsertIdentityRegister(ctx context.Context, arg UpsertIdentityRegisterParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertIdentityRegister,
+		arg.DocumentID,
+		arg.RegisterNumber,
+		arg.Name,
+		arg.Parent1Name,
+		arg.Parent1Gender,
+		arg.Parent2Name,
+		arg.Parent2Gender,
+		arg.DataNascimento,
+		arg.Meta,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertPerson = `-- name: UpsertPerson :one
 INSERT INTO person (person_id, meta)
 VALUES ($1, $2)
 ON CONFLICT (person_id) DO UPDATE SET
     meta = EXCLUDED.meta,
     updated_at = NOW()
+RETURNING id
 `
 
 type UpsertPersonParams struct {
@@ -582,7 +654,9 @@ type UpsertPersonParams struct {
 	Meta     pqtype.NullRawMessage `db:"meta" json:"meta"`
 }
 
-func (q *Queries) UpsertPerson(ctx context.Context, arg UpsertPersonParams) error {
-	_, err := q.db.ExecContext(ctx, upsertPerson, arg.PersonID, arg.Meta)
-	return err
+func (q *Queries) UpsertPerson(ctx context.Context, arg UpsertPersonParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertPerson, arg.PersonID, arg.Meta)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
