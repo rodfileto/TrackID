@@ -1,23 +1,43 @@
 #!/usr/bin/env bash
-# Stops the local dev environment started by start_dev.sh: the
-# docker-compose stack (postgres/redis/memgraph/minio/rust-backend/ml-sidecar)
-# plus any stray frontend or backend process left running outside Docker (e.g.
-# a manually-run `npm run dev` or `cargo run`).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT_DIR"
+RUN_DIR="$ROOT_DIR/.run"
 
-echo "==> Stopping docker-compose stack (docker-compose.dev.yml)..."
-docker compose -f docker-compose.dev.yml down
+stop_process() {
+  local name="$1"
+  local pid_file="$2"
 
-for port_desc in "5173:frontend dev server" "8000:backend dev server" "8001:ml sidecar"; do
-    port="${port_desc%%:*}"
-    desc="${port_desc#*:}"
-    if lsof -ti:"$port" > /dev/null 2>&1; then
-        echo "==> Stopping stray $desc on port $port..."
-        kill "$(lsof -ti:"$port")" 2>/dev/null || true
+  if [[ ! -f "$pid_file" ]]; then
+    return
+  fi
+
+  local pid
+  pid="$(cat "$pid_file")"
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "Stopping $name (PID $pid)..."
+    kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
+    for _ in {1..10}; do
+      if ! kill -0 "$pid" 2>/dev/null; then
+        break
+      fi
+      sleep 1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+      echo "Force stopping $name (PID $pid)..."
+      kill -KILL -- -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
     fi
-done
+  fi
+  rm -f "$pid_file"
+}
 
-echo "==> Done. Data in named volumes (postgres_data, memgraph_data, etc.) is preserved."
+stop_process "Vite frontend" "$RUN_DIR/frontend.pid"
+stop_process "Go API" "$RUN_DIR/backend.pid"
+
+if command -v docker >/dev/null 2>&1; then
+  echo "Stopping TrackID infrastructure..."
+  cd "$ROOT_DIR"
+  docker compose stop postgres redis minio neo4j
+fi
+
+echo "TrackID development stack stopped."

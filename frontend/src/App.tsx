@@ -14,14 +14,14 @@ import BarChart from "./pages/Charts/BarChart";
 import Calendar from "./pages/Calendar";
 import BasicTables from "./pages/Tables/BasicTables";
 import FormElements from "./pages/Forms/FormElements";
-import TabsPage from "./pages/Tabs";
-import VideoProcessing from "./pages/VideoProcessing";
-import ModelComparison from "./pages/ModelComparison";
-import TemplateBuilder from "./pages/TemplateBuilder";
 import Blank from "./pages/Blank";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
+import RequireAuth from "./components/auth/RequireAuth";
+import InfoBioSearch from "./pages/Toolkit/InfoBioSearch";
+import FingerprintCases from "./pages/Toolkit/FingerprintCases";
+import EntityPage from "./pages/Entity/EntityPage";
 
 export default function App() {
   return (
@@ -30,24 +30,20 @@ export default function App() {
         <ScrollToTop />
         <Routes>
           {/* Dashboard Layout */}
-          <Route element={<AppLayout />}>
+          <Route element={<RequireAuth />}>
+            <Route element={<AppLayout />}>
             <Route index path="/" element={<Home />} />
 
             {/* Others Page */}
             <Route path="/profile" element={<UserProfiles />} />
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/blank" element={<Blank />} />
+            <Route path="/toolkit/infobio-search" element={<InfoBioSearch />} />
+            <Route path="/toolkit/fingerprint-cases" element={<FingerprintCases />} />
+            <Route path="/entity/:subjectType/:subjectId" element={<EntityPage />} />
 
             {/* Forms */}
             <Route path="/form-elements" element={<FormElements />} />
-
-            {/* Tabs */}
-            <Route path="/tabs" element={<TabsPage />} />
-
-            {/* Face Recognition */}
-            <Route path="/video-processing" element={<VideoProcessing />} />
-            <Route path="/model-comparison" element={<ModelComparison />} />
-            <Route path="/template-builder" element={<TemplateBuilder />} />
 
             {/* Tables */}
             <Route path="/basic-tables" element={<BasicTables />} />
@@ -63,6 +59,7 @@ export default function App() {
             {/* Charts */}
             <Route path="/line-chart" element={<LineChart />} />
             <Route path="/bar-chart" element={<BarChart />} />
+            </Route>
           </Route>
 
           {/* Auth Layout */}
