@@ -13,14 +13,14 @@ SELECT id, nome, ultimo_nome, matricula, cargo, username, email
 FROM users
 WHERE id = $1;
 
--- name: UpsertCriminalCase :exec
-INSERT INTO criminal_cases
-    (case_id, case_type, description)
+-- name: UpsertCriminalCase :one
+INSERT INTO criminal_cases (case_id, case_type, description)
 VALUES ($1, $2, $3)
 ON CONFLICT (case_id) DO UPDATE SET
     case_type = EXCLUDED.case_type,
     description = EXCLUDED.description,
-    updated_at = NOW();
+    updated_at = NOW()
+RETURNING id;
 
 -- name: CountCriminalCases :one
 SELECT COUNT(*) FROM criminal_cases;
@@ -31,26 +31,6 @@ FROM criminal_cases
 ORDER BY case_id
 LIMIT $1 OFFSET $2;
 
--- name: UpsertComparison :exec
-INSERT INTO comparisons
-    (evidence_a, evidence_b, case_type, comparison_type, responsible_user)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (evidence_a, evidence_b) DO UPDATE SET
-    case_type = EXCLUDED.case_type,
-    comparison_type = EXCLUDED.comparison_type,
-    responsible_user = EXCLUDED.responsible_user,
-    updated_at = NOW();
-
--- name: ListComparisons :many
-SELECT evidence_a, evidence_b, case_type, comparison_type, responsible_user
-FROM comparisons
-ORDER BY evidence_a, evidence_b
-LIMIT $1 OFFSET $2;
-
--- name: RejectComparison :exec
-UPDATE comparisons SET status = 'rejected', updated_at = NOW()
-WHERE evidence_a = $1 AND evidence_b = $2;
-
 -- name: UpsertPerson :exec
 INSERT INTO person (person_id, meta)
 VALUES ($1, $2)
@@ -58,19 +38,91 @@ ON CONFLICT (person_id) DO UPDATE SET
     meta = EXCLUDED.meta,
     updated_at = NOW();
 
--- name: UpsertCodification :exec
-INSERT INTO codifications (trace_id, format, version, payload_ref)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (trace_id, format, version) DO UPDATE SET
-    payload_ref = EXCLUDED.payload_ref,
-    updated_at = NOW();
+-- name: UpsertIdentityFile :one
+INSERT INTO identity_file (register_id, file_type, sequence, source_path, storage_ref, content_type, size_bytes)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (register_id, file_type, sequence) DO UPDATE SET
+    source_path = EXCLUDED.source_path,
+    storage_ref = EXCLUDED.storage_ref,
+    content_type = EXCLUDED.content_type,
+    size_bytes = EXCLUDED.size_bytes,
+    updated_at = NOW()
+RETURNING id;
 
--- name: UpsertIdentification :exec
-INSERT INTO identifications (trace_id, identity_register_id, trace_codification_id, confidence, responsible_user, source)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (trace_id, identity_register_id) DO UPDATE SET
-    trace_codification_id = EXCLUDED.trace_codification_id,
-    confidence = EXCLUDED.confidence,
-    responsible_user = EXCLUDED.responsible_user,
-    source = EXCLUDED.source,
-    updated_at = NOW();
+-- name: UpsertBiometricFeatureFromIdentityFile :one
+INSERT INTO biometricfeature (feature_type, provenance, identity_file_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (identity_file_id) DO UPDATE SET
+    feature_type = EXCLUDED.feature_type,
+    provenance = EXCLUDED.provenance,
+    updated_at = NOW()
+RETURNING id;
+
+-- name: UpsertBiometricFeatureFromCaseTrace :one
+INSERT INTO biometricfeature (feature_type, provenance, case_trace_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (case_trace_id) DO UPDATE SET
+    feature_type = EXCLUDED.feature_type,
+    provenance = EXCLUDED.provenance,
+    updated_at = NOW()
+RETURNING id;
+
+-- name: InsertBiometricDecision :one
+INSERT INTO biometric_decisions
+    (feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes, decided_at, created_at;
+
+-- name: ListBiometricDecisions :many
+SELECT feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence
+FROM biometric_decisions
+ORDER BY feature_a_id, feature_b_id, decided_at;
+
+-- name: ListBiometricFeatures :many
+SELECT id, feature_type, provenance, identity_file_id, case_trace_id
+FROM biometricfeature
+ORDER BY id;
+
+-- name: UpsertCaseFile :one
+INSERT INTO case_files (criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (criminal_case_id, category, hash_id) DO UPDATE SET
+    media_type = EXCLUDED.media_type,
+    filename = EXCLUDED.filename,
+    source_path = EXCLUDED.source_path,
+    storage_ref = EXCLUDED.storage_ref,
+    content_type = EXCLUDED.content_type,
+    size_bytes = EXCLUDED.size_bytes,
+    updated_at = NOW()
+RETURNING id;
+
+-- name: UpsertCaseEvidence :one
+INSERT INTO case_evidences (criminal_case_id, sequence, case_file_id, description)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (criminal_case_id, sequence) DO UPDATE SET
+    case_file_id = EXCLUDED.case_file_id,
+    description = EXCLUDED.description,
+    updated_at = NOW()
+RETURNING id;
+
+-- name: UpsertCaseTrace :one
+INSERT INTO case_traces (evidence_id, sequence, trace_type, box_x1, box_y1, box_x2, box_y2, detection_score, case_file_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (evidence_id, sequence) DO UPDATE SET
+    trace_type = EXCLUDED.trace_type,
+    box_x1 = EXCLUDED.box_x1,
+    box_y1 = EXCLUDED.box_y1,
+    box_x2 = EXCLUDED.box_x2,
+    box_y2 = EXCLUDED.box_y2,
+    detection_score = EXCLUDED.detection_score,
+    case_file_id = EXCLUDED.case_file_id,
+    updated_at = NOW()
+RETURNING id;
+
+-- name: UpsertCaseCodification :one
+INSERT INTO case_codifications (trace_id, sequence, codification_type)
+VALUES ($1, $2, $3)
+ON CONFLICT (trace_id, sequence) DO UPDATE SET
+    codification_type = EXCLUDED.codification_type,
+    updated_at = NOW()
+RETURNING id;

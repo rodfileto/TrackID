@@ -1,6 +1,6 @@
-// sync-graph materializes criminal_cases from Postgres into the Neo4j forensic
-// graph (Evidence, BiometricFeature, and Decision nodes). It reads only from
-// the database; see graph.Sync.
+// sync-graph materializes criminal_cases and QUESTIONED biometric features from
+// Postgres into the Neo4j forensic graph (Evidence and BiometricFeature nodes).
+// It reads only from the database; see graph.Sync.
 //
 // Defaults to a dry run that only reports counts. Pass -commit to write, which
 // requires NEO4J_URL (and NEO4J_PASSWORD; NEO4J_USERNAME defaults to "neo4j").
@@ -39,7 +39,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("dry run: %d case(s), %d decision(s) would be materialized", stats.Cases, stats.Decisions)
+		log.Printf("dry run: %d evidence item(s), %d feature(s) would be materialized", stats.Evidence, stats.Features)
 		return
 	}
 
@@ -53,7 +53,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("sync complete: %d case(s), %d decision(s) materialized", stats.Cases, stats.Decisions)
+	log.Printf("sync complete: %d evidence item(s), %d feature(s) materialized", stats.Evidence, stats.Features)
 }
 
 func neo4jURL() string {

@@ -8,127 +8,111 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
-// syncSource is the value stored on Event:Decision.source for decisions Sync
-// materializes.
-const syncSource = "CRIMINAL_CASES_SYNC"
-
 // SyncStats reports what Sync materialized.
 type SyncStats struct {
-	Cases     int
-	Decisions int
+	Evidence int
+	Features int
 }
 
-// caseRow is one criminal_cases row (an evidence item).
+// caseRow is one criminal_cases row (a base case).
 type caseRow struct {
 	caseID      string
 	caseType    string
 	description string
 }
 
-// comparisonRow is one comparisons row (an evidence-to-evidence edge).
-type comparisonRow struct {
-	evidenceA       string
-	evidenceB       string
-	caseType        string
-	comparisonType  string
-	responsibleUser sql.NullString
+// questionedFeatureRow is one QUESTIONED biometricfeature joined up to its
+// criminal case (via case_traces/case_evidences).
+type questionedFeatureRow struct {
+	caseTraceID int64
+	featureType string
+	caseID      string
 }
 
-// Sync materializes criminal_cases into the Neo4j forensic graph: an
-// Object:Evidence node plus its Object:BiometricFeature for every case, and an
-// Event:Decision linking two evidence items for every comparison. It reads only
-// from Postgres.
+// Sync materializes criminal_cases into Evidence nodes and QUESTIONED
+// biometricfeature rows into BiometricFeature nodes. KNOWN features are
+// materialized by SyncIdentity (the identity chain), not here. Decisions are
+// not materialized here either — they live in Postgres (biometric_decisions)
+// and cluster status is derived from them. Sync reads only from Postgres.
 func Sync(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext) (SyncStats, error) {
-	evidenceRows, decisionRows, stats, err := buildSyncRows(ctx, db)
+	cases, features, err := loadSyncRows(ctx, db)
 	if err != nil {
 		return SyncStats{}, err
 	}
 
-	session := driver.NewSession(ctx, neo4j.SessionConfig{})
-	defer session.Close(ctx)
-
-	if len(evidenceRows) > 0 {
-		if _, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-			_, err := tx.Run(ctx, syncEvidenceQuery, map[string]any{"rows": evidenceRows})
-			return nil, err
-		}); err != nil {
-			return SyncStats{}, fmt.Errorf("materialize evidence: %w", err)
-		}
-	}
-	if len(decisionRows) > 0 {
-		if _, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-			_, err := tx.Run(ctx, syncDecisionsQuery, map[string]any{"decisions": decisionRows})
-			return nil, err
-		}); err != nil {
-			return SyncStats{}, fmt.Errorf("materialize decisions: %w", err)
-		}
-	}
-	return stats, nil
-}
-
-// SyncPlan returns the counts Sync would materialize, without connecting to
-// Neo4j.
-func SyncPlan(ctx context.Context, db *sql.DB) (SyncStats, error) {
-	_, _, stats, err := buildSyncRows(ctx, db)
-	return stats, err
-}
-
-// buildSyncRows loads criminal_cases and comparisons and shapes them into the
-// parameter rows for the evidence and decision write queries.
-func buildSyncRows(ctx context.Context, db *sql.DB) ([]map[string]any, []map[string]any, SyncStats, error) {
-	if db == nil {
-		return nil, nil, SyncStats{}, fmt.Errorf("database is not configured")
-	}
-	cases, err := loadCaseRows(ctx, db)
-	if err != nil {
-		return nil, nil, SyncStats{}, err
-	}
-	comparisons, err := loadComparisonRows(ctx, db)
-	if err != nil {
-		return nil, nil, SyncStats{}, err
-	}
-
-	evidenceRows := make([]map[string]any, 0, len(cases))
+	evidenceParams := make([]map[string]any, 0, len(cases))
 	for _, c := range cases {
 		mapping, ok := Modalities[c.caseType]
 		if !ok {
 			continue
 		}
-		evidenceRows = append(evidenceRows, map[string]any{
+		evidenceParams = append(evidenceParams, map[string]any{
 			"caseId":       c.caseID,
-			"featureId":    FeatureID(c.caseID),
 			"description":  c.description,
 			"evidenceType": mapping.EvidenceType,
-			"featureType":  mapping.FeatureType,
-			"featureLabel": mapping.FeatureLabel,
 		})
 	}
 
-	var decisionRows []map[string]any
-	for _, c := range comparisons {
-		mapping, ok := Modalities[c.caseType]
-		if !ok {
-			continue
-		}
-		var responsibleUser any
-		if c.responsibleUser.Valid {
-			responsibleUser = c.responsibleUser.String
-		}
-		decisionRows = append(decisionRows, map[string]any{
-			"caseId":           c.evidenceA,
-			"relatedReference": c.evidenceB,
-			"relatedFeatureId": FeatureID(c.evidenceB),
-			"decisionId":       DecisionID(c.evidenceA, c.evidenceB),
-			"comparisonType":   c.comparisonType,
-			"responsibleUser":  responsibleUser,
-			"evidenceType":     mapping.EvidenceType,
-			"featureType":      mapping.FeatureType,
-			"featureLabel":     mapping.FeatureLabel,
-			"source":           syncSource,
+	featureParams := make([]map[string]any, 0, len(features))
+	for _, f := range features {
+		featureParams = append(featureParams, map[string]any{
+			"caseId":      f.caseID,
+			"featureId":   QuestionedFeatureID(f.caseTraceID),
+			"featureType": f.featureType,
 		})
 	}
 
-	return evidenceRows, decisionRows, SyncStats{Cases: len(evidenceRows), Decisions: len(decisionRows)}, nil
+	session := driver.NewSession(ctx, neo4j.SessionConfig{})
+	defer session.Close(ctx)
+
+	if len(evidenceParams) > 0 {
+		if _, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+			_, err := tx.Run(ctx, syncEvidenceQuery, map[string]any{"rows": evidenceParams})
+			return nil, err
+		}); err != nil {
+			return SyncStats{}, fmt.Errorf("materialize evidence: %w", err)
+		}
+	}
+	if len(featureParams) > 0 {
+		if _, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+			_, err := tx.Run(ctx, syncFeaturesQuery, map[string]any{"rows": featureParams})
+			return nil, err
+		}); err != nil {
+			return SyncStats{}, fmt.Errorf("materialize features: %w", err)
+		}
+	}
+	return SyncStats{Evidence: len(evidenceParams), Features: len(featureParams)}, nil
+}
+
+// SyncPlan returns the counts Sync would materialize, without connecting to
+// Neo4j.
+func SyncPlan(ctx context.Context, db *sql.DB) (SyncStats, error) {
+	cases, features, err := loadSyncRows(ctx, db)
+	if err != nil {
+		return SyncStats{}, err
+	}
+	evidence := 0
+	for _, c := range cases {
+		if _, ok := Modalities[c.caseType]; ok {
+			evidence++
+		}
+	}
+	return SyncStats{Evidence: evidence, Features: len(features)}, nil
+}
+
+func loadSyncRows(ctx context.Context, db *sql.DB) ([]caseRow, []questionedFeatureRow, error) {
+	if db == nil {
+		return nil, nil, fmt.Errorf("database is not configured")
+	}
+	cases, err := loadCaseRows(ctx, db)
+	if err != nil {
+		return nil, nil, err
+	}
+	features, err := loadQuestionedFeatureRows(ctx, db)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cases, features, nil
 }
 
 const caseRowsQuery = `
@@ -154,23 +138,26 @@ func loadCaseRows(ctx context.Context, db *sql.DB) ([]caseRow, error) {
 	return out, rows.Err()
 }
 
-const comparisonRowsQuery = `
-SELECT evidence_a, evidence_b, case_type, comparison_type, responsible_user
-FROM comparisons
-WHERE status = 'confirmed'
-ORDER BY evidence_a, evidence_b
+const questionedFeaturesQuery = `
+SELECT bf.case_trace_id, bf.feature_type, cc.case_id
+FROM biometricfeature bf
+JOIN case_traces tr ON tr.id = bf.case_trace_id
+JOIN case_evidences ev ON ev.id = tr.evidence_id
+JOIN criminal_cases cc ON cc.id = ev.criminal_case_id
+WHERE bf.provenance = 'QUESTIONED'
+ORDER BY bf.case_trace_id
 `
 
-func loadComparisonRows(ctx context.Context, db *sql.DB) ([]comparisonRow, error) {
-	rows, err := db.QueryContext(ctx, comparisonRowsQuery)
+func loadQuestionedFeatureRows(ctx context.Context, db *sql.DB) ([]questionedFeatureRow, error) {
+	rows, err := db.QueryContext(ctx, questionedFeaturesQuery)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []comparisonRow
+	var out []questionedFeatureRow
 	for rows.Next() {
-		var r comparisonRow
-		if err := rows.Scan(&r.evidenceA, &r.evidenceB, &r.caseType, &r.comparisonType, &r.responsibleUser); err != nil {
+		var r questionedFeatureRow
+		if err := rows.Scan(&r.caseTraceID, &r.featureType, &r.caseID); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -182,29 +169,12 @@ const syncEvidenceQuery = `
 UNWIND $rows AS row
 MERGE (e:Object:Evidence {evidenceId: row.caseId})
 ON CREATE SET e.description = row.description, e.evidenceType = row.evidenceType
-MERGE (f:Object:BiometricFeature {featureId: row.featureId})
-ON CREATE SET f.featureType = row.featureType
-FOREACH (_ IN CASE WHEN row.featureLabel = 'FingerprintLift' THEN [1] ELSE [] END | SET f:FingerprintLift)
-FOREACH (_ IN CASE WHEN row.featureLabel = 'FaceCapture' THEN [1] ELSE [] END | SET f:FaceCapture)
-MERGE (e)-[:HAS_FEATURE]->(f)
 `
 
-const syncDecisionsQuery = `
-UNWIND $decisions AS d
-MERGE (a:Object:Evidence {evidenceId: d.caseId})
-MERGE (b:Object:Evidence {evidenceId: d.relatedReference})
-ON CREATE SET b.evidenceType = d.evidenceType
-MERGE (fb:Object:BiometricFeature {featureId: d.relatedFeatureId})
-ON CREATE SET fb.featureType = d.featureType
-FOREACH (_ IN CASE WHEN d.featureLabel = 'FingerprintLift' THEN [1] ELSE [] END | SET fb:FingerprintLift)
-FOREACH (_ IN CASE WHEN d.featureLabel = 'FaceCapture' THEN [1] ELSE [] END | SET fb:FaceCapture)
-MERGE (b)-[:HAS_FEATURE]->(fb)
-MERGE (decision:Event:Decision {decisionId: d.decisionId})
-ON CREATE SET decision.matchType = d.comparisonType, decision.source = d.source
-MERGE (a)-[:COMPARED]->(decision)
-MERGE (decision)-[:COMPARED]->(b)
-FOREACH (_ IN CASE WHEN d.responsibleUser IS NOT NULL THEN [1] ELSE [] END |
-    MERGE (u:User {username: d.responsibleUser})
-    MERGE (u)-[:DECIDED]->(decision)
-)
+const syncFeaturesQuery = `
+UNWIND $rows AS row
+MERGE (e:Object:Evidence {evidenceId: row.caseId})
+MERGE (f:Object:BiometricFeature {featureId: row.featureId})
+ON CREATE SET f.featureType = row.featureType, f.provenance = 'QUESTIONED'
+MERGE (e)-[:HAS_FEATURE]->(f)
 `
