@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/sqlc-dev/pqtype"
 )
@@ -70,6 +71,55 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		&i.Email,
 	)
 	return i, err
+}
+
+const findNearestFeatureEmbeddings = `-- name: FindNearestFeatureEmbeddings :many
+SELECT fe.id, fe.biometricfeature_id, fe.embedding <=> $1::vector AS distance
+FROM feature_embeddings fe
+WHERE fe.embedding_type = $2 AND fe.id != $3
+ORDER BY fe.embedding <=> $1::vector
+LIMIT $4
+`
+
+type FindNearestFeatureEmbeddingsParams struct {
+	Embedding     interface{} `db:"embedding" json:"embedding"`
+	EmbeddingType string      `db:"embedding_type" json:"embedding_type"`
+	ExcludeID     int64       `db:"exclude_id" json:"exclude_id"`
+	ResultLimit   int32       `db:"result_limit" json:"result_limit"`
+}
+
+type FindNearestFeatureEmbeddingsRow struct {
+	ID                 int64       `db:"id" json:"id"`
+	BiometricfeatureID int64       `db:"biometricfeature_id" json:"biometricfeature_id"`
+	Distance           interface{} `db:"distance" json:"distance"`
+}
+
+func (q *Queries) FindNearestFeatureEmbeddings(ctx context.Context, arg FindNearestFeatureEmbeddingsParams) ([]FindNearestFeatureEmbeddingsRow, error) {
+	rows, err := q.db.QueryContext(ctx, findNearestFeatureEmbeddings,
+		arg.Embedding,
+		arg.EmbeddingType,
+		arg.ExcludeID,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindNearestFeatureEmbeddingsRow
+	for rows.Next() {
+		var i FindNearestFeatureEmbeddingsRow
+		if err := rows.Scan(&i.ID, &i.BiometricfeatureID, &i.Distance); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUserByID = `-- name: GetUserByID :one
@@ -138,25 +188,51 @@ func (q *Queries) GetUserByMatricula(ctx context.Context, matricula string) (Get
 
 const insertBiometricDecision = `-- name: InsertBiometricDecision :one
 INSERT INTO biometric_decisions
-    (feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes, decided_at, created_at
+    (feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
+     comparison_type, related_reference, related_reference_kind, responsible_user)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+RETURNING id, feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
+    comparison_type, related_reference, related_reference_kind, responsible_user, decided_at, created_at
 `
 
 type InsertBiometricDecisionParams struct {
-	FeatureAID   string          `db:"feature_a_id" json:"feature_a_id"`
-	FeatureBID   string          `db:"feature_b_id" json:"feature_b_id"`
-	Modality     string          `db:"modality" json:"modality"`
-	Role         string          `db:"role" json:"role"`
-	Decision     string          `db:"decision" json:"decision"`
-	SystemSource sql.NullString  `db:"system_source" json:"system_source"`
-	Username     sql.NullString  `db:"username" json:"username"`
-	Confidence   sql.NullFloat64 `db:"confidence" json:"confidence"`
-	Threshold    sql.NullFloat64 `db:"threshold" json:"threshold"`
-	Notes        sql.NullString  `db:"notes" json:"notes"`
+	FeatureAID           string          `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID           string          `db:"feature_b_id" json:"feature_b_id"`
+	Modality             string          `db:"modality" json:"modality"`
+	Role                 string          `db:"role" json:"role"`
+	Decision             string          `db:"decision" json:"decision"`
+	SystemSource         sql.NullString  `db:"system_source" json:"system_source"`
+	Username             sql.NullString  `db:"username" json:"username"`
+	Confidence           sql.NullFloat64 `db:"confidence" json:"confidence"`
+	Threshold            sql.NullFloat64 `db:"threshold" json:"threshold"`
+	Notes                sql.NullString  `db:"notes" json:"notes"`
+	ComparisonType       sql.NullString  `db:"comparison_type" json:"comparison_type"`
+	RelatedReference     sql.NullString  `db:"related_reference" json:"related_reference"`
+	RelatedReferenceKind sql.NullString  `db:"related_reference_kind" json:"related_reference_kind"`
+	ResponsibleUser      sql.NullString  `db:"responsible_user" json:"responsible_user"`
 }
 
-func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometricDecisionParams) (BiometricDecision, error) {
+type InsertBiometricDecisionRow struct {
+	ID                   int64           `db:"id" json:"id"`
+	FeatureAID           string          `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID           string          `db:"feature_b_id" json:"feature_b_id"`
+	Modality             string          `db:"modality" json:"modality"`
+	Role                 string          `db:"role" json:"role"`
+	Decision             string          `db:"decision" json:"decision"`
+	SystemSource         sql.NullString  `db:"system_source" json:"system_source"`
+	Username             sql.NullString  `db:"username" json:"username"`
+	Confidence           sql.NullFloat64 `db:"confidence" json:"confidence"`
+	Threshold            sql.NullFloat64 `db:"threshold" json:"threshold"`
+	Notes                sql.NullString  `db:"notes" json:"notes"`
+	ComparisonType       sql.NullString  `db:"comparison_type" json:"comparison_type"`
+	RelatedReference     sql.NullString  `db:"related_reference" json:"related_reference"`
+	RelatedReferenceKind sql.NullString  `db:"related_reference_kind" json:"related_reference_kind"`
+	ResponsibleUser      sql.NullString  `db:"responsible_user" json:"responsible_user"`
+	DecidedAt            time.Time       `db:"decided_at" json:"decided_at"`
+	CreatedAt            time.Time       `db:"created_at" json:"created_at"`
+}
+
+func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometricDecisionParams) (InsertBiometricDecisionRow, error) {
 	row := q.db.QueryRowContext(ctx, insertBiometricDecision,
 		arg.FeatureAID,
 		arg.FeatureBID,
@@ -168,8 +244,12 @@ func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometr
 		arg.Confidence,
 		arg.Threshold,
 		arg.Notes,
+		arg.ComparisonType,
+		arg.RelatedReference,
+		arg.RelatedReferenceKind,
+		arg.ResponsibleUser,
 	)
-	var i BiometricDecision
+	var i InsertBiometricDecisionRow
 	err := row.Scan(
 		&i.ID,
 		&i.FeatureAID,
@@ -181,6 +261,46 @@ func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometr
 		&i.Username,
 		&i.Confidence,
 		&i.Threshold,
+		&i.Notes,
+		&i.ComparisonType,
+		&i.RelatedReference,
+		&i.RelatedReferenceKind,
+		&i.ResponsibleUser,
+		&i.DecidedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertCaseDecision = `-- name: InsertCaseDecision :one
+INSERT INTO case_decisions (criminal_case_id, decision, system_source, username, notes)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, criminal_case_id, decision, system_source, username, notes, decided_at, created_at
+`
+
+type InsertCaseDecisionParams struct {
+	CriminalCaseID int64          `db:"criminal_case_id" json:"criminal_case_id"`
+	Decision       string         `db:"decision" json:"decision"`
+	SystemSource   sql.NullString `db:"system_source" json:"system_source"`
+	Username       sql.NullString `db:"username" json:"username"`
+	Notes          sql.NullString `db:"notes" json:"notes"`
+}
+
+func (q *Queries) InsertCaseDecision(ctx context.Context, arg InsertCaseDecisionParams) (CaseDecision, error) {
+	row := q.db.QueryRowContext(ctx, insertCaseDecision,
+		arg.CriminalCaseID,
+		arg.Decision,
+		arg.SystemSource,
+		arg.Username,
+		arg.Notes,
+	)
+	var i CaseDecision
+	err := row.Scan(
+		&i.ID,
+		&i.CriminalCaseID,
+		&i.Decision,
+		&i.SystemSource,
+		&i.Username,
 		&i.Notes,
 		&i.DecidedAt,
 		&i.CreatedAt,
@@ -280,6 +400,45 @@ func (q *Queries) ListBiometricFeatures(ctx context.Context) ([]ListBiometricFea
 	return items, nil
 }
 
+const listCaseDecisionsByCriminalCase = `-- name: ListCaseDecisionsByCriminalCase :many
+SELECT id, criminal_case_id, decision, system_source, username, notes, decided_at, created_at
+FROM case_decisions
+WHERE criminal_case_id = $1
+ORDER BY decided_at
+`
+
+func (q *Queries) ListCaseDecisionsByCriminalCase(ctx context.Context, criminalCaseID int64) ([]CaseDecision, error) {
+	rows, err := q.db.QueryContext(ctx, listCaseDecisionsByCriminalCase, criminalCaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CaseDecision
+	for rows.Next() {
+		var i CaseDecision
+		if err := rows.Scan(
+			&i.ID,
+			&i.CriminalCaseID,
+			&i.Decision,
+			&i.SystemSource,
+			&i.Username,
+			&i.Notes,
+			&i.DecidedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCriminalCases = `-- name: ListCriminalCases :many
 SELECT case_id, case_type, description
 FROM criminal_cases
@@ -319,6 +478,60 @@ func (q *Queries) ListCriminalCases(ctx context.Context, arg ListCriminalCasesPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const listUnmatchedFeatureEmbeddings = `-- name: ListUnmatchedFeatureEmbeddings :many
+SELECT id, biometricfeature_id, embedding_type, embedding::text AS embedding, model_version
+FROM feature_embeddings
+WHERE embedding_type = $1 AND matched_at IS NULL
+ORDER BY id
+`
+
+type ListUnmatchedFeatureEmbeddingsRow struct {
+	ID                 int64          `db:"id" json:"id"`
+	BiometricfeatureID int64          `db:"biometricfeature_id" json:"biometricfeature_id"`
+	EmbeddingType      string         `db:"embedding_type" json:"embedding_type"`
+	Embedding          string         `db:"embedding" json:"embedding"`
+	ModelVersion       sql.NullString `db:"model_version" json:"model_version"`
+}
+
+func (q *Queries) ListUnmatchedFeatureEmbeddings(ctx context.Context, embeddingType string) ([]ListUnmatchedFeatureEmbeddingsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUnmatchedFeatureEmbeddings, embeddingType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUnmatchedFeatureEmbeddingsRow
+	for rows.Next() {
+		var i ListUnmatchedFeatureEmbeddingsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BiometricfeatureID,
+			&i.EmbeddingType,
+			&i.Embedding,
+			&i.ModelVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markFeatureEmbeddingMatched = `-- name: MarkFeatureEmbeddingMatched :exec
+UPDATE feature_embeddings SET matched_at = NOW(), updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) MarkFeatureEmbeddingMatched(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, markFeatureEmbeddingMatched, id)
+	return err
 }
 
 const upsertBiometricFeatureFromCaseTrace = `-- name: UpsertBiometricFeatureFromCaseTrace :one
@@ -523,6 +736,39 @@ type UpsertCriminalCaseParams struct {
 
 func (q *Queries) UpsertCriminalCase(ctx context.Context, arg UpsertCriminalCaseParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, upsertCriminalCase, arg.CaseID, arg.CaseType, arg.Description)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertFeatureEmbedding = `-- name: UpsertFeatureEmbedding :one
+INSERT INTO feature_embeddings (biometricfeature_id, embedding_type, embedding, model_version)
+VALUES ($1, $2, $3::vector, $4)
+ON CONFLICT (biometricfeature_id, embedding_type) DO UPDATE SET
+    embedding = EXCLUDED.embedding,
+    model_version = EXCLUDED.model_version,
+    matched_at = NULL,
+    updated_at = NOW()
+RETURNING id
+`
+
+type UpsertFeatureEmbeddingParams struct {
+	BiometricfeatureID int64          `db:"biometricfeature_id" json:"biometricfeature_id"`
+	EmbeddingType      string         `db:"embedding_type" json:"embedding_type"`
+	Embedding          interface{}    `db:"embedding" json:"embedding"`
+	ModelVersion       sql.NullString `db:"model_version" json:"model_version"`
+}
+
+// embedding is passed as pgvector's text input format ("[v1,v2,...]") and cast explicitly,
+// so no pgvector-aware driver/codec is needed -- consistent with this package's plain
+// database/sql usage elsewhere.
+func (q *Queries) UpsertFeatureEmbedding(ctx context.Context, arg UpsertFeatureEmbeddingParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertFeatureEmbedding,
+		arg.BiometricfeatureID,
+		arg.EmbeddingType,
+		arg.Embedding,
+		arg.ModelVersion,
+	)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
