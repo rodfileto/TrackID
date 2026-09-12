@@ -12,9 +12,9 @@ import {
   PageIcon,
   PieChartIcon,
   PlugInIcon,
+  FileIcon,
   TableIcon,
   UserCircleIcon,
-  VideoIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 import SidebarWidget from "./SidebarWidget";
@@ -43,19 +43,12 @@ const navItems: NavItem[] = [
     path: "/profile",
   },
   {
-    icon: <VideoIcon />,
-    name: "Video Processing",
-    path: "/video-processing",
-  },
-  {
-    icon: <VideoIcon />,
-    name: "Model Comparison",
-    path: "/model-comparison",
-  },
-  {
-    icon: <VideoIcon />,
-    name: "Template Builder",
-    path: "/template-builder",
+    name: "Toolkit",
+    icon: <FileIcon />,
+    subItems: [
+      { name: "InfoBio Search", path: "/toolkit/infobio-search", pro: false, new: true },
+      { name: "Fingerprint Cases", path: "/toolkit/fingerprint-cases", pro: false, new: true },
+    ],
   },
   {
     name: "Forms",
@@ -96,7 +89,6 @@ const othersItems: NavItem[] = [
       { name: "Buttons", path: "/buttons", pro: false },
       { name: "Images", path: "/images", pro: false },
       { name: "Videos", path: "/videos", pro: false },
-      { name: "Tabs", path: "/tabs", pro: false },
     ],
   },
   {

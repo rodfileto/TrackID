@@ -1,18 +1,13 @@
 import PageMeta from "../../components/common/PageMeta";
 import AuthLayout from "./AuthPageLayout";
 import SignUpForm from "../../components/auth/SignUpForm";
-import { Navigate } from "react-router";
-import { isAuthenticated } from "../../auth";
 
 export default function SignUp() {
-  if (isAuthenticated()) {
-    return <Navigate to="/" replace />;
-  }
   return (
     <>
       <PageMeta
-        title="Sign Up | TrackID"
-        description="Create a TrackID account"
+        title="React.js SignUp Dashboard | TailAdmin - Next.js Admin Dashboard Template"
+        description="This is React.js SignUp Tables Dashboard page for TailAdmin - React.js Tailwind CSS Admin Dashboard Template"
       />
       <AuthLayout>
         <SignUpForm />
