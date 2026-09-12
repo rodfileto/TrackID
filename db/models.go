@@ -11,6 +11,89 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+type BiometricDecision struct {
+	ID           int64           `db:"id" json:"id"`
+	FeatureAID   string          `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID   string          `db:"feature_b_id" json:"feature_b_id"`
+	Modality     string          `db:"modality" json:"modality"`
+	Role         string          `db:"role" json:"role"`
+	Decision     string          `db:"decision" json:"decision"`
+	SystemSource sql.NullString  `db:"system_source" json:"system_source"`
+	Username     sql.NullString  `db:"username" json:"username"`
+	Confidence   sql.NullFloat64 `db:"confidence" json:"confidence"`
+	Threshold    sql.NullFloat64 `db:"threshold" json:"threshold"`
+	Notes        sql.NullString  `db:"notes" json:"notes"`
+	DecidedAt    time.Time       `db:"decided_at" json:"decided_at"`
+	CreatedAt    time.Time       `db:"created_at" json:"created_at"`
+}
+
+type Biometricfeature struct {
+	ID             int64         `db:"id" json:"id"`
+	FeatureType    string        `db:"feature_type" json:"feature_type"`
+	Provenance     string        `db:"provenance" json:"provenance"`
+	IdentityFileID sql.NullInt64 `db:"identity_file_id" json:"identity_file_id"`
+	CaseTraceID    sql.NullInt64 `db:"case_trace_id" json:"case_trace_id"`
+	CreatedAt      time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt      time.Time     `db:"updated_at" json:"updated_at"`
+}
+
+type CaseCodification struct {
+	ID               int64     `db:"id" json:"id"`
+	TraceID          int64     `db:"trace_id" json:"trace_id"`
+	Sequence         int16     `db:"sequence" json:"sequence"`
+	CodificationType string    `db:"codification_type" json:"codification_type"`
+	CreatedAt        time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt        time.Time `db:"updated_at" json:"updated_at"`
+}
+
+type CaseEvidence struct {
+	ID             int64          `db:"id" json:"id"`
+	CriminalCaseID int64          `db:"criminal_case_id" json:"criminal_case_id"`
+	Sequence       int16          `db:"sequence" json:"sequence"`
+	CaseFileID     sql.NullInt64  `db:"case_file_id" json:"case_file_id"`
+	Description    sql.NullString `db:"description" json:"description"`
+	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt      time.Time      `db:"updated_at" json:"updated_at"`
+}
+
+type CaseFile struct {
+	ID             int64          `db:"id" json:"id"`
+	CriminalCaseID int64          `db:"criminal_case_id" json:"criminal_case_id"`
+	Category       string         `db:"category" json:"category"`
+	MediaType      sql.NullString `db:"media_type" json:"media_type"`
+	HashID         sql.NullString `db:"hash_id" json:"hash_id"`
+	Filename       sql.NullString `db:"filename" json:"filename"`
+	SourcePath     sql.NullString `db:"source_path" json:"source_path"`
+	StorageRef     sql.NullString `db:"storage_ref" json:"storage_ref"`
+	ContentType    sql.NullString `db:"content_type" json:"content_type"`
+	SizeBytes      sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
+	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt      time.Time      `db:"updated_at" json:"updated_at"`
+}
+
+type CaseFragmentCode struct {
+	CodificationID int64       `db:"codification_id" json:"codification_id"`
+	TraceID        int64       `db:"trace_id" json:"trace_id"`
+	EvidenceID     int64       `db:"evidence_id" json:"evidence_id"`
+	CriminalCaseID int64       `db:"criminal_case_id" json:"criminal_case_id"`
+	FragmentID     interface{} `db:"fragment_id" json:"fragment_id"`
+}
+
+type CaseTrace struct {
+	ID             int64           `db:"id" json:"id"`
+	EvidenceID     int64           `db:"evidence_id" json:"evidence_id"`
+	Sequence       int16           `db:"sequence" json:"sequence"`
+	TraceType      string          `db:"trace_type" json:"trace_type"`
+	BoxX1          sql.NullFloat64 `db:"box_x1" json:"box_x1"`
+	BoxY1          sql.NullFloat64 `db:"box_y1" json:"box_y1"`
+	BoxX2          sql.NullFloat64 `db:"box_x2" json:"box_x2"`
+	BoxY2          sql.NullFloat64 `db:"box_y2" json:"box_y2"`
+	DetectionScore sql.NullFloat64 `db:"detection_score" json:"detection_score"`
+	CaseFileID     sql.NullInt64   `db:"case_file_id" json:"case_file_id"`
+	CreatedAt      time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt      time.Time       `db:"updated_at" json:"updated_at"`
+}
+
 type Cluster struct {
 	ID        int64     `db:"id" json:"id"`
 	CaseType  string    `db:"case_type" json:"case_type"`
@@ -19,9 +102,9 @@ type Cluster struct {
 }
 
 type ClusterMember struct {
-	ClusterID  int64     `db:"cluster_id" json:"cluster_id"`
-	EvidenceID string    `db:"evidence_id" json:"evidence_id"`
-	CreatedAt  time.Time `db:"created_at" json:"created_at"`
+	ClusterID int64     `db:"cluster_id" json:"cluster_id"`
+	FeatureID string    `db:"feature_id" json:"feature_id"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
 }
 
 type ClusterMerge struct {
@@ -31,28 +114,6 @@ type ClusterMerge struct {
 	MergedAt      time.Time      `db:"merged_at" json:"merged_at"`
 	MergedBy      sql.NullString `db:"merged_by" json:"merged_by"`
 	Reason        sql.NullString `db:"reason" json:"reason"`
-}
-
-type Codification struct {
-	ID         int64          `db:"id" json:"id"`
-	TraceID    string         `db:"trace_id" json:"trace_id"`
-	Format     string         `db:"format" json:"format"`
-	Version    string         `db:"version" json:"version"`
-	PayloadRef sql.NullString `db:"payload_ref" json:"payload_ref"`
-	CreatedAt  time.Time      `db:"created_at" json:"created_at"`
-	UpdatedAt  time.Time      `db:"updated_at" json:"updated_at"`
-}
-
-type Comparison struct {
-	ID              int64          `db:"id" json:"id"`
-	EvidenceA       string         `db:"evidence_a" json:"evidence_a"`
-	EvidenceB       string         `db:"evidence_b" json:"evidence_b"`
-	CaseType        string         `db:"case_type" json:"case_type"`
-	ComparisonType  string         `db:"comparison_type" json:"comparison_type"`
-	ResponsibleUser sql.NullString `db:"responsible_user" json:"responsible_user"`
-	CreatedAt       time.Time      `db:"created_at" json:"created_at"`
-	UpdatedAt       time.Time      `db:"updated_at" json:"updated_at"`
-	Status          string         `db:"status" json:"status"`
 }
 
 type CriminalCase struct {
@@ -69,18 +130,6 @@ type Gender struct {
 	Label string `db:"label" json:"label"`
 }
 
-type Identification struct {
-	ID                  int64           `db:"id" json:"id"`
-	TraceID             string          `db:"trace_id" json:"trace_id"`
-	IdentityRegisterID  int64           `db:"identity_register_id" json:"identity_register_id"`
-	TraceCodificationID sql.NullInt64   `db:"trace_codification_id" json:"trace_codification_id"`
-	Confidence          sql.NullFloat64 `db:"confidence" json:"confidence"`
-	ResponsibleUser     sql.NullString  `db:"responsible_user" json:"responsible_user"`
-	Source              sql.NullString  `db:"source" json:"source"`
-	CreatedAt           time.Time       `db:"created_at" json:"created_at"`
-	UpdatedAt           time.Time       `db:"updated_at" json:"updated_at"`
-}
-
 type IdentityDocument struct {
 	ID             int64          `db:"id" json:"id"`
 	DocumentNumber string         `db:"document_number" json:"document_number"`
@@ -89,6 +138,19 @@ type IdentityDocument struct {
 	UpdatedAt      time.Time      `db:"updated_at" json:"updated_at"`
 	Cpf            sql.NullString `db:"cpf" json:"cpf"`
 	PersonID       sql.NullInt64  `db:"person_id" json:"person_id"`
+}
+
+type IdentityFile struct {
+	ID          int64          `db:"id" json:"id"`
+	RegisterID  int64          `db:"register_id" json:"register_id"`
+	FileType    string         `db:"file_type" json:"file_type"`
+	Sequence    int16          `db:"sequence" json:"sequence"`
+	SourcePath  string         `db:"source_path" json:"source_path"`
+	StorageRef  string         `db:"storage_ref" json:"storage_ref"`
+	ContentType sql.NullString `db:"content_type" json:"content_type"`
+	SizeBytes   sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
+	CreatedAt   time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt   time.Time      `db:"updated_at" json:"updated_at"`
 }
 
 type IdentityRegister struct {
@@ -103,8 +165,6 @@ type IdentityRegister struct {
 	Parent2Name    string                `db:"parent_2_name" json:"parent_2_name"`
 	Parent2Gender  string                `db:"parent_2_gender" json:"parent_2_gender"`
 	DataNascimento sql.NullString        `db:"data_nascimento" json:"data_nascimento"`
-	NistPath       sql.NullString        `db:"nist_path" json:"nist_path"`
-	StorageRef     sql.NullString        `db:"storage_ref" json:"storage_ref"`
 	Meta           pqtype.NullRawMessage `db:"meta" json:"meta"`
 }
 
