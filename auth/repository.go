@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/rodrigorfcm/trackid/db"
+	"github.com/rodfileto/trackid/db"
 )
 
 // Repository is auth's data-access layer, backed by the sqlc-generated

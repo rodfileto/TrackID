@@ -4,10 +4,10 @@ import (
 	"database/sql"
 	"log"
 
-	"github.com/rodrigorfcm/trackid/api"
-	"github.com/rodrigorfcm/trackid/config"
-	"github.com/rodrigorfcm/trackid/database"
-	"github.com/rodrigorfcm/trackid/env"
+	"github.com/rodfileto/trackid/api"
+	"github.com/rodfileto/trackid/config"
+	"github.com/rodfileto/trackid/database"
+	"github.com/rodfileto/trackid/env"
 )
 
 func main() {

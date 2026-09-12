@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"github.com/rodrigorfcm/trackid/graph/migrations"
+	"github.com/rodfileto/trackid/graph/migrations"
 )
 
 // Apply runs every embedded Cypher migration against the given driver, in
