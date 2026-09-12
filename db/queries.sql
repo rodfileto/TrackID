@@ -40,6 +40,9 @@ WHERE case_id = $1;
 UPDATE criminal_cases SET description = $2, updated_at = NOW()
 WHERE id = $1;
 
+-- name: ListCriminalCaseIDsByType :many
+SELECT case_id FROM criminal_cases WHERE case_type = $1 ORDER BY case_id;
+
 -- name: UpsertPerson :one
 INSERT INTO person (person_id, meta)
 VALUES ($1, $2)
@@ -118,6 +121,12 @@ ORDER BY feature_a_id, feature_b_id, decided_at;
 -- name: ListBiometricFeatures :many
 SELECT id, feature_type, provenance, identity_file_id, case_trace_id
 FROM biometricfeature
+ORDER BY id;
+
+-- name: ListCaseFilesByCriminalCase :many
+SELECT id, criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes
+FROM case_files
+WHERE criminal_case_id = $1
 ORDER BY id;
 
 -- name: UpsertCaseFile :one
