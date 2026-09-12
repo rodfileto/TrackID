@@ -12,19 +12,23 @@ import (
 )
 
 type BiometricDecision struct {
-	ID           int64           `db:"id" json:"id"`
-	FeatureAID   string          `db:"feature_a_id" json:"feature_a_id"`
-	FeatureBID   string          `db:"feature_b_id" json:"feature_b_id"`
-	Modality     string          `db:"modality" json:"modality"`
-	Role         string          `db:"role" json:"role"`
-	Decision     string          `db:"decision" json:"decision"`
-	SystemSource sql.NullString  `db:"system_source" json:"system_source"`
-	Username     sql.NullString  `db:"username" json:"username"`
-	Confidence   sql.NullFloat64 `db:"confidence" json:"confidence"`
-	Threshold    sql.NullFloat64 `db:"threshold" json:"threshold"`
-	Notes        sql.NullString  `db:"notes" json:"notes"`
-	DecidedAt    time.Time       `db:"decided_at" json:"decided_at"`
-	CreatedAt    time.Time       `db:"created_at" json:"created_at"`
+	ID                   int64           `db:"id" json:"id"`
+	FeatureAID           string          `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID           string          `db:"feature_b_id" json:"feature_b_id"`
+	Modality             string          `db:"modality" json:"modality"`
+	Role                 string          `db:"role" json:"role"`
+	Decision             string          `db:"decision" json:"decision"`
+	SystemSource         sql.NullString  `db:"system_source" json:"system_source"`
+	Username             sql.NullString  `db:"username" json:"username"`
+	Confidence           sql.NullFloat64 `db:"confidence" json:"confidence"`
+	Threshold            sql.NullFloat64 `db:"threshold" json:"threshold"`
+	Notes                sql.NullString  `db:"notes" json:"notes"`
+	DecidedAt            time.Time       `db:"decided_at" json:"decided_at"`
+	CreatedAt            time.Time       `db:"created_at" json:"created_at"`
+	ComparisonType       sql.NullString  `db:"comparison_type" json:"comparison_type"`
+	RelatedReference     sql.NullString  `db:"related_reference" json:"related_reference"`
+	RelatedReferenceKind sql.NullString  `db:"related_reference_kind" json:"related_reference_kind"`
+	ResponsibleUser      sql.NullString  `db:"responsible_user" json:"responsible_user"`
 }
 
 type Biometricfeature struct {
@@ -44,6 +48,17 @@ type CaseCodification struct {
 	CodificationType string    `db:"codification_type" json:"codification_type"`
 	CreatedAt        time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt        time.Time `db:"updated_at" json:"updated_at"`
+}
+
+type CaseDecision struct {
+	ID             int64          `db:"id" json:"id"`
+	CriminalCaseID int64          `db:"criminal_case_id" json:"criminal_case_id"`
+	Decision       string         `db:"decision" json:"decision"`
+	SystemSource   sql.NullString `db:"system_source" json:"system_source"`
+	Username       sql.NullString `db:"username" json:"username"`
+	Notes          sql.NullString `db:"notes" json:"notes"`
+	DecidedAt      time.Time      `db:"decided_at" json:"decided_at"`
+	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
 }
 
 type CaseEvidence struct {
@@ -123,6 +138,17 @@ type CriminalCase struct {
 	Description string    `db:"description" json:"description"`
 	CreatedAt   time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt   time.Time `db:"updated_at" json:"updated_at"`
+}
+
+type FeatureEmbedding struct {
+	ID                 int64          `db:"id" json:"id"`
+	BiometricfeatureID int64          `db:"biometricfeature_id" json:"biometricfeature_id"`
+	EmbeddingType      string         `db:"embedding_type" json:"embedding_type"`
+	Embedding          interface{}    `db:"embedding" json:"embedding"`
+	ModelVersion       sql.NullString `db:"model_version" json:"model_version"`
+	MatchedAt          sql.NullTime   `db:"matched_at" json:"matched_at"`
+	CreatedAt          time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt          time.Time      `db:"updated_at" json:"updated_at"`
 }
 
 type Gender struct {
