@@ -95,9 +95,11 @@ RETURNING id;
 
 -- name: InsertBiometricDecision :one
 INSERT INTO biometric_decisions
-    (feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes, decided_at, created_at;
+    (feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
+     comparison_type, related_reference, related_reference_kind, responsible_user)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+RETURNING id, feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
+    comparison_type, related_reference, related_reference_kind, responsible_user, decided_at, created_at;
 
 -- name: ListBiometricDecisions :many
 SELECT feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence
@@ -152,3 +154,44 @@ ON CONFLICT (trace_id, sequence) DO UPDATE SET
     codification_type = EXCLUDED.codification_type,
     updated_at = NOW()
 RETURNING id;
+
+-- name: UpsertFeatureEmbedding :one
+-- embedding is passed as pgvector's text input format ("[v1,v2,...]") and cast explicitly,
+-- so no pgvector-aware driver/codec is needed -- consistent with this package's plain
+-- database/sql usage elsewhere.
+INSERT INTO feature_embeddings (biometricfeature_id, embedding_type, embedding, model_version)
+VALUES (sqlc.arg(biometricfeature_id), sqlc.arg(embedding_type), sqlc.arg(embedding)::vector, sqlc.arg(model_version))
+ON CONFLICT (biometricfeature_id, embedding_type) DO UPDATE SET
+    embedding = EXCLUDED.embedding,
+    model_version = EXCLUDED.model_version,
+    matched_at = NULL,
+    updated_at = NOW()
+RETURNING id;
+
+-- name: ListUnmatchedFeatureEmbeddings :many
+SELECT id, biometricfeature_id, embedding_type, embedding::text AS embedding, model_version
+FROM feature_embeddings
+WHERE embedding_type = $1 AND matched_at IS NULL
+ORDER BY id;
+
+-- name: FindNearestFeatureEmbeddings :many
+SELECT fe.id, fe.biometricfeature_id, fe.embedding <=> sqlc.arg(embedding)::vector AS distance
+FROM feature_embeddings fe
+WHERE fe.embedding_type = sqlc.arg(embedding_type) AND fe.id != sqlc.arg(exclude_id)
+ORDER BY fe.embedding <=> sqlc.arg(embedding)::vector
+LIMIT sqlc.arg(result_limit);
+
+-- name: MarkFeatureEmbeddingMatched :exec
+UPDATE feature_embeddings SET matched_at = NOW(), updated_at = NOW()
+WHERE id = $1;
+
+-- name: InsertCaseDecision :one
+INSERT INTO case_decisions (criminal_case_id, decision, system_source, username, notes)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, criminal_case_id, decision, system_source, username, notes, decided_at, created_at;
+
+-- name: ListCaseDecisionsByCriminalCase :many
+SELECT id, criminal_case_id, decision, system_source, username, notes, decided_at, created_at
+FROM case_decisions
+WHERE criminal_case_id = $1
+ORDER BY decided_at;
