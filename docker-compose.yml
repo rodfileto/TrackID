@@ -1,120 +1,59 @@
-version: "3.8"
-
 services:
-  # PostgreSQL 16 with pgvector extension
   postgres:
-    image: pgvector/pgvector:pg16
-    container_name: trackid-postgres
+    image: postgres:16-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
       POSTGRES_DB: trackid
+      POSTGRES_USER: trackid
+      POSTGRES_PASSWORD: trackid_dev
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - trackid-postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U trackid -d trackid"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # Redis for task queue
   redis:
     image: redis:7-alpine
-    container_name: trackid-redis
     ports:
-      - "6379:6379"
+      - "56379:6379"
     volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - trackid-redis:/data
 
-  # Memgraph - knowledge graph store for the Target/Situation/Event/Target
-  # Entity ontology (see docs/DTID_ARCHITECTURE.md). Bolt protocol on 7687,
-  # same port the neo4j Python driver defaults to.
-  memgraph:
-    image: memgraph/memgraph:latest
-    container_name: trackid-memgraph
-    ports:
-      - "7687:7687"
-    volumes:
-      - memgraph_data:/var/lib/memgraph
-    healthcheck:
-      test: ["CMD-SHELL", "echo 'RETURN 0;' | mgconsole --host 127.0.0.1 --port 7687 || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # MinIO - S3-compatible object storage for persisted videos + face crops
   minio:
     image: minio/minio:latest
-    container_name: trackid-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: trackid
+      MINIO_ROOT_PASSWORD: trackid_dev_storage
     ports:
-      # Host ports shifted off the 9000/9001 default - already bound by
-      # another project's MinIO container on this machine. Internal
-      # container-to-container traffic (backend -> minio:9000) is unaffected.
-      - "9010:9000"
-      - "9011:9001"
+      - "59000:9000"
+      - "59001:9001"
     volumes:
-      - minio_data:/data
+      - trackid-minio:/data
+
+  neo4j:
+    image: neo4j:5-community
+    profiles: ["graph"]
+    ports:
+      - "57687:7687"
+      - "57474:7474"
+    environment:
+      NEO4J_AUTH: neo4j/neo4j_dev
+      NEO4J_server_config_strict__validation_enabled: "false"
+      NEO4J_server_bolt_advertised__address: 127.0.0.1:57687
+    volumes:
+      - trackid-neo4j:/var/lib/neo4j/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7474"]
       interval: 5s
       timeout: 5s
-      retries: 5
-
-  # Go backend (gin) — orchestration + API + in-process face detection/
-  # embedding/video-processing (onnxruntime, CUDA-accelerated). Replaces the
-  # retired Rust backend and Python ML sidecar.
-  go-backend:
-    build:
-      context: ./backend-go
-      dockerfile: Dockerfile
-    container_name: trackid-go-backend
-    environment:
-      DATABASE_URL: postgres://postgres:password@postgres:5432/trackid
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
-      SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-change-me}
-      FRONTEND_URL: http://localhost:3000
-      BASE_URL: http://localhost:8000
-      BIND: 0.0.0.0:8000
-      VISION_USE_GPU: "true"
-    ports:
-      - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-
-  # Frontend (React + Nginx)
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: trackid-frontend
-    ports:
-      - "3000:80"
-    depends_on:
-      - go-backend
-    environment:
-      - VITE_API_URL=/api
+      retries: 10
 
 volumes:
-  postgres_data:
-  redis_data:
-  minio_data:
-  memgraph_data:
+  trackid-postgres:
+  trackid-redis:
+  trackid-minio:
+  trackid-neo4j:

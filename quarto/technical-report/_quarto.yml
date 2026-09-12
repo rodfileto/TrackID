@@ -1,0 +1,16 @@
+project:
+  type: default
+  output-dir: _output
+
+title: "TrackID Technical Report"
+author: "TrackID Team"
+date: today
+
+format:
+  html:
+    toc: true
+    number-sections: true
+    theme: cosmo
+  pdf:
+    toc: true
+    number-sections: true

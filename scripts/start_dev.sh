@@ -1,51 +1,100 @@
 #!/usr/bin/env bash
-# Starts the recommended local dev environment for TrackID:
-# postgres + redis + memgraph + minio + rust-backend + ml-sidecar in Docker,
-# frontend locally with HMR.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT_DIR"
+RUN_DIR="$ROOT_DIR/.run"
+BACKEND_DIR="$ROOT_DIR/backend"
+FRONTEND_DIR="$ROOT_DIR/frontend"
 
-echo "==> Stopping any existing dev environment..."
-docker compose -f docker-compose.dev.yml down
-if lsof -ti:5173 > /dev/null 2>&1; then
-    echo "==> Stopping stray frontend dev server on port 5173..."
-    kill "$(lsof -ti:5173)" 2>/dev/null || true
+if [[ -f "$ROOT_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT_DIR/.env"
+  set +a
 fi
 
-echo "==> Starting infra + backend (docker-compose.dev.yml)..."
-docker compose -f docker-compose.dev.yml up -d
+PORT="${PORT:-8082}"
+DATABASE_URL="${DATABASE_URL:-postgres://trackid:trackid_dev@localhost:55432/trackid?sslmode=disable}"
+REDIS_URL="${REDIS_URL:-redis://localhost:56379/0}"
+JWT_SECRET="${JWT_SECRET:-local-development-secret}"
+START_NEO4J="${START_NEO4J:-false}"
+NEO4J_URL="${NEO4J_URL:-}"
+if [[ "$START_NEO4J" == "true" && -z "$NEO4J_URL" ]]; then
+  NEO4J_URL="bolt://neo4j:neo4j_dev@localhost:57687"
+fi
 
-echo "==> Waiting for the Rust backend to become healthy on http://localhost:8000/health ..."
-for _ in $(seq 1 60); do
-    if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
-        break
-    fi
-    sleep 1
+mkdir -p "$RUN_DIR"
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "docker is required" >&2
+  exit 1
+fi
+if ! command -v go >/dev/null 2>&1; then
+  echo "go is required" >&2
+  exit 1
+fi
+if ! command -v npm >/dev/null 2>&1; then
+  echo "npm is required" >&2
+  exit 1
+fi
+
+cd "$ROOT_DIR"
+echo "Starting TrackID infrastructure..."
+docker compose up -d postgres redis minio
+if [[ "$START_NEO4J" == "true" ]]; then
+  docker compose --profile graph up -d neo4j
+fi
+
+echo "Waiting for PostgreSQL..."
+for attempt in {1..30}; do
+  if docker compose exec -T postgres pg_isready -U trackid -d trackid >/dev/null 2>&1; then
+    break
+  fi
+  if [[ "$attempt" -eq 30 ]]; then
+    echo "PostgreSQL did not become ready" >&2
+    exit 1
+  fi
+  sleep 1
 done
 
-# The ML sidecar loads InsightFace on startup; its first request pays that
-# cost, so a cold start is normal. It is not required for the backend's /health.
-if curl -sf http://localhost:8001/ml/v1/health > /dev/null 2>&1; then
-    echo "==> ML sidecar is up on http://localhost:8001 ..."
-else
-    echo "==> ML sidecar is still starting (models loading) ..."
-fi
+echo "Applying database migrations..."
+(cd "$BACKEND_DIR" && DATABASE_URL="$DATABASE_URL" go run ./cmd/migrate up)
 
-if [ ! -d "$ROOT_DIR/frontend/node_modules" ]; then
-    echo "==> Installing frontend dependencies..."
-    (cd "$ROOT_DIR/frontend" && npm install)
-fi
+wait_for_url() {
+  local name="$1"
+  local url="$2"
 
-cleanup() {
-    echo
-    echo "==> Frontend dev server stopped. Docker services (postgres/redis/memgraph/minio/rust-backend/ml-sidecar) are still running."
-    echo "    They'll be stopped automatically next time you run this script, or run:"
-    echo "    docker compose -f docker-compose.dev.yml down"
+  for attempt in {1..30}; do
+    if curl --silent --fail --max-time 2 "$url" >/dev/null 2>&1; then
+      return
+    fi
+    if [[ "$attempt" -eq 30 ]]; then
+      echo "$name did not become ready; check its log" >&2
+      exit 1
+    fi
+    sleep 1
+  done
 }
-trap cleanup EXIT
 
-echo "==> Starting frontend dev server (http://localhost:5173)..."
-cd "$ROOT_DIR/frontend"
-npm run dev
+if [[ ! -f "$RUN_DIR/backend.pid" ]] || ! kill -0 "$(cat "$RUN_DIR/backend.pid")" 2>/dev/null; then
+  echo "Starting Go API on :$PORT..."
+  setsid bash -c "cd '$BACKEND_DIR' && exec env PORT='$PORT' DATABASE_URL='$DATABASE_URL' REDIS_URL='$REDIS_URL' JWT_SECRET='$JWT_SECRET' NEO4J_URL='$NEO4J_URL' INFOBIO_BASE_URL='${INFOBIO_BASE_URL:-}' INFOBIO_IMAGES_URL='${INFOBIO_IMAGES_URL:-}' INFOBIO_NIST_BASE_URL='${INFOBIO_NIST_BASE_URL:-}' go run ./cmd/trackid" >"$RUN_DIR/backend.log" 2>&1 &
+  echo $! >"$RUN_DIR/backend.pid"
+else
+  echo "Go API is already running (PID $(cat "$RUN_DIR/backend.pid"))"
+fi
+wait_for_url "Go API" "http://127.0.0.1:$PORT/health"
+
+if [[ ! -f "$RUN_DIR/frontend.pid" ]] || ! kill -0 "$(cat "$RUN_DIR/frontend.pid")" 2>/dev/null; then
+  echo "Starting Vite frontend..."
+  setsid bash -c "cd '$FRONTEND_DIR' && exec npm run dev -- --host 127.0.0.1" >"$RUN_DIR/frontend.log" 2>&1 &
+  echo $! >"$RUN_DIR/frontend.pid"
+else
+  echo "Vite frontend is already running (PID $(cat "$RUN_DIR/frontend.pid"))"
+fi
+wait_for_url "Vite frontend" "http://127.0.0.1:5173/"
+
+echo "TrackID development stack is running."
+echo "Frontend: http://127.0.0.1:5173"
+echo "API:      http://127.0.0.1:$PORT"
+echo "Logs:     $RUN_DIR/backend.log and $RUN_DIR/frontend.log"

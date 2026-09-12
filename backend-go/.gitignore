@@ -1,3 +1,0 @@
-/models/*.onnx
-/onnxruntime-gpu/
-/cuda-libs/
