@@ -130,13 +130,13 @@ export default function SignUpForm() {
               </Label>
               <Input
                 name="username"
-                placeholder="Your PF username"
+                placeholder="Your username"
                 value={form.username}
                 onChange={(event) => updateField("username", event.target.value)}
                 required
               />
               <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                Your email will be {form.username || "username"}@pf.gov.br.
+                Your email will be derived from your username.
               </p>
             </div>
 
