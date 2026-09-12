@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN_DIR="$ROOT_DIR/.run"
-BACKEND_DIR="$ROOT_DIR/backend"
+BACKEND_DIR="$ROOT_DIR"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 
 if [[ -f "$ROOT_DIR/.env" ]]; then
@@ -78,7 +78,7 @@ wait_for_url() {
 
 if [[ ! -f "$RUN_DIR/backend.pid" ]] || ! kill -0 "$(cat "$RUN_DIR/backend.pid")" 2>/dev/null; then
   echo "Starting Go API on :$PORT..."
-  setsid bash -c "cd '$BACKEND_DIR' && exec env PORT='$PORT' DATABASE_URL='$DATABASE_URL' REDIS_URL='$REDIS_URL' JWT_SECRET='$JWT_SECRET' NEO4J_URL='$NEO4J_URL' INFOBIO_BASE_URL='${INFOBIO_BASE_URL:-}' INFOBIO_IMAGES_URL='${INFOBIO_IMAGES_URL:-}' INFOBIO_NIST_BASE_URL='${INFOBIO_NIST_BASE_URL:-}' go run ./cmd/trackid" >"$RUN_DIR/backend.log" 2>&1 &
+  setsid bash -c "cd '$BACKEND_DIR' && exec env PORT='$PORT' DATABASE_URL='$DATABASE_URL' REDIS_URL='$REDIS_URL' JWT_SECRET='$JWT_SECRET' NEO4J_URL='$NEO4J_URL' go run ./cmd/trackid" >"$RUN_DIR/backend.log" 2>&1 &
   echo $! >"$RUN_DIR/backend.pid"
 else
   echo "Go API is already running (PID $(cat "$RUN_DIR/backend.pid"))"

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MIGRATIONS_DIR="$ROOT_DIR/backend/internal/graph/migrations"
+MIGRATIONS_DIR="$ROOT_DIR/graph/migrations"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker is required" >&2
