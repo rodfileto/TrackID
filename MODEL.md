@@ -36,7 +36,7 @@ person ──< identity_document ──< identity_register ──< identity_file
 | Table | Role |
 | --- | --- |
 | `person` | the real individual (stable business key `person_id`) |
-| `identity_document` | an identity document (e.g. an ID card, an ABIS enrollment record) |
+| `identity_document` | an identity document (e.g. an ID card, an ABIS enrollment record); optionally carries the holder's government-issued fiscal/taxpayer number |
 | `identity_register` | one enrollment event under a document (biographic data: name, parents, birthdate) |
 | `identity_file` | a raw file produced by that enrollment: `photo` (face), `nist` (ten-print), `pdf`, … |
 | `biometricfeature` | the typed feature(s) extracted from a file (a NIST file → one `FINGERPRINT_TEMPLATE`; a photo → one `FACE_RECORD`) |

@@ -846,7 +846,7 @@ ON CONFLICT (case_id) DO UPDATE SET
     case_type = EXCLUDED.case_type,
     description = EXCLUDED.description,
     updated_at = NOW()
-RETURNING id
+RETURNING id, (xmax = 0) AS inserted
 `
 
 type UpsertCriminalCaseParams struct {
@@ -855,11 +855,18 @@ type UpsertCriminalCaseParams struct {
 	Description string `db:"description" json:"description"`
 }
 
-func (q *Queries) UpsertCriminalCase(ctx context.Context, arg UpsertCriminalCaseParams) (int64, error) {
+type UpsertCriminalCaseRow struct {
+	ID       int64 `db:"id" json:"id"`
+	Inserted bool  `db:"inserted" json:"inserted"`
+}
+
+// (xmax = 0) tells a real insert apart from a row that already existed: RowsAffected() is
+// 1 either way, so callers that need to report insert-vs-update counts need this instead.
+func (q *Queries) UpsertCriminalCase(ctx context.Context, arg UpsertCriminalCaseParams) (UpsertCriminalCaseRow, error) {
 	row := q.db.QueryRowContext(ctx, upsertCriminalCase, arg.CaseID, arg.CaseType, arg.Description)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
+	var i UpsertCriminalCaseRow
+	err := row.Scan(&i.ID, &i.Inserted)
+	return i, err
 }
 
 const upsertFeatureEmbedding = `-- name: UpsertFeatureEmbedding :one
@@ -896,11 +903,11 @@ func (q *Queries) UpsertFeatureEmbedding(ctx context.Context, arg UpsertFeatureE
 }
 
 const upsertIdentityDocument = `-- name: UpsertIdentityDocument :one
-INSERT INTO identity_document (person_id, document_number, document_type, cpf)
+INSERT INTO identity_document (person_id, document_number, document_type, fiscal_number)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (document_type, document_number) DO UPDATE SET
     person_id = EXCLUDED.person_id,
-    cpf = EXCLUDED.cpf,
+    fiscal_number = EXCLUDED.fiscal_number,
     updated_at = NOW()
 RETURNING id
 `
@@ -909,7 +916,7 @@ type UpsertIdentityDocumentParams struct {
 	PersonID       sql.NullInt64  `db:"person_id" json:"person_id"`
 	DocumentNumber string         `db:"document_number" json:"document_number"`
 	DocumentType   string         `db:"document_type" json:"document_type"`
-	Cpf            sql.NullString `db:"cpf" json:"cpf"`
+	FiscalNumber   sql.NullString `db:"fiscal_number" json:"fiscal_number"`
 }
 
 func (q *Queries) UpsertIdentityDocument(ctx context.Context, arg UpsertIdentityDocumentParams) (int64, error) {
@@ -917,7 +924,7 @@ func (q *Queries) UpsertIdentityDocument(ctx context.Context, arg UpsertIdentity
 		arg.PersonID,
 		arg.DocumentNumber,
 		arg.DocumentType,
-		arg.Cpf,
+		arg.FiscalNumber,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -963,7 +970,7 @@ func (q *Queries) UpsertIdentityFile(ctx context.Context, arg UpsertIdentityFile
 
 const upsertIdentityRegister = `-- name: UpsertIdentityRegister :one
 INSERT INTO identity_register
-    (document_id, register_number, name, parent_1_name, parent_1_gender, parent_2_name, parent_2_gender, data_nascimento, meta)
+    (document_id, register_number, name, parent_1_name, parent_1_gender, parent_2_name, parent_2_gender, birth_date, meta)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (register_number) DO UPDATE SET
     document_id = EXCLUDED.document_id,
@@ -972,7 +979,7 @@ ON CONFLICT (register_number) DO UPDATE SET
     parent_1_gender = EXCLUDED.parent_1_gender,
     parent_2_name = EXCLUDED.parent_2_name,
     parent_2_gender = EXCLUDED.parent_2_gender,
-    data_nascimento = EXCLUDED.data_nascimento,
+    birth_date = EXCLUDED.birth_date,
     meta = EXCLUDED.meta,
     updated_at = NOW()
 RETURNING id
@@ -986,7 +993,7 @@ type UpsertIdentityRegisterParams struct {
 	Parent1Gender  string                `db:"parent_1_gender" json:"parent_1_gender"`
 	Parent2Name    string                `db:"parent_2_name" json:"parent_2_name"`
 	Parent2Gender  string                `db:"parent_2_gender" json:"parent_2_gender"`
-	DataNascimento sql.NullString        `db:"data_nascimento" json:"data_nascimento"`
+	BirthDate      sql.NullString        `db:"birth_date" json:"birth_date"`
 	Meta           pqtype.NullRawMessage `db:"meta" json:"meta"`
 }
 
@@ -999,7 +1006,7 @@ func (q *Queries) UpsertIdentityRegister(ctx context.Context, arg UpsertIdentity
 		arg.Parent1Gender,
 		arg.Parent2Name,
 		arg.Parent2Gender,
-		arg.DataNascimento,
+		arg.BirthDate,
 		arg.Meta,
 	)
 	var id int64
