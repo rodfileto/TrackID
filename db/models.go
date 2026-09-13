@@ -161,7 +161,7 @@ type IdentityDocument struct {
 	PersonID       sql.NullInt64  `db:"person_id" json:"person_id"`
 	DocumentNumber string         `db:"document_number" json:"document_number"`
 	DocumentType   string         `db:"document_type" json:"document_type"`
-	Cpf            sql.NullString `db:"cpf" json:"cpf"`
+	FiscalNumber   sql.NullString `db:"fiscal_number" json:"fiscal_number"`
 	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
 	UpdatedAt      time.Time      `db:"updated_at" json:"updated_at"`
 }
@@ -188,7 +188,7 @@ type IdentityRegister struct {
 	Parent1Gender  string                `db:"parent_1_gender" json:"parent_1_gender"`
 	Parent2Name    string                `db:"parent_2_name" json:"parent_2_name"`
 	Parent2Gender  string                `db:"parent_2_gender" json:"parent_2_gender"`
-	DataNascimento sql.NullString        `db:"data_nascimento" json:"data_nascimento"`
+	BirthDate      sql.NullString        `db:"birth_date" json:"birth_date"`
 	Meta           pqtype.NullRawMessage `db:"meta" json:"meta"`
 	CreatedAt      time.Time             `db:"created_at" json:"created_at"`
 	UpdatedAt      time.Time             `db:"updated_at" json:"updated_at"`
