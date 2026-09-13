@@ -40,7 +40,7 @@ type Enrollment struct {
 
 	DocumentType   string
 	DocumentNumber string
-	CPF            string // optional
+	FiscalNumber   string // optional; any government-issued taxpayer/fiscal id (e.g. Brazil's CPF)
 
 	RegisterNumber string
 	Name           string
@@ -48,7 +48,7 @@ type Enrollment struct {
 	Parent1Gender  string
 	Parent2Name    string
 	Parent2Gender  string
-	DataNascimento string // optional
+	BirthDate      string // optional
 	RegisterMeta   []byte // optional JSON
 
 	Files []FileInput
@@ -108,7 +108,7 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, e Enrollment) (Result, error) {
 		PersonID:       sql.NullInt64{Int64: personID, Valid: true},
 		DocumentNumber: e.DocumentNumber,
 		DocumentType:   e.DocumentType,
-		Cpf:            nullString(e.CPF),
+		FiscalNumber:   nullString(e.FiscalNumber),
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("identity: upsert identity_document: %w", err)
@@ -122,7 +122,7 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, e Enrollment) (Result, error) {
 		Parent1Gender:  e.Parent1Gender,
 		Parent2Name:    e.Parent2Name,
 		Parent2Gender:  e.Parent2Gender,
-		DataNascimento: nullString(e.DataNascimento),
+		BirthDate:      nullString(e.BirthDate),
 		Meta:           rawMessage(e.RegisterMeta),
 	})
 	if err != nil {

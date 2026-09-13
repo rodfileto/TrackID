@@ -14,13 +14,15 @@ FROM users
 WHERE id = $1;
 
 -- name: UpsertCriminalCase :one
+-- (xmax = 0) tells a real insert apart from a row that already existed: RowsAffected() is
+-- 1 either way, so callers that need to report insert-vs-update counts need this instead.
 INSERT INTO criminal_cases (case_id, case_type, description)
 VALUES ($1, $2, $3)
 ON CONFLICT (case_id) DO UPDATE SET
     case_type = EXCLUDED.case_type,
     description = EXCLUDED.description,
     updated_at = NOW()
-RETURNING id;
+RETURNING id, (xmax = 0) AS inserted;
 
 -- name: CountCriminalCases :one
 SELECT COUNT(*) FROM criminal_cases;
@@ -52,17 +54,17 @@ ON CONFLICT (person_id) DO UPDATE SET
 RETURNING id;
 
 -- name: UpsertIdentityDocument :one
-INSERT INTO identity_document (person_id, document_number, document_type, cpf)
+INSERT INTO identity_document (person_id, document_number, document_type, fiscal_number)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (document_type, document_number) DO UPDATE SET
     person_id = EXCLUDED.person_id,
-    cpf = EXCLUDED.cpf,
+    fiscal_number = EXCLUDED.fiscal_number,
     updated_at = NOW()
 RETURNING id;
 
 -- name: UpsertIdentityRegister :one
 INSERT INTO identity_register
-    (document_id, register_number, name, parent_1_name, parent_1_gender, parent_2_name, parent_2_gender, data_nascimento, meta)
+    (document_id, register_number, name, parent_1_name, parent_1_gender, parent_2_name, parent_2_gender, birth_date, meta)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (register_number) DO UPDATE SET
     document_id = EXCLUDED.document_id,
@@ -71,7 +73,7 @@ ON CONFLICT (register_number) DO UPDATE SET
     parent_1_gender = EXCLUDED.parent_1_gender,
     parent_2_name = EXCLUDED.parent_2_name,
     parent_2_gender = EXCLUDED.parent_2_gender,
-    data_nascimento = EXCLUDED.data_nascimento,
+    birth_date = EXCLUDED.birth_date,
     meta = EXCLUDED.meta,
     updated_at = NOW()
 RETURNING id;

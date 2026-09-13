@@ -24,16 +24,16 @@ type knownIdentityRow struct {
 	documentID     int64
 	documentNumber string
 	documentType   string
-	cpf            sql.NullString
+	fiscalNumber   sql.NullString
 
-	registerID       int64
-	registerNumber   string
-	name             string
-	parent1Name      string
-	parent1Gender    string
-	parent2Name      string
-	parent2Gender    string
-	dataNascimento   sql.NullString
+	registerID     int64
+	registerNumber string
+	name           string
+	parent1Name    string
+	parent1Gender  string
+	parent2Name    string
+	parent2Gender  string
+	birthDate      sql.NullString
 
 	identityFileID int64
 	featureType    string
@@ -105,10 +105,10 @@ func loadIdentityRows(ctx context.Context, db *sql.DB) ([]map[string]any, []map[
 		var r knownIdentityRow
 		if err := rows.Scan(
 			&r.personID,
-			&r.documentID, &r.documentNumber, &r.documentType, &r.cpf,
+			&r.documentID, &r.documentNumber, &r.documentType, &r.fiscalNumber,
 			&r.registerID, &r.registerNumber, &r.name,
 			&r.parent1Name, &r.parent1Gender, &r.parent2Name, &r.parent2Gender,
-			&r.dataNascimento,
+			&r.birthDate,
 			&r.identityFileID, &r.featureType, &r.sourcePath, &r.storageRef,
 			&r.contentType, &r.sizeBytes,
 		); err != nil {
@@ -123,13 +123,13 @@ func loadIdentityRows(ctx context.Context, db *sql.DB) ([]map[string]any, []map[
 }
 
 func identityRowParams(r knownIdentityRow) map[string]any {
-	var cpf, dataNascimento, contentType any
+	var fiscalNumber, birthDate, contentType any
 	var sizeBytes any
-	if r.cpf.Valid {
-		cpf = r.cpf.String
+	if r.fiscalNumber.Valid {
+		fiscalNumber = r.fiscalNumber.String
 	}
-	if r.dataNascimento.Valid {
-		dataNascimento = r.dataNascimento.String
+	if r.birthDate.Valid {
+		birthDate = r.birthDate.String
 	}
 	if r.contentType.Valid {
 		contentType = r.contentType.String
@@ -138,25 +138,25 @@ func identityRowParams(r knownIdentityRow) map[string]any {
 		sizeBytes = r.sizeBytes.Int64
 	}
 	return map[string]any{
-		"personId":        r.personID,
-		"documentId":      r.documentID,
-		"documentNumber":  r.documentNumber,
-		"documentType":    r.documentType,
-		"cpf":             cpf,
-		"registerId":      r.registerID,
-		"registerNumber":  r.registerNumber,
-		"name":            r.name,
-		"parent1Name":     r.parent1Name,
-		"parent1Gender":   r.parent1Gender,
-		"parent2Name":     r.parent2Name,
-		"parent2Gender":   r.parent2Gender,
-		"dataNascimento":  dataNascimento,
-		"featureId":       KnownFeatureID(r.identityFileID),
-		"featureType":     r.featureType,
-		"sourcePath":      r.sourcePath,
-		"storageRef":      r.storageRef,
-		"contentType":     contentType,
-		"sizeBytes":       sizeBytes,
+		"personId":       r.personID,
+		"documentId":     r.documentID,
+		"documentNumber": r.documentNumber,
+		"documentType":   r.documentType,
+		"fiscalNumber":   fiscalNumber,
+		"registerId":     r.registerID,
+		"registerNumber": r.registerNumber,
+		"name":           r.name,
+		"parent1Name":    r.parent1Name,
+		"parent1Gender":  r.parent1Gender,
+		"parent2Name":    r.parent2Name,
+		"parent2Gender":  r.parent2Gender,
+		"birthDate":      birthDate,
+		"featureId":      KnownFeatureID(r.identityFileID),
+		"featureType":    r.featureType,
+		"sourcePath":     r.sourcePath,
+		"storageRef":     r.storageRef,
+		"contentType":    contentType,
+		"sizeBytes":      sizeBytes,
 	}
 }
 
@@ -180,10 +180,10 @@ func loadPersons(ctx context.Context, db *sql.DB) ([]map[string]any, error) {
 const knownIdentityChainQuery = `
 SELECT
     p.person_id,
-    d.id, d.document_number, d.document_type, d.cpf,
+    d.id, d.document_number, d.document_type, d.fiscal_number,
     r.id, r.register_number, r.name,
     r.parent_1_name, r.parent_1_gender, r.parent_2_name, r.parent_2_gender,
-    r.data_nascimento,
+    r.birth_date,
     f.id, bf.feature_type, f.source_path, f.storage_ref, f.content_type, f.size_bytes
 FROM biometricfeature bf
 JOIN identity_file f ON f.id = bf.identity_file_id
@@ -205,14 +205,14 @@ MERGE (person:Person {personId: row.personId})
 
 MERGE (ident:Object:Identification {documentId: row.documentId})
 ON CREATE SET ident.documentNumber = row.documentNumber, ident.documentType = row.documentType,
-              ident.cpf = row.cpf
+              ident.fiscalNumber = row.fiscalNumber
 MERGE (person)-[:HAS_IDENTITY]->(ident)
 
 MERGE (reg:Object:IdentityRegister {registerId: row.registerId})
 ON CREATE SET reg.registerNumber = row.registerNumber
 SET reg.name = row.name, reg.parent1Name = row.parent1Name, reg.parent1Gender = row.parent1Gender,
     reg.parent2Name = row.parent2Name, reg.parent2Gender = row.parent2Gender,
-    reg.dataNascimento = row.dataNascimento
+    reg.birthDate = row.birthDate
 MERGE (ident)-[:HAS_REGISTRATION]->(reg)
 
 MERGE (feature:Object:BiometricFeature {featureId: row.featureId})
