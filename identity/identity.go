@@ -10,12 +10,39 @@ package identity
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/graph"
 	"github.com/sqlc-dev/pqtype"
 )
+
+// ErrGraphSyncFailed wraps a Neo4j sync failure that happened after this Enrollment's Postgres
+// write already committed. The Result Ingest returns alongside it is still valid and the Postgres
+// write is not rolled back -- Neo4j MERGE is idempotent, so a later graph.SyncIdentity backfill
+// run heals whatever this call missed. Callers that pass WithNeo4jDriver should check
+// errors.Is(err, ErrGraphSyncFailed) to tell this apart from a Postgres-level failure (which never
+// returns a usable Result).
+var ErrGraphSyncFailed = errors.New("identity: graph sync failed")
+
+// Option configures optional Ingest behavior.
+type Option func(*ingestOptions)
+
+type ingestOptions struct {
+	neo4jDriver neo4j.DriverWithContext
+}
+
+// WithNeo4jDriver makes Ingest MERGE this Enrollment's Person -> Identification ->
+// IdentityRegister -> KNOWN BiometricFeature chain into Neo4j in the same call, right after the
+// Postgres transaction commits. The sync is scoped to just this Enrollment (via
+// graph.SyncIdentityRows), not a full-table resync, so it stays cheap regardless of how much
+// identity data already exists. Omitting this option (the default) skips Neo4j entirely, matching
+// every existing caller's behavior unchanged.
+func WithNeo4jDriver(driver neo4j.DriverWithContext) Option {
+	return func(o *ingestOptions) { o.neo4jDriver = driver }
+}
 
 // FileInput is one raw file produced by an enrollment event (a photo, a NIST
 // file, ...). FileType determines the KNOWN biometric feature it yields, via
@@ -74,7 +101,12 @@ type Result struct {
 // Ingest upserts one Enrollment's full chain in a single transaction: person,
 // identity_document, identity_register, identity_file (one per Files entry),
 // and the biometricfeature row for each file type that yields one.
-func Ingest(ctx context.Context, sqlDB *sql.DB, e Enrollment) (Result, error) {
+func Ingest(ctx context.Context, sqlDB *sql.DB, e Enrollment, opts ...Option) (Result, error) {
+	var o ingestOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	if sqlDB == nil {
 		return Result{}, fmt.Errorf("identity: nil db")
 	}
@@ -177,7 +209,51 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, e Enrollment) (Result, error) {
 	if err := tx.Commit(); err != nil {
 		return Result{}, err
 	}
+
+	if o.neo4jDriver != nil {
+		if err := syncToGraph(ctx, o.neo4jDriver, e, result); err != nil {
+			return result, fmt.Errorf("%w: %v", ErrGraphSyncFailed, err)
+		}
+	}
 	return result, nil
+}
+
+// syncToGraph MERGEs e/result's KNOWN chain into Neo4j via graph.SyncIdentityRows, built entirely
+// from data Ingest already has -- no re-querying Postgres. Only files that yielded a
+// biometricfeature (result.Features) become chain rows, matching graph.SyncIdentity's own
+// biometricfeature-driven join; a register with no KNOWN-yielding files yet still gets its Person
+// node merged (SyncIdentityRows handles the zero-rows case).
+func syncToGraph(ctx context.Context, driver neo4j.DriverWithContext, e Enrollment, result Result) error {
+	filesByType := make(map[string]FileInput, len(e.Files))
+	for _, f := range e.Files {
+		filesByType[f.FileType] = f
+	}
+
+	rows := make([]graph.IdentityChainParams, 0, len(result.Features))
+	for _, feat := range result.Features {
+		f := filesByType[feat.FileType]
+		rows = append(rows, graph.IdentityChainParams{
+			DocumentID:     result.DocumentID,
+			DocumentNumber: e.DocumentNumber,
+			DocumentType:   e.DocumentType,
+			FiscalNumber:   e.FiscalNumber,
+			RegisterID:     result.RegisterID,
+			RegisterNumber: e.RegisterNumber,
+			Name:           e.Name,
+			Parent1Name:    e.Parent1Name,
+			Parent1Gender:  e.Parent1Gender,
+			Parent2Name:    e.Parent2Name,
+			Parent2Gender:  e.Parent2Gender,
+			BirthDate:      e.BirthDate,
+			IdentityFileID: result.IdentityFileIDs[feat.FileType],
+			FeatureType:    feat.FeatureType,
+			SourcePath:     f.SourcePath,
+			StorageRef:     f.StorageRef,
+			ContentType:    f.ContentType,
+			SizeBytes:      f.SizeBytes,
+		})
+	}
+	return graph.SyncIdentityRows(ctx, driver, e.PersonID, rows)
 }
 
 func nullString(s string) sql.NullString {
