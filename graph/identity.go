@@ -46,13 +46,64 @@ type knownIdentityRow struct {
 // SyncIdentity materializes Person nodes from the person table, and the full
 // KNOWN identity chain — Identification, IdentityRegister, and KNOWN
 // BiometricFeature nodes — from the biometricfeature table. It reads only from
-// Postgres.
+// Postgres, rescanning every row every call; for materializing just the rows
+// one identity.Ingest call already wrote, use SyncIdentityRows instead.
 func SyncIdentity(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext) (IdentitySyncStats, error) {
 	persons, chain, err := loadIdentityRows(ctx, db)
 	if err != nil {
 		return IdentitySyncStats{}, err
 	}
 
+	if err := writeIdentityRows(ctx, driver, persons, chain); err != nil {
+		return IdentitySyncStats{}, err
+	}
+	return IdentitySyncStats{Persons: len(persons), Features: len(chain)}, nil
+}
+
+// IdentityChainParams is one row of the KNOWN identity chain, ready to MERGE into Neo4j. It
+// mirrors what SyncIdentity reads back from Postgres, but is meant to be built directly from data
+// a caller already has in hand (e.g. identity.Ingest's own Enrollment/Result) via
+// SyncIdentityRows, without a round trip through Postgres.
+type IdentityChainParams struct {
+	PersonID string
+
+	DocumentID     int64
+	DocumentNumber string
+	DocumentType   string
+	FiscalNumber   string // empty = not set
+
+	RegisterID     int64
+	RegisterNumber string
+	Name           string
+	Parent1Name    string
+	Parent1Gender  string
+	Parent2Name    string
+	Parent2Gender  string
+	BirthDate      string // empty = not set
+
+	IdentityFileID int64
+	FeatureType    string
+	SourcePath     string
+	StorageRef     string
+	ContentType    string // empty = not set
+	SizeBytes      int64  // 0 = not set
+}
+
+// SyncIdentityRows MERGEs personID's Person node and, for each row, the
+// Identification -> IdentityRegister -> KNOWN BiometricFeature chain it describes. Unlike
+// SyncIdentity it never queries Postgres, so it stays O(len(rows)) per call regardless of how much
+// identity data already exists -- the shape identity.Ingest needs to sync just the one Enrollment
+// it wrote. Safe to call with zero rows (a register with no KNOWN-yielding files yet still gets
+// its Person node merged).
+func SyncIdentityRows(ctx context.Context, driver neo4j.DriverWithContext, personID string, rows []IdentityChainParams) error {
+	chain := make([]map[string]any, len(rows))
+	for i, r := range rows {
+		chain[i] = identityChainRowParams(r, personID)
+	}
+	return writeIdentityRows(ctx, driver, []map[string]any{{"personId": personID}}, chain)
+}
+
+func writeIdentityRows(ctx context.Context, driver neo4j.DriverWithContext, persons, chain []map[string]any) error {
 	session := driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
 
@@ -61,7 +112,7 @@ func SyncIdentity(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContex
 			_, err := tx.Run(ctx, syncIdentityQuery, map[string]any{"persons": persons})
 			return nil, err
 		}); err != nil {
-			return IdentitySyncStats{}, fmt.Errorf("materialize persons: %w", err)
+			return fmt.Errorf("materialize persons: %w", err)
 		}
 	}
 	if len(chain) > 0 {
@@ -69,10 +120,10 @@ func SyncIdentity(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContex
 			_, err := tx.Run(ctx, syncIdentityChainQuery, map[string]any{"rows": chain})
 			return nil, err
 		}); err != nil {
-			return IdentitySyncStats{}, fmt.Errorf("materialize identity chain: %w", err)
+			return fmt.Errorf("materialize identity chain: %w", err)
 		}
 	}
-	return IdentitySyncStats{Persons: len(persons), Features: len(chain)}, nil
+	return nil
 }
 
 // SyncIdentityPlan returns the counts SyncIdentity would materialize.
@@ -123,8 +174,8 @@ func loadIdentityRows(ctx context.Context, db *sql.DB) ([]map[string]any, []map[
 }
 
 func identityRowParams(r knownIdentityRow) map[string]any {
-	var fiscalNumber, birthDate, contentType any
-	var sizeBytes any
+	var fiscalNumber, birthDate, contentType string
+	var sizeBytes int64
 	if r.fiscalNumber.Valid {
 		fiscalNumber = r.fiscalNumber.String
 	}
@@ -137,24 +188,64 @@ func identityRowParams(r knownIdentityRow) map[string]any {
 	if r.sizeBytes.Valid {
 		sizeBytes = r.sizeBytes.Int64
 	}
+	return identityChainRowParams(IdentityChainParams{
+		DocumentID:     r.documentID,
+		DocumentNumber: r.documentNumber,
+		DocumentType:   r.documentType,
+		FiscalNumber:   fiscalNumber,
+		RegisterID:     r.registerID,
+		RegisterNumber: r.registerNumber,
+		Name:           r.name,
+		Parent1Name:    r.parent1Name,
+		Parent1Gender:  r.parent1Gender,
+		Parent2Name:    r.parent2Name,
+		Parent2Gender:  r.parent2Gender,
+		BirthDate:      birthDate,
+		IdentityFileID: r.identityFileID,
+		FeatureType:    r.featureType,
+		SourcePath:     r.sourcePath,
+		StorageRef:     r.storageRef,
+		ContentType:    contentType,
+		SizeBytes:      sizeBytes,
+	}, r.personID)
+}
+
+// identityChainRowParams builds syncIdentityChainQuery's per-row params. Empty string/zero fields
+// map to Cypher null (not the empty value) so an absent optional column stays absent in Neo4j too,
+// matching what the sql.Null* -> map[string]any conversion in identityRowParams already did.
+func identityChainRowParams(r IdentityChainParams, personID string) map[string]any {
+	var fiscalNumber, birthDate, contentType any
+	var sizeBytes any
+	if r.FiscalNumber != "" {
+		fiscalNumber = r.FiscalNumber
+	}
+	if r.BirthDate != "" {
+		birthDate = r.BirthDate
+	}
+	if r.ContentType != "" {
+		contentType = r.ContentType
+	}
+	if r.SizeBytes != 0 {
+		sizeBytes = r.SizeBytes
+	}
 	return map[string]any{
-		"personId":       r.personID,
-		"documentId":     r.documentID,
-		"documentNumber": r.documentNumber,
-		"documentType":   r.documentType,
+		"personId":       personID,
+		"documentId":     r.DocumentID,
+		"documentNumber": r.DocumentNumber,
+		"documentType":   r.DocumentType,
 		"fiscalNumber":   fiscalNumber,
-		"registerId":     r.registerID,
-		"registerNumber": r.registerNumber,
-		"name":           r.name,
-		"parent1Name":    r.parent1Name,
-		"parent1Gender":  r.parent1Gender,
-		"parent2Name":    r.parent2Name,
-		"parent2Gender":  r.parent2Gender,
+		"registerId":     r.RegisterID,
+		"registerNumber": r.RegisterNumber,
+		"name":           r.Name,
+		"parent1Name":    r.Parent1Name,
+		"parent1Gender":  r.Parent1Gender,
+		"parent2Name":    r.Parent2Name,
+		"parent2Gender":  r.Parent2Gender,
 		"birthDate":      birthDate,
-		"featureId":      KnownFeatureID(r.identityFileID),
-		"featureType":    r.featureType,
-		"sourcePath":     r.sourcePath,
-		"storageRef":     r.storageRef,
+		"featureId":      KnownFeatureID(r.IdentityFileID),
+		"featureType":    r.FeatureType,
+		"sourcePath":     r.SourcePath,
+		"storageRef":     r.StorageRef,
 		"contentType":    contentType,
 		"sizeBytes":      sizeBytes,
 	}
