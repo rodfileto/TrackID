@@ -144,6 +144,52 @@ func AddEvidence(ctx context.Context, sqlDB *sql.DB, store *storage.Client, case
 	}, nil
 }
 
+// ErrEvidenceHasTraces is returned by DeleteEvidence when the evidence file
+// already has traces marked on it -- deleting it would leave those traces,
+// and their biometricfeature/feature_embeddings, pointing at an image that
+// no longer exists. Delete the traces first.
+var ErrEvidenceHasTraces = errors.New("cases: evidence has traces marked on it; delete them first")
+
+// DeleteEvidence removes one evidence file (case_files row, category
+// "evidence") from a case. Object storage content is left in place -- like
+// AddEvidence's storage.Upload writes that a re-upload just overwrites the
+// same content-hashed key, nothing in this package deletes from storage.
+func DeleteEvidence(ctx context.Context, sqlDB *sql.DB, caseID string, evidenceFileID int64) error {
+	if sqlDB == nil {
+		return fmt.Errorf("cases: nil db")
+	}
+
+	q := db.New(sqlDB)
+
+	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	traceCount, err := q.CountCaseTracesByCaseFile(ctx, sql.NullInt64{Int64: evidenceFileID, Valid: true})
+	if err != nil {
+		return fmt.Errorf("cases: count traces for file %d: %w", evidenceFileID, err)
+	}
+	if traceCount > 0 {
+		return ErrEvidenceHasTraces
+	}
+
+	deleted, err := q.DeleteCaseFile(ctx, db.DeleteCaseFileParams{
+		ID:             evidenceFileID,
+		CriminalCaseID: caseRow.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("cases: delete case_files %d: %w", evidenceFileID, err)
+	}
+	if deleted == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // classifyContentType maps a detected content type to its media_type category
 // ("image" or "pdf"), rejecting anything else.
 func classifyContentType(contentType string) (string, bool) {

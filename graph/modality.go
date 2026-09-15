@@ -71,6 +71,45 @@ func FeatureTypeForTraceType(traceType string) (string, bool) {
 	}
 }
 
+// Codification types, per MODEL.md: the processing artifact a trace's
+// case_codifications row records.
+const (
+	// CodificationTypeFaceEmbedding is a face trace's embedding artifact.
+	CodificationTypeFaceEmbedding = "FACE_EMBEDDING"
+	// CodificationTypeMinutiae is a fingerprint lift's minutiae artifact.
+	CodificationTypeMinutiae = "MINUTIAE"
+)
+
+// CodificationTypeForTraceType maps a case_traces.trace_type to the
+// case_codifications.codification_type its processing artifact gets.
+func CodificationTypeForTraceType(traceType string) (string, bool) {
+	switch traceType {
+	case "FACE_RECORD":
+		return CodificationTypeFaceEmbedding, true
+	case "FINGERPRINT_LIFT":
+		return CodificationTypeMinutiae, true
+	default:
+		return "", false
+	}
+}
+
+// TraceTypeForCaseType maps a criminal_cases.case_type to the
+// case_traces.trace_type value a trace marked on evidence of that modality
+// gets: one face in an image for FACIAL, one fingerprint lift on a card for
+// FINGERPRINT. Both are just a bounding box on the evidence image -- how the
+// box is produced (drawn by hand, or -- FACIAL only -- auto-detected) doesn't
+// change the trace_type.
+func TraceTypeForCaseType(caseType string) (string, bool) {
+	switch caseType {
+	case "FACIAL":
+		return "FACE_RECORD", true
+	case "FINGERPRINT":
+		return "FINGERPRINT_LIFT", true
+	default:
+		return "", false
+	}
+}
+
 // CaseTypeForFeatureType maps a feature type to its criminal_cases.case_type
 // (the modality vocabulary used by the clusters table and graph.Modalities).
 func CaseTypeForFeatureType(featureType string) (string, bool) {
