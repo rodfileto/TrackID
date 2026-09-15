@@ -15,8 +15,10 @@ import Badge from "../components/ui/badge/Badge";
 import Button from "../components/ui/button/Button";
 import EvidenceDropzone from "../components/cases/EvidenceDropzone";
 import EvidencePreview from "../components/cases/EvidencePreview";
+import TraceMarkerModal from "../components/cases/TraceMarkerModal";
 import {
   addEvidence,
+  deleteEvidence,
   getCase,
   type CaseDetail,
   type Evidence,
@@ -54,6 +56,9 @@ export default function CaseDetailPage() {
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+
+  const [traceEvidence, setTraceEvidence] = useState<Evidence | null>(null);
+  const [excludingId, setExcludingId] = useState<number | null>(null);
 
   async function load() {
     if (!caseId) return;
@@ -115,6 +120,29 @@ export default function CaseDetailPage() {
     setSelectedFiles([]);
     setUploading(false);
     await load();
+  }
+
+  async function handleExcludeEvidence(evidence: Evidence) {
+    if (!caseId) return;
+    if (
+      !window.confirm(
+        `Exclude "${evidence.filename}" from this case? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setExcludingId(evidence.id);
+    try {
+      await deleteEvidence(caseId, evidence.id);
+      toast.success("Evidence excluded.");
+      await load();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not exclude evidence",
+      );
+    } finally {
+      setExcludingId(null);
+    }
   }
 
   const evidences: Evidence[] = detail?.evidences ?? [];
@@ -260,6 +288,12 @@ export default function CaseDetailPage() {
                       >
                         Uploaded
                       </TableCell>
+                      <TableCell
+                        isHeader
+                        className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                      >
+                        Actions
+                      </TableCell>
                     </TableRow>
                   </TableHeader>
 
@@ -272,6 +306,7 @@ export default function CaseDetailPage() {
                             evidenceId={evidence.id}
                             filename={evidence.filename}
                             mediaType={evidence.mediaType}
+                            contentType={evidence.contentType}
                           />
                         </TableCell>
                         <TableCell className="px-5 py-4 sm:px-6 text-start">
@@ -293,6 +328,29 @@ export default function CaseDetailPage() {
                         <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
                           {formatDate(evidence.createdAt)}
                         </TableCell>
+                        <TableCell className="px-4 py-3 text-start text-theme-sm">
+                          <div className="flex items-center gap-2">
+                            {evidence.contentType?.startsWith("image/") && (
+                              <button
+                                type="button"
+                                onClick={() => setTraceEvidence(evidence)}
+                                className="inline-flex h-8 items-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.03]"
+                              >
+                                Mark traces
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleExcludeEvidence(evidence)}
+                              disabled={excludingId === evidence.id}
+                              className="inline-flex h-8 items-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-error-500 shadow-theme-xs hover:bg-error-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-error-400 dark:hover:bg-white/[0.03]"
+                            >
+                              {excludingId === evidence.id
+                                ? "Excluding..."
+                                : "Exclude"}
+                            </button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     ))}
 
@@ -309,6 +367,17 @@ export default function CaseDetailPage() {
             </div>
           </ComponentCard>
         </div>
+      )}
+
+      {traceEvidence && (
+        <TraceMarkerModal
+          caseId={caseId ?? ""}
+          caseType={detail?.caseType ?? ""}
+          evidenceId={traceEvidence.id}
+          filename={traceEvidence.filename}
+          isOpen={!!traceEvidence}
+          onClose={() => setTraceEvidence(null)}
+        />
       )}
     </>
   );
