@@ -32,6 +32,7 @@ stop_process() {
 }
 
 stop_process "Vite frontend" "$RUN_DIR/frontend.pid"
+stop_process "Asynq worker" "$RUN_DIR/worker.pid"
 stop_process "Go API" "$RUN_DIR/backend.pid"
 
 if command -v docker >/dev/null 2>&1; then

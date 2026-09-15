@@ -119,6 +119,19 @@ else
 fi
 wait_for_url "Go API" "http://127.0.0.1:$PORT/health"
 
+if [[ ! -f "$RUN_DIR/worker.pid" ]] || ! kill -0 "$(cat "$RUN_DIR/worker.pid")" 2>/dev/null; then
+  echo "Starting Asynq worker..."
+  setsid bash -c "cd '$BACKEND_DIR' && exec env REDIS_URL='$REDIS_URL' go run ./cmd/worker" >"$RUN_DIR/worker.log" 2>&1 &
+  echo $! >"$RUN_DIR/worker.pid"
+  sleep 2
+  if ! kill -0 "$(cat "$RUN_DIR/worker.pid")" 2>/dev/null; then
+    echo "Asynq worker did not start; check $RUN_DIR/worker.log" >&2
+    exit 1
+  fi
+else
+  echo "Asynq worker is already running (PID $(cat "$RUN_DIR/worker.pid"))"
+fi
+
 if [[ ! -f "$RUN_DIR/frontend.pid" ]] || ! kill -0 "$(cat "$RUN_DIR/frontend.pid")" 2>/dev/null; then
   echo "Starting Vite frontend..."
   setsid bash -c "cd '$FRONTEND_DIR' && exec npm run dev -- --host 127.0.0.1" >"$RUN_DIR/frontend.log" 2>&1 &
@@ -131,9 +144,10 @@ wait_for_url "Vite frontend" "http://127.0.0.1:5173/"
 echo "TrackID development stack is running."
 echo "Frontend: http://127.0.0.1:5173"
 echo "API:      http://127.0.0.1:$PORT"
+echo "Worker:   Asynq processing jobs from $REDIS_URL"
 if [[ "$START_NEO4J" == "true" ]]; then
   echo "Neo4j:    $NEO4J_URL (browser: http://127.0.0.1:57474)"
 else
   echo "Neo4j:    disabled (set START_NEO4J=true to enable)"
 fi
-echo "Logs:     $RUN_DIR/backend.log and $RUN_DIR/frontend.log"
+echo "Logs:     $RUN_DIR/backend.log, $RUN_DIR/worker.log, and $RUN_DIR/frontend.log"

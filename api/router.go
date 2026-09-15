@@ -4,6 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 
 	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/storage"
@@ -18,6 +19,10 @@ type Dependencies struct {
 	JWTSecret   string
 	EmailDomain string
 	Storage     *storage.Client
+	// Queue enqueues background jobs (see the embedding package). A nil Queue
+	// means the request path that would enqueue one just logs and moves on --
+	// see cases.SaveCodificationImage.
+	Queue *asynq.Client
 	// Register is an optional hook called after the core routes are registered.
 	// It receives the engine and the authenticated route group (mounted under
 	// /api) so integrations can attach their own routes. May be nil.
@@ -51,7 +56,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.POST("cases/:caseId/evidences/:evidenceId/traces/:traceId/points", AddPointsHandler(deps.DB))
 	protected.PUT("cases/:caseId/evidences/:evidenceId/traces/:traceId/points/:pointId", UpdatePointHandler(deps.DB))
 	protected.DELETE("cases/:caseId/evidences/:evidenceId/traces/:traceId/points/:pointId", DeletePointHandler(deps.DB))
-	protected.POST("cases/:caseId/evidences/:evidenceId/traces/:traceId/codification-image", SaveCodificationImageHandler(deps.DB, deps.Storage))
+	protected.POST("cases/:caseId/evidences/:evidenceId/traces/:traceId/codification-image", SaveCodificationImageHandler(deps.DB, deps.Storage, deps.Queue))
 
 	if deps.Register != nil {
 		deps.Register(router, protected)
