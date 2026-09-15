@@ -8,16 +8,20 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 
 	"github.com/rodfileto/trackid/cases"
+	"github.com/rodfileto/trackid/embedding"
 	"github.com/rodfileto/trackid/storage"
 )
 
 // SaveCodificationImageHandler stores the rendered result of manually
 // adjusting a trace's codification image (crop + brightness/contrast/
 // saturation/interpolation -- see CodificationEditorModal) as a case_files
-// row linked to the codification.
-func SaveCodificationImageHandler(db *sql.DB, store *storage.Client) gin.HandlerFunc {
+// row linked to the codification. When queue is non-nil, saving also
+// enqueues the codification's embedding computation (see
+// cases.SaveCodificationImage).
+func SaveCodificationImageHandler(db *sql.DB, store *storage.Client, queue *asynq.Client) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		if db == nil {
 			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
@@ -57,7 +61,16 @@ func SaveCodificationImageHandler(db *sql.DB, store *storage.Client) gin.Handler
 			return
 		}
 
-		saved, err := cases.SaveCodificationImage(context.Request.Context(), db, store, caseID, evidenceID, traceID, data)
+		// A nil *asynq.Client boxed into the embedding.Enqueuer interface would
+		// be a non-nil interface wrapping a nil pointer, so this explicit check
+		// is what actually gives cases.SaveCodificationImage a nil Enqueuer when
+		// queueing isn't configured.
+		var enqueuer embedding.Enqueuer
+		if queue != nil {
+			enqueuer = queue
+		}
+
+		saved, err := cases.SaveCodificationImage(context.Request.Context(), db, store, enqueuer, caseID, evidenceID, traceID, data)
 		if err != nil {
 			if errors.Is(err, cases.ErrNotFound) {
 				context.JSON(http.StatusNotFound, gin.H{"error": "trace not found"})

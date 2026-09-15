@@ -443,6 +443,49 @@ func (q *Queries) GetCaseTraceForFile(ctx context.Context, arg GetCaseTraceForFi
 	return i, err
 }
 
+const getCodificationSource = `-- name: GetCodificationSource :one
+SELECT
+    cod.id AS codification_id,
+    cod.codification_type,
+    bf.id AS biometricfeature_id,
+    COALESCE(cod.case_file_id, tr.case_file_id) AS source_file_id,
+    cf.storage_ref,
+    cf.content_type
+FROM case_codifications cod
+JOIN case_traces tr ON tr.id = cod.trace_id
+JOIN biometricfeature bf ON bf.case_trace_id = tr.id
+LEFT JOIN case_files cf ON cf.id = COALESCE(cod.case_file_id, tr.case_file_id)
+WHERE cod.id = $1
+`
+
+type GetCodificationSourceRow struct {
+	CodificationID     int64          `db:"codification_id" json:"codification_id"`
+	CodificationType   string         `db:"codification_type" json:"codification_type"`
+	BiometricfeatureID int64          `db:"biometricfeature_id" json:"biometricfeature_id"`
+	SourceFileID       sql.NullInt64  `db:"source_file_id" json:"source_file_id"`
+	StorageRef         sql.NullString `db:"storage_ref" json:"storage_ref"`
+	ContentType        sql.NullString `db:"content_type" json:"content_type"`
+}
+
+// Resolves the image to embed for a codification: prefers the manually adjusted
+// codification_image (case_codifications.case_file_id) when set, falling back to the
+// trace's auto-detected face_crop (case_traces.case_file_id). Also returns the
+// biometricfeature this codification's trace already has (created at trace-marking
+// time by UpsertBiometricFeatureFromCaseTrace) -- feature_embeddings hangs off it.
+func (q *Queries) GetCodificationSource(ctx context.Context, id int64) (GetCodificationSourceRow, error) {
+	row := q.db.QueryRowContext(ctx, getCodificationSource, id)
+	var i GetCodificationSourceRow
+	err := row.Scan(
+		&i.CodificationID,
+		&i.CodificationType,
+		&i.BiometricfeatureID,
+		&i.SourceFileID,
+		&i.StorageRef,
+		&i.ContentType,
+	)
+	return i, err
+}
+
 const getCriminalCaseByCaseID = `-- name: GetCriminalCaseByCaseID :one
 SELECT id, case_id, case_type, description
 FROM criminal_cases

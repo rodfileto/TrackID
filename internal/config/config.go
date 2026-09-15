@@ -15,6 +15,14 @@ type Config struct {
 	S3AccessKey string
 	S3SecretKey string
 	S3Bucket    string
+
+	// Vision (cmd/worker only -- see embedding.ComputeForCodification). Left
+	// empty, the worker logs a warning and skips registering the embedding
+	// task handler rather than failing to start.
+	VisionDetectorPath      string
+	VisionRecognizerPath    string
+	VisionSharedLibraryPath string
+	VisionUseGPU            bool
 }
 
 func Load() Config {
@@ -34,5 +42,10 @@ func Load() Config {
 		S3AccessKey: os.Getenv("S3_ACCESS_KEY"),
 		S3SecretKey: os.Getenv("S3_SECRET_KEY"),
 		S3Bucket:    os.Getenv("S3_BUCKET"),
+
+		VisionDetectorPath:      os.Getenv("VISION_DETECTOR_PATH"),
+		VisionRecognizerPath:    os.Getenv("VISION_RECOGNIZER_PATH"),
+		VisionSharedLibraryPath: os.Getenv("VISION_SHARED_LIBRARY_PATH"),
+		VisionUseGPU:            os.Getenv("VISION_USE_GPU") == "true",
 	}
 }
