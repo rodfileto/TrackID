@@ -3,6 +3,8 @@ package cluster
 import (
 	"context"
 	"database/sql"
+
+	"github.com/rodfileto/trackid/db"
 )
 
 // Role identifies who — or what — recorded one biometric_decisions row.
@@ -109,18 +111,6 @@ func caseTypeForModality(modality string) string {
 	return "FINGERPRINT"
 }
 
-// decisionRow is one biometric_decisions row.
-type decisionRow struct {
-	featureA     string
-	featureB     string
-	modality     string
-	role         string
-	decision     string
-	systemSource sql.NullString
-	username     sql.NullString
-	confidence   sql.NullFloat64
-}
-
 // confirmedPair is a pair of features whose decision chain has settled to
 // CONFIRMED. confidence/identifiedBy describe who/what settled it, for the
 // IDENTIFIED_AS edge Identify writes.
@@ -132,37 +122,23 @@ type confirmedPair struct {
 	identifiedBy string
 }
 
-const decisionsQuery = `
-SELECT feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence
-FROM biometric_decisions
-ORDER BY feature_a_id, feature_b_id, decided_at
-`
-
 // loadConfirmedPairs reads every biometric_decisions row, groups them into
 // per-pair chains, and returns the pairs whose derived status is CONFIRMED.
-func loadConfirmedPairs(ctx context.Context, db *sql.DB) ([]confirmedPair, error) {
-	rows, err := db.QueryContext(ctx, decisionsQuery)
+func loadConfirmedPairs(ctx context.Context, sqlDB *sql.DB) ([]confirmedPair, error) {
+	rows, err := db.New(sqlDB).ListBiometricDecisions(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	type key struct{ a, b string }
-	chains := map[key][]decisionRow{}
+	chains := map[key][]db.ListBiometricDecisionsRow{}
 	var order []key
-	for rows.Next() {
-		var r decisionRow
-		if err := rows.Scan(&r.featureA, &r.featureB, &r.modality, &r.role, &r.decision, &r.systemSource, &r.username, &r.confidence); err != nil {
-			return nil, err
-		}
-		k := key{r.featureA, r.featureB}
+	for _, r := range rows {
+		k := key{r.FeatureAID, r.FeatureBID}
 		if _, ok := chains[k]; !ok {
 			order = append(order, k)
 		}
 		chains[k] = append(chains[k], r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
 	}
 
 	var pairs []confirmedPair
@@ -170,7 +146,7 @@ func loadConfirmedPairs(ctx context.Context, db *sql.DB) ([]confirmedPair, error
 		rowsForPair := chains[k]
 		chain := make([]ChainEntry, len(rowsForPair))
 		for i, r := range rowsForPair {
-			chain[i] = ChainEntry{Role: Role(r.role), Decision: Decision(r.decision)}
+			chain[i] = ChainEntry{Role: Role(r.Role), Decision: Decision(r.Decision)}
 		}
 		status, ok := DeriveEdgeStatus(chain)
 		if !ok || status != EdgeStatusConfirmed {
@@ -179,7 +155,7 @@ func loadConfirmedPairs(ctx context.Context, db *sql.DB) ([]confirmedPair, error
 		pairs = append(pairs, confirmedPair{
 			featureA:     k.a,
 			featureB:     k.b,
-			modality:     rowsForPair[0].modality,
+			modality:     rowsForPair[0].Modality,
 			confidence:   chainConfidence(rowsForPair),
 			identifiedBy: chainIdentifiedBy(rowsForPair),
 		})
@@ -187,35 +163,35 @@ func loadConfirmedPairs(ctx context.Context, db *sql.DB) ([]confirmedPair, error
 	return pairs, nil
 }
 
-func chainConfidence(rows []decisionRow) *float64 {
+func chainConfidence(rows []db.ListBiometricDecisionsRow) *float64 {
 	for _, r := range rows {
-		if r.confidence.Valid {
-			v := r.confidence.Float64
+		if r.Confidence.Valid {
+			v := r.Confidence.Float64
 			return &v
 		}
 	}
 	return nil
 }
 
-func chainIdentifiedBy(rows []decisionRow) string {
+func chainIdentifiedBy(rows []db.ListBiometricDecisionsRow) string {
 	var inconsistence, reviewer, verificator, systemSource string
 	for _, r := range rows {
-		switch r.role {
+		switch r.Role {
 		case "SYSTEM":
-			if r.systemSource.Valid {
-				systemSource = r.systemSource.String
+			if r.SystemSource.Valid {
+				systemSource = r.SystemSource.String
 			}
 		case "VERIFICATOR":
-			if r.username.Valid {
-				verificator = r.username.String
+			if r.Username.Valid {
+				verificator = r.Username.String
 			}
 		case "REVIEWER":
-			if r.username.Valid {
-				reviewer = r.username.String
+			if r.Username.Valid {
+				reviewer = r.Username.String
 			}
 		case "INCONSISTENCE":
-			if r.username.Valid {
-				inconsistence = r.username.String
+			if r.Username.Valid {
+				inconsistence = r.Username.String
 			}
 		}
 	}

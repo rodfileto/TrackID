@@ -132,12 +132,14 @@ type ClusterMerge struct {
 }
 
 type CriminalCase struct {
-	ID          int64     `db:"id" json:"id"`
-	CaseID      string    `db:"case_id" json:"case_id"`
-	CaseType    string    `db:"case_type" json:"case_type"`
-	Description string    `db:"description" json:"description"`
-	CreatedAt   time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt   time.Time `db:"updated_at" json:"updated_at"`
+	ID          int64         `db:"id" json:"id"`
+	CaseID      string        `db:"case_id" json:"case_id"`
+	CaseType    string        `db:"case_type" json:"case_type"`
+	Description string        `db:"description" json:"description"`
+	CreatedAt   time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt   time.Time     `db:"updated_at" json:"updated_at"`
+	CaseYear    sql.NullInt32 `db:"case_year" json:"case_year"`
+	CaseNumber  sql.NullInt32 `db:"case_number" json:"case_number"`
 }
 
 type FeatureEmbedding struct {

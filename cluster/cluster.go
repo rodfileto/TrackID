@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/graph"
 )
 
@@ -27,20 +28,20 @@ type Stats struct {
 
 // Run reconciles the confirmed decisions against the persisted clusters and
 // materializes the result to Neo4j. It reads only from Postgres.
-func Run(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext) (Stats, error) {
-	if db == nil {
+func Run(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) (Stats, error) {
+	if sqlDB == nil {
 		return Stats{}, fmt.Errorf("database is not configured")
 	}
 
-	featureInfos, err := loadFeatures(ctx, db)
+	featureInfos, err := loadFeatures(ctx, sqlDB)
 	if err != nil {
 		return Stats{}, err
 	}
-	edges, err := loadConfirmedEdges(ctx, db)
+	edges, err := loadConfirmedEdges(ctx, sqlDB)
 	if err != nil {
 		return Stats{}, err
 	}
-	existing, memberCluster, err := loadClusters(ctx, db)
+	existing, memberCluster, err := loadClusters(ctx, sqlDB)
 	if err != nil {
 		return Stats{}, err
 	}
@@ -54,30 +55,30 @@ func Run(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext) (Stats
 
 	p := reconcile(caseTypes, edges, existing)
 
-	if err := apply(ctx, db, p, memberCluster, existing); err != nil {
+	if err := apply(ctx, sqlDB, p, memberCluster, existing); err != nil {
 		return Stats{}, err
 	}
-	if err := materialize(ctx, db, driver, featureTypes); err != nil {
+	if err := materialize(ctx, sqlDB, driver, featureTypes); err != nil {
 		return Stats{}, err
 	}
 	return stats(p), nil
 }
 
 // Plan returns the counts a Run would produce, without writing anything.
-func Plan(ctx context.Context, db *sql.DB) (Stats, error) {
-	if db == nil {
+func Plan(ctx context.Context, sqlDB *sql.DB) (Stats, error) {
+	if sqlDB == nil {
 		return Stats{}, fmt.Errorf("database is not configured")
 	}
 
-	featureInfos, err := loadFeatures(ctx, db)
+	featureInfos, err := loadFeatures(ctx, sqlDB)
 	if err != nil {
 		return Stats{}, err
 	}
-	edges, err := loadConfirmedEdges(ctx, db)
+	edges, err := loadConfirmedEdges(ctx, sqlDB)
 	if err != nil {
 		return Stats{}, err
 	}
-	existing, _, err := loadClusters(ctx, db)
+	existing, _, err := loadClusters(ctx, sqlDB)
 	if err != nil {
 		return Stats{}, err
 	}
@@ -111,49 +112,37 @@ type featureInfo struct {
 	featureType string
 }
 
-const featuresQuery = `
-SELECT identity_file_id, case_trace_id, feature_type
-FROM biometricfeature
-ORDER BY id
-`
-
 // loadFeatures reads every biometricfeature and maps its graph feature id to its
 // case type and feature type. Feature ids follow graph.KnownFeatureID /
 // graph.QuestionedFeatureID, the single source of truth for those conventions.
-func loadFeatures(ctx context.Context, db *sql.DB) (map[string]featureInfo, error) {
-	rows, err := db.QueryContext(ctx, featuresQuery)
+func loadFeatures(ctx context.Context, sqlDB *sql.DB) (map[string]featureInfo, error) {
+	rows, err := db.New(sqlDB).ListBiometricFeatures(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	out := map[string]featureInfo{}
-	for rows.Next() {
-		var fileID, traceID sql.NullInt64
-		var featureType string
-		if err := rows.Scan(&fileID, &traceID, &featureType); err != nil {
-			return nil, err
-		}
-		caseType, ok := graph.CaseTypeForFeatureType(featureType)
+	for _, r := range rows {
+		caseType, ok := graph.CaseTypeForFeatureType(r.FeatureType)
 		if !ok {
 			continue
 		}
 		var featureID string
-		if fileID.Valid {
-			featureID = graph.KnownFeatureID(fileID.Int64)
+		if r.IdentityFileID.Valid {
+			featureID = graph.KnownFeatureID(r.IdentityFileID.Int64)
 		} else {
-			featureID = graph.QuestionedFeatureID(traceID.Int64)
+			featureID = graph.QuestionedFeatureID(r.CaseTraceID.Int64)
 		}
-		out[featureID] = featureInfo{caseType: caseType, featureType: featureType}
+		out[featureID] = featureInfo{caseType: caseType, featureType: r.FeatureType}
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // loadConfirmedEdges reads biometric_decisions and returns the edges whose
 // derived status is CONFIRMED. The decision modality (FACE/FINGERPRINT) is
 // mapped onto the clusters table's case_type vocabulary (FACIAL/FINGERPRINT).
-func loadConfirmedEdges(ctx context.Context, db *sql.DB) ([]edge, error) {
-	pairs, err := loadConfirmedPairs(ctx, db)
+func loadConfirmedEdges(ctx context.Context, sqlDB *sql.DB) ([]edge, error) {
+	pairs, err := loadConfirmedPairs(ctx, sqlDB)
 	if err != nil {
 		return nil, err
 	}
@@ -168,72 +157,48 @@ func loadConfirmedEdges(ctx context.Context, db *sql.DB) ([]edge, error) {
 	return edges, nil
 }
 
-const clustersQuery = `
-SELECT id, case_type
-FROM clusters
-ORDER BY id
-`
+func loadClusters(ctx context.Context, sqlDB *sql.DB) (map[int64]clusterState, map[string]int64, error) {
+	q := db.New(sqlDB)
 
-const membersQuery = `
-SELECT cluster_id, feature_id
-FROM cluster_members
-`
-
-func loadClusters(ctx context.Context, db *sql.DB) (map[int64]clusterState, map[string]int64, error) {
+	clusters, err := q.ListClusters(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	existing := map[int64]clusterState{}
-	rows, err := db.QueryContext(ctx, clustersQuery)
-	if err != nil {
-		return nil, nil, err
-	}
-	for rows.Next() {
-		var id int64
-		var caseType string
-		if err := rows.Scan(&id, &caseType); err != nil {
-			rows.Close()
-			return nil, nil, err
-		}
-		existing[id] = clusterState{caseType: caseType}
-	}
-	if err := rows.Close(); err != nil {
-		return nil, nil, err
+	for _, c := range clusters {
+		existing[c.ID] = clusterState{caseType: c.CaseType}
 	}
 
-	memberCluster := map[string]int64{}
-	rows, err = db.QueryContext(ctx, membersQuery)
+	members, err := q.ListClusterMembers(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var clusterID int64
-		var featureID string
-		if err := rows.Scan(&clusterID, &featureID); err != nil {
-			return nil, nil, err
-		}
-		cs := existing[clusterID]
-		cs.members = append(cs.members, featureID)
-		existing[clusterID] = cs
-		memberCluster[featureID] = clusterID
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, err
+	memberCluster := map[string]int64{}
+	for _, m := range members {
+		cs := existing[m.ClusterID]
+		cs.members = append(cs.members, m.FeatureID)
+		existing[m.ClusterID] = cs
+		memberCluster[m.FeatureID] = m.ClusterID
 	}
 	return existing, memberCluster, nil
 }
 
 // apply writes the plan to Postgres in one transaction.
-func apply(ctx context.Context, db *sql.DB, p plan, memberCluster map[string]int64, existing map[int64]clusterState) error {
-	tx, err := db.BeginTx(ctx, nil)
+func apply(ctx context.Context, sqlDB *sql.DB, p plan, memberCluster map[string]int64, existing map[int64]clusterState) error {
+	tx, err := sqlDB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	q := db.New(tx)
 
 	newIDs := make([]int64, len(p.newClusters))
 	for i, nc := range p.newClusters {
-		if err := tx.QueryRowContext(ctx, `INSERT INTO clusters (case_type) VALUES ($1) RETURNING id`, nc.modality).Scan(&newIDs[i]); err != nil {
+		id, err := q.CreateCluster(ctx, nc.modality)
+		if err != nil {
 			return err
 		}
+		newIDs[i] = id
 	}
 
 	final := map[string]int64{}
@@ -254,11 +219,11 @@ func apply(ctx context.Context, db *sql.DB, p plan, memberCluster map[string]int
 			continue
 		}
 		if ok {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM cluster_members WHERE feature_id = $1`, featureID); err != nil {
+			if err := q.DeleteClusterMember(ctx, featureID); err != nil {
 				return err
 			}
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO cluster_members (cluster_id, feature_id) VALUES ($1, $2)`, finalID, featureID); err != nil {
+		if err := q.InsertClusterMember(ctx, db.InsertClusterMemberParams{ClusterID: finalID, FeatureID: featureID}); err != nil {
 			return err
 		}
 	}
@@ -267,13 +232,17 @@ func apply(ctx context.Context, db *sql.DB, p plan, memberCluster map[string]int
 		if _, ok := p.kept[id]; ok {
 			continue
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM clusters WHERE id = $1`, id); err != nil {
+		if err := q.DeleteCluster(ctx, id); err != nil {
 			return err
 		}
 	}
 
 	for _, m := range p.merges {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO cluster_merges (from_cluster_id, to_cluster_id, reason) VALUES ($1, $2, $3)`, m.from, m.to, "decision_merge"); err != nil {
+		if err := q.InsertClusterMerge(ctx, db.InsertClusterMergeParams{
+			FromClusterID: m.from,
+			ToClusterID:   m.to,
+			Reason:        sql.NullString{String: "decision_merge", Valid: true},
+		}); err != nil {
 			return err
 		}
 	}
@@ -285,16 +254,11 @@ func apply(ctx context.Context, db *sql.DB, p plan, memberCluster map[string]int
 // BiometricCluster nodes and IN_CLUSTER edges to Neo4j. It rebuilds IN_CLUSTER
 // edges from the DB each run but never touches IDENTIFIED_AS. Evidence and
 // feature nodes are created by Sync/SyncIdentity, not here.
-func materialize(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext, featureTypes map[string]string) error {
-	rows, err := db.QueryContext(ctx, `
-SELECT c.id, c.case_type, m.feature_id
-FROM clusters c
-JOIN cluster_members m ON m.cluster_id = c.id
-ORDER BY c.id, m.feature_id`)
+func materialize(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext, featureTypes map[string]string) error {
+	rows, err := db.New(sqlDB).ListClusterMembersJoined(ctx)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
 	type clusterData struct {
 		caseType string
@@ -302,22 +266,14 @@ ORDER BY c.id, m.feature_id`)
 	}
 	var order []int64
 	byID := map[int64]*clusterData{}
-	for rows.Next() {
-		var id int64
-		var caseType, featureID string
-		if err := rows.Scan(&id, &caseType, &featureID); err != nil {
-			return err
-		}
-		c, ok := byID[id]
+	for _, r := range rows {
+		c, ok := byID[r.ClusterID]
 		if !ok {
-			c = &clusterData{caseType: caseType}
-			byID[id] = c
-			order = append(order, id)
+			c = &clusterData{caseType: r.CaseType}
+			byID[r.ClusterID] = c
+			order = append(order, r.ClusterID)
 		}
-		c.members = append(c.members, featureID)
-	}
-	if err := rows.Err(); err != nil {
-		return err
+		c.members = append(c.members, r.FeatureID)
 	}
 
 	params := make([]map[string]any, 0, len(order))

@@ -1,4 +1,4 @@
-package auth
+package api
 
 import (
 	"database/sql"
@@ -10,18 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/db"
 )
-
-type UserProfile struct {
-	ID         int64  `json:"id"`
-	Nome       string `json:"nome"`
-	UltimoNome string `json:"ultimo_nome"`
-	Matricula  string `json:"matricula"`
-	Cargo      string `json:"cargo"`
-	Username   string `json:"username"`
-	Email      string `json:"email"`
-}
 
 type registerRequest struct {
 	Nome       string `json:"nome" binding:"required"`
@@ -38,11 +29,11 @@ type loginRequest struct {
 }
 
 type loginResponse struct {
-	Token string      `json:"token"`
-	User  UserProfile `json:"user"`
+	Token string           `json:"token"`
+	User  auth.UserProfile `json:"user"`
 }
 
-func RegisterHandler(repo *Repository, emailDomain string) gin.HandlerFunc {
+func RegisterHandler(repo *auth.Repository, emailDomain string) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		if repo == nil {
 			context.Status(http.StatusServiceUnavailable)
@@ -88,7 +79,7 @@ func RegisterHandler(repo *Repository, emailDomain string) gin.HandlerFunc {
 	}
 }
 
-func LoginHandler(repo *Repository, jwtSecret string) gin.HandlerFunc {
+func LoginHandler(repo *auth.Repository, jwtSecret string) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		if repo == nil {
 			context.Status(http.StatusServiceUnavailable)
@@ -112,7 +103,7 @@ func LoginHandler(repo *Repository, jwtSecret string) gin.HandlerFunc {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not authenticate user"})
 			return
 		}
-		token, err := issueToken(authenticated.Profile, jwtSecret)
+		token, err := auth.IssueToken(authenticated.Profile, jwtSecret)
 		if err != nil {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not create token"})
 			return
@@ -121,7 +112,7 @@ func LoginHandler(repo *Repository, jwtSecret string) gin.HandlerFunc {
 	}
 }
 
-func MeHandler(repo *Repository) gin.HandlerFunc {
+func MeHandler(repo *auth.Repository) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		if repo == nil {
 			context.Status(http.StatusServiceUnavailable)

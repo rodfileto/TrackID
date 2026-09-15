@@ -24,6 +24,90 @@ func (q *Queries) CountCriminalCases(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const createCaseFile = `-- name: CreateCaseFile :one
+INSERT INTO case_files (criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, created_at
+`
+
+type CreateCaseFileParams struct {
+	CriminalCaseID int64          `db:"criminal_case_id" json:"criminal_case_id"`
+	Category       string         `db:"category" json:"category"`
+	MediaType      sql.NullString `db:"media_type" json:"media_type"`
+	HashID         sql.NullString `db:"hash_id" json:"hash_id"`
+	Filename       sql.NullString `db:"filename" json:"filename"`
+	SourcePath     sql.NullString `db:"source_path" json:"source_path"`
+	StorageRef     sql.NullString `db:"storage_ref" json:"storage_ref"`
+	ContentType    sql.NullString `db:"content_type" json:"content_type"`
+	SizeBytes      sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
+}
+
+type CreateCaseFileRow struct {
+	ID        int64     `db:"id" json:"id"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
+
+func (q *Queries) CreateCaseFile(ctx context.Context, arg CreateCaseFileParams) (CreateCaseFileRow, error) {
+	row := q.db.QueryRowContext(ctx, createCaseFile,
+		arg.CriminalCaseID,
+		arg.Category,
+		arg.MediaType,
+		arg.HashID,
+		arg.Filename,
+		arg.SourcePath,
+		arg.StorageRef,
+		arg.ContentType,
+		arg.SizeBytes,
+	)
+	var i CreateCaseFileRow
+	err := row.Scan(&i.ID, &i.CreatedAt)
+	return i, err
+}
+
+const createCluster = `-- name: CreateCluster :one
+INSERT INTO clusters (case_type) VALUES ($1) RETURNING id
+`
+
+func (q *Queries) CreateCluster(ctx context.Context, caseType string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, createCluster, caseType)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createCriminalCase = `-- name: CreateCriminalCase :one
+INSERT INTO criminal_cases (case_id, case_type, description, case_year, case_number)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING case_id, case_type, description
+`
+
+type CreateCriminalCaseParams struct {
+	CaseID      string        `db:"case_id" json:"case_id"`
+	CaseType    string        `db:"case_type" json:"case_type"`
+	Description string        `db:"description" json:"description"`
+	CaseYear    sql.NullInt32 `db:"case_year" json:"case_year"`
+	CaseNumber  sql.NullInt32 `db:"case_number" json:"case_number"`
+}
+
+type CreateCriminalCaseRow struct {
+	CaseID      string `db:"case_id" json:"case_id"`
+	CaseType    string `db:"case_type" json:"case_type"`
+	Description string `db:"description" json:"description"`
+}
+
+func (q *Queries) CreateCriminalCase(ctx context.Context, arg CreateCriminalCaseParams) (CreateCriminalCaseRow, error) {
+	row := q.db.QueryRowContext(ctx, createCriminalCase,
+		arg.CaseID,
+		arg.CaseType,
+		arg.Description,
+		arg.CaseYear,
+		arg.CaseNumber,
+	)
+	var i CreateCriminalCaseRow
+	err := row.Scan(&i.CaseID, &i.CaseType, &i.Description)
+	return i, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (nome, ultimo_nome, matricula, cargo, username, email, password_hash)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -73,6 +157,24 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
+const deleteCluster = `-- name: DeleteCluster :exec
+DELETE FROM clusters WHERE id = $1
+`
+
+func (q *Queries) DeleteCluster(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteCluster, id)
+	return err
+}
+
+const deleteClusterMember = `-- name: DeleteClusterMember :exec
+DELETE FROM cluster_members WHERE feature_id = $1
+`
+
+func (q *Queries) DeleteClusterMember(ctx context.Context, featureID string) error {
+	_, err := q.db.ExecContext(ctx, deleteClusterMember, featureID)
+	return err
+}
+
 const findNearestFeatureEmbeddings = `-- name: FindNearestFeatureEmbeddings :many
 SELECT fe.id, fe.biometricfeature_id, fe.embedding <=> $1::vector AS distance
 FROM feature_embeddings fe
@@ -120,6 +222,38 @@ func (q *Queries) FindNearestFeatureEmbeddings(ctx context.Context, arg FindNear
 		return nil, err
 	}
 	return items, nil
+}
+
+const getCaseFile = `-- name: GetCaseFile :one
+SELECT id, category, filename, storage_ref, content_type
+FROM case_files
+WHERE id = $1 AND criminal_case_id = $2
+`
+
+type GetCaseFileParams struct {
+	ID             int64 `db:"id" json:"id"`
+	CriminalCaseID int64 `db:"criminal_case_id" json:"criminal_case_id"`
+}
+
+type GetCaseFileRow struct {
+	ID          int64          `db:"id" json:"id"`
+	Category    string         `db:"category" json:"category"`
+	Filename    sql.NullString `db:"filename" json:"filename"`
+	StorageRef  sql.NullString `db:"storage_ref" json:"storage_ref"`
+	ContentType sql.NullString `db:"content_type" json:"content_type"`
+}
+
+func (q *Queries) GetCaseFile(ctx context.Context, arg GetCaseFileParams) (GetCaseFileRow, error) {
+	row := q.db.QueryRowContext(ctx, getCaseFile, arg.ID, arg.CriminalCaseID)
+	var i GetCaseFileRow
+	err := row.Scan(
+		&i.ID,
+		&i.Category,
+		&i.Filename,
+		&i.StorageRef,
+		&i.ContentType,
+	)
+	return i, err
 }
 
 const getCriminalCaseByCaseID = `-- name: GetCriminalCaseByCaseID :one
@@ -333,6 +467,70 @@ func (q *Queries) InsertCaseDecision(ctx context.Context, arg InsertCaseDecision
 	return i, err
 }
 
+const insertClusterMember = `-- name: InsertClusterMember :exec
+INSERT INTO cluster_members (cluster_id, feature_id) VALUES ($1, $2)
+`
+
+type InsertClusterMemberParams struct {
+	ClusterID int64  `db:"cluster_id" json:"cluster_id"`
+	FeatureID string `db:"feature_id" json:"feature_id"`
+}
+
+func (q *Queries) InsertClusterMember(ctx context.Context, arg InsertClusterMemberParams) error {
+	_, err := q.db.ExecContext(ctx, insertClusterMember, arg.ClusterID, arg.FeatureID)
+	return err
+}
+
+const insertClusterMerge = `-- name: InsertClusterMerge :exec
+INSERT INTO cluster_merges (from_cluster_id, to_cluster_id, reason) VALUES ($1, $2, $3)
+`
+
+type InsertClusterMergeParams struct {
+	FromClusterID int64          `db:"from_cluster_id" json:"from_cluster_id"`
+	ToClusterID   int64          `db:"to_cluster_id" json:"to_cluster_id"`
+	Reason        sql.NullString `db:"reason" json:"reason"`
+}
+
+func (q *Queries) InsertClusterMerge(ctx context.Context, arg InsertClusterMergeParams) error {
+	_, err := q.db.ExecContext(ctx, insertClusterMerge, arg.FromClusterID, arg.ToClusterID, arg.Reason)
+	return err
+}
+
+const listAllCriminalCases = `-- name: ListAllCriminalCases :many
+SELECT case_id, case_type, description
+FROM criminal_cases
+ORDER BY case_id
+`
+
+type ListAllCriminalCasesRow struct {
+	CaseID      string `db:"case_id" json:"case_id"`
+	CaseType    string `db:"case_type" json:"case_type"`
+	Description string `db:"description" json:"description"`
+}
+
+func (q *Queries) ListAllCriminalCases(ctx context.Context) ([]ListAllCriminalCasesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAllCriminalCases)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllCriminalCasesRow
+	for rows.Next() {
+		var i ListAllCriminalCasesRow
+		if err := rows.Scan(&i.CaseID, &i.CaseType, &i.Description); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBiometricDecisions = `-- name: ListBiometricDecisions :many
 SELECT feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence
 FROM biometric_decisions
@@ -465,7 +663,7 @@ func (q *Queries) ListCaseDecisionsByCriminalCase(ctx context.Context, criminalC
 }
 
 const listCaseFilesByCriminalCase = `-- name: ListCaseFilesByCriminalCase :many
-SELECT id, criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes
+SELECT id, criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes, created_at
 FROM case_files
 WHERE criminal_case_id = $1
 ORDER BY id
@@ -482,6 +680,7 @@ type ListCaseFilesByCriminalCaseRow struct {
 	StorageRef     sql.NullString `db:"storage_ref" json:"storage_ref"`
 	ContentType    sql.NullString `db:"content_type" json:"content_type"`
 	SizeBytes      sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
+	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
 }
 
 func (q *Queries) ListCaseFilesByCriminalCase(ctx context.Context, criminalCaseID int64) ([]ListCaseFilesByCriminalCaseRow, error) {
@@ -504,7 +703,111 @@ func (q *Queries) ListCaseFilesByCriminalCase(ctx context.Context, criminalCaseI
 			&i.StorageRef,
 			&i.ContentType,
 			&i.SizeBytes,
+			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClusterMembers = `-- name: ListClusterMembers :many
+SELECT cluster_id, feature_id
+FROM cluster_members
+`
+
+type ListClusterMembersRow struct {
+	ClusterID int64  `db:"cluster_id" json:"cluster_id"`
+	FeatureID string `db:"feature_id" json:"feature_id"`
+}
+
+func (q *Queries) ListClusterMembers(ctx context.Context) ([]ListClusterMembersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listClusterMembers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClusterMembersRow
+	for rows.Next() {
+		var i ListClusterMembersRow
+		if err := rows.Scan(&i.ClusterID, &i.FeatureID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClusterMembersJoined = `-- name: ListClusterMembersJoined :many
+SELECT c.id AS cluster_id, c.case_type, m.feature_id
+FROM clusters c
+JOIN cluster_members m ON m.cluster_id = c.id
+ORDER BY c.id, m.feature_id
+`
+
+type ListClusterMembersJoinedRow struct {
+	ClusterID int64  `db:"cluster_id" json:"cluster_id"`
+	CaseType  string `db:"case_type" json:"case_type"`
+	FeatureID string `db:"feature_id" json:"feature_id"`
+}
+
+func (q *Queries) ListClusterMembersJoined(ctx context.Context) ([]ListClusterMembersJoinedRow, error) {
+	rows, err := q.db.QueryContext(ctx, listClusterMembersJoined)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClusterMembersJoinedRow
+	for rows.Next() {
+		var i ListClusterMembersJoinedRow
+		if err := rows.Scan(&i.ClusterID, &i.CaseType, &i.FeatureID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClusters = `-- name: ListClusters :many
+SELECT id, case_type
+FROM clusters
+ORDER BY id
+`
+
+type ListClustersRow struct {
+	ID       int64  `db:"id" json:"id"`
+	CaseType string `db:"case_type" json:"case_type"`
+}
+
+func (q *Queries) ListClusters(ctx context.Context) ([]ListClustersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listClusters)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClustersRow
+	for rows.Next() {
+		var i ListClustersRow
+		if err := rows.Scan(&i.ID, &i.CaseType); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -586,6 +889,192 @@ func (q *Queries) ListCriminalCases(ctx context.Context, arg ListCriminalCasesPa
 	return items, nil
 }
 
+const listKnownFeaturePersons = `-- name: ListKnownFeaturePersons :many
+SELECT p.person_id, f.id AS identity_file_id
+FROM biometricfeature bf
+JOIN identity_file f ON f.id = bf.identity_file_id
+JOIN identity_register r ON r.id = f.register_id
+JOIN identity_document d ON d.id = r.document_id
+JOIN person p ON p.id = d.person_id
+WHERE bf.provenance = 'KNOWN'
+`
+
+type ListKnownFeaturePersonsRow struct {
+	PersonID       string `db:"person_id" json:"person_id"`
+	IdentityFileID int64  `db:"identity_file_id" json:"identity_file_id"`
+}
+
+func (q *Queries) ListKnownFeaturePersons(ctx context.Context) ([]ListKnownFeaturePersonsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listKnownFeaturePersons)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListKnownFeaturePersonsRow
+	for rows.Next() {
+		var i ListKnownFeaturePersonsRow
+		if err := rows.Scan(&i.PersonID, &i.IdentityFileID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKnownIdentityChain = `-- name: ListKnownIdentityChain :many
+SELECT
+    p.person_id,
+    d.id AS document_id, d.document_number, d.document_type, d.fiscal_number,
+    r.id AS register_id, r.register_number, r.name,
+    r.parent_1_name, r.parent_1_gender, r.parent_2_name, r.parent_2_gender,
+    r.birth_date,
+    f.id AS identity_file_id, bf.feature_type, f.source_path, f.storage_ref, f.content_type, f.size_bytes
+FROM biometricfeature bf
+JOIN identity_file f ON f.id = bf.identity_file_id
+JOIN identity_register r ON r.id = f.register_id
+JOIN identity_document d ON d.id = r.document_id
+JOIN person p ON p.id = d.person_id
+WHERE bf.provenance = 'KNOWN'
+ORDER BY bf.id
+`
+
+type ListKnownIdentityChainRow struct {
+	PersonID       string         `db:"person_id" json:"person_id"`
+	DocumentID     int64          `db:"document_id" json:"document_id"`
+	DocumentNumber string         `db:"document_number" json:"document_number"`
+	DocumentType   string         `db:"document_type" json:"document_type"`
+	FiscalNumber   sql.NullString `db:"fiscal_number" json:"fiscal_number"`
+	RegisterID     int64          `db:"register_id" json:"register_id"`
+	RegisterNumber string         `db:"register_number" json:"register_number"`
+	Name           string         `db:"name" json:"name"`
+	Parent1Name    string         `db:"parent_1_name" json:"parent_1_name"`
+	Parent1Gender  string         `db:"parent_1_gender" json:"parent_1_gender"`
+	Parent2Name    string         `db:"parent_2_name" json:"parent_2_name"`
+	Parent2Gender  string         `db:"parent_2_gender" json:"parent_2_gender"`
+	BirthDate      sql.NullString `db:"birth_date" json:"birth_date"`
+	IdentityFileID int64          `db:"identity_file_id" json:"identity_file_id"`
+	FeatureType    string         `db:"feature_type" json:"feature_type"`
+	SourcePath     string         `db:"source_path" json:"source_path"`
+	StorageRef     string         `db:"storage_ref" json:"storage_ref"`
+	ContentType    sql.NullString `db:"content_type" json:"content_type"`
+	SizeBytes      sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
+}
+
+func (q *Queries) ListKnownIdentityChain(ctx context.Context) ([]ListKnownIdentityChainRow, error) {
+	rows, err := q.db.QueryContext(ctx, listKnownIdentityChain)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListKnownIdentityChainRow
+	for rows.Next() {
+		var i ListKnownIdentityChainRow
+		if err := rows.Scan(
+			&i.PersonID,
+			&i.DocumentID,
+			&i.DocumentNumber,
+			&i.DocumentType,
+			&i.FiscalNumber,
+			&i.RegisterID,
+			&i.RegisterNumber,
+			&i.Name,
+			&i.Parent1Name,
+			&i.Parent1Gender,
+			&i.Parent2Name,
+			&i.Parent2Gender,
+			&i.BirthDate,
+			&i.IdentityFileID,
+			&i.FeatureType,
+			&i.SourcePath,
+			&i.StorageRef,
+			&i.ContentType,
+			&i.SizeBytes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPersonIDs = `-- name: ListPersonIDs :many
+SELECT person_id FROM person ORDER BY person_id
+`
+
+func (q *Queries) ListPersonIDs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listPersonIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var person_id string
+		if err := rows.Scan(&person_id); err != nil {
+			return nil, err
+		}
+		items = append(items, person_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listQuestionedFeatures = `-- name: ListQuestionedFeatures :many
+SELECT bf.case_trace_id, bf.feature_type, cc.case_id
+FROM biometricfeature bf
+JOIN case_traces tr ON tr.id = bf.case_trace_id
+JOIN case_evidences ev ON ev.id = tr.evidence_id
+JOIN criminal_cases cc ON cc.id = ev.criminal_case_id
+WHERE bf.provenance = 'QUESTIONED'
+ORDER BY bf.case_trace_id
+`
+
+type ListQuestionedFeaturesRow struct {
+	CaseTraceID sql.NullInt64 `db:"case_trace_id" json:"case_trace_id"`
+	FeatureType string        `db:"feature_type" json:"feature_type"`
+	CaseID      string        `db:"case_id" json:"case_id"`
+}
+
+func (q *Queries) ListQuestionedFeatures(ctx context.Context) ([]ListQuestionedFeaturesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listQuestionedFeatures)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListQuestionedFeaturesRow
+	for rows.Next() {
+		var i ListQuestionedFeaturesRow
+		if err := rows.Scan(&i.CaseTraceID, &i.FeatureType, &i.CaseID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUnmatchedFeatureEmbeddings = `-- name: ListUnmatchedFeatureEmbeddings :many
 SELECT id, biometricfeature_id, embedding_type, embedding::text AS embedding, model_version
 FROM feature_embeddings
@@ -638,6 +1127,20 @@ WHERE id = $1
 func (q *Queries) MarkFeatureEmbeddingMatched(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, markFeatureEmbeddingMatched, id)
 	return err
+}
+
+const maxCaseNumberForYear = `-- name: MaxCaseNumberForYear :one
+SELECT COALESCE(MAX(case_number), 0)::int4 AS max_number
+FROM criminal_cases
+WHERE case_year = $1::int4
+`
+
+// Returns the highest case_number already used for a year, or 0 when none yet.
+func (q *Queries) MaxCaseNumberForYear(ctx context.Context, caseYear int32) (int32, error) {
+	row := q.db.QueryRowContext(ctx, maxCaseNumberForYear, caseYear)
+	var max_number int32
+	err := row.Scan(&max_number)
+	return max_number, err
 }
 
 const updateCriminalCaseDescription = `-- name: UpdateCriminalCaseDescription :exec

@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router";
 
 import {
   ChevronDownIcon,
+  FolderIcon,
   GridIcon,
   HorizontaLDots,
   UserCircleIcon,
@@ -27,6 +28,11 @@ const navItems: NavItem[] = [
     icon: <UserCircleIcon />,
     name: "User Profile",
     path: "/profile",
+  },
+  {
+    icon: <FolderIcon />,
+    name: "Criminal Cases",
+    path: "/cases",
   },
 ];
 

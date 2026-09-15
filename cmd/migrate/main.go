@@ -1,3 +1,5 @@
+// migrate applies the goose-formatted Postgres schema migrations. Run with
+// "up", "down", or "status"; defaults to "up".
 package main
 
 import (
@@ -6,9 +8,9 @@ import (
 	"os"
 
 	"github.com/pressly/goose/v3"
-	"github.com/rodfileto/trackid/database"
 	"github.com/rodfileto/trackid/db/migrations"
-	"github.com/rodfileto/trackid/env"
+	"github.com/rodfileto/trackid/internal/cmdutil"
+	"github.com/rodfileto/trackid/internal/env"
 )
 
 func main() {
@@ -19,15 +21,7 @@ func main() {
 		command = os.Args[1]
 	}
 
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		log.Fatal("DATABASE_URL is not configured")
-	}
-
-	db, err := database.Open(databaseURL)
-	if err != nil {
-		log.Fatal(err)
-	}
+	db := cmdutil.OpenDB()
 	defer db.Close()
 
 	goose.SetBaseFS(migrations.FS)
@@ -35,6 +29,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	var err error
 	switch command {
 	case "up":
 		err = goose.Up(db, ".")

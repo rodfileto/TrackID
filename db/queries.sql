@@ -24,6 +24,17 @@ ON CONFLICT (case_id) DO UPDATE SET
     updated_at = NOW()
 RETURNING id, (xmax = 0) AS inserted;
 
+-- name: MaxCaseNumberForYear :one
+-- Returns the highest case_number already used for a year, or 0 when none yet.
+SELECT COALESCE(MAX(case_number), 0)::int4 AS max_number
+FROM criminal_cases
+WHERE case_year = sqlc.arg(case_year)::int4;
+
+-- name: CreateCriminalCase :one
+INSERT INTO criminal_cases (case_id, case_type, description, case_year, case_number)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING case_id, case_type, description;
+
 -- name: CountCriminalCases :one
 SELECT COUNT(*) FROM criminal_cases;
 
@@ -126,10 +137,15 @@ FROM biometricfeature
 ORDER BY id;
 
 -- name: ListCaseFilesByCriminalCase :many
-SELECT id, criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes
+SELECT id, criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes, created_at
 FROM case_files
 WHERE criminal_case_id = $1
 ORDER BY id;
+
+-- name: GetCaseFile :one
+SELECT id, category, filename, storage_ref, content_type
+FROM case_files
+WHERE id = $1 AND criminal_case_id = $2;
 
 -- name: UpsertCaseFile :one
 INSERT INTO case_files (criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
@@ -143,6 +159,11 @@ ON CONFLICT (criminal_case_id, category, hash_id) DO UPDATE SET
     size_bytes = EXCLUDED.size_bytes,
     updated_at = NOW()
 RETURNING id;
+
+-- name: CreateCaseFile :one
+INSERT INTO case_files (criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, created_at;
 
 -- name: UpsertCaseEvidence :one
 INSERT INTO case_evidences (criminal_case_id, sequence, case_file_id, description)
@@ -215,3 +236,75 @@ SELECT id, criminal_case_id, decision, system_source, username, notes, decided_a
 FROM case_decisions
 WHERE criminal_case_id = $1
 ORDER BY decided_at;
+
+-- name: ListAllCriminalCases :many
+SELECT case_id, case_type, description
+FROM criminal_cases
+ORDER BY case_id;
+
+-- name: ListQuestionedFeatures :many
+SELECT bf.case_trace_id, bf.feature_type, cc.case_id
+FROM biometricfeature bf
+JOIN case_traces tr ON tr.id = bf.case_trace_id
+JOIN case_evidences ev ON ev.id = tr.evidence_id
+JOIN criminal_cases cc ON cc.id = ev.criminal_case_id
+WHERE bf.provenance = 'QUESTIONED'
+ORDER BY bf.case_trace_id;
+
+-- name: ListPersonIDs :many
+SELECT person_id FROM person ORDER BY person_id;
+
+-- name: ListKnownIdentityChain :many
+SELECT
+    p.person_id,
+    d.id AS document_id, d.document_number, d.document_type, d.fiscal_number,
+    r.id AS register_id, r.register_number, r.name,
+    r.parent_1_name, r.parent_1_gender, r.parent_2_name, r.parent_2_gender,
+    r.birth_date,
+    f.id AS identity_file_id, bf.feature_type, f.source_path, f.storage_ref, f.content_type, f.size_bytes
+FROM biometricfeature bf
+JOIN identity_file f ON f.id = bf.identity_file_id
+JOIN identity_register r ON r.id = f.register_id
+JOIN identity_document d ON d.id = r.document_id
+JOIN person p ON p.id = d.person_id
+WHERE bf.provenance = 'KNOWN'
+ORDER BY bf.id;
+
+-- name: ListKnownFeaturePersons :many
+SELECT p.person_id, f.id AS identity_file_id
+FROM biometricfeature bf
+JOIN identity_file f ON f.id = bf.identity_file_id
+JOIN identity_register r ON r.id = f.register_id
+JOIN identity_document d ON d.id = r.document_id
+JOIN person p ON p.id = d.person_id
+WHERE bf.provenance = 'KNOWN';
+
+-- name: ListClusters :many
+SELECT id, case_type
+FROM clusters
+ORDER BY id;
+
+-- name: ListClusterMembers :many
+SELECT cluster_id, feature_id
+FROM cluster_members;
+
+-- name: ListClusterMembersJoined :many
+SELECT c.id AS cluster_id, c.case_type, m.feature_id
+FROM clusters c
+JOIN cluster_members m ON m.cluster_id = c.id
+ORDER BY c.id, m.feature_id;
+
+-- name: CreateCluster :one
+INSERT INTO clusters (case_type) VALUES ($1) RETURNING id;
+
+-- name: InsertClusterMember :exec
+INSERT INTO cluster_members (cluster_id, feature_id) VALUES ($1, $2);
+
+-- name: DeleteClusterMember :exec
+DELETE FROM cluster_members WHERE feature_id = $1;
+
+-- name: DeleteCluster :exec
+DELETE FROM clusters WHERE id = $1;
+
+-- name: InsertClusterMerge :exec
+INSERT INTO cluster_merges (from_cluster_id, to_cluster_id, reason) VALUES ($1, $2, $3);
