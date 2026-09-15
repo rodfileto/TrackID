@@ -122,3 +122,33 @@ func AddEvidenceHandler(db *sql.DB, store *storage.Client) gin.HandlerFunc {
 		context.JSON(http.StatusCreated, evidence)
 	}
 }
+
+func DeleteEvidenceHandler(db *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if db == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		caseID := context.Param("caseId")
+		evidenceID, err := strconv.ParseInt(context.Param("evidenceId"), 10, 64)
+		if err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid evidence id"})
+			return
+		}
+
+		err = cases.DeleteEvidence(context.Request.Context(), db, caseID, evidenceID)
+		if err != nil {
+			if errors.Is(err, cases.ErrNotFound) {
+				context.JSON(http.StatusNotFound, gin.H{"error": "evidence not found"})
+				return
+			}
+			if errors.Is(err, cases.ErrEvidenceHasTraces) {
+				context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not delete evidence"})
+			return
+		}
+		context.JSON(http.StatusOK, gin.H{})
+	}
+}

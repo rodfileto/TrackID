@@ -46,7 +46,12 @@ cd "$ROOT_DIR"
 echo "Starting TrackID infrastructure..."
 docker compose up -d postgres redis minio
 if [[ "$START_NEO4J" == "true" ]]; then
+  echo "Neo4j: enabled (NEO4J_URL=$NEO4J_URL)"
   docker compose --profile graph up -d neo4j
+  echo "Neo4j container status:"
+  docker compose --profile graph ps neo4j
+else
+  echo "Neo4j: disabled (set START_NEO4J=true to enable)"
 fi
 
 # Wait on the host's published port (not the container's internal socket), so a
@@ -69,6 +74,22 @@ for attempt in {1..30}; do
   fi
   sleep 1
 done
+
+if [[ "$START_NEO4J" == "true" ]]; then
+  echo "Waiting for Neo4j on 127.0.0.1:57474..."
+  for attempt in {1..30}; do
+    if curl --silent --fail --max-time 2 "http://127.0.0.1:57474" >/dev/null 2>&1; then
+      echo "Neo4j is ready."
+      break
+    fi
+    if [[ "$attempt" -eq 30 ]]; then
+      echo "Neo4j did not become ready; check 'docker compose logs neo4j'" >&2
+      docker compose logs --tail 50 neo4j >&2 || true
+      exit 1
+    fi
+    sleep 1
+  done
+fi
 
 echo "Applying database migrations..."
 (cd "$BACKEND_DIR" && DATABASE_URL="$DATABASE_URL" go run ./cmd/migrate up)
@@ -110,4 +131,9 @@ wait_for_url "Vite frontend" "http://127.0.0.1:5173/"
 echo "TrackID development stack is running."
 echo "Frontend: http://127.0.0.1:5173"
 echo "API:      http://127.0.0.1:$PORT"
+if [[ "$START_NEO4J" == "true" ]]; then
+  echo "Neo4j:    $NEO4J_URL (browser: http://127.0.0.1:57474)"
+else
+  echo "Neo4j:    disabled (set START_NEO4J=true to enable)"
+fi
 echo "Logs:     $RUN_DIR/backend.log and $RUN_DIR/frontend.log"

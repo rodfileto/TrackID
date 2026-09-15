@@ -13,6 +13,22 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+const countCaseTracesByCaseFile = `-- name: CountCaseTracesByCaseFile :one
+SELECT count(*) FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+WHERE ce.case_file_id = $1
+`
+
+// Traces marked on an evidence file, via case_evidences.case_file_id -- used
+// to guard against deleting an evidence file that traces (and their
+// biometricfeature/embeddings) still depend on.
+func (q *Queries) CountCaseTracesByCaseFile(ctx context.Context, caseFileID sql.NullInt64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countCaseTracesByCaseFile, caseFileID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countCriminalCases = `-- name: CountCriminalCases :one
 SELECT COUNT(*) FROM criminal_cases
 `
@@ -22,6 +38,30 @@ func (q *Queries) CountCriminalCases(ctx context.Context) (int64, error) {
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createCaseEvidenceForFile = `-- name: CreateCaseEvidenceForFile :one
+INSERT INTO case_evidences (criminal_case_id, sequence, case_file_id)
+SELECT $1, COALESCE(MAX(sequence), 0) + 1, $2
+FROM case_evidences
+WHERE criminal_case_id = $1
+RETURNING id
+`
+
+type CreateCaseEvidenceForFileParams struct {
+	CriminalCaseID int64         `db:"criminal_case_id" json:"criminal_case_id"`
+	CaseFileID     sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
+}
+
+// Case files added through AddEvidence only get a case_files row -- case_traces
+// hangs off case_evidences (MODEL.md section 2.2), so trace detection creates
+// the case_evidences row for a case_file on first use. sequence is the next
+// free slot for the case, since case_files added this way never carry one.
+func (q *Queries) CreateCaseEvidenceForFile(ctx context.Context, arg CreateCaseEvidenceForFileParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, createCaseEvidenceForFile, arg.CriminalCaseID, arg.CaseFileID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const createCaseFile = `-- name: CreateCaseFile :one
@@ -70,6 +110,35 @@ INSERT INTO clusters (case_type) VALUES ($1) RETURNING id
 
 func (q *Queries) CreateCluster(ctx context.Context, caseType string) (int64, error) {
 	row := q.db.QueryRowContext(ctx, createCluster, caseType)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createCodificationPoint = `-- name: CreateCodificationPoint :one
+INSERT INTO case_codification_points (codification_id, sequence, x, y, point_type, angle)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id
+`
+
+type CreateCodificationPointParams struct {
+	CodificationID int64           `db:"codification_id" json:"codification_id"`
+	Sequence       int16           `db:"sequence" json:"sequence"`
+	X              float64         `db:"x" json:"x"`
+	Y              float64         `db:"y" json:"y"`
+	PointType      sql.NullString  `db:"point_type" json:"point_type"`
+	Angle          sql.NullFloat64 `db:"angle" json:"angle"`
+}
+
+func (q *Queries) CreateCodificationPoint(ctx context.Context, arg CreateCodificationPointParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, createCodificationPoint,
+		arg.CodificationID,
+		arg.Sequence,
+		arg.X,
+		arg.Y,
+		arg.PointType,
+		arg.Angle,
+	)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
@@ -157,6 +226,50 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
+const deleteCaseFile = `-- name: DeleteCaseFile :execrows
+DELETE FROM case_files WHERE id = $1 AND criminal_case_id = $2 AND category = 'evidence'
+`
+
+type DeleteCaseFileParams struct {
+	ID             int64 `db:"id" json:"id"`
+	CriminalCaseID int64 `db:"criminal_case_id" json:"criminal_case_id"`
+}
+
+func (q *Queries) DeleteCaseFile(ctx context.Context, arg DeleteCaseFileParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteCaseFile, arg.ID, arg.CriminalCaseID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteCaseTrace = `-- name: DeleteCaseTrace :execrows
+DELETE FROM case_traces ct
+USING case_evidences ce
+WHERE ct.id = $1
+  AND ct.evidence_id = ce.id
+  AND ce.criminal_case_id = $2
+  AND ce.case_file_id = $3
+`
+
+type DeleteCaseTraceParams struct {
+	ID             int64         `db:"id" json:"id"`
+	CriminalCaseID int64         `db:"criminal_case_id" json:"criminal_case_id"`
+	CaseFileID     sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
+}
+
+// Scoped to the case + evidence file so a trace can only be deleted through
+// the case/evidence it actually belongs to. case_codifications and
+// biometricfeature (and, through it, feature_embeddings) cascade off
+// case_traces, so this is the only delete needed to fully remove a trace.
+func (q *Queries) DeleteCaseTrace(ctx context.Context, arg DeleteCaseTraceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteCaseTrace, arg.ID, arg.CriminalCaseID, arg.CaseFileID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteCluster = `-- name: DeleteCluster :exec
 DELETE FROM clusters WHERE id = $1
 `
@@ -173,6 +286,24 @@ DELETE FROM cluster_members WHERE feature_id = $1
 func (q *Queries) DeleteClusterMember(ctx context.Context, featureID string) error {
 	_, err := q.db.ExecContext(ctx, deleteClusterMember, featureID)
 	return err
+}
+
+const deleteCodificationPoint = `-- name: DeleteCodificationPoint :execrows
+DELETE FROM case_codification_points
+WHERE id = $1 AND codification_id = $2
+`
+
+type DeleteCodificationPointParams struct {
+	ID             int64 `db:"id" json:"id"`
+	CodificationID int64 `db:"codification_id" json:"codification_id"`
+}
+
+func (q *Queries) DeleteCodificationPoint(ctx context.Context, arg DeleteCodificationPointParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteCodificationPoint, arg.ID, arg.CodificationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const findNearestFeatureEmbeddings = `-- name: FindNearestFeatureEmbeddings :many
@@ -224,6 +355,34 @@ func (q *Queries) FindNearestFeatureEmbeddings(ctx context.Context, arg FindNear
 	return items, nil
 }
 
+const getCaseCodificationByTrace = `-- name: GetCaseCodificationByTrace :one
+SELECT id FROM case_codifications WHERE trace_id = $1 AND sequence = 1
+`
+
+func (q *Queries) GetCaseCodificationByTrace(ctx context.Context, traceID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getCaseCodificationByTrace, traceID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getCaseEvidenceByCaseFile = `-- name: GetCaseEvidenceByCaseFile :one
+SELECT id FROM case_evidences
+WHERE criminal_case_id = $1 AND case_file_id = $2
+`
+
+type GetCaseEvidenceByCaseFileParams struct {
+	CriminalCaseID int64         `db:"criminal_case_id" json:"criminal_case_id"`
+	CaseFileID     sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
+}
+
+func (q *Queries) GetCaseEvidenceByCaseFile(ctx context.Context, arg GetCaseEvidenceByCaseFileParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getCaseEvidenceByCaseFile, arg.CriminalCaseID, arg.CaseFileID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getCaseFile = `-- name: GetCaseFile :one
 SELECT id, category, filename, storage_ref, content_type
 FROM case_files
@@ -253,6 +412,34 @@ func (q *Queries) GetCaseFile(ctx context.Context, arg GetCaseFileParams) (GetCa
 		&i.StorageRef,
 		&i.ContentType,
 	)
+	return i, err
+}
+
+const getCaseTraceForFile = `-- name: GetCaseTraceForFile :one
+SELECT ct.id, ct.trace_type
+FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+WHERE ct.id = $1 AND ce.criminal_case_id = $2 AND ce.case_file_id = $3
+`
+
+type GetCaseTraceForFileParams struct {
+	ID             int64         `db:"id" json:"id"`
+	CriminalCaseID int64         `db:"criminal_case_id" json:"criminal_case_id"`
+	CaseFileID     sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
+}
+
+type GetCaseTraceForFileRow struct {
+	ID        int64  `db:"id" json:"id"`
+	TraceType string `db:"trace_type" json:"trace_type"`
+}
+
+// Scopes a trace to the case + evidence file it belongs to, the same way
+// GetCaseFile scopes a file to a case -- used to authorize codification/point
+// operations reached via /cases/:caseId/evidences/:evidenceId/traces/:traceId.
+func (q *Queries) GetCaseTraceForFile(ctx context.Context, arg GetCaseTraceForFileParams) (GetCaseTraceForFileRow, error) {
+	row := q.db.QueryRowContext(ctx, getCaseTraceForFile, arg.ID, arg.CriminalCaseID, arg.CaseFileID)
+	var i GetCaseTraceForFileRow
+	err := row.Scan(&i.ID, &i.TraceType)
 	return i, err
 }
 
@@ -718,6 +905,66 @@ func (q *Queries) ListCaseFilesByCriminalCase(ctx context.Context, criminalCaseI
 	return items, nil
 }
 
+const listCaseTracesByCaseFile = `-- name: ListCaseTracesByCaseFile :many
+SELECT ct.id, ct.sequence, ct.trace_type, ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2, ct.detection_score,
+    bf.id AS feature_id
+FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+LEFT JOIN biometricfeature bf ON bf.case_trace_id = ct.id
+WHERE ce.criminal_case_id = $1 AND ce.case_file_id = $2
+ORDER BY ct.sequence
+`
+
+type ListCaseTracesByCaseFileParams struct {
+	CriminalCaseID int64         `db:"criminal_case_id" json:"criminal_case_id"`
+	CaseFileID     sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
+}
+
+type ListCaseTracesByCaseFileRow struct {
+	ID             int64           `db:"id" json:"id"`
+	Sequence       int16           `db:"sequence" json:"sequence"`
+	TraceType      string          `db:"trace_type" json:"trace_type"`
+	BoxX1          sql.NullFloat64 `db:"box_x1" json:"box_x1"`
+	BoxY1          sql.NullFloat64 `db:"box_y1" json:"box_y1"`
+	BoxX2          sql.NullFloat64 `db:"box_x2" json:"box_x2"`
+	BoxY2          sql.NullFloat64 `db:"box_y2" json:"box_y2"`
+	DetectionScore sql.NullFloat64 `db:"detection_score" json:"detection_score"`
+	FeatureID      sql.NullInt64   `db:"feature_id" json:"feature_id"`
+}
+
+func (q *Queries) ListCaseTracesByCaseFile(ctx context.Context, arg ListCaseTracesByCaseFileParams) ([]ListCaseTracesByCaseFileRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCaseTracesByCaseFile, arg.CriminalCaseID, arg.CaseFileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCaseTracesByCaseFileRow
+	for rows.Next() {
+		var i ListCaseTracesByCaseFileRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Sequence,
+			&i.TraceType,
+			&i.BoxX1,
+			&i.BoxY1,
+			&i.BoxX2,
+			&i.BoxY2,
+			&i.DetectionScore,
+			&i.FeatureID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClusterMembers = `-- name: ListClusterMembers :many
 SELECT cluster_id, feature_id
 FROM cluster_members
@@ -808,6 +1055,52 @@ func (q *Queries) ListClusters(ctx context.Context) ([]ListClustersRow, error) {
 	for rows.Next() {
 		var i ListClustersRow
 		if err := rows.Scan(&i.ID, &i.CaseType); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCodificationPoints = `-- name: ListCodificationPoints :many
+SELECT id, sequence, x, y, point_type, angle
+FROM case_codification_points
+WHERE codification_id = $1
+ORDER BY sequence
+`
+
+type ListCodificationPointsRow struct {
+	ID        int64           `db:"id" json:"id"`
+	Sequence  int16           `db:"sequence" json:"sequence"`
+	X         float64         `db:"x" json:"x"`
+	Y         float64         `db:"y" json:"y"`
+	PointType sql.NullString  `db:"point_type" json:"point_type"`
+	Angle     sql.NullFloat64 `db:"angle" json:"angle"`
+}
+
+func (q *Queries) ListCodificationPoints(ctx context.Context, codificationID int64) ([]ListCodificationPointsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCodificationPoints, codificationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCodificationPointsRow
+	for rows.Next() {
+		var i ListCodificationPointsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Sequence,
+			&i.X,
+			&i.Y,
+			&i.PointType,
+			&i.Angle,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1143,6 +1436,76 @@ func (q *Queries) MaxCaseNumberForYear(ctx context.Context, caseYear int32) (int
 	return max_number, err
 }
 
+const maxCaseTraceSequence = `-- name: MaxCaseTraceSequence :one
+SELECT COALESCE(MAX(sequence), 0)::smallint AS max_sequence
+FROM case_traces
+WHERE evidence_id = $1
+`
+
+func (q *Queries) MaxCaseTraceSequence(ctx context.Context, evidenceID int64) (int16, error) {
+	row := q.db.QueryRowContext(ctx, maxCaseTraceSequence, evidenceID)
+	var max_sequence int16
+	err := row.Scan(&max_sequence)
+	return max_sequence, err
+}
+
+const maxCodificationPointSequence = `-- name: MaxCodificationPointSequence :one
+SELECT COALESCE(MAX(sequence), 0)::smallint AS max_sequence
+FROM case_codification_points
+WHERE codification_id = $1
+`
+
+func (q *Queries) MaxCodificationPointSequence(ctx context.Context, codificationID int64) (int16, error) {
+	row := q.db.QueryRowContext(ctx, maxCodificationPointSequence, codificationID)
+	var max_sequence int16
+	err := row.Scan(&max_sequence)
+	return max_sequence, err
+}
+
+const setCaseCodificationFile = `-- name: SetCaseCodificationFile :exec
+UPDATE case_codifications SET case_file_id = $2, updated_at = NOW() WHERE id = $1
+`
+
+type SetCaseCodificationFileParams struct {
+	ID         int64         `db:"id" json:"id"`
+	CaseFileID sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
+}
+
+func (q *Queries) SetCaseCodificationFile(ctx context.Context, arg SetCaseCodificationFileParams) error {
+	_, err := q.db.ExecContext(ctx, setCaseCodificationFile, arg.ID, arg.CaseFileID)
+	return err
+}
+
+const updateCodificationPoint = `-- name: UpdateCodificationPoint :execrows
+UPDATE case_codification_points
+SET x = $3, y = $4, point_type = $5, angle = $6, updated_at = NOW()
+WHERE id = $1 AND codification_id = $2
+`
+
+type UpdateCodificationPointParams struct {
+	ID             int64           `db:"id" json:"id"`
+	CodificationID int64           `db:"codification_id" json:"codification_id"`
+	X              float64         `db:"x" json:"x"`
+	Y              float64         `db:"y" json:"y"`
+	PointType      sql.NullString  `db:"point_type" json:"point_type"`
+	Angle          sql.NullFloat64 `db:"angle" json:"angle"`
+}
+
+func (q *Queries) UpdateCodificationPoint(ctx context.Context, arg UpdateCodificationPointParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateCodificationPoint,
+		arg.ID,
+		arg.CodificationID,
+		arg.X,
+		arg.Y,
+		arg.PointType,
+		arg.Angle,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateCriminalCaseDescription = `-- name: UpdateCriminalCaseDescription :exec
 UPDATE criminal_cases SET description = $2, updated_at = NOW()
 WHERE id = $1
@@ -1266,7 +1629,7 @@ ON CONFLICT (criminal_case_id, category, hash_id) DO UPDATE SET
     content_type = EXCLUDED.content_type,
     size_bytes = EXCLUDED.size_bytes,
     updated_at = NOW()
-RETURNING id
+RETURNING id, created_at
 `
 
 type UpsertCaseFileParams struct {
@@ -1281,7 +1644,12 @@ type UpsertCaseFileParams struct {
 	SizeBytes      sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
 }
 
-func (q *Queries) UpsertCaseFile(ctx context.Context, arg UpsertCaseFileParams) (int64, error) {
+type UpsertCaseFileRow struct {
+	ID        int64     `db:"id" json:"id"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
+
+func (q *Queries) UpsertCaseFile(ctx context.Context, arg UpsertCaseFileParams) (UpsertCaseFileRow, error) {
 	row := q.db.QueryRowContext(ctx, upsertCaseFile,
 		arg.CriminalCaseID,
 		arg.Category,
@@ -1293,9 +1661,9 @@ func (q *Queries) UpsertCaseFile(ctx context.Context, arg UpsertCaseFileParams) 
 		arg.ContentType,
 		arg.SizeBytes,
 	)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
+	var i UpsertCaseFileRow
+	err := row.Scan(&i.ID, &i.CreatedAt)
+	return i, err
 }
 
 const upsertCaseTrace = `-- name: UpsertCaseTrace :one

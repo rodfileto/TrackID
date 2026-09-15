@@ -25,6 +25,42 @@ export interface CaseDetail {
   evidences: Evidence[];
 }
 
+export interface Trace {
+  id: number;
+  sequence: number;
+  traceType: string;
+  boxX1: number;
+  boxY1: number;
+  boxX2: number;
+  boxY2: number;
+  score: number;
+  featureId: number;
+}
+
+export interface TraceInput {
+  boxX1: number;
+  boxY1: number;
+  boxX2: number;
+  boxY2: number;
+  score?: number;
+}
+
+export interface Point {
+  id: number;
+  sequence: number;
+  x: number;
+  y: number;
+  pointType?: string;
+  angle?: number;
+}
+
+export interface PointInput {
+  x: number;
+  y: number;
+  pointType?: string;
+  angle?: number;
+}
+
 export interface ListCasesResponse {
   items: Case[];
   total: number;
@@ -106,6 +142,16 @@ export async function addEvidence(
   return (await response.json()) as Evidence;
 }
 
+export async function deleteEvidence(
+  caseId: string,
+  evidenceId: number,
+): Promise<void> {
+  await requestApi<Record<string, never>>(
+    `/cases/${encodeURIComponent(caseId)}/evidences/${evidenceId}`,
+    { method: "DELETE", headers: authHeaders() },
+  );
+}
+
 export async function getEvidenceObjectUrl(
   caseId: string,
   evidenceId: number,
@@ -127,4 +173,144 @@ export async function getEvidenceObjectUrl(
 
   const blob = await response.blob();
   return URL.createObjectURL(blob);
+}
+
+export async function listTraces(
+  caseId: string,
+  evidenceId: number,
+): Promise<Trace[]> {
+  const { traces } = await requestApi<{ traces: Trace[] }>(
+    `/cases/${encodeURIComponent(caseId)}/evidences/${evidenceId}/traces`,
+    { headers: authHeaders() },
+  );
+  return traces;
+}
+
+export async function createTraces(
+  caseId: string,
+  evidenceId: number,
+  traces: TraceInput[],
+): Promise<Trace[]> {
+  const { traces: created } = await requestApi<{ traces: Trace[] }>(
+    `/cases/${encodeURIComponent(caseId)}/evidences/${evidenceId}/traces`,
+    {
+      method: "POST",
+      body: JSON.stringify({ traces }),
+      headers: authHeaders(),
+    },
+  );
+  return created;
+}
+
+export async function deleteTrace(
+  caseId: string,
+  evidenceId: number,
+  traceId: number,
+): Promise<void> {
+  await requestApi<Record<string, never>>(
+    `/cases/${encodeURIComponent(caseId)}/evidences/${evidenceId}/traces/${traceId}`,
+    { method: "DELETE", headers: authHeaders() },
+  );
+}
+
+function pointsPath(caseId: string, evidenceId: number, traceId: number): string {
+  return `/cases/${encodeURIComponent(caseId)}/evidences/${evidenceId}/traces/${traceId}/points`;
+}
+
+export async function listPoints(
+  caseId: string,
+  evidenceId: number,
+  traceId: number,
+): Promise<Point[]> {
+  const { points } = await requestApi<{ points: Point[] }>(
+    pointsPath(caseId, evidenceId, traceId),
+    { headers: authHeaders() },
+  );
+  return points;
+}
+
+export async function addPoints(
+  caseId: string,
+  evidenceId: number,
+  traceId: number,
+  points: PointInput[],
+): Promise<Point[]> {
+  const { points: created } = await requestApi<{ points: Point[] }>(
+    pointsPath(caseId, evidenceId, traceId),
+    {
+      method: "POST",
+      body: JSON.stringify({ points }),
+      headers: authHeaders(),
+    },
+  );
+  return created;
+}
+
+export async function updatePoint(
+  caseId: string,
+  evidenceId: number,
+  traceId: number,
+  pointId: number,
+  point: PointInput,
+): Promise<void> {
+  await requestApi<Record<string, never>>(
+    `${pointsPath(caseId, evidenceId, traceId)}/${pointId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(point),
+      headers: authHeaders(),
+    },
+  );
+}
+
+export async function deletePoint(
+  caseId: string,
+  evidenceId: number,
+  traceId: number,
+  pointId: number,
+): Promise<void> {
+  await requestApi<Record<string, never>>(
+    `${pointsPath(caseId, evidenceId, traceId)}/${pointId}`,
+    { method: "DELETE", headers: authHeaders() },
+  );
+}
+
+export interface CodificationImage {
+  id: number;
+  category: string;
+  mediaType?: string;
+  filename: string;
+  storageRef?: string;
+  contentType?: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export async function saveCodificationImage(
+  caseId: string,
+  evidenceId: number,
+  traceId: number,
+  blob: Blob,
+): Promise<CodificationImage> {
+  const form = new FormData();
+  form.append("file", blob, "codification.png");
+
+  const token = getToken();
+  const response = await fetch(
+    `${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/evidences/${evidenceId}/traces/${traceId}/codification-image`,
+    {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    },
+  );
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    throw new Error(body.error ?? "Could not save codification image");
+  }
+
+  return (await response.json()) as CodificationImage;
 }

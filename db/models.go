@@ -42,12 +42,25 @@ type Biometricfeature struct {
 }
 
 type CaseCodification struct {
-	ID               int64     `db:"id" json:"id"`
-	TraceID          int64     `db:"trace_id" json:"trace_id"`
-	Sequence         int16     `db:"sequence" json:"sequence"`
-	CodificationType string    `db:"codification_type" json:"codification_type"`
-	CreatedAt        time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt        time.Time `db:"updated_at" json:"updated_at"`
+	ID               int64         `db:"id" json:"id"`
+	TraceID          int64         `db:"trace_id" json:"trace_id"`
+	Sequence         int16         `db:"sequence" json:"sequence"`
+	CodificationType string        `db:"codification_type" json:"codification_type"`
+	CreatedAt        time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt        time.Time     `db:"updated_at" json:"updated_at"`
+	CaseFileID       sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
+}
+
+type CaseCodificationPoint struct {
+	ID             int64           `db:"id" json:"id"`
+	CodificationID int64           `db:"codification_id" json:"codification_id"`
+	Sequence       int16           `db:"sequence" json:"sequence"`
+	X              float64         `db:"x" json:"x"`
+	Y              float64         `db:"y" json:"y"`
+	PointType      sql.NullString  `db:"point_type" json:"point_type"`
+	Angle          sql.NullFloat64 `db:"angle" json:"angle"`
+	CreatedAt      time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt      time.Time       `db:"updated_at" json:"updated_at"`
 }
 
 type CaseDecision struct {

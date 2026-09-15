@@ -8,6 +8,7 @@ interface EvidencePreviewProps {
   evidenceId: number;
   filename: string;
   mediaType?: string;
+  contentType?: string;
 }
 
 export default function EvidencePreview({
@@ -15,9 +16,17 @@ export default function EvidencePreview({
   evidenceId,
   filename,
   mediaType,
+  contentType,
 }: EvidencePreviewProps) {
-  const isImage = mediaType === "image";
-  const isPdf = mediaType === "pdf";
+  // media_type is normalized ("image"/"pdf") for evidence uploaded through
+  // this app, but imported data reuses the column for other taxonomies (e.g.
+  // "facial", "video", or a raw MIME string), so content_type — which is
+  // consistently a real MIME type — is the source of truth when present.
+  const isImage =
+    contentType?.startsWith("image/") ?? mediaType === "image";
+  const isPdf =
+    (contentType ? contentType === "application/pdf" : undefined) ??
+    mediaType === "pdf";
 
   const [url, setUrl] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);

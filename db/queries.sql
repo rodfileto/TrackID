@@ -147,6 +147,17 @@ SELECT id, category, filename, storage_ref, content_type
 FROM case_files
 WHERE id = $1 AND criminal_case_id = $2;
 
+-- name: CountCaseTracesByCaseFile :one
+-- Traces marked on an evidence file, via case_evidences.case_file_id -- used
+-- to guard against deleting an evidence file that traces (and their
+-- biometricfeature/embeddings) still depend on.
+SELECT count(*) FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+WHERE ce.case_file_id = $1;
+
+-- name: DeleteCaseFile :execrows
+DELETE FROM case_files WHERE id = $1 AND criminal_case_id = $2 AND category = 'evidence';
+
 -- name: UpsertCaseFile :one
 INSERT INTO case_files (criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -158,7 +169,7 @@ ON CONFLICT (criminal_case_id, category, hash_id) DO UPDATE SET
     content_type = EXCLUDED.content_type,
     size_bytes = EXCLUDED.size_bytes,
     updated_at = NOW()
-RETURNING id;
+RETURNING id, created_at;
 
 -- name: CreateCaseFile :one
 INSERT INTO case_files (criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
@@ -173,6 +184,47 @@ ON CONFLICT (criminal_case_id, sequence) DO UPDATE SET
     description = EXCLUDED.description,
     updated_at = NOW()
 RETURNING id;
+
+-- name: GetCaseEvidenceByCaseFile :one
+SELECT id FROM case_evidences
+WHERE criminal_case_id = $1 AND case_file_id = $2;
+
+-- name: CreateCaseEvidenceForFile :one
+-- Case files added through AddEvidence only get a case_files row -- case_traces
+-- hangs off case_evidences (MODEL.md section 2.2), so trace detection creates
+-- the case_evidences row for a case_file on first use. sequence is the next
+-- free slot for the case, since case_files added this way never carry one.
+INSERT INTO case_evidences (criminal_case_id, sequence, case_file_id)
+SELECT $1, COALESCE(MAX(sequence), 0) + 1, $2
+FROM case_evidences
+WHERE criminal_case_id = $1
+RETURNING id;
+
+-- name: MaxCaseTraceSequence :one
+SELECT COALESCE(MAX(sequence), 0)::smallint AS max_sequence
+FROM case_traces
+WHERE evidence_id = $1;
+
+-- name: ListCaseTracesByCaseFile :many
+SELECT ct.id, ct.sequence, ct.trace_type, ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2, ct.detection_score,
+    bf.id AS feature_id
+FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+LEFT JOIN biometricfeature bf ON bf.case_trace_id = ct.id
+WHERE ce.criminal_case_id = $1 AND ce.case_file_id = $2
+ORDER BY ct.sequence;
+
+-- name: DeleteCaseTrace :execrows
+-- Scoped to the case + evidence file so a trace can only be deleted through
+-- the case/evidence it actually belongs to. case_codifications and
+-- biometricfeature (and, through it, feature_embeddings) cascade off
+-- case_traces, so this is the only delete needed to fully remove a trace.
+DELETE FROM case_traces ct
+USING case_evidences ce
+WHERE ct.id = $1
+  AND ct.evidence_id = ce.id
+  AND ce.criminal_case_id = $2
+  AND ce.case_file_id = $3;
 
 -- name: UpsertCaseTrace :one
 INSERT INTO case_traces (evidence_id, sequence, trace_type, box_x1, box_y1, box_x2, box_y2, detection_score, case_file_id)
@@ -195,6 +247,46 @@ ON CONFLICT (trace_id, sequence) DO UPDATE SET
     codification_type = EXCLUDED.codification_type,
     updated_at = NOW()
 RETURNING id;
+
+-- name: GetCaseCodificationByTrace :one
+SELECT id FROM case_codifications WHERE trace_id = $1 AND sequence = 1;
+
+-- name: SetCaseCodificationFile :exec
+UPDATE case_codifications SET case_file_id = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: GetCaseTraceForFile :one
+-- Scopes a trace to the case + evidence file it belongs to, the same way
+-- GetCaseFile scopes a file to a case -- used to authorize codification/point
+-- operations reached via /cases/:caseId/evidences/:evidenceId/traces/:traceId.
+SELECT ct.id, ct.trace_type
+FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+WHERE ct.id = $1 AND ce.criminal_case_id = $2 AND ce.case_file_id = $3;
+
+-- name: MaxCodificationPointSequence :one
+SELECT COALESCE(MAX(sequence), 0)::smallint AS max_sequence
+FROM case_codification_points
+WHERE codification_id = $1;
+
+-- name: CreateCodificationPoint :one
+INSERT INTO case_codification_points (codification_id, sequence, x, y, point_type, angle)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id;
+
+-- name: ListCodificationPoints :many
+SELECT id, sequence, x, y, point_type, angle
+FROM case_codification_points
+WHERE codification_id = $1
+ORDER BY sequence;
+
+-- name: UpdateCodificationPoint :execrows
+UPDATE case_codification_points
+SET x = $3, y = $4, point_type = $5, angle = $6, updated_at = NOW()
+WHERE id = $1 AND codification_id = $2;
+
+-- name: DeleteCodificationPoint :execrows
+DELETE FROM case_codification_points
+WHERE id = $1 AND codification_id = $2;
 
 -- name: UpsertFeatureEmbedding :one
 -- embedding is passed as pgvector's text input format ("[v1,v2,...]") and cast explicitly,

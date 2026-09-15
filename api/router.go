@@ -42,7 +42,16 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.POST("cases", CreateCaseHandler(deps.DB))
 	protected.GET("cases/:caseId", GetCaseHandler(deps.DB))
 	protected.POST("cases/:caseId/evidences", AddEvidenceHandler(deps.DB, deps.Storage))
+	protected.DELETE("cases/:caseId/evidences/:evidenceId", DeleteEvidenceHandler(deps.DB))
 	protected.GET("cases/:caseId/evidences/:evidenceId/download", DownloadEvidenceHandler(deps.DB, deps.Storage))
+	protected.GET("cases/:caseId/evidences/:evidenceId/traces", ListTracesHandler(deps.DB))
+	protected.POST("cases/:caseId/evidences/:evidenceId/traces", CreateTracesHandler(deps.DB))
+	protected.DELETE("cases/:caseId/evidences/:evidenceId/traces/:traceId", DeleteTraceHandler(deps.DB))
+	protected.GET("cases/:caseId/evidences/:evidenceId/traces/:traceId/points", ListPointsHandler(deps.DB))
+	protected.POST("cases/:caseId/evidences/:evidenceId/traces/:traceId/points", AddPointsHandler(deps.DB))
+	protected.PUT("cases/:caseId/evidences/:evidenceId/traces/:traceId/points/:pointId", UpdatePointHandler(deps.DB))
+	protected.DELETE("cases/:caseId/evidences/:evidenceId/traces/:traceId/points/:pointId", DeletePointHandler(deps.DB))
+	protected.POST("cases/:caseId/evidences/:evidenceId/traces/:traceId/codification-image", SaveCodificationImageHandler(deps.DB, deps.Storage))
 
 	if deps.Register != nil {
 		deps.Register(router, protected)
