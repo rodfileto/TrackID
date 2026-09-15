@@ -1,3 +1,5 @@
+import { requestApi } from "./api";
+
 export interface UserProfile {
   id: number;
   nome: string;
@@ -22,32 +24,10 @@ interface RegisterRequest {
   password: string;
 }
 
-interface ErrorResponse {
-  error?: string;
-}
-
-const apiBaseUrl = import.meta.env.VITE_API_URL ?? "/api";
 const sessionTokenKey = "trackid.session.token";
 const localTokenKey = "trackid.local.token";
 const sessionUserKey = "trackid.session.user";
 const localUserKey = "trackid.local.user";
-
-async function requestApi<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as ErrorResponse;
-    throw new Error(body.error ?? "The request could not be completed");
-  }
-
-  return (await response.json()) as T;
-}
 
 export async function login(
   matricula: string,
@@ -119,4 +99,3 @@ export async function getCurrentUser(): Promise<UserProfile> {
     },
   });
 }
-
