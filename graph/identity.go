@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/rodfileto/trackid/db"
 )
 
 // IdentitySyncStats reports what SyncIdentity materialized.
@@ -14,42 +15,13 @@ type IdentitySyncStats struct {
 	Features int
 }
 
-// knownIdentityRow is one KNOWN biometricfeature joined up through
-// identity_file -> identity_register -> identity_document -> person. A register
-// can yield zero, one, or both feature types (photo -> FACE_RECORD, nist ->
-// FINGERPRINT_TEMPLATE).
-type knownIdentityRow struct {
-	personID string
-
-	documentID     int64
-	documentNumber string
-	documentType   string
-	fiscalNumber   sql.NullString
-
-	registerID     int64
-	registerNumber string
-	name           string
-	parent1Name    string
-	parent1Gender  string
-	parent2Name    string
-	parent2Gender  string
-	birthDate      sql.NullString
-
-	identityFileID int64
-	featureType    string
-	sourcePath     string
-	storageRef     string
-	contentType    sql.NullString
-	sizeBytes      sql.NullInt64
-}
-
 // SyncIdentity materializes Person nodes from the person table, and the full
 // KNOWN identity chain — Identification, IdentityRegister, and KNOWN
 // BiometricFeature nodes — from the biometricfeature table. It reads only from
 // Postgres, rescanning every row every call; for materializing just the rows
 // one identity.Ingest call already wrote, use SyncIdentityRows instead.
-func SyncIdentity(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext) (IdentitySyncStats, error) {
-	persons, chain, err := loadIdentityRows(ctx, db)
+func SyncIdentity(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) (IdentitySyncStats, error) {
+	persons, chain, err := loadIdentityRows(ctx, sqlDB)
 	if err != nil {
 		return IdentitySyncStats{}, err
 	}
@@ -127,92 +99,66 @@ func writeIdentityRows(ctx context.Context, driver neo4j.DriverWithContext, pers
 }
 
 // SyncIdentityPlan returns the counts SyncIdentity would materialize.
-func SyncIdentityPlan(ctx context.Context, db *sql.DB) (IdentitySyncStats, error) {
-	persons, chain, err := loadIdentityRows(ctx, db)
+func SyncIdentityPlan(ctx context.Context, sqlDB *sql.DB) (IdentitySyncStats, error) {
+	persons, chain, err := loadIdentityRows(ctx, sqlDB)
 	if err != nil {
 		return IdentitySyncStats{}, err
 	}
 	return IdentitySyncStats{Persons: len(persons), Features: len(chain)}, nil
 }
 
-func loadIdentityRows(ctx context.Context, db *sql.DB) ([]map[string]any, []map[string]any, error) {
-	if db == nil {
+func loadIdentityRows(ctx context.Context, sqlDB *sql.DB) ([]map[string]any, []map[string]any, error) {
+	if sqlDB == nil {
 		return nil, nil, fmt.Errorf("database is not configured")
 	}
 
-	persons, err := loadPersons(ctx, db)
+	persons, err := loadPersons(ctx, sqlDB)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	rows, err := db.QueryContext(ctx, knownIdentityChainQuery)
+	rows, err := db.New(sqlDB).ListKnownIdentityChain(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
 
-	var chain []map[string]any
-	for rows.Next() {
-		var r knownIdentityRow
-		if err := rows.Scan(
-			&r.personID,
-			&r.documentID, &r.documentNumber, &r.documentType, &r.fiscalNumber,
-			&r.registerID, &r.registerNumber, &r.name,
-			&r.parent1Name, &r.parent1Gender, &r.parent2Name, &r.parent2Gender,
-			&r.birthDate,
-			&r.identityFileID, &r.featureType, &r.sourcePath, &r.storageRef,
-			&r.contentType, &r.sizeBytes,
-		); err != nil {
-			return nil, nil, err
-		}
-		chain = append(chain, identityRowParams(r))
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, err
+	chain := make([]map[string]any, 0, len(rows))
+	for _, r := range rows {
+		chain = append(chain, identityChainRowParams(identityParamsFromRow(r), r.PersonID))
 	}
 	return persons, chain, nil
 }
 
-func identityRowParams(r knownIdentityRow) map[string]any {
-	var fiscalNumber, birthDate, contentType string
-	var sizeBytes int64
-	if r.fiscalNumber.Valid {
-		fiscalNumber = r.fiscalNumber.String
+// identityParamsFromRow converts a ListKnownIdentityChainRow (the sqlc view of
+// the KNOWN identity chain) into the IdentityChainParams shape the Cypher
+// builder expects. Empty string / zero fields become "not set", matching the
+// IdentityChainParams contract.
+func identityParamsFromRow(r db.ListKnownIdentityChainRow) IdentityChainParams {
+	return IdentityChainParams{
+		DocumentID:     r.DocumentID,
+		DocumentNumber: r.DocumentNumber,
+		DocumentType:   r.DocumentType,
+		FiscalNumber:   r.FiscalNumber.String,
+		RegisterID:     r.RegisterID,
+		RegisterNumber: r.RegisterNumber,
+		Name:           r.Name,
+		Parent1Name:    r.Parent1Name,
+		Parent1Gender:  r.Parent1Gender,
+		Parent2Name:    r.Parent2Name,
+		Parent2Gender:  r.Parent2Gender,
+		BirthDate:      r.BirthDate.String,
+		IdentityFileID: r.IdentityFileID,
+		FeatureType:    r.FeatureType,
+		SourcePath:     r.SourcePath,
+		StorageRef:     r.StorageRef,
+		ContentType:    r.ContentType.String,
+		SizeBytes:      r.SizeBytes.Int64,
 	}
-	if r.birthDate.Valid {
-		birthDate = r.birthDate.String
-	}
-	if r.contentType.Valid {
-		contentType = r.contentType.String
-	}
-	if r.sizeBytes.Valid {
-		sizeBytes = r.sizeBytes.Int64
-	}
-	return identityChainRowParams(IdentityChainParams{
-		DocumentID:     r.documentID,
-		DocumentNumber: r.documentNumber,
-		DocumentType:   r.documentType,
-		FiscalNumber:   fiscalNumber,
-		RegisterID:     r.registerID,
-		RegisterNumber: r.registerNumber,
-		Name:           r.name,
-		Parent1Name:    r.parent1Name,
-		Parent1Gender:  r.parent1Gender,
-		Parent2Name:    r.parent2Name,
-		Parent2Gender:  r.parent2Gender,
-		BirthDate:      birthDate,
-		IdentityFileID: r.identityFileID,
-		FeatureType:    r.featureType,
-		SourcePath:     r.sourcePath,
-		StorageRef:     r.storageRef,
-		ContentType:    contentType,
-		SizeBytes:      sizeBytes,
-	}, r.personID)
 }
 
 // identityChainRowParams builds syncIdentityChainQuery's per-row params. Empty string/zero fields
 // map to Cypher null (not the empty value) so an absent optional column stays absent in Neo4j too,
-// matching what the sql.Null* -> map[string]any conversion in identityRowParams already did.
+// matching what the sql.Null* -> map[string]any conversion in identityParamsFromRow already did.
 func identityChainRowParams(r IdentityChainParams, personID string) map[string]any {
 	var fiscalNumber, birthDate, contentType any
 	var sizeBytes any
@@ -251,39 +197,17 @@ func identityChainRowParams(r IdentityChainParams, personID string) map[string]a
 	}
 }
 
-func loadPersons(ctx context.Context, db *sql.DB) ([]map[string]any, error) {
-	rows, err := db.QueryContext(ctx, `SELECT person_id FROM person ORDER BY person_id`)
+func loadPersons(ctx context.Context, sqlDB *sql.DB) ([]map[string]any, error) {
+	ids, err := db.New(sqlDB).ListPersonIDs(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var persons []map[string]any
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
+	persons := make([]map[string]any, 0, len(ids))
+	for _, id := range ids {
 		persons = append(persons, map[string]any{"personId": id})
 	}
-	return persons, rows.Err()
+	return persons, nil
 }
-
-const knownIdentityChainQuery = `
-SELECT
-    p.person_id,
-    d.id, d.document_number, d.document_type, d.fiscal_number,
-    r.id, r.register_number, r.name,
-    r.parent_1_name, r.parent_1_gender, r.parent_2_name, r.parent_2_gender,
-    r.birth_date,
-    f.id, bf.feature_type, f.source_path, f.storage_ref, f.content_type, f.size_bytes
-FROM biometricfeature bf
-JOIN identity_file f ON f.id = bf.identity_file_id
-JOIN identity_register r ON r.id = f.register_id
-JOIN identity_document d ON d.id = r.document_id
-JOIN person p ON p.id = d.person_id
-WHERE bf.provenance = 'KNOWN'
-ORDER BY bf.id
-`
 
 const syncIdentityQuery = `
 UNWIND $persons AS person

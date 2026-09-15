@@ -7,6 +7,17 @@ import (
 	"github.com/rodfileto/trackid/db"
 )
 
+// UserProfile is the public representation of a registered user.
+type UserProfile struct {
+	ID         int64  `json:"id"`
+	Nome       string `json:"nome"`
+	UltimoNome string `json:"ultimo_nome"`
+	Matricula  string `json:"matricula"`
+	Cargo      string `json:"cargo"`
+	Username   string `json:"username"`
+	Email      string `json:"email"`
+}
+
 // Repository is auth's data-access layer, backed by the sqlc-generated
 // Queries in the db package.
 type Repository struct {

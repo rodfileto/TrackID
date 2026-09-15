@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/rodfileto/trackid/db"
 )
 
 // SyncStats reports what Sync materialized.
@@ -34,8 +35,8 @@ type questionedFeatureRow struct {
 // materialized by SyncIdentity (the identity chain), not here. Decisions are
 // not materialized here either — they live in Postgres (biometric_decisions)
 // and cluster status is derived from them. Sync reads only from Postgres.
-func Sync(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext) (SyncStats, error) {
-	cases, features, err := loadSyncRows(ctx, db)
+func Sync(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) (SyncStats, error) {
+	cases, features, err := loadSyncRows(ctx, sqlDB)
 	if err != nil {
 		return SyncStats{}, err
 	}
@@ -86,8 +87,8 @@ func Sync(ctx context.Context, db *sql.DB, driver neo4j.DriverWithContext) (Sync
 
 // SyncPlan returns the counts Sync would materialize, without connecting to
 // Neo4j.
-func SyncPlan(ctx context.Context, db *sql.DB) (SyncStats, error) {
-	cases, features, err := loadSyncRows(ctx, db)
+func SyncPlan(ctx context.Context, sqlDB *sql.DB) (SyncStats, error) {
+	cases, features, err := loadSyncRows(ctx, sqlDB)
 	if err != nil {
 		return SyncStats{}, err
 	}
@@ -100,69 +101,47 @@ func SyncPlan(ctx context.Context, db *sql.DB) (SyncStats, error) {
 	return SyncStats{Evidence: evidence, Features: len(features)}, nil
 }
 
-func loadSyncRows(ctx context.Context, db *sql.DB) ([]caseRow, []questionedFeatureRow, error) {
-	if db == nil {
+func loadSyncRows(ctx context.Context, sqlDB *sql.DB) ([]caseRow, []questionedFeatureRow, error) {
+	if sqlDB == nil {
 		return nil, nil, fmt.Errorf("database is not configured")
 	}
-	cases, err := loadCaseRows(ctx, db)
+	cases, err := loadCaseRows(ctx, sqlDB)
 	if err != nil {
 		return nil, nil, err
 	}
-	features, err := loadQuestionedFeatureRows(ctx, db)
+	features, err := loadQuestionedFeatureRows(ctx, sqlDB)
 	if err != nil {
 		return nil, nil, err
 	}
 	return cases, features, nil
 }
 
-const caseRowsQuery = `
-SELECT case_id, case_type, description
-FROM criminal_cases
-ORDER BY case_id
-`
-
-func loadCaseRows(ctx context.Context, db *sql.DB) ([]caseRow, error) {
-	rows, err := db.QueryContext(ctx, caseRowsQuery)
+func loadCaseRows(ctx context.Context, sqlDB *sql.DB) ([]caseRow, error) {
+	rows, err := db.New(sqlDB).ListAllCriminalCases(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []caseRow
-	for rows.Next() {
-		var r caseRow
-		if err := rows.Scan(&r.caseID, &r.caseType, &r.description); err != nil {
-			return nil, err
-		}
-		out = append(out, r)
+	out := make([]caseRow, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, caseRow{caseID: r.CaseID, caseType: r.CaseType, description: r.Description})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-const questionedFeaturesQuery = `
-SELECT bf.case_trace_id, bf.feature_type, cc.case_id
-FROM biometricfeature bf
-JOIN case_traces tr ON tr.id = bf.case_trace_id
-JOIN case_evidences ev ON ev.id = tr.evidence_id
-JOIN criminal_cases cc ON cc.id = ev.criminal_case_id
-WHERE bf.provenance = 'QUESTIONED'
-ORDER BY bf.case_trace_id
-`
-
-func loadQuestionedFeatureRows(ctx context.Context, db *sql.DB) ([]questionedFeatureRow, error) {
-	rows, err := db.QueryContext(ctx, questionedFeaturesQuery)
+func loadQuestionedFeatureRows(ctx context.Context, sqlDB *sql.DB) ([]questionedFeatureRow, error) {
+	rows, err := db.New(sqlDB).ListQuestionedFeatures(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []questionedFeatureRow
-	for rows.Next() {
-		var r questionedFeatureRow
-		if err := rows.Scan(&r.caseTraceID, &r.featureType, &r.caseID); err != nil {
-			return nil, err
-		}
-		out = append(out, r)
+	out := make([]questionedFeatureRow, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, questionedFeatureRow{
+			caseTraceID: r.CaseTraceID.Int64,
+			featureType: r.FeatureType,
+			caseID:      r.CaseID,
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 const syncEvidenceQuery = `

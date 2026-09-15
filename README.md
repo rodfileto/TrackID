@@ -42,25 +42,49 @@ reuse the full core unchanged regardless of their source formats.
 
 ## Structure
 
-- `cmd/` — command-line tools: `migrate` (Postgres schema), `trackid` (API server),
-  `sync-graph` (Evidence + QUESTIONED features → Neo4j), `sync-identity` (Person /
-  Identification / IdentityRegister / KNOWN features → Neo4j), `cluster-biometrics`
-  (stable clustering), `identify` (`IDENTIFIED_AS` → Neo4j)
-- `api/` — the HTTP router: health, auth, and the core `cases` endpoint, plus a
-  route-registration hook for integrations
-- `auth/` — user registration/login, JWT issuance and middleware
-- `cases/` — read API for the `criminal_cases` table
+The package is split between a **public** surface (the packages downstream
+organizations import to build their import commands) and an **internal** runtime
+(the code that only this repository's own binaries need).
+
+**Public — the reusable core (importable by organizations):**
+
+- `api/` — the HTTP router and every core handler (health, auth, cases), plus the
+  `Dependencies.Register` hook integrations use to attach their own routes
+- `auth/` — user accounts: `UserProfile`, the data-access `Repository`, and JWT
+  issuance (no HTTP handlers; those live in `api/`)
+- `cases/` — the `Case` type and the generic `Ingest` extension contract for the
+  QUESTIONED (evidence) hierarchy (no HTTP handlers)
+- `identity/` — the generic `Ingest` extension contract for the KNOWN (enrollment)
+  hierarchy
 - `cluster/` — decision-status derivation and biometric clustering by modality
   (persisted, stable ids; extend/merge/split) plus identified-person linkage, all
   driven by `biometric_decisions`, reading Postgres and writing Neo4j
-- `config/`, `database/`, `env/` — configuration, connection, and dotenv loading
+- `graph/` — embedded Neo4j (Cypher) schema migrations, their applier, the feature-type
+  mapping, and the Postgres → Neo4j sync of evidence, the identity chain, and
+  biometric features
+- `biometricmatch/` — ANN similarity search over `feature_embeddings` writing SYSTEM
+  decisions
+- `storage/` — MinIO/S3 object-storage client
 - `db/` — sqlc queries and models for the core Postgres schema (`queries.sql`) and the
   goose migrations (`db/migrations`)
-- `graph/` — embedded Neo4j (Cypher) schema migrations, their applier, and the
-  Postgres → Neo4j sync of evidence, the identity chain, and biometric features
-- `storage/` — MinIO/S3 object-storage client
+
+**Internal — this repository's own runtime (not importable downstream):**
+
+- `internal/config/`, `internal/env/`, `internal/database/` — configuration, dotenv
+  loading, and the Postgres connection pool
+- `internal/cmdutil/` — shared bootstrap helpers for the `cmd/` tools (`-commit`
+  dry-run flag, DB/Neo4j opening)
+- `internal/server/` — the composition root: wires the API router and mounts the
+  prototype frontend
+- `internal/web/` — serves the built frontend as a single-page application
+
+**Commands and other:**
+
+- `cmd/` — thin `main()` wrappers: `migrate` (Postgres schema), `trackid` (API server
+  + frontend), `sync-graph`, `sync-identity`, `cluster-biometrics`, `identify`, and
+  `match-embeddings`
 - `frontend/` — React + Vite, based on the [TailAdmin React](https://github.com/TailAdmin/free-react-tailwind-admin-dashboard)
-  template
+  template; `npm run build` produces the bundle `internal/web` serves
 - `quarto/` — technical report and ontology documentation
 - `scripts/` — development helpers (start/stop the stack, apply the graph schema)
 - `docker-compose.yml` — Postgres, Redis, MinIO, and optional Neo4j
