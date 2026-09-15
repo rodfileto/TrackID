@@ -10,11 +10,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 
 	"github.com/rodfileto/trackid/api"
 	"github.com/rodfileto/trackid/internal/config"
 	"github.com/rodfileto/trackid/internal/database"
 	"github.com/rodfileto/trackid/internal/env"
+	"github.com/rodfileto/trackid/internal/queue"
 	"github.com/rodfileto/trackid/internal/web"
 	"github.com/rodfileto/trackid/storage"
 )
@@ -50,11 +52,25 @@ func Run() error {
 		log.Printf("object storage is not configured; evidence uploads will return 503")
 	}
 
+	var queueClient *asynq.Client
+	if configuration.RedisURL != "" {
+		var err error
+		queueClient, err = queue.OpenClient(configuration.RedisURL)
+		if err != nil {
+			log.Printf("Redis is configured but the queue client could not be created; background jobs will not be enqueued: %v", err)
+		} else {
+			defer queueClient.Close()
+		}
+	} else {
+		log.Printf("REDIS_URL is not configured; background jobs will not be enqueued")
+	}
+
 	router := api.NewRouter(api.Dependencies{
 		DB:          db,
 		JWTSecret:   configuration.JWTSecret,
 		EmailDomain: configuration.EmailDomain,
 		Storage:     store,
+		Queue:       queueClient,
 	})
 
 	if distDir := web.DistDir(); distDir != "" {

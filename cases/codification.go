@@ -7,10 +7,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
 	"github.com/rodfileto/trackid/db"
+	"github.com/rodfileto/trackid/embedding"
 	"github.com/rodfileto/trackid/graph"
 	"github.com/rodfileto/trackid/storage"
 )
@@ -321,7 +323,13 @@ func DeletePoint(ctx context.Context, sqlDB *sql.DB, caseID string, evidenceFile
 // the link; the previous file is left in storage, not deleted -- nothing
 // else in the schema references case_files by anything other than id, so an
 // orphaned old version is harmless and (deliberately) not cleaned up here.
-func SaveCodificationImage(ctx context.Context, sqlDB *sql.DB, store *storage.Client, caseID string, evidenceFileID, traceID int64, data []byte) (File, error) {
+//
+// On success, if queue is non-nil, it enqueues embedding.TaskTypeComputeCodification
+// so cmd/worker picks up the new image and computes/stores its embedding
+// asynchronously (see embedding.ComputeForCodification). A nil queue (Redis not
+// configured) or an enqueue error only logs -- the image is already saved, and the
+// embedding can still be produced later by a backfill run.
+func SaveCodificationImage(ctx context.Context, sqlDB *sql.DB, store *storage.Client, queue embedding.Enqueuer, caseID string, evidenceFileID, traceID int64, data []byte) (File, error) {
 	if sqlDB == nil {
 		return File{}, fmt.Errorf("cases: nil db")
 	}
@@ -388,6 +396,15 @@ func SaveCodificationImage(ctx context.Context, sqlDB *sql.DB, store *storage.Cl
 
 	if err := tx.Commit(); err != nil {
 		return File{}, err
+	}
+
+	if queue != nil {
+		task, err := embedding.NewComputeCodificationTask(codificationID)
+		if err != nil {
+			log.Printf("cases: build embed task for codification %d: %v", codificationID, err)
+		} else if _, err := queue.Enqueue(task); err != nil {
+			log.Printf("cases: enqueue embed task for codification %d: %v", codificationID, err)
+		}
 	}
 
 	return File{
