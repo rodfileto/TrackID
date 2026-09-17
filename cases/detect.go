@@ -28,8 +28,21 @@ type FaceVision interface {
 var ErrVisionUnavailable = errors.New("cases: face vision is not configured")
 
 // ErrUnsupportedImage is returned when an image is in a format trackid-vision
-// can't decode (it reads JPEG and PNG only).
-var ErrUnsupportedImage = errors.New("unsupported image format for face analysis (JPEG and PNG only)")
+// can't decode.
+var ErrUnsupportedImage = errors.New("unsupported image format for face analysis (JPEG, PNG, GIF, BMP, TIFF, and WebP only)")
+
+// supportedImageFormats mirrors the decoders trackid-vision's vision package
+// registers (see its image.go) -- image.DecodeConfig's format string only
+// recognizes a format once something in the binary has blank-imported its
+// decoder, which importing vision already does for all of these.
+var supportedImageFormats = map[string]bool{
+	"jpeg": true,
+	"png":  true,
+	"gif":  true,
+	"bmp":  true,
+	"tiff": true,
+	"webp": true,
+}
 
 // FaceProposal is one face the detector found on an evidence image: a box in
 // the image's pixel coordinates plus the detector's confidence. Same shape as
@@ -59,7 +72,7 @@ func DetectFaces(ctx context.Context, sqlDB *sql.DB, store *storage.Client, vis 
 	}
 
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(content.Data))
-	if err != nil || (format != "jpeg" && format != "png") {
+	if err != nil || !supportedImageFormats[format] {
 		return nil, ErrUnsupportedImage
 	}
 
