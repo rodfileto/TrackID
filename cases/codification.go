@@ -52,6 +52,71 @@ type PointInput struct {
 	Angle     float64
 }
 
+// CaseCodification is one case_codifications row plus enough about its trace
+// (box, sequence) and the trace's evidence file (sequence, id, filename) for
+// a caller to render every codification across a whole case -- e.g. every
+// face codified in a FACIAL case -- without a request per trace. Label it
+// "<evidenceSequence>-<traceSequence>-<sequence>" (the numbering scheme
+// analysts use to refer to one codification).
+type CaseCodification struct {
+	ID               int64   `json:"id"`
+	Sequence         int16   `json:"sequence"`
+	CodificationType string  `json:"codificationType"`
+	CaseFileID       int64   `json:"caseFileId,omitempty"`
+	TraceID          int64   `json:"traceId"`
+	TraceSequence    int16   `json:"traceSequence"`
+	BoxX1            float64 `json:"boxX1"`
+	BoxY1            float64 `json:"boxY1"`
+	BoxX2            float64 `json:"boxX2"`
+	BoxY2            float64 `json:"boxY2"`
+	EvidenceSequence int16   `json:"evidenceSequence"`
+	EvidenceFileID   int64   `json:"evidenceFileId"`
+	EvidenceFilename string  `json:"evidenceFilename"`
+}
+
+// ListCaseCodifications returns every codification recorded across every
+// trace of a case, in evidence-then-trace-then-codification sequence order.
+func ListCaseCodifications(ctx context.Context, sqlDB *sql.DB, caseID string) ([]CaseCodification, error) {
+	if sqlDB == nil {
+		return nil, fmt.Errorf("cases: nil db")
+	}
+
+	q := db.New(sqlDB)
+
+	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	rows, err := q.ListCaseCodificationsByCriminalCase(ctx, caseRow.ID)
+	if err != nil {
+		return nil, fmt.Errorf("cases: list case_codifications for case %d: %w", caseRow.ID, err)
+	}
+
+	codifications := make([]CaseCodification, 0, len(rows))
+	for _, row := range rows {
+		codifications = append(codifications, CaseCodification{
+			ID:               row.CodificationID,
+			Sequence:         row.CodificationSequence,
+			CodificationType: row.CodificationType,
+			CaseFileID:       row.CodificationFileID.Int64,
+			TraceID:          row.TraceID,
+			TraceSequence:    row.TraceSequence,
+			BoxX1:            row.BoxX1.Float64,
+			BoxY1:            row.BoxY1.Float64,
+			BoxX2:            row.BoxX2.Float64,
+			BoxY2:            row.BoxY2.Float64,
+			EvidenceSequence: row.EvidenceSequence,
+			EvidenceFileID:   row.EvidenceFileID,
+			EvidenceFilename: row.EvidenceFilename.String,
+		})
+	}
+	return codifications, nil
+}
+
 // resolveCodification scopes traceID to the given case + evidence file (see
 // GetCaseTraceForFile), then finds or creates its codification row. Every
 // trace gets exactly one codification (sequence 1) -- CreateTraces already

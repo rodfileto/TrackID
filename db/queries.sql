@@ -214,6 +214,23 @@ LEFT JOIN biometricfeature bf ON bf.case_trace_id = ct.id
 WHERE ce.criminal_case_id = $1 AND ce.case_file_id = $2
 ORDER BY ct.sequence;
 
+-- name: ListCaseCodificationsByCriminalCase :many
+-- Every codification recorded across every trace of a case, with enough
+-- about its trace (box, sequence), the trace's evidence file (sequence, id,
+-- filename) and its own saved image (case_file_id, if the analyst adjusted
+-- and saved one via SaveCodificationImage) for a caller to render a
+-- thumbnail and label it "<evidence sequence>-<trace sequence>-<codification
+-- sequence>" without a second round trip per codification.
+SELECT cd.id AS codification_id, cd.sequence AS codification_sequence, cd.codification_type, cd.case_file_id AS codification_file_id,
+    ct.id AS trace_id, ct.sequence AS trace_sequence, ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2,
+    ce.sequence AS evidence_sequence, cf.id AS evidence_file_id, cf.filename AS evidence_filename
+FROM case_codifications cd
+JOIN case_traces ct ON ct.id = cd.trace_id
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+JOIN case_files cf ON cf.id = ce.case_file_id
+WHERE ce.criminal_case_id = $1
+ORDER BY ce.sequence, ct.sequence, cd.sequence;
+
 -- name: DeleteCaseTrace :execrows
 -- Scoped to the case + evidence file so a trace can only be deleted through
 -- the case/evidence it actually belongs to. case_codifications and
@@ -302,23 +319,53 @@ ON CONFLICT (biometricfeature_id, embedding_type) DO UPDATE SET
 RETURNING id;
 
 -- name: GetCodificationSource :one
--- Resolves the image to embed for a codification: prefers the manually adjusted
--- codification_image (case_codifications.case_file_id) when set, falling back to the
--- trace's auto-detected face_crop (case_traces.case_file_id). Also returns the
--- biometricfeature this codification's trace already has (created at trace-marking
--- time by UpsertBiometricFeatureFromCaseTrace) -- feature_embeddings hangs off it.
+-- Resolves the image to embed for a codification, in priority order: the
+-- manually adjusted codification_image (case_codifications.case_file_id),
+-- the trace's own face_crop (case_traces.case_file_id, set by an automated
+-- import pipeline that already produced one), or -- for a trace marked by
+-- hand and codified with neither -- the evidence image plus the trace's own
+-- box (box_x1..y2), letting the caller crop+pad around just that face.
+-- Also returns the biometricfeature this codification's trace already has
+-- (created at trace-marking time by UpsertBiometricFeatureFromCaseTrace) --
+-- feature_embeddings hangs off it.
 SELECT
     cod.id AS codification_id,
     cod.codification_type,
     bf.id AS biometricfeature_id,
-    COALESCE(cod.case_file_id, tr.case_file_id) AS source_file_id,
-    cf.storage_ref,
-    cf.content_type
+    ccf.storage_ref AS codification_storage_ref,
+    tcf.storage_ref AS trace_crop_storage_ref,
+    ecf.storage_ref AS evidence_storage_ref,
+    tr.box_x1, tr.box_y1, tr.box_x2, tr.box_y2
 FROM case_codifications cod
 JOIN case_traces tr ON tr.id = cod.trace_id
+JOIN case_evidences ce ON ce.id = tr.evidence_id
 JOIN biometricfeature bf ON bf.case_trace_id = tr.id
-LEFT JOIN case_files cf ON cf.id = COALESCE(cod.case_file_id, tr.case_file_id)
+LEFT JOIN case_files ccf ON ccf.id = cod.case_file_id
+LEFT JOIN case_files tcf ON tcf.id = tr.case_file_id
+LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
 WHERE cod.id = $1;
+
+-- name: GetCodificationForComparison :one
+-- One codification of a case with what comparing it needs: its stored
+-- embedding of the given type when there is one, and otherwise the images to
+-- compute one from -- the analyst's adjusted codification image if saved,
+-- else the evidence image plus the trace's box.
+SELECT
+    cd.id AS codification_id,
+    cd.codification_type,
+    ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2,
+    ecf.storage_ref AS evidence_storage_ref,
+    ccf.storage_ref AS codification_storage_ref,
+    -- '' when there's no stored embedding (sqlc can't see the LEFT JOIN's NULL).
+    COALESCE(fe.embedding::text, '')::text AS embedding
+FROM case_codifications cd
+JOIN case_traces ct ON ct.id = cd.trace_id
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
+LEFT JOIN case_files ccf ON ccf.id = cd.case_file_id
+LEFT JOIN biometricfeature bf ON bf.case_trace_id = ct.id
+LEFT JOIN feature_embeddings fe ON fe.biometricfeature_id = bf.id AND fe.embedding_type = sqlc.arg(embedding_type)
+WHERE cd.id = sqlc.arg(codification_id) AND ce.criminal_case_id = sqlc.arg(criminal_case_id);
 
 -- name: ListUnmatchedFeatureEmbeddings :many
 SELECT id, biometricfeature_id, embedding_type, embedding::text AS embedding, model_version

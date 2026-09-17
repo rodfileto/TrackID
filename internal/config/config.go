@@ -16,9 +16,9 @@ type Config struct {
 	S3SecretKey string
 	S3Bucket    string
 
-	// Vision (cmd/worker only -- see embedding.ComputeForCodification). Left
-	// empty, the worker logs a warning and skips registering the embedding
-	// task handler rather than failing to start.
+	// Vision: face detection on evidence in the API (cases.DetectFaces) and
+	// embedding in the worker (embedding.ComputeForCodification). Left empty,
+	// both log a warning and run without it rather than failing to start.
 	VisionDetectorPath      string
 	VisionRecognizerPath    string
 	VisionSharedLibraryPath string

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -31,6 +32,79 @@ func GetCaseHandler(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		context.JSON(http.StatusOK, detail)
+	}
+}
+
+// ListCaseCodificationsHandler returns every codification recorded across
+// every trace of a case -- e.g. every face codified in a FACIAL case -- so a
+// caller can render them all in one view without a request per trace.
+func ListCaseCodificationsHandler(db *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if db == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		caseID := context.Param("caseId")
+
+		codifications, err := cases.ListCaseCodifications(context.Request.Context(), db, caseID)
+		if err != nil {
+			if errors.Is(err, cases.ErrNotFound) {
+				context.JSON(http.StatusNotFound, gin.H{"error": "case not found"})
+				return
+			}
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not list codifications"})
+			return
+		}
+		context.JSON(http.StatusOK, gin.H{"codifications": codifications})
+	}
+}
+
+type compareFacesRequest struct {
+	CodificationIDs []int64 `json:"codificationIds" binding:"required,len=2"`
+}
+
+// CompareFacesHandler returns the machine similarity score between two face
+// codifications of a case (see cases.CompareFaces).
+func CompareFacesHandler(db *sql.DB, store *storage.Client, vis cases.FaceVision) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if db == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		var request compareFacesRequest
+		if err := context.ShouldBindJSON(&request); err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "codificationIds must hold exactly two codification ids"})
+			return
+		}
+		caseID := context.Param("caseId")
+
+		comparison, err := cases.CompareFaces(
+			context.Request.Context(), db, store, vis, caseID,
+			[2]int64{request.CodificationIDs[0], request.CodificationIDs[1]},
+		)
+		if err != nil {
+			var noFace cases.NoFaceError
+			switch {
+			case errors.As(err, &noFace):
+				context.JSON(http.StatusUnprocessableEntity, gin.H{
+					"error":          "no face detected in one of the codifications",
+					"codificationId": noFace.CodificationID,
+				})
+			case errors.Is(err, cases.ErrNotFound):
+				context.JSON(http.StatusNotFound, gin.H{"error": "codification not found in this case"})
+			case errors.Is(err, cases.ErrNotFaceCodification):
+				context.JSON(http.StatusBadRequest, gin.H{"error": "only face codifications can be compared"})
+			case errors.Is(err, cases.ErrUnsupportedImage):
+				context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			case errors.Is(err, cases.ErrVisionUnavailable):
+				context.JSON(http.StatusServiceUnavailable, gin.H{"error": "face recognition is not configured, and one of the faces has no stored embedding"})
+			default:
+				log.Printf("compare faces (case %s, codifications %v): %v", caseID, request.CodificationIDs, err)
+				context.JSON(http.StatusInternalServerError, gin.H{"error": "could not compare faces"})
+			}
+			return
+		}
+		context.JSON(http.StatusOK, comparison)
 	}
 }
 

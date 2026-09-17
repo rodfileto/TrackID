@@ -11,8 +11,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
+	"github.com/rodfileto/trackid-vision/vision"
 
 	"github.com/rodfileto/trackid/api"
+	"github.com/rodfileto/trackid/cases"
 	"github.com/rodfileto/trackid/internal/config"
 	"github.com/rodfileto/trackid/internal/database"
 	"github.com/rodfileto/trackid/internal/env"
@@ -65,12 +67,33 @@ func Run() error {
 		log.Printf("REDIS_URL is not configured; background jobs will not be enqueued")
 	}
 
+	// Assigned only on success: a nil *vision.Service stored in the interface
+	// would not compare equal to nil, and the handler relies on that check.
+	var faceVision cases.FaceVision
+	if configuration.VisionDetectorPath != "" && configuration.VisionRecognizerPath != "" {
+		vis, err := vision.NewService(vision.Config{
+			DetectorPath:      configuration.VisionDetectorPath,
+			RecognizerPath:    configuration.VisionRecognizerPath,
+			SharedLibraryPath: configuration.VisionSharedLibraryPath,
+			UseGPU:            configuration.VisionUseGPU,
+		})
+		if err != nil {
+			log.Printf("vision service unavailable; face detection and on-the-fly face comparison will return 503: %v", err)
+		} else {
+			defer vis.Close()
+			faceVision = vis
+		}
+	} else {
+		log.Printf("VISION_DETECTOR_PATH/VISION_RECOGNIZER_PATH not configured; face detection and on-the-fly face comparison will return 503")
+	}
+
 	router := api.NewRouter(api.Dependencies{
 		DB:          db,
 		JWTSecret:   configuration.JWTSecret,
 		EmailDomain: configuration.EmailDomain,
 		Storage:     store,
 		Queue:       queueClient,
+		FaceVision:  faceVision,
 	})
 
 	if distDir := web.DistDir(); distDir != "" {

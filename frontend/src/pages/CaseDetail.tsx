@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import PageMeta from "../components/common/PageMeta";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
@@ -15,6 +15,7 @@ import Badge from "../components/ui/badge/Badge";
 import Button from "../components/ui/button/Button";
 import EvidenceDropzone from "../components/cases/EvidenceDropzone";
 import EvidencePreview from "../components/cases/EvidencePreview";
+import FacialCaseWorkspace from "../components/cases/FacialCaseWorkspace";
 import TraceMarkerModal from "../components/cases/TraceMarkerModal";
 import {
   addEvidence,
@@ -50,6 +51,9 @@ function formatDate(iso: string): string {
 
 export default function CaseDetailPage() {
   const { caseId } = useParams<{ caseId: string }>();
+  const location = useLocation();
+  const backToCases =
+    (location.state as { from?: string } | null)?.from ?? "/cases";
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -157,7 +161,7 @@ export default function CaseDetailPage() {
 
       <div className="mb-6">
         <Link
-          to="/cases"
+          to={backToCases}
           className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
         >
           <svg
@@ -180,7 +184,9 @@ export default function CaseDetailPage() {
         </Link>
       </div>
 
-      {loading && (
+      {/* Only the first load blanks the page: reloads after an upload or
+          exclude keep the workspace mounted, with its unsaved boxes. */}
+      {loading && !detail && (
         <p className="text-sm text-gray-500 dark:text-gray-400">Loading...</p>
       )}
 
@@ -188,7 +194,7 @@ export default function CaseDetailPage() {
         <p className="text-sm text-error-500">{error}</p>
       )}
 
-      {!loading && detail && (
+      {detail && (
         <div className="space-y-6">
           <ComponentCard
             title="Case"
@@ -204,58 +210,77 @@ export default function CaseDetailPage() {
             </div>
           </ComponentCard>
 
-          <ComponentCard title="Add Evidence" desc="Attach digital files.">
-            <EvidenceDropzone onFiles={handleFiles} onRejected={handleRejected} />
-
-            {selectedFiles.length > 0 && (
-              <ul className="mt-4 divide-y divide-gray-100 dark:divide-white/[0.05]">
-                {selectedFiles.map((file, index) => (
-                  <li
-                    key={`${file.name}-${index}`}
-                    className="flex items-center justify-between py-2"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-gray-800 dark:text-white/90">
-                        {file.name}
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatBytes(file.size)}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeFile(index)}
-                      className="text-sm text-error-500 hover:text-error-600 dark:text-error-400"
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <div className="mt-4 flex justify-end">
-              <Button
-                size="sm"
-                onClick={handleUpload}
-                disabled={selectedFiles.length === 0 || uploading}
+          {detail.caseType === "FACIAL" ? (
+            <FacialCaseWorkspace
+              caseId={caseId ?? ""}
+              evidences={evidences}
+              onEvidencesChanged={load}
+            />
+          ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            <div className="lg:col-span-4">
+              <ComponentCard
+                title="Add Evidence"
+                desc="Attach digital files."
+                className="h-full"
               >
-                {uploading
-                  ? "Uploading..."
-                  : selectedFiles.length > 1
-                    ? `Upload ${selectedFiles.length} files`
-                    : "Upload"}
-              </Button>
-            </div>
-          </ComponentCard>
+                <EvidenceDropzone
+                  onFiles={handleFiles}
+                  onRejected={handleRejected}
+                />
 
-          <ComponentCard
-            title="Evidences"
-            desc={`${evidences.length} file${evidences.length === 1 ? "" : "s"}`}
-          >
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
-              <div className="max-w-full overflow-x-auto">
-                <Table>
+                {selectedFiles.length > 0 && (
+                  <ul className="mt-4 divide-y divide-gray-100 dark:divide-white/[0.05]">
+                    {selectedFiles.map((file, index) => (
+                      <li
+                        key={`${file.name}-${index}`}
+                        className="flex items-center justify-between py-2"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-medium text-gray-800 dark:text-white/90">
+                            {file.name}
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {formatBytes(file.size)}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeFile(index)}
+                          className="text-sm text-error-500 hover:text-error-600 dark:text-error-400"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={handleUpload}
+                    disabled={selectedFiles.length === 0 || uploading}
+                  >
+                    {uploading
+                      ? "Uploading..."
+                      : selectedFiles.length > 1
+                        ? `Upload ${selectedFiles.length} files`
+                        : "Upload"}
+                  </Button>
+                </div>
+              </ComponentCard>
+            </div>
+
+            <div className="lg:col-span-8">
+              <ComponentCard
+                title="Evidences"
+                desc={`${evidences.length} file${evidences.length === 1 ? "" : "s"}`}
+                className="h-full"
+              >
+                <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
+                  <div className="max-w-full overflow-x-auto">
+                    <Table>
                   <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
                     <TableRow>
                       <TableCell
@@ -362,10 +387,13 @@ export default function CaseDetailPage() {
                       </TableRow>
                     )}
                   </TableBody>
-                </Table>
-              </div>
+                    </Table>
+                  </div>
+                </div>
+              </ComponentCard>
             </div>
-          </ComponentCard>
+          </div>
+          )}
         </div>
       )}
 

@@ -37,6 +37,32 @@ export interface Trace {
   featureId: number;
 }
 
+export interface CaseCodification {
+  id: number;
+  sequence: number;
+  codificationType: string;
+  caseFileId?: number;
+  traceId: number;
+  traceSequence: number;
+  boxX1: number;
+  boxY1: number;
+  boxX2: number;
+  boxY2: number;
+  evidenceSequence: number;
+  evidenceFileId: number;
+  evidenceFilename: string;
+}
+
+/** A face the detector found on an evidence image -- not saved until the
+ * analyst sends it to createTraces. */
+export interface FaceProposal {
+  boxX1: number;
+  boxY1: number;
+  boxX2: number;
+  boxY2: number;
+  score: number;
+}
+
 export interface TraceInput {
   boxX1: number;
   boxY1: number;
@@ -74,6 +100,7 @@ export interface ListCasesParams {
   pageSize?: number;
   caseType?: string;
   q?: string;
+  year?: string;
 }
 
 export interface CreateCaseInput {
@@ -94,11 +121,19 @@ export async function listCases(
   if (params.pageSize) query.set("page_size", String(params.pageSize));
   if (params.caseType) query.set("case_type", params.caseType);
   if (params.q) query.set("q", params.q);
+  if (params.year) query.set("year", params.year);
 
   const qs = query.toString();
   return requestApi<ListCasesResponse>(`/cases${qs ? `?${qs}` : ""}`, {
     headers: authHeaders(),
   });
+}
+
+export async function listCaseYears(): Promise<string[]> {
+  const { years } = await requestApi<{ years: string[] }>("/cases/years", {
+    headers: authHeaders(),
+  });
+  return years;
 }
 
 export async function createCase(input: CreateCaseInput): Promise<Case> {
@@ -113,6 +148,69 @@ export async function getCase(caseId: string): Promise<CaseDetail> {
   return requestApi<CaseDetail>(`/cases/${encodeURIComponent(caseId)}`, {
     headers: authHeaders(),
   });
+}
+
+/** Where one side's embedding came from: already stored, or computed now
+ * from the saved codification image or the evidence image. */
+export type EmbeddingSource = "stored" | "codification_image" | "evidence";
+
+export interface FaceComparison {
+  /** Cosine similarity of the two face embeddings; 1 = identical. */
+  similarity: number;
+  embeddingType: string;
+  modelVersion: string;
+  faces: [
+    { codificationId: number; source: EmbeddingSource },
+    { codificationId: number; source: EmbeddingSource },
+  ];
+}
+
+export class CompareFacesError extends Error {
+  /** Set when no face could be found for this codification. */
+  codificationId?: number;
+
+  constructor(message: string, codificationId?: number) {
+    super(message);
+    this.codificationId = codificationId;
+  }
+}
+
+export async function compareFaces(
+  caseId: string,
+  codificationIds: [number, number],
+): Promise<FaceComparison> {
+  const response = await fetch(
+    `${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/codifications/compare`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ codificationIds }),
+    },
+  );
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      codificationId?: number;
+    };
+    throw new CompareFacesError(
+      body.error ?? "Could not compare faces",
+      body.codificationId,
+    );
+  }
+
+  return (await response.json()) as FaceComparison;
+}
+
+export async function listCaseCodifications(
+  caseId: string,
+): Promise<CaseCodification[]> {
+  const { codifications } = await requestApi<{
+    codifications: CaseCodification[];
+  }>(`/cases/${encodeURIComponent(caseId)}/codifications`, {
+    headers: authHeaders(),
+  });
+  return codifications;
 }
 
 export async function addEvidence(
@@ -173,6 +271,17 @@ export async function getEvidenceObjectUrl(
 
   const blob = await response.blob();
   return URL.createObjectURL(blob);
+}
+
+export async function detectFaces(
+  caseId: string,
+  evidenceId: number,
+): Promise<FaceProposal[]> {
+  const { faces } = await requestApi<{ faces: FaceProposal[] }>(
+    `/cases/${encodeURIComponent(caseId)}/evidences/${evidenceId}/detect-faces`,
+    { method: "POST", headers: authHeaders() },
+  );
+  return faces;
 }
 
 export async function listTraces(

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -11,6 +12,11 @@ import (
 
 	"github.com/rodfileto/trackid/cases"
 )
+
+// caseYearPattern matches a single case_id segment (case_ids are dot-separated,
+// e.g. "01.2026.01.SRMG.00270" or "2026.0001") that looks like a year, whichever
+// position it appears in.
+var caseYearPattern = regexp.MustCompile(`^(19|20)\d{2}$`)
 
 type ListResponse struct {
 	Items      []cases.Case `json:"items"`
@@ -80,6 +86,9 @@ func ListCasesHandler(db *sql.DB) gin.HandlerFunc {
 		addWildcardFilter("case_id ILIKE", context.Query("case_id"))
 		addWildcardFilter("description ILIKE", context.Query("q"))
 		addFilter("case_type =", strings.ToUpper(context.Query("case_type")))
+		if year := strings.TrimSpace(context.Query("year")); year != "" && caseYearPattern.MatchString(year) {
+			addFilter("case_id ~", `(^|\.)`+year+`(\.|$)`)
+		}
 		where := ""
 		if len(filters) > 0 {
 			where = " WHERE " + strings.Join(filters, " AND ")
@@ -111,6 +120,44 @@ func ListCasesHandler(db *sql.DB) gin.HandlerFunc {
 		}
 		totalPages := (total + pageSize - 1) / pageSize
 		context.JSON(http.StatusOK, ListResponse{Items: items, Total: total, Page: page, PageSize: pageSize, TotalPages: totalPages})
+	}
+}
+
+// ListCaseYearsHandler returns the distinct years found across all case_ids,
+// newest first, for populating the "filter by year" dropdown. A year is any
+// dot-separated case_id segment matching caseYearPattern, regardless of its
+// position -- case_ids from different sources place the year differently
+// (e.g. "01.2026.01.SRMG.00270" vs. "2026.0001").
+func ListCaseYearsHandler(db *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if db == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		rows, err := db.QueryContext(context.Request.Context(), `
+			SELECT DISTINCT seg
+			FROM (SELECT unnest(string_to_array(case_id, '.')) AS seg FROM criminal_cases) parts
+			WHERE seg ~ '^(19|20)[0-9]{2}$'
+			ORDER BY seg DESC`)
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not list case years"})
+			return
+		}
+		defer rows.Close()
+		years := []string{}
+		for rows.Next() {
+			var year string
+			if err := rows.Scan(&year); err != nil {
+				context.JSON(http.StatusInternalServerError, gin.H{"error": "could not read case years"})
+				return
+			}
+			years = append(years, year)
+		}
+		if err := rows.Err(); err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not read case years"})
+			return
+		}
+		context.JSON(http.StatusOK, gin.H{"years": years})
 	}
 }
 

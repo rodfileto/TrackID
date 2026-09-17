@@ -53,6 +53,10 @@ export interface TraceEditorProps {
   className?: string;
   /** Minimum box side, in original-image pixels, to keep a drawn box. */
   minBoxSize?: number;
+  /** Controlled drawing mode, for callers that want their own "mark" button.
+   * Leave undefined to let the editor's own + button manage it. */
+  drawing?: boolean;
+  onDrawingChange?: (drawing: boolean) => void;
 }
 
 const BOX_COLOR = "#3b82f6"; // blue-500
@@ -87,8 +91,15 @@ export default function TraceEditor({
   readOnly = false,
   className = "",
   minBoxSize = DEFAULT_MIN_BOX_SIZE,
+  drawing,
+  onDrawingChange,
 }: TraceEditorProps) {
-  const [isDrawing, setIsDrawing] = useState(false);
+  const [internalDrawing, setInternalDrawing] = useState(false);
+  const isDrawing = drawing ?? internalDrawing;
+  function setIsDrawing(next: boolean) {
+    setInternalDrawing(next);
+    onDrawingChange?.(next);
+  }
   const [draft, setDraft] = useState<{
     x1: number;
     y1: number;
@@ -321,7 +332,7 @@ export default function TraceEditor({
             type="button"
             onClick={() => {
               setSelectedId(null);
-              setIsDrawing((prev) => !prev);
+              setIsDrawing(!isDrawing);
             }}
             title="Mark a trace"
             className={`flex h-6 w-6 items-center justify-center rounded transition-colors ${

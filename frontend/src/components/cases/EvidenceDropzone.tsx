@@ -4,6 +4,9 @@ import { useDropzone } from "react-dropzone";
 interface EvidenceDropzoneProps {
   onFiles: (files: File[]) => void;
   onRejected: () => void;
+  /** Smaller padding and copy, for narrow side columns. */
+  compact?: boolean;
+  className?: string;
 }
 
 const ACCEPT = {
@@ -19,6 +22,8 @@ const ACCEPT = {
 export default function EvidenceDropzone({
   onFiles,
   onRejected,
+  compact = false,
+  className = "",
 }: EvidenceDropzoneProps) {
   const onDrop = useCallback(
     (accepted: File[]) => {
@@ -41,16 +46,22 @@ export default function EvidenceDropzone({
   return (
     <div
       {...getRootProps()}
-      className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed p-7 transition lg:p-10 ${
+      className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed transition ${
+        compact ? "p-4 text-center" : "p-7 lg:p-10"
+      } ${
         isDragActive
           ? "border-brand-500 bg-gray-100 dark:bg-gray-800"
           : "border-gray-300 bg-gray-50 hover:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-brand-500"
-      }`}
+      } ${className}`}
     >
       <input {...getInputProps()} />
 
-      <div className="mb-[22px] flex justify-center">
-        <div className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-400">
+      <div className={`flex justify-center ${compact ? "mb-3" : "mb-[22px]"}`}>
+        <div
+          className={`flex items-center justify-center rounded-full bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-400 ${
+            compact ? "h-11 w-11" : "h-[68px] w-[68px]"
+          }`}
+        >
           <svg
             className="fill-current"
             width="29"
@@ -67,14 +78,20 @@ export default function EvidenceDropzone({
         </div>
       </div>
 
-      <h4 className="mb-3 font-semibold text-gray-800 text-theme-xl dark:text-white/90">
+      <h4
+        className={`font-semibold text-gray-800 dark:text-white/90 ${
+          compact ? "mb-2 text-sm" : "mb-3 text-theme-xl"
+        }`}
+      >
         {isDragActive ? "Drop files here" : "Drag & drop files here"}
       </h4>
 
-      <span className="mb-5 block w-full max-w-[320px] text-center text-sm text-gray-700 dark:text-gray-400">
-        Drag and drop PDF or image files (JPG, PNG, WebP, GIF, TIFF, BMP) here,
-        or click to browse.
-      </span>
+      {!compact && (
+        <span className="mb-5 block w-full max-w-[320px] text-center text-sm text-gray-700 dark:text-gray-400">
+          Drag and drop PDF or image files (JPG, PNG, WebP, GIF, TIFF, BMP)
+          here, or click to browse.
+        </span>
+      )}
 
       <span className="font-medium underline text-theme-sm text-brand-500">
         Browse files
