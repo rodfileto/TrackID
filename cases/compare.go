@@ -143,7 +143,7 @@ func codificationEmbedding(ctx context.Context, q *db.Queries, store *storage.Cl
 		return nil, "", fmt.Errorf("cases: download image for codification %d: %w", codificationID, err)
 	}
 	img, format, err := image.Decode(bytes.NewReader(data))
-	if err != nil || (format != "jpeg" && format != "png") {
+	if err != nil || !supportedImageFormats[format] {
 		return nil, "", ErrUnsupportedImage
 	}
 
