@@ -7,6 +7,7 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/rodfileto/trackid/auth"
+	"github.com/rodfileto/trackid/cases"
 	"github.com/rodfileto/trackid/storage"
 )
 
@@ -23,6 +24,10 @@ type Dependencies struct {
 	// means the request path that would enqueue one just logs and moves on --
 	// see cases.SaveCodificationImage.
 	Queue *asynq.Client
+	// FaceVision backs face detection on evidence images and machine face
+	// comparison. Nil means detect-faces returns 503, and comparisons only
+	// work between codifications that already have stored embeddings.
+	FaceVision cases.FaceVision
 	// Register is an optional hook called after the core routes are registered.
 	// It receives the engine and the authenticated route group (mounted under
 	// /api) so integrations can attach their own routes. May be nil.
@@ -45,12 +50,16 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.GET("me", MeHandler(authRepository))
 	protected.GET("cases", ListCasesHandler(deps.DB))
 	protected.POST("cases", CreateCaseHandler(deps.DB))
+	protected.GET("cases/years", ListCaseYearsHandler(deps.DB))
 	protected.GET("cases/:caseId", GetCaseHandler(deps.DB))
+	protected.GET("cases/:caseId/codifications", ListCaseCodificationsHandler(deps.DB))
 	protected.POST("cases/:caseId/evidences", AddEvidenceHandler(deps.DB, deps.Storage))
 	protected.DELETE("cases/:caseId/evidences/:evidenceId", DeleteEvidenceHandler(deps.DB))
 	protected.GET("cases/:caseId/evidences/:evidenceId/download", DownloadEvidenceHandler(deps.DB, deps.Storage))
+	protected.POST("cases/:caseId/codifications/compare", CompareFacesHandler(deps.DB, deps.Storage, deps.FaceVision))
+	protected.POST("cases/:caseId/evidences/:evidenceId/detect-faces", DetectFacesHandler(deps.DB, deps.Storage, deps.FaceVision))
 	protected.GET("cases/:caseId/evidences/:evidenceId/traces", ListTracesHandler(deps.DB))
-	protected.POST("cases/:caseId/evidences/:evidenceId/traces", CreateTracesHandler(deps.DB))
+	protected.POST("cases/:caseId/evidences/:evidenceId/traces", CreateTracesHandler(deps.DB, deps.Queue))
 	protected.DELETE("cases/:caseId/evidences/:evidenceId/traces/:traceId", DeleteTraceHandler(deps.DB))
 	protected.GET("cases/:caseId/evidences/:evidenceId/traces/:traceId/points", ListPointsHandler(deps.DB))
 	protected.POST("cases/:caseId/evidences/:evidenceId/traces/:traceId/points", AddPointsHandler(deps.DB))
