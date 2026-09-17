@@ -75,20 +75,33 @@ for attempt in {1..30}; do
   sleep 1
 done
 
-if [[ "$START_NEO4J" == "true" ]]; then
-  echo "Waiting for Neo4j on 127.0.0.1:57474..."
+wait_for_neo4j() {
   for attempt in {1..30}; do
     if curl --silent --fail --max-time 2 "http://127.0.0.1:57474" >/dev/null 2>&1; then
       echo "Neo4j is ready."
-      break
-    fi
-    if [[ "$attempt" -eq 30 ]]; then
-      echo "Neo4j did not become ready; check 'docker compose logs neo4j'" >&2
-      docker compose logs --tail 50 neo4j >&2 || true
-      exit 1
+      return 0
     fi
     sleep 1
   done
+  return 1
+}
+
+if [[ "$START_NEO4J" == "true" ]]; then
+  echo "Waiting for Neo4j on 127.0.0.1:57474..."
+  if ! wait_for_neo4j; then
+    # A container reused across restarts/host reboots can accumulate stale
+    # state in its writable layer and die instantly on boot even though the
+    # underlying data volume is fine. Recreating the container (same volume)
+    # clears that state; retry once before giving up.
+    echo "Neo4j did not become ready; recreating its container and retrying once..." >&2
+    docker compose logs --tail 50 neo4j >&2 || true
+    docker compose --profile graph up -d --force-recreate neo4j
+    if ! wait_for_neo4j; then
+      echo "Neo4j still did not become ready after recreating the container; check 'docker compose logs neo4j'" >&2
+      docker compose logs --tail 50 neo4j >&2 || true
+      exit 1
+    fi
+  fi
 fi
 
 echo "Applying database migrations..."
