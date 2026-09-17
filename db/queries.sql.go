@@ -443,35 +443,105 @@ func (q *Queries) GetCaseTraceForFile(ctx context.Context, arg GetCaseTraceForFi
 	return i, err
 }
 
+const getCodificationForComparison = `-- name: GetCodificationForComparison :one
+SELECT
+    cd.id AS codification_id,
+    cd.codification_type,
+    ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2,
+    ecf.storage_ref AS evidence_storage_ref,
+    ccf.storage_ref AS codification_storage_ref,
+    -- '' when there's no stored embedding (sqlc can't see the LEFT JOIN's NULL).
+    COALESCE(fe.embedding::text, '')::text AS embedding
+FROM case_codifications cd
+JOIN case_traces ct ON ct.id = cd.trace_id
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
+LEFT JOIN case_files ccf ON ccf.id = cd.case_file_id
+LEFT JOIN biometricfeature bf ON bf.case_trace_id = ct.id
+LEFT JOIN feature_embeddings fe ON fe.biometricfeature_id = bf.id AND fe.embedding_type = $1
+WHERE cd.id = $2 AND ce.criminal_case_id = $3
+`
+
+type GetCodificationForComparisonParams struct {
+	EmbeddingType  string `db:"embedding_type" json:"embedding_type"`
+	CodificationID int64  `db:"codification_id" json:"codification_id"`
+	CriminalCaseID int64  `db:"criminal_case_id" json:"criminal_case_id"`
+}
+
+type GetCodificationForComparisonRow struct {
+	CodificationID         int64           `db:"codification_id" json:"codification_id"`
+	CodificationType       string          `db:"codification_type" json:"codification_type"`
+	BoxX1                  sql.NullFloat64 `db:"box_x1" json:"box_x1"`
+	BoxY1                  sql.NullFloat64 `db:"box_y1" json:"box_y1"`
+	BoxX2                  sql.NullFloat64 `db:"box_x2" json:"box_x2"`
+	BoxY2                  sql.NullFloat64 `db:"box_y2" json:"box_y2"`
+	EvidenceStorageRef     sql.NullString  `db:"evidence_storage_ref" json:"evidence_storage_ref"`
+	CodificationStorageRef sql.NullString  `db:"codification_storage_ref" json:"codification_storage_ref"`
+	Embedding              string          `db:"embedding" json:"embedding"`
+}
+
+// One codification of a case with what comparing it needs: its stored
+// embedding of the given type when there is one, and otherwise the images to
+// compute one from -- the analyst's adjusted codification image if saved,
+// else the evidence image plus the trace's box.
+func (q *Queries) GetCodificationForComparison(ctx context.Context, arg GetCodificationForComparisonParams) (GetCodificationForComparisonRow, error) {
+	row := q.db.QueryRowContext(ctx, getCodificationForComparison, arg.EmbeddingType, arg.CodificationID, arg.CriminalCaseID)
+	var i GetCodificationForComparisonRow
+	err := row.Scan(
+		&i.CodificationID,
+		&i.CodificationType,
+		&i.BoxX1,
+		&i.BoxY1,
+		&i.BoxX2,
+		&i.BoxY2,
+		&i.EvidenceStorageRef,
+		&i.CodificationStorageRef,
+		&i.Embedding,
+	)
+	return i, err
+}
+
 const getCodificationSource = `-- name: GetCodificationSource :one
 SELECT
     cod.id AS codification_id,
     cod.codification_type,
     bf.id AS biometricfeature_id,
-    COALESCE(cod.case_file_id, tr.case_file_id) AS source_file_id,
-    cf.storage_ref,
-    cf.content_type
+    ccf.storage_ref AS codification_storage_ref,
+    tcf.storage_ref AS trace_crop_storage_ref,
+    ecf.storage_ref AS evidence_storage_ref,
+    tr.box_x1, tr.box_y1, tr.box_x2, tr.box_y2
 FROM case_codifications cod
 JOIN case_traces tr ON tr.id = cod.trace_id
+JOIN case_evidences ce ON ce.id = tr.evidence_id
 JOIN biometricfeature bf ON bf.case_trace_id = tr.id
-LEFT JOIN case_files cf ON cf.id = COALESCE(cod.case_file_id, tr.case_file_id)
+LEFT JOIN case_files ccf ON ccf.id = cod.case_file_id
+LEFT JOIN case_files tcf ON tcf.id = tr.case_file_id
+LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
 WHERE cod.id = $1
 `
 
 type GetCodificationSourceRow struct {
-	CodificationID     int64          `db:"codification_id" json:"codification_id"`
-	CodificationType   string         `db:"codification_type" json:"codification_type"`
-	BiometricfeatureID int64          `db:"biometricfeature_id" json:"biometricfeature_id"`
-	SourceFileID       sql.NullInt64  `db:"source_file_id" json:"source_file_id"`
-	StorageRef         sql.NullString `db:"storage_ref" json:"storage_ref"`
-	ContentType        sql.NullString `db:"content_type" json:"content_type"`
+	CodificationID         int64           `db:"codification_id" json:"codification_id"`
+	CodificationType       string          `db:"codification_type" json:"codification_type"`
+	BiometricfeatureID     int64           `db:"biometricfeature_id" json:"biometricfeature_id"`
+	CodificationStorageRef sql.NullString  `db:"codification_storage_ref" json:"codification_storage_ref"`
+	TraceCropStorageRef    sql.NullString  `db:"trace_crop_storage_ref" json:"trace_crop_storage_ref"`
+	EvidenceStorageRef     sql.NullString  `db:"evidence_storage_ref" json:"evidence_storage_ref"`
+	BoxX1                  sql.NullFloat64 `db:"box_x1" json:"box_x1"`
+	BoxY1                  sql.NullFloat64 `db:"box_y1" json:"box_y1"`
+	BoxX2                  sql.NullFloat64 `db:"box_x2" json:"box_x2"`
+	BoxY2                  sql.NullFloat64 `db:"box_y2" json:"box_y2"`
 }
 
-// Resolves the image to embed for a codification: prefers the manually adjusted
-// codification_image (case_codifications.case_file_id) when set, falling back to the
-// trace's auto-detected face_crop (case_traces.case_file_id). Also returns the
-// biometricfeature this codification's trace already has (created at trace-marking
-// time by UpsertBiometricFeatureFromCaseTrace) -- feature_embeddings hangs off it.
+// Resolves the image to embed for a codification, in priority order: the
+// manually adjusted codification_image (case_codifications.case_file_id),
+// the trace's own face_crop (case_traces.case_file_id, set by an automated
+// import pipeline that already produced one), or -- for a trace marked by
+// hand and codified with neither -- the evidence image plus the trace's own
+// box (box_x1..y2), letting the caller crop+pad around just that face.
+// Also returns the biometricfeature this codification's trace already has
+// (created at trace-marking time by UpsertBiometricFeatureFromCaseTrace) --
+// feature_embeddings hangs off it.
 func (q *Queries) GetCodificationSource(ctx context.Context, id int64) (GetCodificationSourceRow, error) {
 	row := q.db.QueryRowContext(ctx, getCodificationSource, id)
 	var i GetCodificationSourceRow
@@ -479,9 +549,13 @@ func (q *Queries) GetCodificationSource(ctx context.Context, id int64) (GetCodif
 		&i.CodificationID,
 		&i.CodificationType,
 		&i.BiometricfeatureID,
-		&i.SourceFileID,
-		&i.StorageRef,
-		&i.ContentType,
+		&i.CodificationStorageRef,
+		&i.TraceCropStorageRef,
+		&i.EvidenceStorageRef,
+		&i.BoxX1,
+		&i.BoxY1,
+		&i.BoxX2,
+		&i.BoxY2,
 	)
 	return i, err
 }
@@ -839,6 +913,77 @@ func (q *Queries) ListBiometricFeatures(ctx context.Context) ([]ListBiometricFea
 			&i.Provenance,
 			&i.IdentityFileID,
 			&i.CaseTraceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCaseCodificationsByCriminalCase = `-- name: ListCaseCodificationsByCriminalCase :many
+SELECT cd.id AS codification_id, cd.sequence AS codification_sequence, cd.codification_type, cd.case_file_id AS codification_file_id,
+    ct.id AS trace_id, ct.sequence AS trace_sequence, ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2,
+    ce.sequence AS evidence_sequence, cf.id AS evidence_file_id, cf.filename AS evidence_filename
+FROM case_codifications cd
+JOIN case_traces ct ON ct.id = cd.trace_id
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+JOIN case_files cf ON cf.id = ce.case_file_id
+WHERE ce.criminal_case_id = $1
+ORDER BY ce.sequence, ct.sequence, cd.sequence
+`
+
+type ListCaseCodificationsByCriminalCaseRow struct {
+	CodificationID       int64           `db:"codification_id" json:"codification_id"`
+	CodificationSequence int16           `db:"codification_sequence" json:"codification_sequence"`
+	CodificationType     string          `db:"codification_type" json:"codification_type"`
+	CodificationFileID   sql.NullInt64   `db:"codification_file_id" json:"codification_file_id"`
+	TraceID              int64           `db:"trace_id" json:"trace_id"`
+	TraceSequence        int16           `db:"trace_sequence" json:"trace_sequence"`
+	BoxX1                sql.NullFloat64 `db:"box_x1" json:"box_x1"`
+	BoxY1                sql.NullFloat64 `db:"box_y1" json:"box_y1"`
+	BoxX2                sql.NullFloat64 `db:"box_x2" json:"box_x2"`
+	BoxY2                sql.NullFloat64 `db:"box_y2" json:"box_y2"`
+	EvidenceSequence     int16           `db:"evidence_sequence" json:"evidence_sequence"`
+	EvidenceFileID       int64           `db:"evidence_file_id" json:"evidence_file_id"`
+	EvidenceFilename     sql.NullString  `db:"evidence_filename" json:"evidence_filename"`
+}
+
+// Every codification recorded across every trace of a case, with enough
+// about its trace (box, sequence), the trace's evidence file (sequence, id,
+// filename) and its own saved image (case_file_id, if the analyst adjusted
+// and saved one via SaveCodificationImage) for a caller to render a
+// thumbnail and label it "<evidence sequence>-<trace sequence>-<codification
+// sequence>" without a second round trip per codification.
+func (q *Queries) ListCaseCodificationsByCriminalCase(ctx context.Context, criminalCaseID int64) ([]ListCaseCodificationsByCriminalCaseRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCaseCodificationsByCriminalCase, criminalCaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCaseCodificationsByCriminalCaseRow
+	for rows.Next() {
+		var i ListCaseCodificationsByCriminalCaseRow
+		if err := rows.Scan(
+			&i.CodificationID,
+			&i.CodificationSequence,
+			&i.CodificationType,
+			&i.CodificationFileID,
+			&i.TraceID,
+			&i.TraceSequence,
+			&i.BoxX1,
+			&i.BoxY1,
+			&i.BoxX2,
+			&i.BoxY2,
+			&i.EvidenceSequence,
+			&i.EvidenceFileID,
+			&i.EvidenceFilename,
 		); err != nil {
 			return nil, err
 		}

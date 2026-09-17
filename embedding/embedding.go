@@ -2,8 +2,9 @@
 // trackid-vision and stores it in feature_embeddings, the same table
 // cmd/backfill-face-embeddings and cmd/match-embeddings already read/write.
 // It also defines the Asynq task that runs this asynchronously from
-// cmd/worker, enqueued whenever a codification's image becomes available
-// (see cases.SaveCodificationImage).
+// cmd/worker, enqueued whenever a codification gets an image to embed --
+// either a trace freshly marked and Codify'd (cases.CreateTraces) or an
+// existing one whose image is (re)saved (cases.SaveCodificationImage).
 package embedding
 
 import (
@@ -13,6 +14,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"math"
 	"strconv"
 	"strings"
 
@@ -24,14 +27,14 @@ import (
 	"github.com/rodfileto/trackid/storage"
 )
 
-// embeddingType/modelVersion identify the vectors this package produces --
+// EmbeddingType/ModelVersion identify the vectors this package produces --
 // same embedding_type cmd/backfill-face-embeddings writes for the legacy
 // AuraFace-v1 vectors (see migration 017), so both live in one comparable
 // space and cmd/match-embeddings -embedding-type=FACE_AURAFACE_512 matches
 // across them.
 const (
-	embeddingType = "FACE_AURAFACE_512"
-	modelVersion  = "auraface:v1"
+	EmbeddingType = "FACE_AURAFACE_512"
+	ModelVersion  = "auraface:v1"
 )
 
 // TaskTypeComputeCodification is the Asynq task type cmd/worker registers a
@@ -73,15 +76,22 @@ func HandleComputeCodification(sqlDB *sql.DB, store *storage.Client, vis *vision
 	}
 }
 
-// ComputeForCodification resolves codificationID's source image (see the
-// GetCodificationSource query), runs face detection+embedding via vis, and
-// upserts the highest-scoring face's embedding into feature_embeddings for
-// the codification's biometricfeature.
+// ComputeForCodification resolves codificationID's source image, in priority
+// order (see the GetCodificationSource query): the manually adjusted
+// codification_image, the trace's own face_crop (an automated import
+// pipeline that already produced one), or the evidence image plus the
+// trace's own box -- what a trace marked by hand and Codify'd gets, with
+// neither of the above. Either way the face is presented to the detector
+// padded with context (see EmbedFaceInBox: a tight crop, on its own, is
+// close to undetectable), and the highest-scoring face's embedding is
+// upserted into feature_embeddings for the codification's biometricfeature.
 //
 // ok is false with a nil error for every legitimate "nothing to do" case --
-// a MINUTIAE (fingerprint) codification, one with no image saved yet, or an
-// image with no detectable face -- so callers (and Asynq's retry policy)
-// don't treat those as failures.
+// a MINUTIAE (fingerprint) codification, one with no image to embed yet
+// (neither a dedicated crop nor even an evidence image), or an image with no
+// detectable face -- so callers (and Asynq's retry policy) don't treat those
+// as failures. An image trackid-vision can't decode fails with
+// asynq.SkipRetry: retrying won't change the file.
 func ComputeForCodification(ctx context.Context, sqlDB *sql.DB, store *storage.Client, vis *vision.Service, codificationID int64) (ok bool, err error) {
 	if sqlDB == nil {
 		return false, fmt.Errorf("embedding: nil db")
@@ -104,35 +114,59 @@ func ComputeForCodification(ctx context.Context, sqlDB *sql.DB, store *storage.C
 	if row.CodificationType != graph.CodificationTypeFaceEmbedding {
 		return false, nil
 	}
-	if !row.SourceFileID.Valid || !row.StorageRef.Valid {
+
+	// A dedicated crop (codification image or trace face_crop) already is
+	// just the face -- embed the whole thing. Falling back to the evidence
+	// image, the box narrows the whole photo down to this one trace's face.
+	storageRef, box := row.CodificationStorageRef, image.Rectangle{}
+	if !storageRef.Valid {
+		storageRef = row.TraceCropStorageRef
+	}
+	if !storageRef.Valid {
+		storageRef = row.EvidenceStorageRef
+		if !row.BoxX1.Valid {
+			return false, nil
+		}
+		box = image.Rect(
+			int(math.Floor(row.BoxX1.Float64)), int(math.Floor(row.BoxY1.Float64)),
+			int(math.Ceil(row.BoxX2.Float64)), int(math.Ceil(row.BoxY2.Float64)),
+		)
+	}
+	if !storageRef.Valid {
 		return false, nil
 	}
 
-	data, err := store.Download(ctx, row.StorageRef.String)
+	data, err := store.Download(ctx, storageRef.String)
 	if err != nil {
 		return false, fmt.Errorf("embedding: download codification %d source image: %w", codificationID, err)
 	}
 
-	faces, err := vis.DetectAndEmbed(bytes.NewReader(data))
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return false, fmt.Errorf("%w: embedding: decode codification %d source image: %w", asynq.SkipRetry, codificationID, err)
+	}
+	if box.Empty() {
+		box = img.Bounds()
+	} else {
+		box = box.Add(img.Bounds().Min).Intersect(img.Bounds())
+		if box.Empty() {
+			return false, nil
+		}
+	}
+
+	vector, err := EmbedFaceInBox(vis, img, box)
 	if err != nil {
 		return false, fmt.Errorf("embedding: detect+embed codification %d: %w", codificationID, err)
 	}
-	if len(faces) == 0 {
+	if vector == nil {
 		return false, nil
-	}
-
-	best := faces[0]
-	for _, f := range faces[1:] {
-		if f.Score > best.Score {
-			best = f
-		}
 	}
 
 	if _, err := q.UpsertFeatureEmbedding(ctx, db.UpsertFeatureEmbeddingParams{
 		BiometricfeatureID: row.BiometricfeatureID,
-		EmbeddingType:      embeddingType,
-		Embedding:          vectorText(best.Embedding),
-		ModelVersion:       sql.NullString{String: modelVersion, Valid: true},
+		EmbeddingType:      EmbeddingType,
+		Embedding:          vectorText(vector),
+		ModelVersion:       sql.NullString{String: ModelVersion, Valid: true},
 	}); err != nil {
 		return false, fmt.Errorf("embedding: store feature_embeddings for biometricfeature %d: %w", row.BiometricfeatureID, err)
 	}

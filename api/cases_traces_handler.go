@@ -3,13 +3,60 @@ package api
 import (
 	"database/sql"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 
 	"github.com/rodfileto/trackid/cases"
+	"github.com/rodfileto/trackid/embedding"
+	"github.com/rodfileto/trackid/storage"
 )
+
+// DetectFacesHandler runs face detection on one evidence image and returns
+// the faces found as proposals, without saving anything -- the analyst
+// reviews them and saves the ones they keep through CreateTracesHandler.
+func DetectFacesHandler(db *sql.DB, store *storage.Client, vis cases.FaceVision) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if db == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		if store == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "object storage is not configured"})
+			return
+		}
+		if vis == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "face detection is not configured"})
+			return
+		}
+		caseID := context.Param("caseId")
+		evidenceID, err := strconv.ParseInt(context.Param("evidenceId"), 10, 64)
+		if err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid evidence id"})
+			return
+		}
+
+		proposals, err := cases.DetectFaces(context.Request.Context(), db, store, vis, caseID, evidenceID)
+		if err != nil {
+			switch {
+			case errors.Is(err, cases.ErrNotFound):
+				context.JSON(http.StatusNotFound, gin.H{"error": "evidence not found"})
+			case errors.Is(err, cases.ErrNotImage):
+				context.JSON(http.StatusBadRequest, gin.H{"error": "evidence file is not an image"})
+			case errors.Is(err, cases.ErrUnsupportedImage):
+				context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			default:
+				log.Printf("detect faces (case %s, evidence %d): %v", caseID, evidenceID, err)
+				context.JSON(http.StatusInternalServerError, gin.H{"error": "could not detect faces"})
+			}
+			return
+		}
+		context.JSON(http.StatusOK, gin.H{"faces": proposals})
+	}
+}
 
 func ListTracesHandler(db *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
@@ -49,7 +96,7 @@ type traceInput struct {
 	Score float64 `json:"score"`
 }
 
-func CreateTracesHandler(db *sql.DB) gin.HandlerFunc {
+func CreateTracesHandler(db *sql.DB, queue *asynq.Client) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		if db == nil {
 			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
@@ -81,7 +128,16 @@ func CreateTracesHandler(db *sql.DB) gin.HandlerFunc {
 			})
 		}
 
-		traces, err := cases.CreateTraces(context.Request.Context(), db, caseID, evidenceID, detections)
+		// A nil *asynq.Client boxed into the embedding.Enqueuer interface would
+		// be a non-nil interface wrapping a nil pointer, so this explicit check
+		// is what actually gives cases.CreateTraces a nil Enqueuer when queueing
+		// isn't configured (see SaveCodificationImageHandler for the same fix).
+		var enqueuer embedding.Enqueuer
+		if queue != nil {
+			enqueuer = queue
+		}
+
+		traces, err := cases.CreateTraces(context.Request.Context(), db, enqueuer, caseID, evidenceID, detections)
 		if err != nil {
 			if errors.Is(err, cases.ErrNotFound) {
 				context.JSON(http.StatusNotFound, gin.H{"error": "evidence not found"})
