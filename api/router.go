@@ -67,6 +67,12 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.DELETE("cases/:caseId/evidences/:evidenceId/traces/:traceId/points/:pointId", DeletePointHandler(deps.DB))
 	protected.POST("cases/:caseId/evidences/:evidenceId/traces/:traceId/codification-image", SaveCodificationImageHandler(deps.DB, deps.Storage, deps.Queue))
 
+	protected.GET("persons/search", SearchPersonsHandler(deps.DB))
+	protected.GET("persons/:personId", GetPersonProfileHandler(deps.DB))
+	protected.GET("persons/:personId/identity", GetPersonIdentityHandler(deps.DB))
+	protected.GET("persons/:personId/clusters", ListPersonClustersHandler(deps.DB))
+	protected.GET("persons/:personId/cases", ListPersonCasesHandler(deps.DB))
+
 	if deps.Register != nil {
 		deps.Register(router, protected)
 	}

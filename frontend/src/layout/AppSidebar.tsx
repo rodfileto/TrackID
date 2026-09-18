@@ -5,6 +5,7 @@ import {
   ChevronDownIcon,
   FolderIcon,
   GridIcon,
+  GroupIcon,
   HorizontaLDots,
   UserCircleIcon,
 } from "../icons";
@@ -33,6 +34,11 @@ const navItems: NavItem[] = [
     icon: <FolderIcon />,
     name: "Criminal Cases",
     path: "/cases",
+  },
+  {
+    icon: <GroupIcon />,
+    name: "Persons",
+    path: "/persons",
   },
 ];
 
