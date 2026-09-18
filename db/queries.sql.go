@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/sqlc-dev/pqtype"
 )
 
@@ -585,6 +586,30 @@ func (q *Queries) GetCriminalCaseByCaseID(ctx context.Context, caseID string) (G
 	return i, err
 }
 
+const getPersonByPersonID = `-- name: GetPersonByPersonID :one
+
+SELECT id, person_id, meta, created_at, updated_at
+FROM person
+WHERE person_id = $1
+`
+
+// Person profile (see the person package): read-only views assembled from
+// the enrollment chain, cluster_members, and the evidence hierarchy. Nothing
+// here writes; a person's cluster/case links are always derived fresh from
+// biometric_decisions-backed cluster_members, never cached.
+func (q *Queries) GetPersonByPersonID(ctx context.Context, personID string) (Person, error) {
+	row := q.db.QueryRowContext(ctx, getPersonByPersonID, personID)
+	var i Person
+	err := row.Scan(
+		&i.ID,
+		&i.PersonID,
+		&i.Meta,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByID = `-- name: GetUserByID :one
 SELECT id, nome, ultimo_nome, matricula, cargo, username, email
 FROM users
@@ -1153,6 +1178,89 @@ func (q *Queries) ListCaseTracesByCaseFile(ctx context.Context, arg ListCaseTrac
 	return items, nil
 }
 
+const listCasesByCaseTraceIDs = `-- name: ListCasesByCaseTraceIDs :many
+SELECT cc.case_id, cc.case_type, cc.description, ct.id AS case_trace_id
+FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+WHERE ct.id = ANY($1::bigint[])
+ORDER BY cc.case_id, ct.id
+`
+
+type ListCasesByCaseTraceIDsRow struct {
+	CaseID      string `db:"case_id" json:"case_id"`
+	CaseType    string `db:"case_type" json:"case_type"`
+	Description string `db:"description" json:"description"`
+	CaseTraceID int64  `db:"case_trace_id" json:"case_trace_id"`
+}
+
+// Resolves a set of case_trace ids (parsed back out of QUESTIONED cluster
+// member feature ids -- see graph.QuestionedFeatureID) to their criminal
+// cases. One case can own several of the given traces (rows are not
+// de-duplicated by case) so a caller can re-attribute each case back to the
+// cluster that supplied the matching trace.
+func (q *Queries) ListCasesByCaseTraceIDs(ctx context.Context, caseTraceIds []int64) ([]ListCasesByCaseTraceIDsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCasesByCaseTraceIDs, pq.Array(caseTraceIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCasesByCaseTraceIDsRow
+	for rows.Next() {
+		var i ListCasesByCaseTraceIDsRow
+		if err := rows.Scan(
+			&i.CaseID,
+			&i.CaseType,
+			&i.Description,
+			&i.CaseTraceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClusterIDsForFeatureIDs = `-- name: ListClusterIDsForFeatureIDs :many
+SELECT DISTINCT cluster_id
+FROM cluster_members
+WHERE feature_id = ANY($1::text[])
+ORDER BY cluster_id
+`
+
+// Resolves a set of graph feature ids (graph.KnownFeatureID /
+// graph.QuestionedFeatureID) to the clusters they belong to.
+// cluster_members.feature_id is UNIQUE, so each input feature id contributes
+// at most one row.
+func (q *Queries) ListClusterIDsForFeatureIDs(ctx context.Context, featureIds []string) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listClusterIDsForFeatureIDs, pq.Array(featureIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var cluster_id int64
+		if err := rows.Scan(&cluster_id); err != nil {
+			return nil, err
+		}
+		items = append(items, cluster_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClusterMembers = `-- name: ListClusterMembers :many
 SELECT cluster_id, feature_id
 FROM cluster_members
@@ -1172,6 +1280,41 @@ func (q *Queries) ListClusterMembers(ctx context.Context) ([]ListClusterMembersR
 	var items []ListClusterMembersRow
 	for rows.Next() {
 		var i ListClusterMembersRow
+		if err := rows.Scan(&i.ClusterID, &i.FeatureID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClusterMembersByClusterIDs = `-- name: ListClusterMembersByClusterIDs :many
+SELECT cluster_id, feature_id
+FROM cluster_members
+WHERE cluster_id = ANY($1::bigint[])
+ORDER BY cluster_id, feature_id
+`
+
+type ListClusterMembersByClusterIDsRow struct {
+	ClusterID int64  `db:"cluster_id" json:"cluster_id"`
+	FeatureID string `db:"feature_id" json:"feature_id"`
+}
+
+func (q *Queries) ListClusterMembersByClusterIDs(ctx context.Context, clusterIds []int64) ([]ListClusterMembersByClusterIDsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listClusterMembersByClusterIDs, pq.Array(clusterIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClusterMembersByClusterIDsRow
+	for rows.Next() {
+		var i ListClusterMembersByClusterIDsRow
 		if err := rows.Scan(&i.ClusterID, &i.FeatureID); err != nil {
 			return nil, err
 		}
@@ -1243,6 +1386,42 @@ func (q *Queries) ListClusters(ctx context.Context) ([]ListClustersRow, error) {
 	for rows.Next() {
 		var i ListClustersRow
 		if err := rows.Scan(&i.ID, &i.CaseType); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClustersByIDs = `-- name: ListClustersByIDs :many
+SELECT id, case_type, created_at
+FROM clusters
+WHERE id = ANY($1::bigint[])
+ORDER BY id
+`
+
+type ListClustersByIDsRow struct {
+	ID        int64     `db:"id" json:"id"`
+	CaseType  string    `db:"case_type" json:"case_type"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
+
+func (q *Queries) ListClustersByIDs(ctx context.Context, clusterIds []int64) ([]ListClustersByIDsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listClustersByIDs, pq.Array(clusterIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClustersByIDsRow
+	for rows.Next() {
+		var i ListClustersByIDsRow
+		if err := rows.Scan(&i.ID, &i.CaseType, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1357,6 +1536,100 @@ func (q *Queries) ListCriminalCases(ctx context.Context, arg ListCriminalCasesPa
 	for rows.Next() {
 		var i ListCriminalCasesRow
 		if err := rows.Scan(&i.CaseID, &i.CaseType, &i.Description); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIdentityChainByPerson = `-- name: ListIdentityChainByPerson :many
+SELECT
+    d.id AS document_id, d.document_number, d.document_type, d.fiscal_number,
+    r.id AS register_id, r.register_number, r.name,
+    r.parent_1_name, r.parent_1_gender, r.parent_2_name, r.parent_2_gender,
+    r.birth_date, r.meta AS register_meta,
+    f.id AS identity_file_id, f.file_type, f.sequence, f.source_path, f.storage_ref, f.content_type, f.size_bytes,
+    bf.id AS biometricfeature_id, bf.feature_type
+FROM identity_document d
+JOIN identity_register r ON r.document_id = d.id
+LEFT JOIN identity_file f ON f.register_id = r.id
+LEFT JOIN biometricfeature bf ON bf.identity_file_id = f.id
+WHERE d.person_id = $1
+ORDER BY d.id, r.id, f.sequence
+`
+
+type ListIdentityChainByPersonRow struct {
+	DocumentID         int64                 `db:"document_id" json:"document_id"`
+	DocumentNumber     string                `db:"document_number" json:"document_number"`
+	DocumentType       string                `db:"document_type" json:"document_type"`
+	FiscalNumber       sql.NullString        `db:"fiscal_number" json:"fiscal_number"`
+	RegisterID         int64                 `db:"register_id" json:"register_id"`
+	RegisterNumber     string                `db:"register_number" json:"register_number"`
+	Name               string                `db:"name" json:"name"`
+	Parent1Name        string                `db:"parent_1_name" json:"parent_1_name"`
+	Parent1Gender      string                `db:"parent_1_gender" json:"parent_1_gender"`
+	Parent2Name        string                `db:"parent_2_name" json:"parent_2_name"`
+	Parent2Gender      string                `db:"parent_2_gender" json:"parent_2_gender"`
+	BirthDate          sql.NullString        `db:"birth_date" json:"birth_date"`
+	RegisterMeta       pqtype.NullRawMessage `db:"register_meta" json:"register_meta"`
+	IdentityFileID     sql.NullInt64         `db:"identity_file_id" json:"identity_file_id"`
+	FileType           sql.NullString        `db:"file_type" json:"file_type"`
+	Sequence           sql.NullInt16         `db:"sequence" json:"sequence"`
+	SourcePath         sql.NullString        `db:"source_path" json:"source_path"`
+	StorageRef         sql.NullString        `db:"storage_ref" json:"storage_ref"`
+	ContentType        sql.NullString        `db:"content_type" json:"content_type"`
+	SizeBytes          sql.NullInt64         `db:"size_bytes" json:"size_bytes"`
+	BiometricfeatureID sql.NullInt64         `db:"biometricfeature_id" json:"biometricfeature_id"`
+	FeatureType        sql.NullString        `db:"feature_type" json:"feature_type"`
+}
+
+// Every document -> register recorded for one person, left-joined down to
+// each register's files and the KNOWN biometricfeature a file yielded. Both
+// joins are LEFT so a register shows up even before any file has been
+// uploaded for it, and a file shows up even when its type (e.g. "pdf")
+// yields no feature -- a caller distinguishes the two by identity_file_id/
+// biometricfeature_id being NULL. Mirrors ListKnownIdentityChain's join
+// shape, scoped to one person instead of every person.
+func (q *Queries) ListIdentityChainByPerson(ctx context.Context, personID sql.NullInt64) ([]ListIdentityChainByPersonRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIdentityChainByPerson, personID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIdentityChainByPersonRow
+	for rows.Next() {
+		var i ListIdentityChainByPersonRow
+		if err := rows.Scan(
+			&i.DocumentID,
+			&i.DocumentNumber,
+			&i.DocumentType,
+			&i.FiscalNumber,
+			&i.RegisterID,
+			&i.RegisterNumber,
+			&i.Name,
+			&i.Parent1Name,
+			&i.Parent1Gender,
+			&i.Parent2Name,
+			&i.Parent2Gender,
+			&i.BirthDate,
+			&i.RegisterMeta,
+			&i.IdentityFileID,
+			&i.FileType,
+			&i.Sequence,
+			&i.SourcePath,
+			&i.StorageRef,
+			&i.ContentType,
+			&i.SizeBytes,
+			&i.BiometricfeatureID,
+			&i.FeatureType,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1648,6 +1921,65 @@ func (q *Queries) MaxCodificationPointSequence(ctx context.Context, codification
 	var max_sequence int16
 	err := row.Scan(&max_sequence)
 	return max_sequence, err
+}
+
+const searchPersonsByName = `-- name: SearchPersonsByName :many
+SELECT p.person_id, r.name, r.register_number, d.document_type, d.document_number
+FROM identity_register r
+JOIN identity_document d ON d.id = r.document_id
+JOIN person p ON p.id = d.person_id
+WHERE r.name ILIKE $1
+ORDER BY r.name
+LIMIT $2
+`
+
+type SearchPersonsByNameParams struct {
+	Name  string `db:"name" json:"name"`
+	Limit int32  `db:"limit" json:"limit"`
+}
+
+type SearchPersonsByNameRow struct {
+	PersonID       string `db:"person_id" json:"person_id"`
+	Name           string `db:"name" json:"name"`
+	RegisterNumber string `db:"register_number" json:"register_number"`
+	DocumentType   string `db:"document_type" json:"document_type"`
+	DocumentNumber string `db:"document_number" json:"document_number"`
+}
+
+// Finds every identity_register whose name contains the search term
+// (case-insensitive substring match -- see
+// migrations/021_add_person_name_search.sql for the trigram index this
+// relies on), joined up to its person and document. A person with several
+// documents/registers can surface more than once, once per matching
+// register -- useful signal on its own (an alias, or the same name spelled
+// differently across enrollments), so callers are not deduplicated here.
+func (q *Queries) SearchPersonsByName(ctx context.Context, arg SearchPersonsByNameParams) ([]SearchPersonsByNameRow, error) {
+	rows, err := q.db.QueryContext(ctx, searchPersonsByName, arg.Name, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchPersonsByNameRow
+	for rows.Next() {
+		var i SearchPersonsByNameRow
+		if err := rows.Scan(
+			&i.PersonID,
+			&i.Name,
+			&i.RegisterNumber,
+			&i.DocumentType,
+			&i.DocumentNumber,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const setCaseCodificationFile = `-- name: SetCaseCodificationFile :exec

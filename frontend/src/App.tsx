@@ -10,6 +10,8 @@ import Home from "./pages/Dashboard/Home";
 import RequireAuth from "./components/auth/RequireAuth";
 import CriminalCases from "./pages/CriminalCases";
 import CaseDetailPage from "./pages/CaseDetail";
+import PersonLookup from "./pages/PersonLookup";
+import PersonProfilePage from "./pages/PersonProfile";
 import { useTheme } from "./context/ThemeContext";
 
 export default function App() {
@@ -28,6 +30,8 @@ export default function App() {
               <Route path="/profile" element={<UserProfiles />} />
               <Route path="/cases" element={<CriminalCases />} />
               <Route path="/cases/:caseId" element={<CaseDetailPage />} />
+              <Route path="/persons" element={<PersonLookup />} />
+              <Route path="/persons/:personId" element={<PersonProfilePage />} />
             </Route>
           </Route>
 

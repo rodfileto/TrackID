@@ -466,3 +466,86 @@ DELETE FROM clusters WHERE id = $1;
 
 -- name: InsertClusterMerge :exec
 INSERT INTO cluster_merges (from_cluster_id, to_cluster_id, reason) VALUES ($1, $2, $3);
+
+-- Person profile (see the person package): read-only views assembled from
+-- the enrollment chain, cluster_members, and the evidence hierarchy. Nothing
+-- here writes; a person's cluster/case links are always derived fresh from
+-- biometric_decisions-backed cluster_members, never cached.
+
+-- name: GetPersonByPersonID :one
+SELECT id, person_id, meta, created_at, updated_at
+FROM person
+WHERE person_id = $1;
+
+-- name: ListIdentityChainByPerson :many
+-- Every document -> register recorded for one person, left-joined down to
+-- each register's files and the KNOWN biometricfeature a file yielded. Both
+-- joins are LEFT so a register shows up even before any file has been
+-- uploaded for it, and a file shows up even when its type (e.g. "pdf")
+-- yields no feature -- a caller distinguishes the two by identity_file_id/
+-- biometricfeature_id being NULL. Mirrors ListKnownIdentityChain's join
+-- shape, scoped to one person instead of every person.
+SELECT
+    d.id AS document_id, d.document_number, d.document_type, d.fiscal_number,
+    r.id AS register_id, r.register_number, r.name,
+    r.parent_1_name, r.parent_1_gender, r.parent_2_name, r.parent_2_gender,
+    r.birth_date, r.meta AS register_meta,
+    f.id AS identity_file_id, f.file_type, f.sequence, f.source_path, f.storage_ref, f.content_type, f.size_bytes,
+    bf.id AS biometricfeature_id, bf.feature_type
+FROM identity_document d
+JOIN identity_register r ON r.document_id = d.id
+LEFT JOIN identity_file f ON f.register_id = r.id
+LEFT JOIN biometricfeature bf ON bf.identity_file_id = f.id
+WHERE d.person_id = $1
+ORDER BY d.id, r.id, f.sequence;
+
+-- name: ListClusterIDsForFeatureIDs :many
+-- Resolves a set of graph feature ids (graph.KnownFeatureID /
+-- graph.QuestionedFeatureID) to the clusters they belong to.
+-- cluster_members.feature_id is UNIQUE, so each input feature id contributes
+-- at most one row.
+SELECT DISTINCT cluster_id
+FROM cluster_members
+WHERE feature_id = ANY(@feature_ids::text[])
+ORDER BY cluster_id;
+
+-- name: ListClustersByIDs :many
+SELECT id, case_type, created_at
+FROM clusters
+WHERE id = ANY(@cluster_ids::bigint[])
+ORDER BY id;
+
+-- name: ListClusterMembersByClusterIDs :many
+SELECT cluster_id, feature_id
+FROM cluster_members
+WHERE cluster_id = ANY(@cluster_ids::bigint[])
+ORDER BY cluster_id, feature_id;
+
+-- name: ListCasesByCaseTraceIDs :many
+-- Resolves a set of case_trace ids (parsed back out of QUESTIONED cluster
+-- member feature ids -- see graph.QuestionedFeatureID) to their criminal
+-- cases. One case can own several of the given traces (rows are not
+-- de-duplicated by case) so a caller can re-attribute each case back to the
+-- cluster that supplied the matching trace.
+SELECT cc.case_id, cc.case_type, cc.description, ct.id AS case_trace_id
+FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+WHERE ct.id = ANY(@case_trace_ids::bigint[])
+ORDER BY cc.case_id, ct.id;
+
+-- name: SearchPersonsByName :many
+-- Finds every identity_register whose name contains the search term
+-- (case-insensitive substring match -- see
+-- migrations/021_add_person_name_search.sql for the trigram index this
+-- relies on), joined up to its person and document. A person with several
+-- documents/registers can surface more than once, once per matching
+-- register -- useful signal on its own (an alias, or the same name spelled
+-- differently across enrollments), so callers are not deduplicated here.
+SELECT p.person_id, r.name, r.register_number, d.document_type, d.document_number
+FROM identity_register r
+JOIN identity_document d ON d.id = r.document_id
+JOIN person p ON p.id = d.person_id
+WHERE r.name ILIKE $1
+ORDER BY r.name
+LIMIT $2;
