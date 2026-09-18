@@ -1,6 +1,10 @@
 package graph
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 // ModalityMapping describes how a criminal_cases.case_type maps onto Neo4j
 // labels and type values. It is the single place that connects the relational
@@ -134,4 +138,26 @@ func KnownFeatureID(identityFileID int64) string {
 // Postgres bigserial sequence) from colliding with identity_file ids.
 func QuestionedFeatureID(caseTraceID int64) string {
 	return fmt.Sprintf("TRACE:%d#feature", caseTraceID)
+}
+
+// ParseQuestionedFeatureID is the inverse of QuestionedFeatureID: it recovers
+// the case_trace_id from a graph feature id, so a caller that only has
+// cluster_members.feature_id (e.g. after resolving a cluster's membership)
+// can join back to case_traces without a round trip through Neo4j. ok is
+// false for a KNOWN member (a bare identity_file id, with no "TRACE:" prefix)
+// or a malformed string.
+func ParseQuestionedFeatureID(featureID string) (caseTraceID int64, ok bool) {
+	rest, ok := strings.CutPrefix(featureID, "TRACE:")
+	if !ok {
+		return 0, false
+	}
+	rest, ok = strings.CutSuffix(rest, "#feature")
+	if !ok {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(rest, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return id, true
 }
