@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
+import { useTranslation } from "react-i18next";
 
 interface EvidenceDropzoneProps {
   onFiles: (files: File[]) => void;
@@ -25,6 +26,7 @@ export default function EvidenceDropzone({
   compact = false,
   className = "",
 }: EvidenceDropzoneProps) {
+  const { t } = useTranslation();
   const onDrop = useCallback(
     (accepted: File[]) => {
       if (accepted.length > 0) onFiles(accepted);
@@ -83,18 +85,17 @@ export default function EvidenceDropzone({
           compact ? "mb-2 text-sm" : "mb-3 text-theme-xl"
         }`}
       >
-        {isDragActive ? "Drop files here" : "Drag & drop files here"}
+        {isDragActive ? t("dropzone.dropHere") : t("dropzone.dragHere")}
       </h4>
 
       {!compact && (
         <span className="mb-5 block w-full max-w-[320px] text-center text-sm text-gray-700 dark:text-gray-400">
-          Drag and drop PDF or image files (JPG, PNG, WebP, GIF, TIFF, BMP)
-          here, or click to browse.
+          {t("dropzone.description")}
         </span>
       )}
 
       <span className="font-medium underline text-theme-sm text-brand-500">
-        Browse files
+        {t("dropzone.browse")}
       </span>
     </div>
   );

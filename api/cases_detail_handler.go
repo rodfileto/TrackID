@@ -59,6 +59,30 @@ func ListCaseCodificationsHandler(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// ListCaseClustersHandler returns the distinct biometric clusters a case's
+// codified traces have resolved into, and the other cases/persons each one
+// is CONFIRMED-linked to (see cases.ListCaseClusters).
+func ListCaseClustersHandler(db *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if db == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		caseID := context.Param("caseId")
+
+		clusters, err := cases.ListCaseClusters(context.Request.Context(), db, caseID)
+		if err != nil {
+			if errors.Is(err, cases.ErrNotFound) {
+				context.JSON(http.StatusNotFound, gin.H{"error": "case not found"})
+				return
+			}
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load case clusters"})
+			return
+		}
+		context.JSON(http.StatusOK, gin.H{"clusters": clusters})
+	}
+}
+
 type compareFacesRequest struct {
 	CodificationIDs []int64 `json:"codificationIds" binding:"required,len=2"`
 }

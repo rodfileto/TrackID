@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { Modal } from "../ui/modal";
 import Button from "../ui/button/Button";
 import Label from "../form/Label";
@@ -7,9 +8,9 @@ import Input from "../form/input/InputField";
 import { createCase, type Case } from "../../services/cases";
 
 const CASE_TYPES = [
-  { value: "", label: "Select type" },
-  { value: "FACIAL", label: "Facial" },
-  { value: "FINGERPRINT", label: "Fingerprint" },
+  { value: "", labelKey: "createCase.selectType" },
+  { value: "FACIAL", labelKey: "caseType.facial" },
+  { value: "FINGERPRINT", labelKey: "caseType.fingerprint" },
 ];
 
 interface CreateCaseModalProps {
@@ -23,6 +24,7 @@ export default function CreateCaseModal({
   onClose,
   onCreated,
 }: CreateCaseModalProps) {
+  const { t } = useTranslation();
   const [caseType, setCaseType] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
@@ -47,7 +49,7 @@ export default function CreateCaseModal({
       onCreated(created);
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not create case");
+      toast.error(err instanceof Error ? err.message : t("createCase.error"));
     } finally {
       setCreating(false);
     }
@@ -58,17 +60,17 @@ export default function CreateCaseModal({
       <div className="relative w-full p-4 overflow-y-auto bg-white no-scrollbar rounded-3xl dark:bg-gray-900 lg:p-8">
         <div className="px-2 pr-14">
           <h4 className="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">
-            New Case
+            {t("cases.newCase")}
           </h4>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">
-            The case number is generated automatically.
+            {t("createCase.autoNumber")}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col">
           <div className="px-2 space-y-5">
             <div>
-              <Label>Type</Label>
+              <Label>{t("cases.columns.type")}</Label>
               <select
                 value={caseType}
                 onChange={(event) => setCaseType(event.target.value)}
@@ -77,17 +79,17 @@ export default function CreateCaseModal({
               >
                 {CASE_TYPES.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label}
+                    {t(option.labelKey)}
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <Label>Description</Label>
+              <Label>{t("cases.columns.description")}</Label>
               <Input
                 name="description"
-                placeholder="Brief description of the case"
+                placeholder={t("createCase.descriptionPlaceholder")}
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 required
@@ -101,10 +103,10 @@ export default function CreateCaseModal({
               onClick={handleClose}
               className="inline-flex items-center justify-center gap-2 rounded-lg transition px-4 py-3 text-sm bg-white text-gray-700 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700 dark:hover:bg-white/[0.03] dark:hover:text-gray-300"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <Button size="sm" disabled={creating}>
-              {creating ? "Creating..." : "Create Case"}
+              {creating ? t("createCase.creating") : t("createCase.create")}
             </Button>
           </div>
         </form>

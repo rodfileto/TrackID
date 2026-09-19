@@ -380,6 +380,83 @@ WHERE fe.embedding_type = sqlc.arg(embedding_type) AND fe.id != sqlc.arg(exclude
 ORDER BY fe.embedding <=> sqlc.arg(embedding)::vector
 LIMIT sqlc.arg(result_limit);
 
+-- name: FindNearestPersonsByFaceEmbedding :many
+-- Nearest enrolled (KNOWN) face embeddings to a query vector, joined up to
+-- the person/register/document that enrolled them -- the face-search
+-- counterpart to SearchPersonsByName. Only KNOWN features match: a
+-- QUESTIONED (case_trace) embedding has no identity_file row, so the join
+-- to identity_file excludes it. A person can surface more than once, once
+-- per matching register, same as SearchPersonsByName. Also returns the
+-- matched identity_file itself (id + content_type) -- the enrollment photo
+-- the embedding was computed from -- so a caller can render it as a
+-- thumbnail (see DownloadIdentityFileHandler).
+SELECT p.person_id, r.name, r.register_number, d.document_type, d.document_number,
+       f.id AS identity_file_id, f.content_type,
+       fe.embedding <=> sqlc.arg(embedding)::vector AS distance
+FROM feature_embeddings fe
+JOIN biometricfeature bf ON bf.id = fe.biometricfeature_id
+JOIN identity_file f ON f.id = bf.identity_file_id
+JOIN identity_register r ON r.id = f.register_id
+JOIN identity_document d ON d.id = r.document_id
+JOIN person p ON p.id = d.person_id
+WHERE fe.embedding_type = sqlc.arg(embedding_type)
+ORDER BY fe.embedding <=> sqlc.arg(embedding)::vector
+LIMIT sqlc.arg(result_limit);
+
+-- name: FindNearestCasesByFaceEmbedding :many
+-- Nearest QUESTIONED (case evidence) face embeddings to a query vector,
+-- joined up to the criminal case that owns the matching trace -- the
+-- case-evidence counterpart to FindNearestPersonsByFaceEmbedding. Only
+-- QUESTIONED features match: a KNOWN (identity_file) embedding has no
+-- case_trace_id, so the join to case_traces excludes it. A case can surface
+-- more than once, once per matching trace -- callers dedupe per case
+-- themselves (see person.SearchByFace), keeping the best-scoring trace.
+--
+-- Also resolves what a caller needs to render the matched trace as a
+-- thumbnail, same priority GetCodificationSource already uses: the trace's
+-- own face_crop file (trace_crop_file_id) when an automated import pipeline
+-- already produced one -- already just the face, no box needed -- or
+-- otherwise the evidence file (evidence_file_id) plus the trace's own box
+-- to crop it down to just this face.
+SELECT cc.case_id, cc.case_type, cc.description, ct.id AS case_trace_id,
+       tcf.id AS trace_crop_file_id, ecf.id AS evidence_file_id,
+       ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2,
+       fe.embedding <=> sqlc.arg(embedding)::vector AS distance
+FROM feature_embeddings fe
+JOIN biometricfeature bf ON bf.id = fe.biometricfeature_id
+JOIN case_traces ct ON ct.id = bf.case_trace_id
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+LEFT JOIN case_files tcf ON tcf.id = ct.case_file_id
+LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
+WHERE fe.embedding_type = sqlc.arg(embedding_type)
+ORDER BY fe.embedding <=> sqlc.arg(embedding)::vector
+LIMIT sqlc.arg(result_limit);
+
+-- name: GetIdentityFeatureSource :one
+-- Resolves the image to embed for a KNOWN identity biometricfeature: its
+-- identity_file's stored photo. The identity-enrollment counterpart to
+-- GetCodificationSource -- an identity_file IS the face record already (a
+-- mugshot/ID photo), so there's no codification/crop indirection to resolve.
+SELECT bf.id AS biometricfeature_id, bf.feature_type, f.storage_ref
+FROM biometricfeature bf
+JOIN identity_file f ON f.id = bf.identity_file_id
+WHERE bf.id = sqlc.arg(biometricfeature_id);
+
+-- name: ListKnownFaceFeaturesMissingEmbedding :many
+-- Every KNOWN FACE_RECORD biometricfeature (an enrolled identity photo) with
+-- no embedding of the given type yet -- what
+-- cmd/backfill-identity-face-embeddings enqueues embedding computation for.
+SELECT bf.id
+FROM biometricfeature bf
+WHERE bf.feature_type = 'FACE_RECORD'
+  AND bf.identity_file_id IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM feature_embeddings fe
+      WHERE fe.biometricfeature_id = bf.id AND fe.embedding_type = sqlc.arg(embedding_type)
+  )
+ORDER BY bf.id;
+
 -- name: MarkFeatureEmbeddingMatched :exec
 UPDATE feature_embeddings SET matched_at = NOW(), updated_at = NOW()
 WHERE id = $1;
@@ -477,6 +554,18 @@ SELECT id, person_id, meta, created_at, updated_at
 FROM person
 WHERE person_id = $1;
 
+-- name: GetIdentityFileForPerson :one
+-- Scopes an identity_file to the given person (through
+-- identity_register -> identity_document), same scoping GetCaseFile does
+-- for a case's evidence files -- so a caller can't download a file that
+-- doesn't belong to the person named in the URL.
+SELECT f.id, f.file_type, f.source_path, f.storage_ref, f.content_type
+FROM identity_file f
+JOIN identity_register r ON r.id = f.register_id
+JOIN identity_document d ON d.id = r.document_id
+JOIN person p ON p.id = d.person_id
+WHERE f.id = sqlc.arg(identity_file_id) AND p.person_id = sqlc.arg(person_id);
+
 -- name: ListIdentityChainByPerson :many
 -- Every document -> register recorded for one person, left-joined down to
 -- each register's files and the KNOWN biometricfeature a file yielded. Both
@@ -509,6 +598,24 @@ FROM cluster_members
 WHERE feature_id = ANY(@feature_ids::text[])
 ORDER BY cluster_id;
 
+-- name: ListClusterMembershipsForFeatureIDs :many
+-- Same lookup as ListClusterIDsForFeatureIDs but keeping feature_id on each
+-- row, so a caller can map each of its own feature ids back to the cluster
+-- it landed in (see cases.ListTraceClusters).
+SELECT feature_id, cluster_id
+FROM cluster_members
+WHERE feature_id = ANY(@feature_ids::text[]);
+
+-- name: ListBiometricDecisionsForFeatures :many
+-- Every biometric_decisions row touching any of the given feature ids, on
+-- either side of the pair -- the raw chain a caller groups by counterpart
+-- feature to derive that pair's status (see cluster.DeriveEdgeStatus) and
+-- who/what decided it (see cases.ListTraceClusters).
+SELECT feature_a_id, feature_b_id, role, decision, system_source, username, confidence
+FROM biometric_decisions
+WHERE feature_a_id = ANY(@feature_ids::text[]) OR feature_b_id = ANY(@feature_ids::text[])
+ORDER BY feature_a_id, feature_b_id, decided_at;
+
 -- name: ListClustersByIDs :many
 SELECT id, case_type, created_at
 FROM clusters
@@ -534,6 +641,35 @@ JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
 WHERE ct.id = ANY(@case_trace_ids::bigint[])
 ORDER BY cc.case_id, ct.id;
 
+-- name: ListKnownClusterMembers :many
+-- Resolves a set of identity_file ids (KNOWN cluster member feature ids --
+-- see graph.KnownFeatureID) to the enrollment they belong to, for rendering
+-- a cluster's membership (see person.buildClusters). Same join shape as
+-- FindNearestPersonsByFaceEmbedding, minus the embedding distance.
+SELECT p.person_id, r.name, r.register_number, d.document_type, d.document_number,
+       f.id AS identity_file_id, f.content_type
+FROM identity_file f
+JOIN identity_register r ON r.id = f.register_id
+JOIN identity_document d ON d.id = r.document_id
+JOIN person p ON p.id = d.person_id
+WHERE f.id = ANY(@identity_file_ids::bigint[]);
+
+-- name: ListQuestionedClusterMembers :many
+-- Resolves a set of case_trace ids (parsed back out of QUESTIONED cluster
+-- member feature ids -- see graph.QuestionedFeatureID) to the case evidence
+-- they belong to, for rendering a cluster's membership (see
+-- person.buildClusters). Same join and thumbnail-source resolution as
+-- FindNearestCasesByFaceEmbedding, minus the embedding distance.
+SELECT cc.case_id, cc.case_type, cc.description, ct.id AS case_trace_id,
+       tcf.id AS trace_crop_file_id, ecf.id AS evidence_file_id,
+       ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2
+FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+LEFT JOIN case_files tcf ON tcf.id = ct.case_file_id
+LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
+WHERE ct.id = ANY(@case_trace_ids::bigint[]);
+
 -- name: SearchPersonsByName :many
 -- Finds every identity_register whose name contains the search term
 -- (case-insensitive substring match -- see
@@ -549,3 +685,25 @@ JOIN person p ON p.id = d.person_id
 WHERE r.name ILIKE $1
 ORDER BY r.name
 LIMIT $2;
+
+-- name: CountPersonCasesByType :many
+-- For each of the given persons, the number of distinct criminal cases
+-- linked through their resolved biometric clusters, grouped by case_type --
+-- the "N facial / N fingerprint" badge a person search result shows. Same
+-- KNOWN feature -> cluster -> QUESTIONED trace -> case resolution as
+-- person.ListCases/buildCases (feature_id text format from
+-- graph.KnownFeatureID/QuestionedFeatureID), batched across every requested
+-- person in one query instead of one loadPersonAndClusterIDs call per row.
+SELECT p.person_id, cc.case_type, COUNT(DISTINCT cc.id) AS case_count
+FROM person p
+JOIN identity_document d ON d.person_id = p.id
+JOIN identity_register r ON r.document_id = d.id
+JOIN identity_file f ON f.register_id = r.id
+JOIN cluster_members known_cm ON known_cm.feature_id = f.id::text
+JOIN cluster_members quest_cm ON quest_cm.cluster_id = known_cm.cluster_id
+JOIN case_traces ct ON quest_cm.feature_id = 'TRACE:' || ct.id || '#feature'
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+WHERE p.person_id = ANY(@person_ids::text[])
+GROUP BY p.person_id, cc.case_type
+ORDER BY p.person_id, cc.case_type;
