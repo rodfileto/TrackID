@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import PageMeta from "../components/common/PageMeta";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import ComponentCard from "../components/common/ComponentCard";
@@ -25,13 +26,13 @@ import {
 const PAGE_SIZE = 10;
 
 const FILTER_CASE_TYPES = [
-  { value: "", label: "All types" },
-  { value: "FACIAL", label: "Facial" },
-  { value: "FINGERPRINT", label: "Fingerprint" },
+  { value: "", labelKey: "caseType.all" },
+  { value: "FACIAL", labelKey: "caseType.facial" },
+  { value: "FINGERPRINT", labelKey: "caseType.fingerprint" },
 ];
 
-function caseTypeLabel(caseType: string): string {
-  return caseType === "FACIAL" ? "Facial" : "Fingerprint";
+function caseTypeLabelKey(caseType: string): string {
+  return caseType === "FACIAL" ? "caseType.facial" : "caseType.fingerprint";
 }
 
 function caseTypeColor(caseType: string): "info" | "warning" {
@@ -44,6 +45,7 @@ function parsePage(value: string | null): number {
 }
 
 export default function CriminalCases() {
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const caseType = searchParams.get("caseType") ?? "";
@@ -99,7 +101,7 @@ export default function CriminalCases() {
       } catch (err) {
         if (!cancelled) {
           setError(
-            err instanceof Error ? err.message : "Could not load cases",
+            err instanceof Error ? err.message : t("cases.loadError"),
           );
         }
       } finally {
@@ -111,7 +113,7 @@ export default function CriminalCases() {
     return () => {
       cancelled = true;
     };
-  }, [page, caseType, year, query, refreshKey]);
+  }, [page, caseType, year, query, refreshKey, t]);
 
   function handleCaseTypeChange(value: string) {
     updateParams({ caseType: value || undefined, page: undefined });
@@ -127,7 +129,7 @@ export default function CriminalCases() {
   }
 
   function handleCreated(created: Case) {
-    toast.success(`Case ${created.caseId} created.`);
+    toast.success(t("cases.created", { caseId: created.caseId }));
     updateParams({ page: undefined });
     setRefreshKey((key) => key + 1);
   }
@@ -140,14 +142,14 @@ export default function CriminalCases() {
   return (
     <>
       <PageMeta
-        title="Criminal Cases | TrackID"
-        description="List of criminal cases"
+        title={`${t("cases.title")} | TrackID`}
+        description={t("cases.metaDescription")}
       />
-      <PageBreadcrumb pageTitle="Criminal Cases" />
+      <PageBreadcrumb pageTitle={t("cases.title")} />
 
       <ComponentCard
-        title="Criminal Cases"
-        desc="Cases imported into TrackID, filterable by modality."
+        title={t("cases.title")}
+        desc={t("cases.subtitle")}
       >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -158,7 +160,7 @@ export default function CriminalCases() {
             >
               {FILTER_CASE_TYPES.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(option.labelKey)}
                 </option>
               ))}
             </select>
@@ -168,7 +170,7 @@ export default function CriminalCases() {
               onChange={(event) => handleYearChange(event.target.value)}
               className="h-11 rounded-lg border border-gray-200 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
             >
-              <option value="">All years</option>
+              <option value="">{t("cases.allYears")}</option>
               {years.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -184,24 +186,24 @@ export default function CriminalCases() {
                 type="text"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search by description..."
+                placeholder={t("cases.searchPlaceholder")}
                 className="h-11 w-full rounded-lg border border-gray-200 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 sm:w-72"
               />
               <button
                 type="submit"
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.03]"
               >
-                Search
+                {t("common.search")}
               </button>
             </form>
           </div>
 
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-500 dark:text-gray-400">
-              {total} case{total === 1 ? "" : "s"}
+              {t("cases.count", { count: total })}
             </span>
             <Button size="sm" onClick={openModal}>
-              New Case
+              {t("cases.newCase")}
             </Button>
           </div>
         </div>
@@ -215,19 +217,19 @@ export default function CriminalCases() {
                     isHeader
                     className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                   >
-                    Case ID
+                    {t("cases.columns.caseId")}
                   </TableCell>
                   <TableCell
                     isHeader
                     className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                   >
-                    Type
+                    {t("cases.columns.type")}
                   </TableCell>
                   <TableCell
                     isHeader
                     className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                   >
-                    Description
+                    {t("cases.columns.description")}
                   </TableCell>
                 </TableRow>
               </TableHeader>
@@ -250,7 +252,7 @@ export default function CriminalCases() {
                     </TableCell>
                     <TableCell className="px-4 py-3 text-start text-theme-sm">
                       <Badge size="sm" color={caseTypeColor(item.caseType)}>
-                        {caseTypeLabel(item.caseType)}
+                        {t(caseTypeLabelKey(item.caseType))}
                       </Badge>
                     </TableCell>
                     <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
@@ -262,7 +264,7 @@ export default function CriminalCases() {
                 {!loading && items.length === 0 && (
                   <TableRow>
                     <TableCell className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">
-                      {error ? error : "No criminal cases found."}
+                      {error ? error : t("cases.empty")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -270,7 +272,7 @@ export default function CriminalCases() {
                 {loading && (
                   <TableRow>
                     <TableCell className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">
-                      Loading...
+                      {t("common.loading")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -281,7 +283,7 @@ export default function CriminalCases() {
 
         <div className="flex items-center justify-between">
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            Page {currentPage} of {totalPages || 1}
+            {t("common.pageOf", { page: currentPage, total: totalPages || 1 })}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -293,7 +295,7 @@ export default function CriminalCases() {
               disabled={currentPage <= 1}
               className="inline-flex h-9 items-center justify-center rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.03]"
             >
-              Previous
+              {t("common.previous")}
             </button>
             <button
               onClick={() =>
@@ -304,7 +306,7 @@ export default function CriminalCases() {
               disabled={currentPage >= totalPages}
               className="inline-flex h-9 items-center justify-center rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.03]"
             >
-              Next
+              {t("common.next")}
             </button>
           </div>
         </div>

@@ -1,6 +1,8 @@
 import React from "react";
 import GridShape from "../../components/common/GridShape";
 import { Link } from "react-router";
+import { useTranslation } from "react-i18next";
+import LanguageSwitcher from "../../components/common/LanguageSwitcher";
 import ThemeTogglerTwo from "../../components/common/ThemeTogglerTwo";
 
 export default function AuthLayout({
@@ -8,6 +10,7 @@ export default function AuthLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="relative p-6 bg-white z-1 dark:bg-gray-900 sm:p-0">
       <div className="relative flex flex-col justify-center w-full h-screen lg:flex-row dark:bg-gray-900 sm:p-0">
@@ -22,14 +25,17 @@ export default function AuthLayout({
                   width={231}
                   height={48}
                   src="/images/logo/auth-logo.svg"
-                  alt="Logo"
+                  alt={t("common.logo")}
                 />
               </Link>
               <p className="text-center text-gray-400 dark:text-white/60">
-                Free and Open-Source Tailwind CSS Admin Dashboard Template
+                {t("auth.tagline")}
               </p>
             </div>
           </div>
+        </div>
+        <div className="fixed z-50 top-6 right-6">
+          <LanguageSwitcher />
         </div>
         <div className="fixed z-50 hidden bottom-6 right-6 sm:block">
           <ThemeTogglerTwo />

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { Modal } from "../ui/modal";
 import Button from "../ui/button/Button";
 import {
@@ -95,6 +96,7 @@ export default function CodificationEditorModal({
   isOpen,
   onClose,
 }: CodificationEditorModalProps) {
+  const { t } = useTranslation();
   const supportsPoints = caseType === "FINGERPRINT";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -139,7 +141,7 @@ export default function CodificationEditorModal({
       .catch((err) => {
         if (!cancelled) {
           setError(
-            err instanceof Error ? err.message : "Could not load codification",
+            err instanceof Error ? err.message : t("codification.loadError"),
           );
         }
       })
@@ -181,7 +183,7 @@ export default function CodificationEditorModal({
   async function handleAdd() {
     const parsed = parseDraft(newDraft, box);
     if (!parsed) {
-      toast.error("X and Y must be numbers.");
+      toast.error(t("codification.xyNumbers"));
       return;
     }
     setAdding(true);
@@ -193,9 +195,9 @@ export default function CodificationEditorModal({
         ...Object.fromEntries(created.map((p) => [p.id, toDraft(p, box)])),
       }));
       setNewDraft(emptyDraft);
-      toast.success("Point added.");
+      toast.success(t("codification.pointAdded"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not add point");
+      toast.error(err instanceof Error ? err.message : t("codification.addError"));
     } finally {
       setAdding(false);
     }
@@ -205,7 +207,7 @@ export default function CodificationEditorModal({
     const draft = drafts[point.id];
     const parsed = draft && parseDraft(draft, box);
     if (!parsed) {
-      toast.error("X and Y must be numbers.");
+      toast.error(t("codification.xyNumbers"));
       return;
     }
     setSavingId(point.id);
@@ -214,9 +216,9 @@ export default function CodificationEditorModal({
       setPoints((current) =>
         current.map((p) => (p.id === point.id ? { ...p, ...parsed } : p)),
       );
-      toast.success("Point saved.");
+      toast.success(t("codification.pointSaved"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save point");
+      toast.error(err instanceof Error ? err.message : t("codification.saveError"));
     } finally {
       setSavingId(null);
     }
@@ -224,7 +226,7 @@ export default function CodificationEditorModal({
 
   async function handleDelete(point: Point) {
     if (
-      !window.confirm(`Delete point #${point.sequence}? This cannot be undone.`)
+      !window.confirm(t("codification.confirmDelete", { number: point.sequence }))
     ) {
       return;
     }
@@ -237,9 +239,9 @@ export default function CodificationEditorModal({
         delete next[point.id];
         return next;
       });
-      toast.success("Point deleted.");
+      toast.success(t("codification.pointDeleted"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not delete point");
+      toast.error(err instanceof Error ? err.message : t("codification.deleteError"));
     } finally {
       setDeletingId(null);
     }
@@ -248,7 +250,7 @@ export default function CodificationEditorModal({
   async function handleSaveImage() {
     const dataUrl = imageViewerRef.current?.exportDataURL();
     if (!dataUrl) {
-      toast.error("Image isn't ready yet.");
+      toast.error(t("codification.imageNotReady"));
       return;
     }
     setSavingImage(true);
@@ -256,10 +258,10 @@ export default function CodificationEditorModal({
       const response = await fetch(dataUrl);
       const blob = await response.blob();
       await saveCodificationImage(caseId, evidenceId, traceId, blob);
-      toast.success("Codification image saved.");
+      toast.success(t("codification.imageSaved"));
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Could not save codification image",
+        err instanceof Error ? err.message : t("codification.imageSaveError"),
       );
     } finally {
       setSavingImage(false);
@@ -270,16 +272,16 @@ export default function CodificationEditorModal({
     <Modal isOpen={isOpen} onClose={onClose} className="m-4 max-w-6xl">
       <div className="p-4">
         <h4 className="mb-1 text-lg font-medium text-gray-800 dark:text-white/90">
-          Edit codification
+          {t("markTraces.editCodification")}
         </h4>
         <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
           {traceLabel}
-          {!supportsPoints && " — image adjustment only"}
+          {!supportsPoints && ` — ${t("codification.imageOnly")}`}
         </p>
 
         {loading && (
           <p className="py-16 text-center text-sm text-gray-500 dark:text-gray-400">
-            Loading…
+            {t("common.loadingShort")}
           </p>
         )}
 
@@ -312,8 +314,8 @@ export default function CodificationEditorModal({
                     <th className="pb-2 pr-2 font-medium">#</th>
                     <th className="pb-2 pr-2 font-medium">X</th>
                     <th className="pb-2 pr-2 font-medium">Y</th>
-                    <th className="pb-2 pr-2 font-medium">Type</th>
-                    <th className="pb-2 pr-2 font-medium">Angle</th>
+                    <th className="pb-2 pr-2 font-medium">{t("codification.type")}</th>
+                    <th className="pb-2 pr-2 font-medium">{t("codification.angle")}</th>
                     <th className="pb-2" />
                   </tr>
                 </thead>
@@ -373,7 +375,7 @@ export default function CodificationEditorModal({
                             disabled={savingId === point.id}
                             className="mr-2 text-xs text-brand-500 hover:text-brand-600 disabled:opacity-50"
                           >
-                            {savingId === point.id ? "Saving..." : "Save"}
+                            {savingId === point.id ? t("common.saving") : t("common.save")}
                           </button>
                           <button
                             type="button"
@@ -381,7 +383,7 @@ export default function CodificationEditorModal({
                             disabled={deletingId === point.id}
                             className="text-xs text-error-500 hover:text-error-600 disabled:opacity-50 dark:text-error-400"
                           >
-                            {deletingId === point.id ? "Deleting..." : "Delete"}
+                            {deletingId === point.id ? t("markTraces.deleting") : t("common.delete")}
                           </button>
                         </td>
                       </tr>
@@ -393,7 +395,7 @@ export default function CodificationEditorModal({
                         colSpan={6}
                         className="py-6 text-center text-gray-500 dark:text-gray-400"
                       >
-                        No points yet.
+                        {t("codification.noPoints")}
                       </td>
                     </tr>
                   )}
@@ -429,7 +431,7 @@ export default function CodificationEditorModal({
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">
-                    Type
+                    {t("codification.type")}
                   </label>
                   <input
                     type="text"
@@ -443,7 +445,7 @@ export default function CodificationEditorModal({
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">
-                    Angle
+                    {t("codification.angle")}
                   </label>
                   <input
                     type="number"
@@ -455,7 +457,7 @@ export default function CodificationEditorModal({
                   />
                 </div>
                 <Button size="sm" onClick={handleAdd} disabled={adding}>
-                  {adding ? "Adding..." : "Add point"}
+                  {adding ? t("codification.adding") : t("codification.addPoint")}
                 </Button>
               </div>
             </div>
@@ -464,14 +466,14 @@ export default function CodificationEditorModal({
 
         <div className="mt-4 flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={onClose}>
-            Close
+            {t("common.close")}
           </Button>
           <Button
             size="sm"
             onClick={handleSaveImage}
             disabled={!imageUrl || savingImage}
           >
-            {savingImage ? "Saving..." : "Save image"}
+            {savingImage ? t("common.saving") : t("codification.saveImage")}
           </Button>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "../../icons";
 import Label from "../form/Label";
 import Input from "../form/input/InputField";
@@ -7,6 +8,7 @@ import Button from "../ui/button/Button";
 import { register } from "../../services/auth";
 
 export default function SignUpForm() {
+  const { t } = useTranslation();
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({
     nome: "",
@@ -33,13 +35,13 @@ export default function SignUpForm() {
       await register(form);
       navigate("/signin", {
         replace: true,
-        state: { message: "Account created. Sign in with your matrícula." },
+        state: { message: t("auth.accountCreated") },
       });
     } catch (submitError) {
       setError(
         submitError instanceof Error
           ? submitError.message
-          : "Could not create account",
+          : t("auth.createError"),
       );
     } finally {
       setIsSubmitting(false);
@@ -54,16 +56,16 @@ export default function SignUpForm() {
           className="inline-flex items-center text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
         >
           <ChevronLeftIcon className="size-5" />
-          Back to dashboard
+          {t("auth.backToDashboard")}
         </Link>
       </div>
       <div className="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
         <div className="mb-5 sm:mb-8">
           <h1 className="mb-2 font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md">
-            Create account
+            {t("auth.createTitle")}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Register your staff profile to access TrackID.
+            {t("auth.createSubtitle")}
           </p>
         </div>
 
@@ -72,11 +74,11 @@ export default function SignUpForm() {
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div>
                 <Label>
-                  Nome <span className="text-error-500">*</span>
+                  {t("auth.firstName")} <span className="text-error-500">*</span>
                 </Label>
                 <Input
                   name="nome"
-                  placeholder="Your first name"
+                  placeholder={t("auth.firstNamePlaceholder")}
                   value={form.nome}
                   onChange={(event) => updateField("nome", event.target.value)}
                   required
@@ -84,11 +86,11 @@ export default function SignUpForm() {
               </div>
               <div>
                 <Label>
-                  Último nome <span className="text-error-500">*</span>
+                  {t("auth.lastName")} <span className="text-error-500">*</span>
                 </Label>
                 <Input
                   name="ultimo_nome"
-                  placeholder="Your last name"
+                  placeholder={t("auth.lastNamePlaceholder")}
                   value={form.ultimo_nome}
                   onChange={(event) =>
                     updateField("ultimo_nome", event.target.value)
@@ -100,11 +102,11 @@ export default function SignUpForm() {
 
             <div>
               <Label>
-                Matrícula <span className="text-error-500">*</span>
+                {t("auth.matricula")} <span className="text-error-500">*</span>
               </Label>
               <Input
                 name="matricula"
-                placeholder="Your staff registration number"
+                placeholder={t("auth.matriculaStaffPlaceholder")}
                 value={form.matricula}
                 onChange={(event) => updateField("matricula", event.target.value)}
                 required
@@ -113,11 +115,11 @@ export default function SignUpForm() {
 
             <div>
               <Label>
-                Cargo <span className="text-error-500">*</span>
+                {t("auth.role")} <span className="text-error-500">*</span>
               </Label>
               <Input
                 name="cargo"
-                placeholder="Your role"
+                placeholder={t("auth.rolePlaceholder")}
                 value={form.cargo}
                 onChange={(event) => updateField("cargo", event.target.value)}
                 required
@@ -126,28 +128,28 @@ export default function SignUpForm() {
 
             <div>
               <Label>
-                Username <span className="text-error-500">*</span>
+                {t("auth.username")} <span className="text-error-500">*</span>
               </Label>
               <Input
                 name="username"
-                placeholder="Your username"
+                placeholder={t("auth.usernamePlaceholder")}
                 value={form.username}
                 onChange={(event) => updateField("username", event.target.value)}
                 required
               />
               <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                Your email will be derived from your username.
+                {t("auth.emailDerived")}
               </p>
             </div>
 
             <div>
               <Label>
-                Password <span className="text-error-500">*</span>
+                {t("auth.password")} <span className="text-error-500">*</span>
               </Label>
               <div className="relative">
                 <Input
                   name="password"
-                  placeholder="At least 8 characters"
+                  placeholder={t("auth.passwordMin")}
                   type={showPassword ? "text" : "password"}
                   value={form.password}
                   onChange={(event) => updateField("password", event.target.value)}
@@ -157,7 +159,7 @@ export default function SignUpForm() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((visible) => !visible)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
                   className="absolute z-30 -translate-y-1/2 right-4 top-1/2"
                 >
                   {showPassword ? (
@@ -176,18 +178,18 @@ export default function SignUpForm() {
             )}
 
             <Button className="w-full" size="sm" disabled={isSubmitting}>
-              {isSubmitting ? "Creating account..." : "Create account"}
+              {isSubmitting ? t("auth.creatingAccount") : t("auth.createTitle")}
             </Button>
           </div>
         </form>
 
         <p className="mt-5 text-sm font-normal text-center text-gray-700 dark:text-gray-400 sm:text-start">
-          Already have an account?{" "}
+          {t("auth.haveAccount")}{" "}
           <Link
             to="/signin"
             className="text-brand-500 hover:text-brand-600 dark:text-brand-400"
           >
-            Sign in
+            {t("auth.signIn")}
           </Link>
         </p>
       </div>

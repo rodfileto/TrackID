@@ -15,6 +15,7 @@
  *   <TraceEditor src={objectUrl} traces={traces} onChange={setTraces} />
  */
 
+import { useTranslation } from "react-i18next";
 import { useEffect, useRef, useState } from "react";
 import { Layer, Rect, Text, Transformer } from "react-konva";
 import type Konva from "konva";
@@ -94,6 +95,7 @@ export default function TraceEditor({
   drawing,
   onDrawingChange,
 }: TraceEditorProps) {
+  const { t } = useTranslation();
   const [internalDrawing, setInternalDrawing] = useState(false);
   const isDrawing = drawing ?? internalDrawing;
   function setIsDrawing(next: boolean) {
@@ -334,7 +336,7 @@ export default function TraceEditor({
               setSelectedId(null);
               setIsDrawing(!isDrawing);
             }}
-            title="Mark a trace"
+            title={t("traceEditor.mark")}
             className={`flex h-6 w-6 items-center justify-center rounded transition-colors ${
               isDrawing
                 ? "bg-brand-500 text-white"
@@ -347,7 +349,7 @@ export default function TraceEditor({
             type="button"
             onClick={removeSelected}
             disabled={!selectedId}
-            title="Delete selected trace"
+            title={t("traceEditor.deleteSelected")}
             className="flex h-6 w-6 items-center justify-center rounded text-white transition-colors hover:bg-white/10 hover:text-error-400 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-white"
           >
             <TrashBinIcon className="h-4 w-4" />
