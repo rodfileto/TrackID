@@ -31,6 +31,26 @@ type BiometricDecision struct {
 	ResponsibleUser      sql.NullString  `db:"responsible_user" json:"responsible_user"`
 }
 
+type BiometricDecisionSide struct {
+	ID                   int64           `db:"id" json:"id"`
+	FeatureID            string          `db:"feature_id" json:"feature_id"`
+	CounterpartID        string          `db:"counterpart_id" json:"counterpart_id"`
+	Modality             string          `db:"modality" json:"modality"`
+	Role                 string          `db:"role" json:"role"`
+	Decision             string          `db:"decision" json:"decision"`
+	SystemSource         sql.NullString  `db:"system_source" json:"system_source"`
+	Username             sql.NullString  `db:"username" json:"username"`
+	Confidence           sql.NullFloat64 `db:"confidence" json:"confidence"`
+	Threshold            sql.NullFloat64 `db:"threshold" json:"threshold"`
+	Notes                sql.NullString  `db:"notes" json:"notes"`
+	ComparisonType       sql.NullString  `db:"comparison_type" json:"comparison_type"`
+	RelatedReference     sql.NullString  `db:"related_reference" json:"related_reference"`
+	RelatedReferenceKind sql.NullString  `db:"related_reference_kind" json:"related_reference_kind"`
+	ResponsibleUser      sql.NullString  `db:"responsible_user" json:"responsible_user"`
+	DecidedAt            time.Time       `db:"decided_at" json:"decided_at"`
+	CreatedAt            time.Time       `db:"created_at" json:"created_at"`
+}
+
 type Biometricfeature struct {
 	ID             int64         `db:"id" json:"id"`
 	FeatureType    string        `db:"feature_type" json:"feature_type"`
