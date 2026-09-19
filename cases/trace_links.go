@@ -202,26 +202,13 @@ func ListCaseClusters(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Case
 		return nil, err
 	}
 	// chainsByOwn[ownFeature][counterpartFeature] is that pair's decision
-	// chain, kept from our own trace's point of view on either side of the
-	// stored (feature_a_id, feature_b_id) ordering.
+	// chain, from our own trace's point of view.
 	chainsByOwn := map[string]map[string][]db.ListBiometricDecisionsForFeaturesRow{}
 	for _, r := range decisionRows {
-		for _, own := range [2]string{r.FeatureAID, r.FeatureBID} {
-			if _, ok := traceOfFeature[own]; !ok {
-				continue
-			}
-			counterpart := r.FeatureBID
-			if own == r.FeatureBID {
-				counterpart = r.FeatureAID
-			}
-			if counterpart == own {
-				continue
-			}
-			if chainsByOwn[own] == nil {
-				chainsByOwn[own] = map[string][]db.ListBiometricDecisionsForFeaturesRow{}
-			}
-			chainsByOwn[own][counterpart] = append(chainsByOwn[own][counterpart], r)
+		if chainsByOwn[r.FeatureID] == nil {
+			chainsByOwn[r.FeatureID] = map[string][]db.ListBiometricDecisionsForFeaturesRow{}
 		}
+		chainsByOwn[r.FeatureID][r.CounterpartID] = append(chainsByOwn[r.FeatureID][r.CounterpartID], r)
 	}
 
 	out := make([]CaseCluster, 0, len(clusterOrder))

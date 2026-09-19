@@ -607,14 +607,16 @@ FROM cluster_members
 WHERE feature_id = ANY(@feature_ids::text[]);
 
 -- name: ListBiometricDecisionsForFeatures :many
--- Every biometric_decisions row touching any of the given feature ids, on
--- either side of the pair -- the raw chain a caller groups by counterpart
--- feature to derive that pair's status (see cluster.DeriveEdgeStatus) and
--- who/what decided it (see cases.ListTraceClusters).
-SELECT feature_a_id, feature_b_id, role, decision, system_source, username, confidence
-FROM biometric_decisions
-WHERE feature_a_id = ANY(@feature_ids::text[]) OR feature_b_id = ANY(@feature_ids::text[])
-ORDER BY feature_a_id, feature_b_id, decided_at;
+-- Every biometric_decisions row touching any of the given feature ids, seen
+-- from that feature's side (biometric_decision_sides): the raw chain a caller
+-- groups by counterpart_id to derive that pair's status (see
+-- cluster.DeriveEdgeStatus) and who/what decided it (see
+-- cases.ListCaseClusters). A decision between two of the given features
+-- appears once from each side.
+SELECT feature_id, counterpart_id, role, decision, system_source, username, confidence
+FROM biometric_decision_sides
+WHERE feature_id = ANY(@feature_ids::text[])
+ORDER BY feature_id, counterpart_id, decided_at;
 
 -- name: ListClustersByIDs :many
 SELECT id, case_type, created_at

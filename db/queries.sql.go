@@ -1184,26 +1184,28 @@ func (q *Queries) ListBiometricDecisions(ctx context.Context) ([]ListBiometricDe
 }
 
 const listBiometricDecisionsForFeatures = `-- name: ListBiometricDecisionsForFeatures :many
-SELECT feature_a_id, feature_b_id, role, decision, system_source, username, confidence
-FROM biometric_decisions
-WHERE feature_a_id = ANY($1::text[]) OR feature_b_id = ANY($1::text[])
-ORDER BY feature_a_id, feature_b_id, decided_at
+SELECT feature_id, counterpart_id, role, decision, system_source, username, confidence
+FROM biometric_decision_sides
+WHERE feature_id = ANY($1::text[])
+ORDER BY feature_id, counterpart_id, decided_at
 `
 
 type ListBiometricDecisionsForFeaturesRow struct {
-	FeatureAID   string          `db:"feature_a_id" json:"feature_a_id"`
-	FeatureBID   string          `db:"feature_b_id" json:"feature_b_id"`
-	Role         string          `db:"role" json:"role"`
-	Decision     string          `db:"decision" json:"decision"`
-	SystemSource sql.NullString  `db:"system_source" json:"system_source"`
-	Username     sql.NullString  `db:"username" json:"username"`
-	Confidence   sql.NullFloat64 `db:"confidence" json:"confidence"`
+	FeatureID     string          `db:"feature_id" json:"feature_id"`
+	CounterpartID string          `db:"counterpart_id" json:"counterpart_id"`
+	Role          string          `db:"role" json:"role"`
+	Decision      string          `db:"decision" json:"decision"`
+	SystemSource  sql.NullString  `db:"system_source" json:"system_source"`
+	Username      sql.NullString  `db:"username" json:"username"`
+	Confidence    sql.NullFloat64 `db:"confidence" json:"confidence"`
 }
 
-// Every biometric_decisions row touching any of the given feature ids, on
-// either side of the pair -- the raw chain a caller groups by counterpart
-// feature to derive that pair's status (see cluster.DeriveEdgeStatus) and
-// who/what decided it (see cases.ListTraceClusters).
+// Every biometric_decisions row touching any of the given feature ids, seen
+// from that feature's side (biometric_decision_sides): the raw chain a caller
+// groups by counterpart_id to derive that pair's status (see
+// cluster.DeriveEdgeStatus) and who/what decided it (see
+// cases.ListCaseClusters). A decision between two of the given features
+// appears once from each side.
 func (q *Queries) ListBiometricDecisionsForFeatures(ctx context.Context, featureIds []string) ([]ListBiometricDecisionsForFeaturesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listBiometricDecisionsForFeatures, pq.Array(featureIds))
 	if err != nil {
@@ -1214,8 +1216,8 @@ func (q *Queries) ListBiometricDecisionsForFeatures(ctx context.Context, feature
 	for rows.Next() {
 		var i ListBiometricDecisionsForFeaturesRow
 		if err := rows.Scan(
-			&i.FeatureAID,
-			&i.FeatureBID,
+			&i.FeatureID,
+			&i.CounterpartID,
 			&i.Role,
 			&i.Decision,
 			&i.SystemSource,

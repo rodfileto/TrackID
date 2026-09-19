@@ -23,7 +23,8 @@ type identificationRow struct {
 // biometric_decisions log: a CONFIRMED decision linking a QUESTIONED feature to
 // a KNOWN feature resolves the QUESTIONED feature's cluster to the KNOWN
 // feature's person. It reads only from Postgres and rebuilds the edges each run,
-// so it is idempotent and consistent with the persisted clusters.
+// so it is idempotent and consistent with the persisted clusters. It returns
+// the number of distinct IDENTIFIED_AS edges written.
 func Identify(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) (int, error) {
 	rows, err := loadIdentificationRows(ctx, sqlDB)
 	if err != nil {
@@ -62,15 +63,15 @@ func Identify(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext
 	return len(params), nil
 }
 
-// IdentifyPlan returns how many identifications Identify would write.
+// IdentifyPlan returns how many distinct identifications Identify would write.
 func IdentifyPlan(ctx context.Context, sqlDB *sql.DB) (int, error) {
 	rows, err := loadIdentificationRows(ctx, sqlDB)
 	return len(rows), err
 }
 
 // loadIdentificationRows resolves confirmed QUESTIONED<->KNOWN decisions into
-// cluster->person edges. It is a pure function of the three loads (decisions,
-// known-feature persons, cluster membership).
+// distinct cluster->person edges. It is a pure function of the three loads
+// (decisions, known-feature persons, cluster membership).
 func loadIdentificationRows(ctx context.Context, sqlDB *sql.DB) ([]identificationRow, error) {
 	if sqlDB == nil {
 		return nil, fmt.Errorf("database is not configured")
@@ -99,6 +100,11 @@ func loadIdentificationRows(ctx context.Context, sqlDB *sql.DB) ([]identificatio
 		memberCluster[m.FeatureID] = m.ClusterID
 	}
 
+	type edgeKey struct {
+		clusterID int64
+		personID  string
+	}
+	seen := map[edgeKey]bool{}
 	var out []identificationRow
 	for _, pair := range pairs {
 		personA, aKnown := knownPerson[pair.featureA]
@@ -120,6 +126,13 @@ func loadIdentificationRows(ctx context.Context, sqlDB *sql.DB) ([]identificatio
 		if !ok {
 			continue
 		}
+		// Several decisions can resolve the same cluster to the same person;
+		// keep the first, which is the one identifyQuery's MERGE would keep.
+		k := edgeKey{clusterID, person}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
 		out = append(out, identificationRow{
 			clusterID:    clusterID,
 			personID:     person,
