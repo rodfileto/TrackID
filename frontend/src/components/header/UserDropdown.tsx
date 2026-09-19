@@ -2,13 +2,15 @@ import { useState } from "react";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { clearSession, getStoredUser } from "../../services/auth";
 
 export default function UserDropdown() {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
   const user = getStoredUser();
-  const fullName = user ? `${user.nome} ${user.ultimo_nome}`.trim() : "User";
+  const fullName = user ? `${user.nome} ${user.ultimo_nome}`.trim() : t("common.user");
 
   function toggleDropdown() {
     setIsOpen(!isOpen);
@@ -30,11 +32,11 @@ export default function UserDropdown() {
         className="flex items-center text-gray-700 dropdown-toggle dark:text-gray-400"
       >
         <span className="mr-3 overflow-hidden rounded-full h-11 w-11">
-          <img src="/images/user/owner.jpg" alt="User" />
+          <img src="/images/user/owner.jpg" alt={t("common.user")} />
         </span>
 
         <span className="block mr-1 font-medium text-theme-sm">
-          {user?.nome ?? "User"}
+          {user?.nome ?? t("common.user")}
         </span>
         <svg
           className={`stroke-gray-500 dark:stroke-gray-400 transition-transform duration-200 ${
@@ -93,7 +95,7 @@ export default function UserDropdown() {
                   fill=""
                 />
               </svg>
-              Edit profile
+              {t("userMenu.editProfile")}
             </DropdownItem>
           </li>
           <li>
@@ -118,7 +120,7 @@ export default function UserDropdown() {
                   fill=""
                 />
               </svg>
-              Account settings
+              {t("userMenu.accountSettings")}
             </DropdownItem>
           </li>
           <li>
@@ -143,7 +145,7 @@ export default function UserDropdown() {
                   fill=""
                 />
               </svg>
-              Support
+              {t("userMenu.support")}
             </DropdownItem>
           </li>
         </ul>
@@ -166,7 +168,7 @@ export default function UserDropdown() {
               fill=""
             />
           </svg>
-          Sign out
+          {t("userMenu.signOut")}
         </button>
       </Dropdown>
     </div>

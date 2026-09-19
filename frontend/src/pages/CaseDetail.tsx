@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import PageMeta from "../components/common/PageMeta";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import ComponentCard from "../components/common/ComponentCard";
@@ -25,8 +26,8 @@ import {
   type Evidence,
 } from "../services/cases";
 
-function caseTypeLabel(caseType: string): string {
-  return caseType === "FACIAL" ? "Facial" : "Fingerprint";
+function caseTypeLabelKey(caseType: string): string {
+  return caseType === "FACIAL" ? "caseType.facial" : "caseType.fingerprint";
 }
 
 function caseTypeColor(caseType: string): "info" | "warning" {
@@ -45,11 +46,12 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString();
+function formatDate(iso: string, locale: string): string {
+  return new Date(iso).toLocaleString(locale);
 }
 
 export default function CaseDetailPage() {
+  const { t, i18n } = useTranslation();
   const { caseId } = useParams<{ caseId: string }>();
   const location = useLocation();
   const backToCases =
@@ -71,7 +73,7 @@ export default function CaseDetailPage() {
     try {
       setDetail(await getCase(caseId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load case");
+      setError(err instanceof Error ? err.message : t("caseDetail.loadError"));
     } finally {
       setLoading(false);
     }
@@ -87,9 +89,7 @@ export default function CaseDetailPage() {
   }
 
   function handleRejected() {
-    toast.error(
-      "Unsupported file type. Allowed: pdf, jpg, png, webp, gif, tiff, bmp.",
-    );
+    toast.error(t("caseDetail.unsupportedFile"));
   }
 
   function removeFile(index: number) {
@@ -112,13 +112,11 @@ export default function CaseDetailPage() {
     }
 
     if (failed === 0) {
-      toast.success(
-        `${added} evidence file${added === 1 ? "" : "s"} added.`,
-      );
+      toast.success(t("caseDetail.evidenceAdded", { count: added }));
     } else if (added > 0) {
-      toast.warning(`${added} added, ${failed} failed.`);
+      toast.warning(t("caseDetail.partialUpload", { added, failed }));
     } else {
-      toast.error("No evidence files were uploaded.");
+      toast.error(t("caseDetail.noneUploaded"));
     }
 
     setSelectedFiles([]);
@@ -130,7 +128,7 @@ export default function CaseDetailPage() {
     if (!caseId) return;
     if (
       !window.confirm(
-        `Exclude "${evidence.filename}" from this case? This cannot be undone.`,
+        t("caseDetail.confirmExclude", { filename: evidence.filename }),
       )
     ) {
       return;
@@ -138,11 +136,11 @@ export default function CaseDetailPage() {
     setExcludingId(evidence.id);
     try {
       await deleteEvidence(caseId, evidence.id);
-      toast.success("Evidence excluded.");
+      toast.success(t("caseDetail.evidenceExcluded"));
       await load();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Could not exclude evidence",
+        err instanceof Error ? err.message : t("caseDetail.excludeError"),
       );
     } finally {
       setExcludingId(null);
@@ -154,10 +152,10 @@ export default function CaseDetailPage() {
   return (
     <>
       <PageMeta
-        title={`Case ${caseId ?? ""} | TrackID`}
-        description="Case detail"
+        title={`${t("caseDetail.title", { caseId: caseId ?? "" })} | TrackID`}
+        description={t("caseDetail.metaDescription")}
       />
-      <PageBreadcrumb pageTitle={`Case ${caseId ?? ""}`} />
+      <PageBreadcrumb pageTitle={t("caseDetail.title", { caseId: caseId ?? "" })} />
 
       <div className="mb-6">
         <Link
@@ -180,14 +178,14 @@ export default function CaseDetailPage() {
               strokeLinejoin="round"
             />
           </svg>
-          Back to cases
+          {t("caseDetail.backToCases")}
         </Link>
       </div>
 
       {/* Only the first load blanks the page: reloads after an upload or
           exclude keep the workspace mounted, with its unsaved boxes. */}
       {loading && !detail && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">Loading...</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t("common.loading")}</p>
       )}
 
       {!loading && error && (
@@ -197,15 +195,15 @@ export default function CaseDetailPage() {
       {detail && (
         <div className="space-y-6">
           <ComponentCard
-            title="Case"
-            desc={detail.description || "No description."}
+            title={t("caseDetail.case")}
+            desc={detail.description || t("caseDetail.noDescription")}
           >
             <div className="flex items-center gap-4">
               <span className="font-medium text-gray-800 text-theme-sm dark:text-white/90">
                 {detail.caseId}
               </span>
               <Badge size="sm" color={caseTypeColor(detail.caseType)}>
-                {caseTypeLabel(detail.caseType)}
+                {t(caseTypeLabelKey(detail.caseType))}
               </Badge>
             </div>
           </ComponentCard>
@@ -220,8 +218,8 @@ export default function CaseDetailPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
             <div className="lg:col-span-4">
               <ComponentCard
-                title="Add Evidence"
-                desc="Attach digital files."
+                title={t("caseDetail.addEvidence")}
+                desc={t("caseDetail.attachFiles")}
                 className="h-full"
               >
                 <EvidenceDropzone
@@ -249,7 +247,7 @@ export default function CaseDetailPage() {
                           onClick={() => removeFile(index)}
                           className="text-sm text-error-500 hover:text-error-600 dark:text-error-400"
                         >
-                          Remove
+                          {t("common.remove")}
                         </button>
                       </li>
                     ))}
@@ -263,10 +261,10 @@ export default function CaseDetailPage() {
                     disabled={selectedFiles.length === 0 || uploading}
                   >
                     {uploading
-                      ? "Uploading..."
+                      ? t("caseDetail.uploading")
                       : selectedFiles.length > 1
-                        ? `Upload ${selectedFiles.length} files`
-                        : "Upload"}
+                        ? t("caseDetail.uploadN", { count: selectedFiles.length })
+                        : t("caseDetail.upload")}
                   </Button>
                 </div>
               </ComponentCard>
@@ -274,8 +272,8 @@ export default function CaseDetailPage() {
 
             <div className="lg:col-span-8">
               <ComponentCard
-                title="Evidences"
-                desc={`${evidences.length} file${evidences.length === 1 ? "" : "s"}`}
+                title={t("caseDetail.evidences")}
+                desc={t("caseDetail.fileCount", { count: evidences.length })}
                 className="h-full"
               >
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
@@ -287,37 +285,37 @@ export default function CaseDetailPage() {
                         isHeader
                         className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                       >
-                        Preview
+                        {t("caseDetail.columns.preview")}
                       </TableCell>
                       <TableCell
                         isHeader
                         className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                       >
-                        File
+                        {t("caseDetail.columns.file")}
                       </TableCell>
                       <TableCell
                         isHeader
                         className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                       >
-                        Type
+                        {t("caseDetail.columns.type")}
                       </TableCell>
                       <TableCell
                         isHeader
                         className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                       >
-                        Size
+                        {t("caseDetail.columns.size")}
                       </TableCell>
                       <TableCell
                         isHeader
                         className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                       >
-                        Uploaded
+                        {t("caseDetail.columns.uploaded")}
                       </TableCell>
                       <TableCell
                         isHeader
                         className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                       >
-                        Actions
+                        {t("caseDetail.columns.actions")}
                       </TableCell>
                     </TableRow>
                   </TableHeader>
@@ -351,7 +349,7 @@ export default function CaseDetailPage() {
                           {formatBytes(evidence.sizeBytes)}
                         </TableCell>
                         <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
-                          {formatDate(evidence.createdAt)}
+                          {formatDate(evidence.createdAt, i18n.resolvedLanguage ?? "en")}
                         </TableCell>
                         <TableCell className="px-4 py-3 text-start text-theme-sm">
                           <div className="flex items-center gap-2">
@@ -361,7 +359,7 @@ export default function CaseDetailPage() {
                                 onClick={() => setTraceEvidence(evidence)}
                                 className="inline-flex h-8 items-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.03]"
                               >
-                                Mark traces
+                                {t("caseDetail.markTraces")}
                               </button>
                             )}
                             <button
@@ -371,8 +369,8 @@ export default function CaseDetailPage() {
                               className="inline-flex h-8 items-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-error-500 shadow-theme-xs hover:bg-error-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-error-400 dark:hover:bg-white/[0.03]"
                             >
                               {excludingId === evidence.id
-                                ? "Excluding..."
-                                : "Exclude"}
+                                ? t("caseDetail.excluding")
+                                : t("caseDetail.exclude")}
                             </button>
                           </div>
                         </TableCell>
@@ -382,7 +380,7 @@ export default function CaseDetailPage() {
                     {evidences.length === 0 && (
                       <TableRow>
                         <TableCell className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">
-                          No evidence yet.
+                          {t("caseDetail.noEvidence")}
                         </TableCell>
                       </TableRow>
                     )}

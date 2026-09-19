@@ -3,12 +3,16 @@ package api
 import (
 	"database/sql"
 	"errors"
+	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/rodfileto/trackid/cases"
 	"github.com/rodfileto/trackid/person"
+	"github.com/rodfileto/trackid/storage"
 )
 
 // SearchPersonsHandler finds enrolled persons by name (see
@@ -33,6 +37,55 @@ func SearchPersonsHandler(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		context.JSON(http.StatusOK, gin.H{"results": results})
+	}
+}
+
+// SearchPersonsByFaceHandler finds enrolled persons whose enrolled face, and
+// criminal cases whose evidence holds a matching face trace, most resemble
+// the face in an uploaded photo (see person.SearchByFace), for a caller to
+// disambiguate before opening a full profile or case. The image is sent as
+// multipart form field "image" and is required.
+func SearchPersonsByFaceHandler(db *sql.DB, vis cases.FaceVision) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if db == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		if vis == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "face search is not configured"})
+			return
+		}
+
+		file, err := context.FormFile("image")
+		if err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "image is required"})
+			return
+		}
+		opened, err := file.Open()
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not read image"})
+			return
+		}
+		defer opened.Close()
+		data, err := io.ReadAll(opened)
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not read image"})
+			return
+		}
+
+		results, err := person.SearchByFace(context.Request.Context(), db, vis, data)
+		if err != nil {
+			switch {
+			case errors.Is(err, person.ErrUnsupportedImage):
+				context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			case errors.Is(err, person.ErrNoFaceDetected):
+				context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			default:
+				context.JSON(http.StatusInternalServerError, gin.H{"error": "could not search persons by face"})
+			}
+			return
+		}
+		context.JSON(http.StatusOK, results)
 	}
 }
 
@@ -85,6 +138,46 @@ func GetPersonIdentityHandler(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		context.JSON(http.StatusOK, identity)
+	}
+}
+
+// DownloadIdentityFileHandler serves one identity_file's raw bytes (e.g. an
+// enrollment photo, for a face thumbnail), scoped to the person named in the
+// URL (see person.DownloadIdentityFile).
+func DownloadIdentityFileHandler(db *sql.DB, store *storage.Client) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if db == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		if store == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "object storage is not configured"})
+			return
+		}
+		personID := context.Param("personId")
+		identityFileID, err := strconv.ParseInt(context.Param("identityFileId"), 10, 64)
+		if err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid identity file id"})
+			return
+		}
+
+		content, err := person.DownloadIdentityFile(context.Request.Context(), db, store, personID, identityFileID)
+		if err != nil {
+			if errors.Is(err, person.ErrNotFound) {
+				context.JSON(http.StatusNotFound, gin.H{"error": "identity file not found"})
+				return
+			}
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load identity file"})
+			return
+		}
+
+		contentType := content.ContentType
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		context.Header("Content-Type", contentType)
+		context.Header("Content-Disposition", "inline; filename=\""+content.Filename+"\"")
+		context.Data(http.StatusOK, contentType, content.Data)
 	}
 }
 

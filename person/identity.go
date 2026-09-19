@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 
 	"github.com/rodfileto/trackid/db"
+	"github.com/rodfileto/trackid/storage"
 	"github.com/sqlc-dev/pqtype"
 )
 
@@ -161,4 +163,47 @@ func buildIdentity(personID string, meta pqtype.NullRawMessage, chainRows []db.L
 	}
 
 	return identity
+}
+
+// IdentityFileContent is a downloaded identity_file's bytes and metadata.
+type IdentityFileContent struct {
+	Data        []byte
+	ContentType string
+	Filename    string
+}
+
+// DownloadIdentityFile fetches one identity_file's content by person_id and
+// file id. The file must belong to the given person (scoped through
+// identity_register -> identity_document), same scoping cases.DownloadEvidence
+// uses for a case's evidence files. Returns ErrNotFound if no such file
+// belongs to that person.
+func DownloadIdentityFile(ctx context.Context, sqlDB *sql.DB, store *storage.Client, personID string, identityFileID int64) (IdentityFileContent, error) {
+	if sqlDB == nil {
+		return IdentityFileContent{}, fmt.Errorf("person: nil db")
+	}
+	if store == nil {
+		return IdentityFileContent{}, fmt.Errorf("person: object storage is not configured")
+	}
+
+	fileRow, err := db.New(sqlDB).GetIdentityFileForPerson(ctx, db.GetIdentityFileForPersonParams{
+		IdentityFileID: identityFileID,
+		PersonID:       personID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return IdentityFileContent{}, ErrNotFound
+		}
+		return IdentityFileContent{}, err
+	}
+
+	data, err := store.Download(ctx, fileRow.StorageRef)
+	if err != nil {
+		return IdentityFileContent{}, fmt.Errorf("person: download identity file %d: %w", identityFileID, err)
+	}
+
+	return IdentityFileContent{
+		Data:        data,
+		ContentType: fileRow.ContentType.String,
+		Filename:    path.Base(fileRow.SourcePath),
+	}, nil
 }

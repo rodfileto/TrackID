@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import ComponentCard from "../common/ComponentCard";
 import Button from "../ui/button/Button";
 import {
@@ -8,6 +9,7 @@ import {
 } from "../ui/image-viewer/ImageViewer";
 import EvidenceDropzone from "./EvidenceDropzone";
 import TraceEditor, { type TraceBox } from "./TraceEditor";
+import CaseClusters from "./CaseClusters";
 import {
   addEvidence,
   compareFaces,
@@ -17,8 +19,10 @@ import {
   deleteTrace,
   detectFaces,
   getEvidenceObjectUrl,
+  listCaseClusters,
   listTraces,
   saveCodificationImage,
+  type CaseCluster,
   type EmbeddingSource,
   type Evidence,
   type FaceComparison,
@@ -111,6 +115,7 @@ function EvidenceThumb({
   detecting: boolean;
   onSelect: () => void;
 }) {
+  const { t } = useTranslation();
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -157,14 +162,16 @@ function EvidenceThumb({
           {evidence.filename}
         </span>
         <span className="block text-xs text-gray-400 dark:text-gray-500">
-          {faceCount} face{faceCount === 1 ? "" : "s"}
+          {t("facial.faceCount", { count: faceCount })}
         </span>
         {detecting ? (
-          <span className="block text-xs text-brand-500">Detecting...</span>
+          <span className="block text-xs text-brand-500">
+            {t("facial.detecting")}
+          </span>
         ) : (
           pendingCount > 0 && (
             <span className="block text-xs font-medium text-warning-600 dark:text-warning-500">
-              {pendingCount} to review
+              {t("facial.toReview", { count: pendingCount })}
             </span>
           )
         )}
@@ -177,10 +184,10 @@ function EvidenceThumb({
 // Machine score
 // ─────────────────────────────────────────────────────────────────────────────
 
-const EMBEDDING_SOURCE_LABELS: Record<EmbeddingSource, string> = {
-  stored: "stored embedding",
-  codification_image: "computed from the saved codification image",
-  evidence: "computed from the evidence image",
+const EMBEDDING_SOURCE_LABEL_KEYS: Record<EmbeddingSource, string> = {
+  stored: "facial.source.stored",
+  codification_image: "facial.source.codificationImage",
+  evidence: "facial.source.evidence",
 };
 
 /** Order-insensitive: the score is symmetric, so a swap keeps it valid. */
@@ -195,17 +202,18 @@ function MachineScore({
   result: FaceComparison;
   slotIds: SlotIds;
 }) {
+  const { t } = useTranslation();
   const similarity = Math.max(-1, Math.min(1, result.similarity));
   const sourceLabel = (codificationId: number | null) => {
     const face = result.faces.find((f) => f.codificationId === codificationId);
-    return face ? EMBEDDING_SOURCE_LABELS[face.source] : "—";
+    return face ? t(EMBEDDING_SOURCE_LABEL_KEYS[face.source]) : "—";
   };
 
   return (
     <div className="rounded-xl border border-gray-200 px-4 py-3 dark:border-white/[0.05]">
       <div className="flex items-baseline justify-between gap-4">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-          Machine score
+          {t("facial.machineScore")}
         </span>
         <span className="font-mono text-2xl font-semibold text-gray-800 dark:text-white/90">
           {similarity.toFixed(3)}
@@ -218,8 +226,7 @@ function MachineScore({
         />
       </div>
       <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-        Cosine similarity of the two {result.modelVersion} face embeddings — 1
-        means identical, around 0 unrelated.
+        {t("facial.cosineHint", { model: result.modelVersion })}
       </p>
       <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
         A: {sourceLabel(slotIds[0])} · B: {sourceLabel(slotIds[1])}
@@ -243,6 +250,7 @@ function ComparePane({
   face: CodificationThumbnail | null;
   onClear: () => void;
 }) {
+  const { t } = useTranslation();
   const viewerRef = useRef<ImageViewerHandle>(null);
   const [saving, setSaving] = useState(false);
 
@@ -250,7 +258,7 @@ function ComparePane({
     if (!face) return;
     const dataUrl = viewerRef.current?.exportDataURL();
     if (!dataUrl) {
-      toast.error("Image isn't ready yet.");
+      toast.error(t("codification.imageNotReady"));
       return;
     }
     setSaving(true);
@@ -264,11 +272,11 @@ function ComparePane({
         blob,
       );
       toast.success(
-        `Codification image saved for ${codificationLabel(face.codification)}.`,
+        t("facial.imageSavedFor", { label: codificationLabel(face.codification) }),
       );
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Could not save codification image",
+        err instanceof Error ? err.message : t("codification.imageSaveError"),
       );
     } finally {
       setSaving(false);
@@ -293,7 +301,7 @@ function ComparePane({
             </span>
           ) : (
             <span className="text-sm text-gray-400 dark:text-gray-500">
-              Empty
+              {t("facial.empty")}
             </span>
           )}
         </div>
@@ -306,14 +314,14 @@ function ComparePane({
               disabled={saving}
               className="text-xs text-brand-500 hover:text-brand-600 disabled:opacity-50"
             >
-              {saving ? "Saving..." : "Save image"}
+              {saving ? t("common.saving") : t("codification.saveImage")}
             </button>
             <button
               type="button"
               onClick={onClear}
               className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             >
-              Clear
+              {t("common.clear")}
             </button>
           </div>
         )}
@@ -328,7 +336,7 @@ function ComparePane({
         />
       ) : (
         <p className="flex h-[46vh] items-center justify-center px-4 text-center text-sm text-gray-400 dark:text-gray-500">
-          Pick a face below to load it here.
+          {t("facial.pickFace")}
         </p>
       )}
     </div>
@@ -344,6 +352,7 @@ export default function FacialCaseWorkspace({
   evidences,
   onEvidencesChanged,
 }: FacialCaseWorkspaceProps) {
+  const { t } = useTranslation();
   const imageEvidences = evidences.filter(isImageEvidence);
 
   const [selectedEvidenceId, setSelectedEvidenceId] = useState<number | null>(
@@ -369,6 +378,33 @@ export default function FacialCaseWorkspace({
   const [refreshKey, setRefreshKey] = useState(0);
   const { items: faces, loading: facesLoading, error: facesError } =
     useCodificationThumbnails(caseId, refreshKey);
+
+  const [clusters, setClusters] = useState<CaseCluster[]>([]);
+  const [clustersLoading, setClustersLoading] = useState(true);
+  const [clustersError, setClustersError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setClustersLoading(true);
+    setClustersError("");
+    listCaseClusters(caseId)
+      .then((items) => {
+        if (cancelled) return;
+        setClusters(items);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setClustersError(
+          err instanceof Error ? err.message : t("facial.clustersLoadError"),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setClustersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId, refreshKey, t]);
 
   const [slotIds, setSlotIds] = useState<SlotIds>([null, null]);
   const [comparison, setComparison] = useState<{
@@ -419,7 +455,7 @@ export default function FacialCaseWorkspace({
       .catch((err) => {
         if (!cancelled) {
           toast.error(
-            err instanceof Error ? err.message : "Could not load evidence",
+            err instanceof Error ? err.message : t("markTraces.loadError"),
           );
         }
       })
@@ -431,7 +467,7 @@ export default function FacialCaseWorkspace({
       cancelled = true;
       if (created) URL.revokeObjectURL(created);
     };
-  }, [caseId, selectedEvidenceId]);
+  }, [caseId, selectedEvidenceId, t]);
 
   const unsavedTraces =
     selectedEvidenceId === null ? [] : (pending[selectedEvidenceId] ?? []);
@@ -485,7 +521,7 @@ export default function FacialCaseWorkspace({
       return fresh.length;
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Could not detect faces",
+        err instanceof Error ? err.message : t("facial.detectError"),
       );
       return null;
     } finally {
@@ -499,11 +535,9 @@ export default function FacialCaseWorkspace({
     const found = await recognizeFaces(selectedEvidenceId, savedBoxes);
     if (found === null) return;
     if (found === 0) {
-      toast.info("No new faces detected on this image.");
+      toast.info(t("facial.noNewFaces"));
     } else {
-      toast.success(
-        `${found} face${found === 1 ? "" : "s"} detected — review the boxes, then Codify to save.`,
-      );
+      toast.success(t("facial.detected", { count: found }));
     }
   }
 
@@ -547,11 +581,14 @@ export default function FacialCaseWorkspace({
           (f) => f?.codification.id === err.codificationId,
         );
         toast.error(
-          `No face detected in ${slot}${face ? ` (${codificationLabel(face.codification)})` : ""}.`,
+          t("facial.noFaceInSlot", {
+            slot,
+            label: face ? ` (${codificationLabel(face.codification)})` : "",
+          }),
         );
       } else {
         toast.error(
-          err instanceof Error ? err.message : "Could not compare faces",
+          err instanceof Error ? err.message : t("facial.compareError"),
         );
       }
     } finally {
@@ -592,11 +629,9 @@ export default function FacialCaseWorkspace({
         setSavedBoxes((current) => [...current, ...created.map(toLockedBox)]);
       }
       setRefreshKey((key) => key + 1);
-      toast.success(
-        `${created.length} face${created.length === 1 ? "" : "s"} codified.`,
-      );
+      toast.success(t("facial.codified", { count: created.length }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save traces");
+      toast.error(err instanceof Error ? err.message : t("markTraces.saveError"));
     } finally {
       setSavingTraces(false);
     }
@@ -604,7 +639,7 @@ export default function FacialCaseWorkspace({
 
   async function handleDeleteFace(face: CodificationThumbnail) {
     const label = codificationLabel(face.codification);
-    if (!window.confirm(`Delete face ${label}? This cannot be undone.`)) return;
+    if (!window.confirm(t("facial.confirmDeleteFace", { label }))) return;
 
     setDeletingTraceId(face.codification.traceId);
     try {
@@ -621,9 +656,9 @@ export default function FacialCaseWorkspace({
         current.filter((trace) => trace.id !== String(face.codification.traceId)),
       );
       setRefreshKey((key) => key + 1);
-      toast.success(`Face ${label} deleted.`);
+      toast.success(t("facial.faceDeleted", { label }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not delete face");
+      toast.error(err instanceof Error ? err.message : t("facial.deleteFaceError"));
     } finally {
       setDeletingTraceId(null);
     }
@@ -644,13 +679,13 @@ export default function FacialCaseWorkspace({
     }
 
     if (failed === 0) {
-      toast.success(
-        `${added.length} evidence file${added.length === 1 ? "" : "s"} added.`,
-      );
+      toast.success(t("caseDetail.evidenceAdded", { count: added.length }));
     } else if (added.length > 0) {
-      toast.warning(`${added.length} added, ${failed} failed.`);
+      toast.warning(
+        t("caseDetail.partialUpload", { added: added.length, failed }),
+      );
     } else {
-      toast.error("No evidence files were uploaded.");
+      toast.error(t("caseDetail.noneUploaded"));
     }
 
     setSelectedFiles([]);
@@ -670,11 +705,9 @@ export default function FacialCaseWorkspace({
       found += count;
     }
     if (found === 0) {
-      toast.info("No faces detected on the new evidence.");
+      toast.info(t("facial.noFacesNew"));
     } else {
-      toast.success(
-        `${found} face${found === 1 ? "" : "s"} detected — review the boxes, then Codify to save.`,
-      );
+      toast.success(t("facial.detected", { count: found }));
     }
   }
 
@@ -687,7 +720,7 @@ export default function FacialCaseWorkspace({
   async function handleExcludeEvidence(evidence: Evidence) {
     if (
       !window.confirm(
-        `Exclude "${evidence.filename}" from this case? This cannot be undone.`,
+        t("caseDetail.confirmExclude", { filename: evidence.filename }),
       )
     ) {
       return;
@@ -699,11 +732,11 @@ export default function FacialCaseWorkspace({
         delete next[evidence.id];
         return next;
       });
-      toast.success("Evidence excluded.");
+      toast.success(t("caseDetail.evidenceExcluded"));
       await onEvidencesChanged();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Could not exclude evidence",
+        err instanceof Error ? err.message : t("caseDetail.excludeError"),
       );
     }
   }
@@ -716,8 +749,8 @@ export default function FacialCaseWorkspace({
   return (
     <div className="space-y-6">
       <ComponentCard
-        title="Evidence"
-        desc="Pick an image, then recognize or draw its faces. Nothing is saved until you Codify."
+        title={t("facial.evidenceTitle")}
+        desc={t("facial.evidenceDesc")}
       >
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto pr-1 lg:col-span-3">
@@ -736,7 +769,7 @@ export default function FacialCaseWorkspace({
 
             {imageEvidences.length === 0 && (
               <p className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                No image evidence yet. Drop one on the right.
+                {t("facial.noImageEvidence")}
               </p>
             )}
           </div>
@@ -745,24 +778,23 @@ export default function FacialCaseWorkspace({
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-gray-800 dark:text-white/90">
-                  {selectedEvidence?.filename ?? "No evidence selected"}
+                  {selectedEvidence?.filename ?? t("facial.noEvidenceSelected")}
                 </p>
                 {drawing ? (
                   <p className="text-xs text-brand-500">
-                    Drag on the photo to box a face.
+                    {t("facial.dragToBox")}
                   </p>
                 ) : detectingSelected ? (
-                  <p className="text-xs text-brand-500">Detecting faces...</p>
+                  <p className="text-xs text-brand-500">
+                    {t("facial.detectingFaces")}
+                  </p>
                 ) : unsavedTraces.length > 0 ? (
                   <p className="text-xs font-medium text-warning-600 dark:text-warning-500">
-                    {unsavedTraces.length} unsaved box
-                    {unsavedTraces.length === 1 ? "" : "es"} — adjust or remove
-                    them, then Codify to save or Discard.
+                    {t("facial.unsavedBoxes", { count: unsavedTraces.length })}
                   </p>
                 ) : (
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {savedBoxes.length} saved face
-                    {savedBoxes.length === 1 ? "" : "s"}
+                    {t("facial.savedFaces", { count: savedBoxes.length })}
                   </p>
                 )}
               </div>
@@ -773,7 +805,7 @@ export default function FacialCaseWorkspace({
                     onClick={() => handleExcludeEvidence(selectedEvidence)}
                     className="inline-flex h-9 items-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-error-500 shadow-theme-xs hover:bg-error-50 dark:border-gray-700 dark:bg-gray-900 dark:text-error-400 dark:hover:bg-white/[0.03]"
                   >
-                    Exclude evidence
+                    {t("facial.excludeEvidence")}
                   </button>
                 )}
                 <button
@@ -782,7 +814,7 @@ export default function FacialCaseWorkspace({
                   disabled={!evidenceUrl || editorLoading || detectingSelected}
                   className="inline-flex h-9 items-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 shadow-theme-xs transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.03]"
                 >
-                  {detectingSelected ? "Detecting..." : "Recognize faces"}
+                  {detectingSelected ? t("facial.detecting") : t("facial.recognize")}
                 </button>
                 <button
                   type="button"
@@ -794,7 +826,7 @@ export default function FacialCaseWorkspace({
                       : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.03]"
                   }`}
                 >
-                  {drawing ? "Cancel marking" : "Mark face"}
+                  {drawing ? t("facial.cancelMarking") : t("facial.markFace")}
                 </button>
                 {unsavedTraces.length > 0 && (
                   <button
@@ -803,7 +835,7 @@ export default function FacialCaseWorkspace({
                     disabled={savingTraces}
                     className="inline-flex h-9 items-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 shadow-theme-xs transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.03]"
                   >
-                    Discard
+                    {t("facial.discard")}
                   </button>
                 )}
                 <Button
@@ -812,10 +844,10 @@ export default function FacialCaseWorkspace({
                   disabled={unsavedTraces.length === 0 || savingTraces}
                 >
                   {savingTraces
-                    ? "Saving..."
+                    ? t("common.saving")
                     : unsavedTraces.length > 0
-                      ? `Codify ${unsavedTraces.length} face${unsavedTraces.length === 1 ? "" : "s"}`
-                      : "Codify"}
+                      ? t("facial.codifyN", { count: unsavedTraces.length })
+                      : t("facial.codify")}
                 </Button>
               </div>
             </div>
@@ -824,7 +856,7 @@ export default function FacialCaseWorkspace({
               <div className="min-w-0 flex-1">
                 {editorLoading && (
                   <p className="flex h-[52vh] items-center justify-center rounded-xl border border-gray-200 text-sm text-gray-500 dark:border-white/[0.05] dark:text-gray-400">
-                    Loading...
+                    {t("common.loading")}
                   </p>
                 )}
 
@@ -841,7 +873,7 @@ export default function FacialCaseWorkspace({
 
                 {!editorLoading && !evidenceUrl && (
                   <p className="flex h-[52vh] items-center justify-center rounded-xl border border-gray-200 px-4 text-center text-sm text-gray-500 dark:border-white/[0.05] dark:text-gray-400">
-                    Add an image to this case to start marking faces.
+                    {t("facial.addImageHint")}
                   </p>
                 )}
               </div>
@@ -854,16 +886,13 @@ export default function FacialCaseWorkspace({
                     setSelectedFiles((current) => [...current, ...files])
                   }
                   onRejected={() =>
-                    toast.error(
-                      "Unsupported file type. Allowed: pdf, jpg, png, webp, gif, tiff, bmp.",
-                    )
+                    toast.error(t("caseDetail.unsupportedFile"))
                   }
                 />
                 {selectedFiles.length > 0 && (
                   <div className="flex flex-col gap-2">
                     <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {selectedFiles.length} file
-                      {selectedFiles.length === 1 ? "" : "s"} ready
+                      {t("facial.filesReady", { count: selectedFiles.length })}
                     </span>
                     <div className="flex items-center justify-between gap-2">
                       <button
@@ -871,14 +900,14 @@ export default function FacialCaseWorkspace({
                         onClick={() => setSelectedFiles([])}
                         className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                       >
-                        Clear
+                        {t("common.clear")}
                       </button>
                       <Button
                         size="sm"
                         onClick={handleUpload}
                         disabled={uploading}
                       >
-                        {uploading ? "Uploading..." : "Upload"}
+                        {uploading ? t("caseDetail.uploading") : t("caseDetail.upload")}
                       </Button>
                     </div>
                   </div>
@@ -890,16 +919,16 @@ export default function FacialCaseWorkspace({
       </ComponentCard>
 
       <ComponentCard
-        title="Face codifications"
+        title={t("facial.codifications")}
         desc={
           facesLoading
-            ? "Loading..."
-            : `${faces.length} face${faces.length === 1 ? "" : "s"} in this case — click one to load it into a comparison slot.`
+            ? t("common.loading")
+            : t("facial.codificationsDesc", { count: faces.length })
         }
       >
         {facesLoading && (
           <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-            Loading...
+            {t("common.loading")}
           </p>
         )}
 
@@ -909,7 +938,7 @@ export default function FacialCaseWorkspace({
 
         {!facesLoading && !facesError && faces.length === 0 && (
           <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-            No faces codified yet. Mark one on the evidence image above.
+            {t("facial.noFacesCodified")}
           </p>
         )}
 
@@ -934,7 +963,7 @@ export default function FacialCaseWorkspace({
                     <span className="block aspect-square w-full overflow-hidden bg-gray-100 dark:bg-white/[0.05]">
                       <img
                         src={face.thumbnailUrl}
-                        alt={`Face ${codificationLabel(face.codification)}`}
+                        alt={t("facial.faceAlt", { label: codificationLabel(face.codification) })}
                         className="h-full w-full object-cover"
                       />
                     </span>
@@ -955,7 +984,7 @@ export default function FacialCaseWorkspace({
                     type="button"
                     onClick={() => handleDeleteFace(face)}
                     disabled={deletingTraceId === face.codification.traceId}
-                    title="Delete this face"
+                    title={t("facial.deleteThisFace")}
                     className="absolute right-1.5 top-1.5 hidden h-5 w-5 items-center justify-center rounded bg-black/60 text-xs text-white transition-colors hover:bg-error-500 disabled:opacity-50 group-hover:flex"
                   >
                     ×
@@ -968,8 +997,8 @@ export default function FacialCaseWorkspace({
       </ComponentCard>
 
       <ComponentCard
-        title="Comparison"
-        desc="Two faces side by side, with independent zoom and image adjustment."
+        title={t("facial.comparison")}
+        desc={t("facial.comparisonDesc")}
         collapsible
       >
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -997,7 +1026,7 @@ export default function FacialCaseWorkspace({
             onClick={handleMachineScore}
             disabled={!bothSlotsFilled || scoring}
           >
-            {scoring ? "Scoring..." : "Machine score"}
+            {scoring ? t("facial.scoring") : t("facial.machineScore")}
           </Button>
           <div className="flex items-center gap-3">
             <button
@@ -1006,7 +1035,7 @@ export default function FacialCaseWorkspace({
               disabled={slotIds[0] === null && slotIds[1] === null}
               className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-40 dark:text-gray-400 dark:hover:text-gray-300"
             >
-              Swap
+              {t("facial.swap")}
             </button>
             <button
               type="button"
@@ -1014,11 +1043,18 @@ export default function FacialCaseWorkspace({
               disabled={slotIds[0] === null && slotIds[1] === null}
               className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-40 dark:text-gray-400 dark:hover:text-gray-300"
             >
-              Clear both
+              {t("facial.clearBoth")}
             </button>
           </div>
         </div>
       </ComponentCard>
+
+      <CaseClusters
+        clusters={clusters}
+        faces={faces}
+        loading={clustersLoading}
+        error={clustersError}
+      />
     </div>
   );
 }

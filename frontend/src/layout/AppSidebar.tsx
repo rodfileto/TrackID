@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
+import { useTranslation } from "react-i18next";
 
 import {
+  BoxCubeIcon,
   ChevronDownIcon,
   FolderIcon,
   GridIcon,
@@ -10,7 +12,6 @@ import {
   UserCircleIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
-import SidebarWidget from "./SidebarWidget";
 
 type NavItem = {
   name: string;
@@ -22,27 +23,33 @@ type NavItem = {
 const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
-    name: "Dashboard",
-    subItems: [{ name: "Home", path: "/", pro: false }],
+    name: "nav.dashboard",
+    subItems: [{ name: "nav.home", path: "/", pro: false }],
   },
   {
     icon: <UserCircleIcon />,
-    name: "User Profile",
+    name: "nav.userProfile",
     path: "/profile",
   },
   {
     icon: <FolderIcon />,
-    name: "Criminal Cases",
+    name: "nav.criminalCases",
     path: "/cases",
   },
   {
     icon: <GroupIcon />,
-    name: "Persons",
+    name: "nav.persons",
     path: "/persons",
+  },
+  {
+    icon: <BoxCubeIcon />,
+    name: "nav.clusters",
+    path: "/clusters",
   },
 ];
 
 const AppSidebar: React.FC = () => {
+  const { t } = useTranslation();
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const location = useLocation();
 
@@ -106,7 +113,7 @@ const AppSidebar: React.FC = () => {
   const renderMenuItems = (items: NavItem[], menuType: "main" | "others") => (
     <ul className="flex flex-col gap-4">
       {items.map((nav, index) => (
-        <li key={nav.name}>
+        <li key={t(nav.name)}>
           {nav.subItems ? (
             <button
               onClick={() => handleSubmenuToggle(index, menuType)}
@@ -130,7 +137,7 @@ const AppSidebar: React.FC = () => {
                 {nav.icon}
               </span>
               {(isExpanded || isHovered || isMobileOpen) && (
-                <span className="menu-item-text">{nav.name}</span>
+                <span className="menu-item-text">{t(nav.name)}</span>
               )}
               {(isExpanded || isHovered || isMobileOpen) && (
                 <ChevronDownIcon
@@ -161,7 +168,7 @@ const AppSidebar: React.FC = () => {
                   {nav.icon}
                 </span>
                 {(isExpanded || isHovered || isMobileOpen) && (
-                  <span className="menu-item-text">{nav.name}</span>
+                  <span className="menu-item-text">{t(nav.name)}</span>
                 )}
               </Link>
             )
@@ -181,7 +188,7 @@ const AppSidebar: React.FC = () => {
             >
               <ul className="mt-2 space-y-1 ml-9">
                 {nav.subItems.map((subItem) => (
-                  <li key={subItem.name}>
+                  <li key={t(subItem.name)}>
                     <Link
                       to={subItem.path}
                       className={`menu-dropdown-item ${
@@ -190,7 +197,7 @@ const AppSidebar: React.FC = () => {
                           : "menu-dropdown-item-inactive"
                       }`}
                     >
-                      {subItem.name}
+                      {t(subItem.name)}
                       <span className="flex items-center gap-1 ml-auto">
                         {subItem.new && (
                           <span
@@ -200,7 +207,7 @@ const AppSidebar: React.FC = () => {
                                 : "menu-dropdown-badge-inactive"
                             } menu-dropdown-badge`}
                           >
-                            new
+                            {t("nav.new")}
                           </span>
                         )}
                         {subItem.pro && (
@@ -211,7 +218,7 @@ const AppSidebar: React.FC = () => {
                                 : "menu-dropdown-badge-inactive"
                             } menu-dropdown-badge`}
                           >
-                            pro
+                            {t("nav.pro")}
                           </span>
                         )}
                       </span>
@@ -252,14 +259,14 @@ const AppSidebar: React.FC = () => {
               <img
                 className="dark:hidden"
                 src="/images/logo/logo.svg"
-                alt="Logo"
+                alt={t("common.logo")}
                 width={150}
                 height={40}
               />
               <img
                 className="hidden dark:block"
                 src="/images/logo/logo-dark.svg"
-                alt="Logo"
+                alt={t("common.logo")}
                 width={150}
                 height={40}
               />
@@ -267,7 +274,7 @@ const AppSidebar: React.FC = () => {
           ) : (
             <img
               src="/images/logo/logo-icon.svg"
-              alt="Logo"
+              alt={t("common.logo")}
               width={32}
               height={32}
             />
@@ -286,7 +293,7 @@ const AppSidebar: React.FC = () => {
                 }`}
               >
                 {isExpanded || isHovered || isMobileOpen ? (
-                  "Menu"
+                  t("nav.menu")
                 ) : (
                   <HorizontaLDots className="size-6" />
                 )}
@@ -295,7 +302,6 @@ const AppSidebar: React.FC = () => {
             </div>
           </div>
         </nav>
-        {isExpanded || isHovered || isMobileOpen ? <SidebarWidget /> : null}
       </div>
     </aside>
   );

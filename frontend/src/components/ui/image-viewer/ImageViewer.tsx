@@ -23,6 +23,7 @@ import React, {
   useCallback,
   useImperativeHandle,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { Stage, Layer, Image as KonvaImage } from "react-konva";
 import Konva from "konva";
 import {
@@ -54,23 +55,23 @@ type Interpolation = "bicubic" | "bilinear" | "nearest";
 
 const INTERPOLATION_OPTIONS: Array<{
   value: Interpolation;
-  label: string;
-  title: string;
+  labelKey: string;
+  titleKey: string;
 }> = [
   {
     value: "bicubic",
-    label: "Bicubic",
-    title: "Smoothest -- best for standard photographs",
+    labelKey: "viewer.bicubic",
+    titleKey: "viewer.bicubicHint",
   },
   {
     value: "bilinear",
-    label: "Bilinear",
-    title: "Smooth, cheaper to compute",
+    labelKey: "viewer.bilinear",
+    titleKey: "viewer.bilinearHint",
   },
   {
     value: "nearest",
-    label: "Pixelated",
-    title: "Nearest-neighbor -- best for inspecting raw pixel data",
+    labelKey: "viewer.pixelated",
+    titleKey: "viewer.pixelatedHint",
   },
 ];
 
@@ -202,6 +203,7 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
     },
     ref,
   ) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const imageNodeRef = useRef<Konva.Image>(null);
@@ -392,18 +394,18 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
       {/* ── Toolbar ── */}
       {showToolbar && (
         <div className="absolute top-2 left-2 z-10 flex items-center gap-0.5 rounded-lg bg-black/50 px-1.5 py-1 backdrop-blur-sm">
-          <ToolBtn onClick={() => zoomBy(ZOOM_FACTOR)} title="Zoom in">
+          <ToolBtn onClick={() => zoomBy(ZOOM_FACTOR)} title={t("viewer.zoomIn")}>
             <ZoomInIcon className="h-4 w-4" />
           </ToolBtn>
-          <ToolBtn onClick={() => zoomBy(1 / ZOOM_FACTOR)} title="Zoom out">
+          <ToolBtn onClick={() => zoomBy(1 / ZOOM_FACTOR)} title={t("viewer.zoomOut")}>
             <ZoomOutIcon className="h-4 w-4" />
           </ToolBtn>
           <div className="mx-0.5 h-4 w-px bg-white/30" />
-          <ToolBtn onClick={handleFit} title="Fit to frame">
+          <ToolBtn onClick={handleFit} title={t("viewer.fit")}>
             <FitToFrameIcon className="h-4 w-4" />
           </ToolBtn>
           {showRotate && (
-            <ToolBtn onClick={handleRotate} title="Rotate 90°">
+            <ToolBtn onClick={handleRotate} title={t("viewer.rotate")}>
               <RotateIcon className="h-4 w-4" />
             </ToolBtn>
           )}
@@ -414,40 +416,40 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
       {showFilters && (
         <div className="absolute top-2 right-2 z-10 flex w-44 flex-col gap-2 rounded-lg bg-black/50 px-3 py-2.5 backdrop-blur-sm">
           <FilterSlider
-            label="Brightness"
+            label={t("viewer.brightness")}
             value={brightness}
             onChange={setBrightness}
             range={BRIGHTNESS_RANGE}
           />
           <FilterSlider
-            label="Contrast"
+            label={t("viewer.contrast")}
             value={contrast}
             onChange={setContrast}
             range={CONTRAST_RANGE}
           />
           <FilterSlider
-            label="Saturation"
+            label={t("viewer.saturation")}
             value={saturation}
             onChange={setSaturation}
             range={SATURATION_RANGE}
           />
 
           <div className="flex flex-col gap-1 text-[10px] text-white/90">
-            <span>Interpolation</span>
+            <span>{t("viewer.interpolation")}</span>
             <div className="flex overflow-hidden rounded-md border border-white/20">
               {INTERPOLATION_OPTIONS.map((option) => (
                 <button
                   key={option.value}
                   type="button"
                   onClick={() => setInterpolation(option.value)}
-                  title={option.title}
+                  title={t(option.titleKey)}
                   className={`flex-1 px-1.5 py-1 text-[10px] transition-colors ${
                     interpolation === option.value
                       ? "bg-brand-500 text-white"
                       : "text-white/70 hover:bg-white/10"
                   }`}
                 >
-                  {option.label}
+                  {t(option.labelKey)}
                 </button>
               ))}
             </div>
@@ -459,7 +461,7 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
             disabled={!filtersAdjusted}
             className="self-end text-[10px] text-white/70 transition-colors hover:text-white disabled:opacity-40"
           >
-            Reset
+            {t("viewer.reset")}
           </button>
         </div>
       )}

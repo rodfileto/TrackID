@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { Modal } from "../ui/modal";
 import { getEvidenceObjectUrl } from "../../services/cases";
 
@@ -18,6 +19,7 @@ export default function EvidencePreview({
   mediaType,
   contentType,
 }: EvidencePreviewProps) {
+  const { t } = useTranslation();
   // media_type is normalized ("image"/"pdf") for evidence uploaded through
   // this app, but imported data reuses the column for other taxonomies (e.g.
   // "facial", "video", or a raw MIME string), so content_type — which is
@@ -67,7 +69,7 @@ export default function EvidencePreview({
       setUrl(u);
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Could not load evidence",
+        err instanceof Error ? err.message : t("markTraces.loadError"),
       );
     }
   }

@@ -41,6 +41,58 @@ func (q *Queries) CountCriminalCases(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countPersonCasesByType = `-- name: CountPersonCasesByType :many
+SELECT p.person_id, cc.case_type, COUNT(DISTINCT cc.id) AS case_count
+FROM person p
+JOIN identity_document d ON d.person_id = p.id
+JOIN identity_register r ON r.document_id = d.id
+JOIN identity_file f ON f.register_id = r.id
+JOIN cluster_members known_cm ON known_cm.feature_id = f.id::text
+JOIN cluster_members quest_cm ON quest_cm.cluster_id = known_cm.cluster_id
+JOIN case_traces ct ON quest_cm.feature_id = 'TRACE:' || ct.id || '#feature'
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+WHERE p.person_id = ANY($1::text[])
+GROUP BY p.person_id, cc.case_type
+ORDER BY p.person_id, cc.case_type
+`
+
+type CountPersonCasesByTypeRow struct {
+	PersonID  string `db:"person_id" json:"person_id"`
+	CaseType  string `db:"case_type" json:"case_type"`
+	CaseCount int64  `db:"case_count" json:"case_count"`
+}
+
+// For each of the given persons, the number of distinct criminal cases
+// linked through their resolved biometric clusters, grouped by case_type --
+// the "N facial / N fingerprint" badge a person search result shows. Same
+// KNOWN feature -> cluster -> QUESTIONED trace -> case resolution as
+// person.ListCases/buildCases (feature_id text format from
+// graph.KnownFeatureID/QuestionedFeatureID), batched across every requested
+// person in one query instead of one loadPersonAndClusterIDs call per row.
+func (q *Queries) CountPersonCasesByType(ctx context.Context, personIds []string) ([]CountPersonCasesByTypeRow, error) {
+	rows, err := q.db.QueryContext(ctx, countPersonCasesByType, pq.Array(personIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountPersonCasesByTypeRow
+	for rows.Next() {
+		var i CountPersonCasesByTypeRow
+		if err := rows.Scan(&i.PersonID, &i.CaseType, &i.CaseCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createCaseEvidenceForFile = `-- name: CreateCaseEvidenceForFile :one
 INSERT INTO case_evidences (criminal_case_id, sequence, case_file_id)
 SELECT $1, COALESCE(MAX(sequence), 0) + 1, $2
@@ -307,6 +359,92 @@ func (q *Queries) DeleteCodificationPoint(ctx context.Context, arg DeleteCodific
 	return result.RowsAffected()
 }
 
+const findNearestCasesByFaceEmbedding = `-- name: FindNearestCasesByFaceEmbedding :many
+SELECT cc.case_id, cc.case_type, cc.description, ct.id AS case_trace_id,
+       tcf.id AS trace_crop_file_id, ecf.id AS evidence_file_id,
+       ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2,
+       fe.embedding <=> $1::vector AS distance
+FROM feature_embeddings fe
+JOIN biometricfeature bf ON bf.id = fe.biometricfeature_id
+JOIN case_traces ct ON ct.id = bf.case_trace_id
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+LEFT JOIN case_files tcf ON tcf.id = ct.case_file_id
+LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
+WHERE fe.embedding_type = $2
+ORDER BY fe.embedding <=> $1::vector
+LIMIT $3
+`
+
+type FindNearestCasesByFaceEmbeddingParams struct {
+	Embedding     interface{} `db:"embedding" json:"embedding"`
+	EmbeddingType string      `db:"embedding_type" json:"embedding_type"`
+	ResultLimit   int32       `db:"result_limit" json:"result_limit"`
+}
+
+type FindNearestCasesByFaceEmbeddingRow struct {
+	CaseID          string          `db:"case_id" json:"case_id"`
+	CaseType        string          `db:"case_type" json:"case_type"`
+	Description     string          `db:"description" json:"description"`
+	CaseTraceID     int64           `db:"case_trace_id" json:"case_trace_id"`
+	TraceCropFileID sql.NullInt64   `db:"trace_crop_file_id" json:"trace_crop_file_id"`
+	EvidenceFileID  sql.NullInt64   `db:"evidence_file_id" json:"evidence_file_id"`
+	BoxX1           sql.NullFloat64 `db:"box_x1" json:"box_x1"`
+	BoxY1           sql.NullFloat64 `db:"box_y1" json:"box_y1"`
+	BoxX2           sql.NullFloat64 `db:"box_x2" json:"box_x2"`
+	BoxY2           sql.NullFloat64 `db:"box_y2" json:"box_y2"`
+	Distance        interface{}     `db:"distance" json:"distance"`
+}
+
+// Nearest QUESTIONED (case evidence) face embeddings to a query vector,
+// joined up to the criminal case that owns the matching trace -- the
+// case-evidence counterpart to FindNearestPersonsByFaceEmbedding. Only
+// QUESTIONED features match: a KNOWN (identity_file) embedding has no
+// case_trace_id, so the join to case_traces excludes it. A case can surface
+// more than once, once per matching trace -- callers dedupe per case
+// themselves (see person.SearchByFace), keeping the best-scoring trace.
+//
+// Also resolves what a caller needs to render the matched trace as a
+// thumbnail, same priority GetCodificationSource already uses: the trace's
+// own face_crop file (trace_crop_file_id) when an automated import pipeline
+// already produced one -- already just the face, no box needed -- or
+// otherwise the evidence file (evidence_file_id) plus the trace's own box
+// to crop it down to just this face.
+func (q *Queries) FindNearestCasesByFaceEmbedding(ctx context.Context, arg FindNearestCasesByFaceEmbeddingParams) ([]FindNearestCasesByFaceEmbeddingRow, error) {
+	rows, err := q.db.QueryContext(ctx, findNearestCasesByFaceEmbedding, arg.Embedding, arg.EmbeddingType, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindNearestCasesByFaceEmbeddingRow
+	for rows.Next() {
+		var i FindNearestCasesByFaceEmbeddingRow
+		if err := rows.Scan(
+			&i.CaseID,
+			&i.CaseType,
+			&i.Description,
+			&i.CaseTraceID,
+			&i.TraceCropFileID,
+			&i.EvidenceFileID,
+			&i.BoxX1,
+			&i.BoxY1,
+			&i.BoxX2,
+			&i.BoxY2,
+			&i.Distance,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findNearestFeatureEmbeddings = `-- name: FindNearestFeatureEmbeddings :many
 SELECT fe.id, fe.biometricfeature_id, fe.embedding <=> $1::vector AS distance
 FROM feature_embeddings fe
@@ -343,6 +481,79 @@ func (q *Queries) FindNearestFeatureEmbeddings(ctx context.Context, arg FindNear
 	for rows.Next() {
 		var i FindNearestFeatureEmbeddingsRow
 		if err := rows.Scan(&i.ID, &i.BiometricfeatureID, &i.Distance); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const findNearestPersonsByFaceEmbedding = `-- name: FindNearestPersonsByFaceEmbedding :many
+SELECT p.person_id, r.name, r.register_number, d.document_type, d.document_number,
+       f.id AS identity_file_id, f.content_type,
+       fe.embedding <=> $1::vector AS distance
+FROM feature_embeddings fe
+JOIN biometricfeature bf ON bf.id = fe.biometricfeature_id
+JOIN identity_file f ON f.id = bf.identity_file_id
+JOIN identity_register r ON r.id = f.register_id
+JOIN identity_document d ON d.id = r.document_id
+JOIN person p ON p.id = d.person_id
+WHERE fe.embedding_type = $2
+ORDER BY fe.embedding <=> $1::vector
+LIMIT $3
+`
+
+type FindNearestPersonsByFaceEmbeddingParams struct {
+	Embedding     interface{} `db:"embedding" json:"embedding"`
+	EmbeddingType string      `db:"embedding_type" json:"embedding_type"`
+	ResultLimit   int32       `db:"result_limit" json:"result_limit"`
+}
+
+type FindNearestPersonsByFaceEmbeddingRow struct {
+	PersonID       string         `db:"person_id" json:"person_id"`
+	Name           string         `db:"name" json:"name"`
+	RegisterNumber string         `db:"register_number" json:"register_number"`
+	DocumentType   string         `db:"document_type" json:"document_type"`
+	DocumentNumber string         `db:"document_number" json:"document_number"`
+	IdentityFileID int64          `db:"identity_file_id" json:"identity_file_id"`
+	ContentType    sql.NullString `db:"content_type" json:"content_type"`
+	Distance       interface{}    `db:"distance" json:"distance"`
+}
+
+// Nearest enrolled (KNOWN) face embeddings to a query vector, joined up to
+// the person/register/document that enrolled them -- the face-search
+// counterpart to SearchPersonsByName. Only KNOWN features match: a
+// QUESTIONED (case_trace) embedding has no identity_file row, so the join
+// to identity_file excludes it. A person can surface more than once, once
+// per matching register, same as SearchPersonsByName. Also returns the
+// matched identity_file itself (id + content_type) -- the enrollment photo
+// the embedding was computed from -- so a caller can render it as a
+// thumbnail (see DownloadIdentityFileHandler).
+func (q *Queries) FindNearestPersonsByFaceEmbedding(ctx context.Context, arg FindNearestPersonsByFaceEmbeddingParams) ([]FindNearestPersonsByFaceEmbeddingRow, error) {
+	rows, err := q.db.QueryContext(ctx, findNearestPersonsByFaceEmbedding, arg.Embedding, arg.EmbeddingType, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindNearestPersonsByFaceEmbeddingRow
+	for rows.Next() {
+		var i FindNearestPersonsByFaceEmbeddingRow
+		if err := rows.Scan(
+			&i.PersonID,
+			&i.Name,
+			&i.RegisterNumber,
+			&i.DocumentType,
+			&i.DocumentNumber,
+			&i.IdentityFileID,
+			&i.ContentType,
+			&i.Distance,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -582,6 +793,69 @@ func (q *Queries) GetCriminalCaseByCaseID(ctx context.Context, caseID string) (G
 		&i.CaseID,
 		&i.CaseType,
 		&i.Description,
+	)
+	return i, err
+}
+
+const getIdentityFeatureSource = `-- name: GetIdentityFeatureSource :one
+SELECT bf.id AS biometricfeature_id, bf.feature_type, f.storage_ref
+FROM biometricfeature bf
+JOIN identity_file f ON f.id = bf.identity_file_id
+WHERE bf.id = $1
+`
+
+type GetIdentityFeatureSourceRow struct {
+	BiometricfeatureID int64  `db:"biometricfeature_id" json:"biometricfeature_id"`
+	FeatureType        string `db:"feature_type" json:"feature_type"`
+	StorageRef         string `db:"storage_ref" json:"storage_ref"`
+}
+
+// Resolves the image to embed for a KNOWN identity biometricfeature: its
+// identity_file's stored photo. The identity-enrollment counterpart to
+// GetCodificationSource -- an identity_file IS the face record already (a
+// mugshot/ID photo), so there's no codification/crop indirection to resolve.
+func (q *Queries) GetIdentityFeatureSource(ctx context.Context, biometricfeatureID int64) (GetIdentityFeatureSourceRow, error) {
+	row := q.db.QueryRowContext(ctx, getIdentityFeatureSource, biometricfeatureID)
+	var i GetIdentityFeatureSourceRow
+	err := row.Scan(&i.BiometricfeatureID, &i.FeatureType, &i.StorageRef)
+	return i, err
+}
+
+const getIdentityFileForPerson = `-- name: GetIdentityFileForPerson :one
+SELECT f.id, f.file_type, f.source_path, f.storage_ref, f.content_type
+FROM identity_file f
+JOIN identity_register r ON r.id = f.register_id
+JOIN identity_document d ON d.id = r.document_id
+JOIN person p ON p.id = d.person_id
+WHERE f.id = $1 AND p.person_id = $2
+`
+
+type GetIdentityFileForPersonParams struct {
+	IdentityFileID int64  `db:"identity_file_id" json:"identity_file_id"`
+	PersonID       string `db:"person_id" json:"person_id"`
+}
+
+type GetIdentityFileForPersonRow struct {
+	ID          int64          `db:"id" json:"id"`
+	FileType    string         `db:"file_type" json:"file_type"`
+	SourcePath  string         `db:"source_path" json:"source_path"`
+	StorageRef  string         `db:"storage_ref" json:"storage_ref"`
+	ContentType sql.NullString `db:"content_type" json:"content_type"`
+}
+
+// Scopes an identity_file to the given person (through
+// identity_register -> identity_document), same scoping GetCaseFile does
+// for a case's evidence files -- so a caller can't download a file that
+// doesn't belong to the person named in the URL.
+func (q *Queries) GetIdentityFileForPerson(ctx context.Context, arg GetIdentityFileForPersonParams) (GetIdentityFileForPersonRow, error) {
+	row := q.db.QueryRowContext(ctx, getIdentityFileForPerson, arg.IdentityFileID, arg.PersonID)
+	var i GetIdentityFileForPersonRow
+	err := row.Scan(
+		&i.ID,
+		&i.FileType,
+		&i.SourcePath,
+		&i.StorageRef,
+		&i.ContentType,
 	)
 	return i, err
 }
@@ -890,6 +1164,58 @@ func (q *Queries) ListBiometricDecisions(ctx context.Context) ([]ListBiometricDe
 			&i.FeatureAID,
 			&i.FeatureBID,
 			&i.Modality,
+			&i.Role,
+			&i.Decision,
+			&i.SystemSource,
+			&i.Username,
+			&i.Confidence,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBiometricDecisionsForFeatures = `-- name: ListBiometricDecisionsForFeatures :many
+SELECT feature_a_id, feature_b_id, role, decision, system_source, username, confidence
+FROM biometric_decisions
+WHERE feature_a_id = ANY($1::text[]) OR feature_b_id = ANY($1::text[])
+ORDER BY feature_a_id, feature_b_id, decided_at
+`
+
+type ListBiometricDecisionsForFeaturesRow struct {
+	FeatureAID   string          `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID   string          `db:"feature_b_id" json:"feature_b_id"`
+	Role         string          `db:"role" json:"role"`
+	Decision     string          `db:"decision" json:"decision"`
+	SystemSource sql.NullString  `db:"system_source" json:"system_source"`
+	Username     sql.NullString  `db:"username" json:"username"`
+	Confidence   sql.NullFloat64 `db:"confidence" json:"confidence"`
+}
+
+// Every biometric_decisions row touching any of the given feature ids, on
+// either side of the pair -- the raw chain a caller groups by counterpart
+// feature to derive that pair's status (see cluster.DeriveEdgeStatus) and
+// who/what decided it (see cases.ListTraceClusters).
+func (q *Queries) ListBiometricDecisionsForFeatures(ctx context.Context, featureIds []string) ([]ListBiometricDecisionsForFeaturesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBiometricDecisionsForFeatures, pq.Array(featureIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBiometricDecisionsForFeaturesRow
+	for rows.Next() {
+		var i ListBiometricDecisionsForFeaturesRow
+		if err := rows.Scan(
+			&i.FeatureAID,
+			&i.FeatureBID,
 			&i.Role,
 			&i.Decision,
 			&i.SystemSource,
@@ -1365,6 +1691,43 @@ func (q *Queries) ListClusterMembersJoined(ctx context.Context) ([]ListClusterMe
 	return items, nil
 }
 
+const listClusterMembershipsForFeatureIDs = `-- name: ListClusterMembershipsForFeatureIDs :many
+SELECT feature_id, cluster_id
+FROM cluster_members
+WHERE feature_id = ANY($1::text[])
+`
+
+type ListClusterMembershipsForFeatureIDsRow struct {
+	FeatureID string `db:"feature_id" json:"feature_id"`
+	ClusterID int64  `db:"cluster_id" json:"cluster_id"`
+}
+
+// Same lookup as ListClusterIDsForFeatureIDs but keeping feature_id on each
+// row, so a caller can map each of its own feature ids back to the cluster
+// it landed in (see cases.ListTraceClusters).
+func (q *Queries) ListClusterMembershipsForFeatureIDs(ctx context.Context, featureIds []string) ([]ListClusterMembershipsForFeatureIDsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listClusterMembershipsForFeatureIDs, pq.Array(featureIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClusterMembershipsForFeatureIDsRow
+	for rows.Next() {
+		var i ListClusterMembershipsForFeatureIDsRow
+		if err := rows.Scan(&i.FeatureID, &i.ClusterID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClusters = `-- name: ListClusters :many
 SELECT id, case_type
 FROM clusters
@@ -1643,6 +2006,99 @@ func (q *Queries) ListIdentityChainByPerson(ctx context.Context, personID sql.Nu
 	return items, nil
 }
 
+const listKnownClusterMembers = `-- name: ListKnownClusterMembers :many
+SELECT p.person_id, r.name, r.register_number, d.document_type, d.document_number,
+       f.id AS identity_file_id, f.content_type
+FROM identity_file f
+JOIN identity_register r ON r.id = f.register_id
+JOIN identity_document d ON d.id = r.document_id
+JOIN person p ON p.id = d.person_id
+WHERE f.id = ANY($1::bigint[])
+`
+
+type ListKnownClusterMembersRow struct {
+	PersonID       string         `db:"person_id" json:"person_id"`
+	Name           string         `db:"name" json:"name"`
+	RegisterNumber string         `db:"register_number" json:"register_number"`
+	DocumentType   string         `db:"document_type" json:"document_type"`
+	DocumentNumber string         `db:"document_number" json:"document_number"`
+	IdentityFileID int64          `db:"identity_file_id" json:"identity_file_id"`
+	ContentType    sql.NullString `db:"content_type" json:"content_type"`
+}
+
+// Resolves a set of identity_file ids (KNOWN cluster member feature ids --
+// see graph.KnownFeatureID) to the enrollment they belong to, for rendering
+// a cluster's membership (see person.buildClusters). Same join shape as
+// FindNearestPersonsByFaceEmbedding, minus the embedding distance.
+func (q *Queries) ListKnownClusterMembers(ctx context.Context, identityFileIds []int64) ([]ListKnownClusterMembersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listKnownClusterMembers, pq.Array(identityFileIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListKnownClusterMembersRow
+	for rows.Next() {
+		var i ListKnownClusterMembersRow
+		if err := rows.Scan(
+			&i.PersonID,
+			&i.Name,
+			&i.RegisterNumber,
+			&i.DocumentType,
+			&i.DocumentNumber,
+			&i.IdentityFileID,
+			&i.ContentType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKnownFaceFeaturesMissingEmbedding = `-- name: ListKnownFaceFeaturesMissingEmbedding :many
+SELECT bf.id
+FROM biometricfeature bf
+WHERE bf.feature_type = 'FACE_RECORD'
+  AND bf.identity_file_id IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM feature_embeddings fe
+      WHERE fe.biometricfeature_id = bf.id AND fe.embedding_type = $1
+  )
+ORDER BY bf.id
+`
+
+// Every KNOWN FACE_RECORD biometricfeature (an enrolled identity photo) with
+// no embedding of the given type yet -- what
+// cmd/backfill-identity-face-embeddings enqueues embedding computation for.
+func (q *Queries) ListKnownFaceFeaturesMissingEmbedding(ctx context.Context, embeddingType string) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listKnownFaceFeaturesMissingEmbedding, embeddingType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listKnownFeaturePersons = `-- name: ListKnownFeaturePersons :many
 SELECT p.person_id, f.id AS identity_file_id
 FROM biometricfeature bf
@@ -1780,6 +2236,70 @@ func (q *Queries) ListPersonIDs(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		items = append(items, person_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listQuestionedClusterMembers = `-- name: ListQuestionedClusterMembers :many
+SELECT cc.case_id, cc.case_type, cc.description, ct.id AS case_trace_id,
+       tcf.id AS trace_crop_file_id, ecf.id AS evidence_file_id,
+       ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2
+FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+LEFT JOIN case_files tcf ON tcf.id = ct.case_file_id
+LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
+WHERE ct.id = ANY($1::bigint[])
+`
+
+type ListQuestionedClusterMembersRow struct {
+	CaseID          string          `db:"case_id" json:"case_id"`
+	CaseType        string          `db:"case_type" json:"case_type"`
+	Description     string          `db:"description" json:"description"`
+	CaseTraceID     int64           `db:"case_trace_id" json:"case_trace_id"`
+	TraceCropFileID sql.NullInt64   `db:"trace_crop_file_id" json:"trace_crop_file_id"`
+	EvidenceFileID  sql.NullInt64   `db:"evidence_file_id" json:"evidence_file_id"`
+	BoxX1           sql.NullFloat64 `db:"box_x1" json:"box_x1"`
+	BoxY1           sql.NullFloat64 `db:"box_y1" json:"box_y1"`
+	BoxX2           sql.NullFloat64 `db:"box_x2" json:"box_x2"`
+	BoxY2           sql.NullFloat64 `db:"box_y2" json:"box_y2"`
+}
+
+// Resolves a set of case_trace ids (parsed back out of QUESTIONED cluster
+// member feature ids -- see graph.QuestionedFeatureID) to the case evidence
+// they belong to, for rendering a cluster's membership (see
+// person.buildClusters). Same join and thumbnail-source resolution as
+// FindNearestCasesByFaceEmbedding, minus the embedding distance.
+func (q *Queries) ListQuestionedClusterMembers(ctx context.Context, caseTraceIds []int64) ([]ListQuestionedClusterMembersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listQuestionedClusterMembers, pq.Array(caseTraceIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListQuestionedClusterMembersRow
+	for rows.Next() {
+		var i ListQuestionedClusterMembersRow
+		if err := rows.Scan(
+			&i.CaseID,
+			&i.CaseType,
+			&i.Description,
+			&i.CaseTraceID,
+			&i.TraceCropFileID,
+			&i.EvidenceFileID,
+			&i.BoxX1,
+			&i.BoxY1,
+			&i.BoxX2,
+			&i.BoxY2,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

@@ -52,7 +52,10 @@ func GetProfile(ctx context.Context, sqlDB *sql.DB, personID string) (Profile, e
 		return Profile{}, err
 	}
 
-	profile.Clusters = buildClusters(clusterRows, memberRows)
+	profile.Clusters, err = buildClusters(ctx, q, clusterRows, memberRows)
+	if err != nil {
+		return Profile{}, err
+	}
 	profile.Cases, err = buildCases(ctx, q, memberRows)
 	if err != nil {
 		return Profile{}, err

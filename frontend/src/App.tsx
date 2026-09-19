@@ -12,6 +12,7 @@ import CriminalCases from "./pages/CriminalCases";
 import CaseDetailPage from "./pages/CaseDetail";
 import PersonLookup from "./pages/PersonLookup";
 import PersonProfilePage from "./pages/PersonProfile";
+import Clusters from "./pages/Clusters";
 import { useTheme } from "./context/ThemeContext";
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
               <Route path="/cases/:caseId" element={<CaseDetailPage />} />
               <Route path="/persons" element={<PersonLookup />} />
               <Route path="/persons/:personId" element={<PersonProfilePage />} />
+              <Route path="/clusters" element={<Clusters />} />
             </Route>
           </Route>
 

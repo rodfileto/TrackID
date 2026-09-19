@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { Modal } from "../ui/modal";
 import Button from "../ui/button/Button";
 import TraceEditor, { type TraceBox } from "./TraceEditor";
@@ -44,6 +45,7 @@ export default function TraceMarkerModal({
   isOpen,
   onClose,
 }: TraceMarkerModalProps) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -77,7 +79,7 @@ export default function TraceMarkerModal({
       .catch((err) => {
         if (!cancelled) {
           setError(
-            err instanceof Error ? err.message : "Could not load evidence",
+            err instanceof Error ? err.message : t("markTraces.loadError"),
           );
         }
       })
@@ -88,7 +90,7 @@ export default function TraceMarkerModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, caseId, evidenceId]);
+  }, [isOpen, caseId, evidenceId, t]);
 
   useEffect(() => {
     return () => {
@@ -103,16 +105,16 @@ export default function TraceMarkerModal({
     const traceId = Number(trace.id);
     if (!Number.isFinite(traceId)) return;
     const number = traces.findIndex((t) => t.id === trace.id) + 1;
-    if (!window.confirm(`Delete saved trace #${number}? This cannot be undone.`)) {
+    if (!window.confirm(t("markTraces.confirmDelete", { number }))) {
       return;
     }
     setDeletingId(trace.id);
     try {
       await deleteTrace(caseId, evidenceId, traceId);
       setTraces((current) => current.filter((t) => t.id !== trace.id));
-      toast.success("Trace deleted.");
+      toast.success(t("markTraces.deleted"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not delete trace");
+      toast.error(err instanceof Error ? err.message : t("markTraces.deleteError"));
     } finally {
       setDeletingId(null);
     }
@@ -136,11 +138,9 @@ export default function TraceMarkerModal({
         ...current.filter((t) => t.locked),
         ...created.map(toLockedBox),
       ]);
-      toast.success(
-        `${created.length} trace${created.length === 1 ? "" : "s"} saved.`,
-      );
+      toast.success(t("markTraces.saved", { count: created.length }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save traces");
+      toast.error(err instanceof Error ? err.message : t("markTraces.saveError"));
     } finally {
       setSaving(false);
     }
@@ -150,7 +150,7 @@ export default function TraceMarkerModal({
     <Modal isOpen={isOpen} onClose={onClose} className="m-4 max-w-6xl">
       <div className="p-4">
         <h4 className="mb-1 text-lg font-medium text-gray-800 dark:text-white/90">
-          Mark traces
+          {t("caseDetail.markTraces")}
         </h4>
         <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
           {filename}
@@ -158,7 +158,7 @@ export default function TraceMarkerModal({
 
         {loading && (
           <p className="py-16 text-center text-sm text-gray-500 dark:text-gray-400">
-            Loading…
+            {t("common.loadingShort")}
           </p>
         )}
 
@@ -178,7 +178,7 @@ export default function TraceMarkerModal({
             {lockedTraces.length > 0 && (
               <div className="mt-4">
                 <p className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">
-                  Saved traces
+                  {t("markTraces.savedTraces")}
                 </p>
                 <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-white/[0.05] dark:border-white/[0.05]">
                   {lockedTraces.map((trace) => (
@@ -187,7 +187,7 @@ export default function TraceMarkerModal({
                       className="flex items-center justify-between px-3 py-2 text-sm"
                     >
                       <span className="text-gray-700 dark:text-gray-300">
-                        Trace #{traces.findIndex((t) => t.id === trace.id) + 1}
+                        {t("markTraces.traceNumber", { number: traces.findIndex((x) => x.id === trace.id) + 1 })}
                       </span>
                       <span className="flex items-center gap-3">
                         <button
@@ -195,7 +195,7 @@ export default function TraceMarkerModal({
                           onClick={() => setCodificationTrace(trace)}
                           className="text-xs text-brand-500 hover:text-brand-600"
                         >
-                          Edit codification
+                          {t("markTraces.editCodification")}
                         </button>
                         <button
                           type="button"
@@ -203,7 +203,7 @@ export default function TraceMarkerModal({
                           disabled={deletingId === trace.id}
                           className="text-xs text-error-500 hover:text-error-600 disabled:opacity-50 dark:text-error-400"
                         >
-                          {deletingId === trace.id ? "Deleting..." : "Delete"}
+                          {deletingId === trace.id ? t("markTraces.deleting") : t("common.delete")}
                         </button>
                       </span>
                     </li>
@@ -214,20 +214,20 @@ export default function TraceMarkerModal({
 
             <div className="mt-4 flex items-center justify-between">
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {traces.length} trace{traces.length === 1 ? "" : "s"} total
+                {t("markTraces.total", { count: traces.length })}
                 {newTraces.length > 0 &&
-                  ` — ${newTraces.length} unsaved`}
+                  ` — ${t("markTraces.unsaved", { count: newTraces.length })}`}
               </p>
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={onClose}>
-                  Close
+                  {t("common.close")}
                 </Button>
                 <Button
                   size="sm"
                   onClick={handleSave}
                   disabled={newTraces.length === 0 || saving}
                 >
-                  {saving ? "Saving..." : "Save traces"}
+                  {saving ? t("common.saving") : t("markTraces.saveTraces")}
                 </Button>
               </div>
             </div>
@@ -241,7 +241,7 @@ export default function TraceMarkerModal({
           caseType={caseType}
           evidenceId={evidenceId}
           traceId={Number(codificationTrace.id)}
-          traceLabel={`Trace #${traces.findIndex((t) => t.id === codificationTrace.id) + 1}`}
+          traceLabel={t("markTraces.traceNumber", { number: traces.findIndex((x) => x.id === codificationTrace.id) + 1 })}
           box={{
             x1: codificationTrace.boxX1,
             y1: codificationTrace.boxY1,

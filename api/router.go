@@ -53,6 +53,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.GET("cases/years", ListCaseYearsHandler(deps.DB))
 	protected.GET("cases/:caseId", GetCaseHandler(deps.DB))
 	protected.GET("cases/:caseId/codifications", ListCaseCodificationsHandler(deps.DB))
+	protected.GET("cases/:caseId/clusters", ListCaseClustersHandler(deps.DB))
 	protected.POST("cases/:caseId/evidences", AddEvidenceHandler(deps.DB, deps.Storage))
 	protected.DELETE("cases/:caseId/evidences/:evidenceId", DeleteEvidenceHandler(deps.DB))
 	protected.GET("cases/:caseId/evidences/:evidenceId/download", DownloadEvidenceHandler(deps.DB, deps.Storage))
@@ -68,10 +69,15 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.POST("cases/:caseId/evidences/:evidenceId/traces/:traceId/codification-image", SaveCodificationImageHandler(deps.DB, deps.Storage, deps.Queue))
 
 	protected.GET("persons/search", SearchPersonsHandler(deps.DB))
+	protected.POST("persons/search-by-face", SearchPersonsByFaceHandler(deps.DB, deps.FaceVision))
 	protected.GET("persons/:personId", GetPersonProfileHandler(deps.DB))
 	protected.GET("persons/:personId/identity", GetPersonIdentityHandler(deps.DB))
+	protected.GET("persons/:personId/identity-files/:identityFileId/download", DownloadIdentityFileHandler(deps.DB, deps.Storage))
 	protected.GET("persons/:personId/clusters", ListPersonClustersHandler(deps.DB))
 	protected.GET("persons/:personId/cases", ListPersonCasesHandler(deps.DB))
+
+	protected.GET("clusters", ListClustersHandler(deps.DB))
+	protected.GET("clusters/graph", ClustersGraphHandler(deps.DB))
 
 	if deps.Register != nil {
 		deps.Register(router, protected)

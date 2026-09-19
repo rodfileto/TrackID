@@ -12,9 +12,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/rodfileto/trackid/db"
+	"github.com/rodfileto/trackid/embedding"
 	"github.com/rodfileto/trackid/graph"
 	"github.com/sqlc-dev/pqtype"
 )
@@ -32,6 +34,7 @@ type Option func(*ingestOptions)
 
 type ingestOptions struct {
 	neo4jDriver neo4j.DriverWithContext
+	enqueuer    embedding.Enqueuer
 }
 
 // WithNeo4jDriver makes Ingest MERGE this Enrollment's Person -> Identification ->
@@ -42,6 +45,18 @@ type ingestOptions struct {
 // every existing caller's behavior unchanged.
 func WithNeo4jDriver(driver neo4j.DriverWithContext) Option {
 	return func(o *ingestOptions) { o.neo4jDriver = driver }
+}
+
+// WithEnqueuer makes Ingest enqueue face-embedding computation (see
+// embedding.ComputeForIdentityFeature) for every FACE_RECORD biometricfeature
+// this Enrollment's files produce, right after the Postgres transaction
+// commits -- the KNOWN-side counterpart to how cases.CreateTraces enqueues
+// embeddings for QUESTIONED case traces. Omitting this option (the default)
+// still writes the biometricfeature row, just without anything ever
+// populating feature_embeddings for it, so person.SearchByFace has nothing
+// to match against.
+func WithEnqueuer(queue embedding.Enqueuer) Option {
+	return func(o *ingestOptions) { o.enqueuer = queue }
 }
 
 // FileInput is one raw file produced by an enrollment event (a photo, a NIST
@@ -208,6 +223,22 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, e Enrollment, opts ...Option) (R
 
 	if err := tx.Commit(); err != nil {
 		return Result{}, err
+	}
+
+	if o.enqueuer != nil {
+		for _, feat := range result.Features {
+			if feat.FeatureType != graph.FeatureTypeFaceRecord {
+				continue
+			}
+			task, err := embedding.NewComputeIdentityFeatureTask(feat.FeatureID)
+			if err != nil {
+				log.Printf("identity: build embed task for biometricfeature %d: %v", feat.FeatureID, err)
+				continue
+			}
+			if _, err := o.enqueuer.Enqueue(task); err != nil {
+				log.Printf("identity: enqueue embed task for biometricfeature %d: %v", feat.FeatureID, err)
+			}
+		}
 	}
 
 	if o.neo4jDriver != nil {

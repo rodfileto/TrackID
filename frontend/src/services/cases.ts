@@ -1,5 +1,6 @@
 import { apiBaseUrl, requestApi } from "./api";
 import { getToken } from "./auth";
+import type { ThumbnailBox } from "./persons";
 
 export interface Case {
   caseId: string;
@@ -51,6 +52,51 @@ export interface CaseCodification {
   evidenceSequence: number;
   evidenceFileId: number;
   evidenceFilename: string;
+}
+
+/** One other biometric sample sharing a case cluster -- another case's
+ * trace, or an enrolled person's KNOWN feature. decisionRole/automatic/
+ * decidedBy describe the CONFIRMED decision chain directly linking one of
+ * the cluster's local traces to this one, when there was a direct pair to
+ * point to -- decisionRole is empty for a member reached only transitively
+ * through other cluster members. automatic is true when decisionRole is
+ * "SYSTEM" (an algorithmic match with no human confirmation yet), false for
+ * a human-reviewed one (VERIFICATOR/REVIEWER/INCONSISTENCE).
+ *
+ * thumbnailFileId/thumbnailBox (QUESTIONED) say how to render this link as a
+ * thumbnail via CaseTraceThumbnail, scoped to *this* link's own caseId, not
+ * the case the cluster was requested for. identityFileId/contentType
+ * (KNOWN) do the same via IdentityFileThumbnail, scoped to personId. */
+export interface TraceLink {
+  kind: "KNOWN" | "QUESTIONED";
+
+  personId?: string;
+  name?: string;
+  identityFileId?: number;
+  contentType?: string;
+
+  caseId?: string;
+  caseType?: string;
+  description?: string;
+  traceId?: number;
+  thumbnailFileId?: number;
+  thumbnailBox?: ThumbnailBox;
+
+  decisionRole?: string;
+  automatic: boolean;
+  decidedBy?: string;
+  confidence?: number;
+}
+
+/** One biometric cluster (see cases.CaseCluster) that at least one of a
+ * case's codified traces resolved into -- traces of the same case sharing a
+ * cluster are merged into localTraceIds instead of repeating the cluster
+ * once per trace. */
+export interface CaseCluster {
+  clusterId: number;
+  memberCount: number;
+  localTraceIds: number[];
+  links: TraceLink[] | null;
 }
 
 /** A face the detector found on an evidence image -- not saved until the
@@ -211,6 +257,15 @@ export async function listCaseCodifications(
     headers: authHeaders(),
   });
   return codifications;
+}
+
+export async function listCaseClusters(caseId: string): Promise<CaseCluster[]> {
+  const { clusters } = await requestApi<{
+    clusters: CaseCluster[];
+  }>(`/cases/${encodeURIComponent(caseId)}/clusters`, {
+    headers: authHeaders(),
+  });
+  return clusters;
 }
 
 export async function addEvidence(
