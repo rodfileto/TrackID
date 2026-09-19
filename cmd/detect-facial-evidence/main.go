@@ -1,7 +1,7 @@
 // detect-facial-evidence runs automatic face detection over every evidence image
 // attached to a FACIAL criminal case and records what it finds through the same
 // write path a human marking a trace by hand already goes through:
-// cases.DetectFaces (SCRFD) proposes boxes, cases.CreateTraces persists each as a
+// cases.DetectFaces (the configured detector) proposes boxes, cases.CreateTraces persists each as a
 // case_traces row ("a face record" once the detector has identified it), its
 // QUESTIONED biometricfeature, and a placeholder case_codifications row -- then
 // enqueues embedding computation for it (see MODEL.md section 2.2/6).
@@ -97,6 +97,7 @@ func main() {
 		log.Fatal("VISION_DETECTOR_PATH/VISION_RECOGNIZER_PATH are required to run face detection")
 	}
 	vis, err := vision.NewService(vision.Config{
+		Detector:          vision.DetectorKind(configuration.VisionDetector),
 		DetectorPath:      configuration.VisionDetectorPath,
 		RecognizerPath:    configuration.VisionRecognizerPath,
 		SharedLibraryPath: configuration.VisionSharedLibraryPath,

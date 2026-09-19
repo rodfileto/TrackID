@@ -81,7 +81,7 @@ func DetectFaces(ctx context.Context, sqlDB *sql.DB, store *storage.Client, vis 
 		return nil, fmt.Errorf("cases: detect faces on evidence %d: %w", evidenceFileID, err)
 	}
 
-	// SCRFD can place a box partly outside the frame for faces cut off at the
+	// A detector can place a box partly outside the frame for faces cut off at the
 	// edge; clamp so every proposal crops cleanly.
 	width, height := float64(cfg.Width), float64(cfg.Height)
 	proposals := make([]FaceProposal, 0, len(detections))

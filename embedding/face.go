@@ -16,7 +16,9 @@ import (
 // -- which is what a codification image or a face crop is -- so the box is
 // always presented at about a third of the frame, padded with neutral gray
 // wherever that runs past the image edge. Measured on 60 real tight face
-// crops: 0 faces found as-is, 59 found padded.
+// crops with SCRFD: 0 faces found as-is, 59 found padded. YuNet, the default
+// detector, does find tight crops as-is (6 of 6 on a small check); the padding
+// is kept because it also works there and keeps SCRFD usable.
 const faceContextScale = 3
 
 // FaceEmbedder is the trackid-vision call EmbedFaceInBox needs.
