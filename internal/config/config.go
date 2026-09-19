@@ -19,6 +19,7 @@ type Config struct {
 	// Vision: face detection on evidence in the API (cases.DetectFaces) and
 	// embedding in the worker (embedding.ComputeForCodification). Left empty,
 	// both log a warning and run without it rather than failing to start.
+	VisionDetector          string // "yunet" (default) or "scrfd"; see README "Models and licences"
 	VisionDetectorPath      string
 	VisionRecognizerPath    string
 	VisionSharedLibraryPath string
@@ -29,6 +30,10 @@ func Load() Config {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8082"
+	}
+	detector := os.Getenv("VISION_DETECTOR")
+	if detector == "" {
+		detector = "yunet"
 	}
 
 	return Config{
@@ -43,6 +48,7 @@ func Load() Config {
 		S3SecretKey: os.Getenv("S3_SECRET_KEY"),
 		S3Bucket:    os.Getenv("S3_BUCKET"),
 
+		VisionDetector:          detector,
 		VisionDetectorPath:      os.Getenv("VISION_DETECTOR_PATH"),
 		VisionRecognizerPath:    os.Getenv("VISION_RECOGNIZER_PATH"),
 		VisionSharedLibraryPath: os.Getenv("VISION_SHARED_LIBRARY_PATH"),
