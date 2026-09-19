@@ -101,6 +101,7 @@ func main() {
 		log.Printf("VISION_DETECTOR_PATH/VISION_RECOGNIZER_PATH not configured; %s will not be processed", embedding.TaskTypeComputeCodification)
 	} else {
 		vis, err := vision.NewService(vision.Config{
+			Detector:          vision.DetectorKind(configuration.VisionDetector),
 			DetectorPath:      configuration.VisionDetectorPath,
 			RecognizerPath:    configuration.VisionRecognizerPath,
 			SharedLibraryPath: configuration.VisionSharedLibraryPath,

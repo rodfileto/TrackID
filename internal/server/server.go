@@ -72,6 +72,7 @@ func Run() error {
 	var faceVision cases.FaceVision
 	if configuration.VisionDetectorPath != "" && configuration.VisionRecognizerPath != "" {
 		vis, err := vision.NewService(vision.Config{
+			Detector:          vision.DetectorKind(configuration.VisionDetector),
 			DetectorPath:      configuration.VisionDetectorPath,
 			RecognizerPath:    configuration.VisionRecognizerPath,
 			SharedLibraryPath: configuration.VisionSharedLibraryPath,

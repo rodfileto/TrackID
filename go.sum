@@ -112,8 +112,8 @@ github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/robfig/cron/v3 v3.0.1 h1:WdRxkvbJztn8LMz/QEvLN5sBU+xKpSqwwUO1Pjr4qDs=
 github.com/robfig/cron/v3 v3.0.1/go.mod h1:eQICP3HwyT7UooqI/z+Ov+PtYAWygg1TEWWzGIFLtro=
-github.com/rodfileto/trackid-vision v0.2.0 h1:FMQzjQt8VTLkCDPUogDKM1ILrdw4XLYhpSWtZcECx8g=
-github.com/rodfileto/trackid-vision v0.2.0/go.mod h1:SNdFP93KP6rRwP+DAYLRfDzp9SbXnsvodHlkb71VrrE=
+github.com/rodfileto/trackid-vision v0.3.0 h1:vEWWAaAj8MJsUAAYFTbRXnhsXbmLFEb0Q/A+SgFF6Us=
+github.com/rodfileto/trackid-vision v0.3.0/go.mod h1:SNdFP93KP6rRwP+DAYLRfDzp9SbXnsvodHlkb71VrrE=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
 github.com/rs/xid v1.6.0 h1:fV591PaemRlL6JfRxGDEPl69wICngIQ3shQtzfy2gxU=
