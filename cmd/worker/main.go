@@ -8,7 +8,7 @@
 // embedding is computed, its handler enqueues embedding.TaskTypeSyncFace
 // (see embedding.SyncFace) to run matching and clustering incrementally,
 // without an operator running cmd/match-embeddings/cmd/cluster-biometrics by
-// hand. Fingerprint has no such pipeline yet.
+// hand. Fingerprint templates do the same through fingerprint.TaskTypeSync.
 package main
 
 import (
@@ -22,6 +22,7 @@ import (
 	"github.com/rodfileto/trackid-vision/vision"
 
 	"github.com/rodfileto/trackid/embedding"
+	"github.com/rodfileto/trackid/fingerprint"
 	"github.com/rodfileto/trackid/graph"
 	"github.com/rodfileto/trackid/internal/config"
 	"github.com/rodfileto/trackid/internal/database"
@@ -121,6 +122,25 @@ func main() {
 	if neo4jDriver != nil {
 		mux.HandleFunc(embedding.TaskTypeSyncFace, embedding.HandleSyncFace(sqlDB, neo4jDriver))
 		log.Printf("registered handler for %s", embedding.TaskTypeSyncFace)
+	}
+
+	// Fingerprint doesn't need Vision or Neo4j: the sidecar extracts and
+	// matches, and fingerprint.RunSync clusters only when a driver is given.
+	if configuration.FingerprintSidecarURL == "" {
+		log.Printf("FINGERPRINT_SIDECAR_URL not configured; fingerprint tasks will not be processed")
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		fp, err := fingerprint.NewClient(ctx, configuration.FingerprintSidecarURL)
+		cancel()
+		if err != nil {
+			log.Printf("fingerprint sidecar unavailable; fingerprint tasks will not be processed: %v", err)
+		} else {
+			mux.HandleFunc(fingerprint.TaskTypeExtractCodification, fingerprint.HandleExtractCodification(sqlDB, store, fp, queueClient))
+			mux.HandleFunc(fingerprint.TaskTypeExtractIdentityFeature, fingerprint.HandleExtractIdentityFeature(sqlDB, store, fp, queueClient))
+			mux.HandleFunc(fingerprint.TaskTypeSync, fingerprint.HandleSync(sqlDB, fp, neo4jDriver))
+			log.Printf("registered handlers for %s, %s, %s",
+				fingerprint.TaskTypeExtractCodification, fingerprint.TaskTypeExtractIdentityFeature, fingerprint.TaskTypeSync)
+		}
 	}
 
 	srv, err := queue.OpenServer(redisURL, asynq.Config{
