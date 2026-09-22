@@ -14,7 +14,8 @@ CREATE TABLE identity_document (
     person_id BIGINT REFERENCES person(id),
     document_number TEXT NOT NULL,
     document_type TEXT NOT NULL,
-    cpf TEXT,
+    -- Any government-issued taxpayer/fiscal identifier (e.g. Brazil's CPF).
+    fiscal_number TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT identity_document_type_number_key UNIQUE (document_type, document_number)
@@ -40,7 +41,7 @@ CREATE TABLE identity_register (
     parent_1_gender VARCHAR(1) NOT NULL REFERENCES gender(code),
     parent_2_name TEXT NOT NULL,
     parent_2_gender VARCHAR(1) NOT NULL REFERENCES gender(code),
-    data_nascimento TEXT,
+    birth_date TEXT,
     meta JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -63,3 +64,17 @@ CREATE TABLE identity_file (
 );
 
 CREATE INDEX identity_file_register_id_idx ON identity_file (register_id);
+
+-- Person name search (person.SearchByName) runs substring matches (ILIKE '%term%') against a
+-- population-scale table, which a btree index can't accelerate -- a trigram GIN index can.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE INDEX identity_register_name_trgm_idx ON identity_register
+    USING GIN (name gin_trgm_ops);
+
+-- +goose Down
+DROP TABLE identity_file;
+DROP TABLE identity_register;
+DROP TABLE gender;
+DROP TABLE identity_document;
+DROP TABLE person;

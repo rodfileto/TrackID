@@ -108,7 +108,7 @@ func recordDecisions(ctx context.Context, sqlDB *sql.DB, candidates []candidate,
 }
 
 // featureInfo is a biometricfeature's graph feature id and biometric_decisions
-// modality (FACE/FINGERPRINT, not to be confused with criminal_cases.case_type
+// modality (FACE/FINGERPRINT, not to be confused with biometric_cases.modality
 // which spells the face modality "FACIAL").
 type featureInfo struct {
 	graphID  string

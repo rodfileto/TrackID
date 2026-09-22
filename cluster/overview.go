@@ -13,12 +13,12 @@ import (
 )
 
 // Summary is one persisted cluster's row in a general clusters listing: how
-// many biometric samples it holds, how many distinct criminal cases its
+// many biometric samples it holds, how many distinct biometric cases its
 // QUESTIONED members touch, and whether it has resolved to an enrolled
 // identity (see Identify).
 type Summary struct {
 	ClusterID   int64           `json:"clusterId"`
-	CaseType    string          `json:"caseType"`
+	Modality    string          `json:"modality"`
 	CreatedAt   time.Time       `json:"createdAt"`
 	MemberCount int             `json:"memberCount"`
 	CaseCount   int             `json:"caseCount"`
@@ -53,7 +53,7 @@ type ListOverviewResult struct {
 }
 
 // ListOverview lists every persisted cluster (cluster.Run's output), ordered
-// by how many distinct criminal cases it touches (descending) -- the
+// by how many distinct biometric cases it touches (descending) -- the
 // clusters most relevant to active investigations surface first. Filtered
 // and paginated at the database level; safe to call on every request even
 // against a large cluster table.
@@ -105,19 +105,19 @@ func ListOverview(ctx context.Context, sqlDB *sql.DB, params ListOverviewParams)
 		WITH agg AS (
 			SELECT
 				c.id AS cluster_id,
-				c.case_type,
+				c.modality,
 				c.created_at,
 				COUNT(cm.feature_id) AS member_count,
 				COUNT(*) FILTER (WHERE cm.feature_id NOT LIKE 'TRACE:%') AS known_count,
-				COUNT(DISTINCT cc.id) AS case_count
+				COUNT(DISTINCT bc.id) AS case_count
 			FROM clusters c
 			JOIN cluster_members cm ON cm.cluster_id = c.id
 			LEFT JOIN case_traces ct ON cm.feature_id = 'TRACE:' || ct.id || '#feature'
 			LEFT JOIN case_evidences ce ON ce.id = ct.evidence_id
-			LEFT JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+			LEFT JOIN biometric_cases bc ON bc.id = ce.biometric_case_id
 			GROUP BY c.id
 		)
-		SELECT cluster_id, case_type, created_at, member_count, case_count, known_count
+		SELECT cluster_id, modality, created_at, member_count, case_count, known_count
 		FROM agg ` + having + `
 		ORDER BY case_count DESC, cluster_id DESC
 		LIMIT $1 OFFSET $2`
@@ -133,7 +133,7 @@ func ListOverview(ctx context.Context, sqlDB *sql.DB, params ListOverviewParams)
 	for rows.Next() {
 		var s Summary
 		var knownCount int
-		if err := rows.Scan(&s.ClusterID, &s.CaseType, &s.CreatedAt, &s.MemberCount, &s.CaseCount, &knownCount); err != nil {
+		if err := rows.Scan(&s.ClusterID, &s.Modality, &s.CreatedAt, &s.MemberCount, &s.CaseCount, &knownCount); err != nil {
 			return ListOverviewResult{}, fmt.Errorf("cluster: scan overview row: %w", err)
 		}
 		s.Identified = knownCount > 0

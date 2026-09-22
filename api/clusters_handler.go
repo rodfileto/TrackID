@@ -19,7 +19,7 @@ type ListClustersResponse struct {
 }
 
 // ListClustersHandler returns every persisted biometric cluster, ordered by
-// how many distinct criminal cases it touches (descending). ?identified=true
+// how many distinct biometric cases it touches (descending). ?identified=true
 // keeps only clusters resolved to an enrolled identity (see
 // cluster.ListOverview).
 func ListClustersHandler(db *sql.DB) gin.HandlerFunc {

@@ -1,7 +1,7 @@
 // Package person provides read-only intelligence views over one enrolled
 // person: their identity chain (identity_document/identity_register), the
 // biometric clusters their enrolled features have resolved into, and the
-// criminal cases linked to them through those clusters.
+// biometric cases linked to them through those clusters.
 //
 // Every view here is a Postgres-only projection over person / identity_* /
 // biometricfeature / cluster_* / case_* (see MODEL.md) -- there is no Neo4j

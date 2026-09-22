@@ -70,7 +70,7 @@ func CompareFaces(ctx context.Context, sqlDB *sql.DB, store *storage.Client, vis
 
 	q := db.New(sqlDB)
 
-	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	caseRow, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return FaceComparison{}, ErrNotFound
@@ -99,11 +99,11 @@ func CompareFaces(ctx context.Context, sqlDB *sql.DB, store *storage.Client, vis
 	return result, nil
 }
 
-func codificationEmbedding(ctx context.Context, q *db.Queries, store *storage.Client, vis FaceVision, criminalCaseID, codificationID int64) ([]float64, string, error) {
+func codificationEmbedding(ctx context.Context, q *db.Queries, store *storage.Client, vis FaceVision, biometricCaseID, codificationID int64) ([]float64, string, error) {
 	row, err := q.GetCodificationForComparison(ctx, db.GetCodificationForComparisonParams{
-		EmbeddingType:  embedding.EmbeddingType,
-		CodificationID: codificationID,
-		CriminalCaseID: criminalCaseID,
+		EmbeddingType:   embedding.EmbeddingType,
+		CodificationID:  codificationID,
+		BiometricCaseID: biometricCaseID,
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

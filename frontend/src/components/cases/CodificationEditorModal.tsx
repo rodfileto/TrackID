@@ -25,7 +25,7 @@ interface CodificationEditorModalProps {
    * saturation adjustment -- a face's codification is a computed embedding,
    * not something marked point by point, but the same image inspection
    * tooling is still useful for a closer look. */
-  caseType: string;
+  modality: string;
   evidenceId: number;
   traceId: number;
   traceLabel: string;
@@ -88,7 +88,7 @@ function parseDraft(
 
 export default function CodificationEditorModal({
   caseId,
-  caseType,
+  modality,
   evidenceId,
   traceId,
   traceLabel,
@@ -97,7 +97,7 @@ export default function CodificationEditorModal({
   onClose,
 }: CodificationEditorModalProps) {
   const { t } = useTranslation();
-  const supportsPoints = caseType === "FINGERPRINT";
+  const supportsPoints = modality === "FINGERPRINT";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);

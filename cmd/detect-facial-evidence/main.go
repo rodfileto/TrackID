@@ -1,5 +1,5 @@
 // detect-facial-evidence runs automatic face detection over every evidence image
-// attached to a FACIAL criminal case and records what it finds through the same
+// attached to a FACIAL biometric case and records what it finds through the same
 // write path a human marking a trace by hand already goes through:
 // cases.DetectFaces (the configured detector) proposes boxes, cases.CreateTraces persists each as a
 // case_traces row ("a face record" once the detector has identified it), its
@@ -170,9 +170,9 @@ func main() {
 }
 
 func loadFacialCases(ctx context.Context, sqlDB *sql.DB) ([]facialCase, error) {
-	rows, err := sqlDB.QueryContext(ctx, `SELECT id, case_id FROM criminal_cases WHERE case_type = 'FACIAL' ORDER BY id`)
+	rows, err := sqlDB.QueryContext(ctx, `SELECT id, case_id FROM biometric_cases WHERE modality = 'FACIAL' ORDER BY id`)
 	if err != nil {
-		return nil, fmt.Errorf("detect-facial-evidence: query criminal_cases: %w", err)
+		return nil, fmt.Errorf("detect-facial-evidence: query biometric_cases: %w", err)
 	}
 	defer rows.Close()
 
@@ -180,7 +180,7 @@ func loadFacialCases(ctx context.Context, sqlDB *sql.DB) ([]facialCase, error) {
 	for rows.Next() {
 		var c facialCase
 		if err := rows.Scan(&c.id, &c.caseID); err != nil {
-			return nil, fmt.Errorf("detect-facial-evidence: scan criminal_cases: %w", err)
+			return nil, fmt.Errorf("detect-facial-evidence: scan biometric_cases: %w", err)
 		}
 		out = append(out, c)
 	}
@@ -189,11 +189,11 @@ func loadFacialCases(ctx context.Context, sqlDB *sql.DB) ([]facialCase, error) {
 
 // listEvidenceFileIDs returns the id of every "evidence"-category case_files row
 // for a case, via the same generated query the case-detail API uses.
-func listEvidenceFileIDs(ctx context.Context, sqlDB *sql.DB, criminalCaseID int64) ([]int64, error) {
+func listEvidenceFileIDs(ctx context.Context, sqlDB *sql.DB, biometricCaseID int64) ([]int64, error) {
 	q := db.New(sqlDB)
-	rows, err := q.ListCaseFilesByCriminalCase(ctx, criminalCaseID)
+	rows, err := q.ListCaseFilesByBiometricCase(ctx, biometricCaseID)
 	if err != nil {
-		return nil, fmt.Errorf("detect-facial-evidence: list case_files for case %d: %w", criminalCaseID, err)
+		return nil, fmt.Errorf("detect-facial-evidence: list case_files for case %d: %w", biometricCaseID, err)
 	}
 	var ids []int64
 	for _, row := range rows {

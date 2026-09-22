@@ -47,19 +47,25 @@ many files; each file yields one or more features.
 ### 2.2 Evidence hierarchy (QUESTIONED)
 
 ```
-criminal_cases ──< case_files
-criminal_cases ──< case_evidences ──< case_traces ──< case_codifications
+biometric_cases ──< case_files
+biometric_cases ──< case_evidences ──< case_traces ──< case_codifications
 case_traces ── biometricfeature
 ```
 
 | Table | Role |
 | --- | --- |
-| `criminal_cases` | the base case (`case_id`, `case_type` = `FACIAL` \| `FINGERPRINT`) |
-| `case_files` | raw files attached to a case (`evidence`, `documento`, `forensic_report`) |
+| `biometric_cases` | the base case (`case_id`; `case_type` = `CRIMINAL` \| `CIVIL`; `modality` = `FACIAL` \| `FINGERPRINT`) |
+| `case_files` | raw files attached to a case (`evidence`, `documento`, `forensic_report`, `face_crop`, `codification_image`) |
 | `case_evidences` | one evidence item within a case (e.g. a lift card, an image) |
 | `case_traces` | one biometric trace within an evidence (one face in an image, one lift on a card) |
 | `case_codifications` | one processed encoding of a trace (e.g. a minutiae set, an embedding) |
 | `biometricfeature` | the typed QUESTIONED feature for a trace |
+
+A biometric case is any case with questioned biometric material to identify. `case_type`
+is its legal nature: `CRIMINAL` (e.g. latent prints from a crime scene) or `CIVIL`
+(non-criminal identification such as disaster victim identification or unidentified dead
+bodies). `modality` is the biometric the case works with. The two are independent, and
+the rest of the hierarchy is the same for both case types.
 
 A codification is a processing artifact, not a comparison record — the pairwise comparison
 outcome lives entirely in `biometric_decisions` (section 3), keyed by the two features'
@@ -139,8 +145,8 @@ Every logic entry point reads Postgres — never an external file or a third-par
 
 Done (core), end to end:
 
-- **Schema** (`db/migrations/001`–`006`): `users`; `person`, `identity_document`,
-  `identity_register`, `identity_file` (the enrollment hierarchy); `criminal_cases`,
+- **Schema** (`db/migrations/001`–`008`): `users`; `person`, `identity_document`,
+  `identity_register`, `identity_file` (the enrollment hierarchy); `biometric_cases`,
   `case_files`, `case_evidences`, `case_traces`, `case_codifications` (+
   `case_fragment_codes` view) (the evidence hierarchy); `biometricfeature` (unified
   KNOWN+QUESTIONED, exactly-one-source constraint against `identity_file`/`case_traces`);

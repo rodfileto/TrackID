@@ -26,7 +26,7 @@ type GraphNode struct {
 	// Refs let the UI link a node back to its page.
 	PersonID string `json:"personId,omitempty"`
 	CaseID   string `json:"caseId,omitempty"`
-	CaseType string `json:"caseType,omitempty"`
+	Modality string `json:"modality,omitempty"`
 	// Size hints how many members a cluster node holds.
 	Size int `json:"size,omitempty"`
 }
@@ -98,7 +98,7 @@ func BuildGraph(ctx context.Context, sqlDB *sql.DB, limit, minMembers int) (Grap
 			ID:       clusterNode(s.ClusterID),
 			Kind:     NodeCluster,
 			Label:    fmt.Sprintf("Cluster #%d", s.ClusterID),
-			CaseType: s.CaseType,
+			Modality: s.Modality,
 			Size:     s.MemberCount,
 		})
 	}
@@ -144,7 +144,7 @@ func BuildGraph(ctx context.Context, sqlDB *sql.DB, limit, minMembers int) (Grap
 					Kind:     NodeTrace,
 					Label:    fmt.Sprintf("%s · trace %d", r.CaseID, r.CaseTraceID),
 					CaseID:   r.CaseID,
-					CaseType: r.CaseType,
+					Modality: r.Modality,
 				})
 			}
 			for _, cid := range traceCluster[r.CaseTraceID] {

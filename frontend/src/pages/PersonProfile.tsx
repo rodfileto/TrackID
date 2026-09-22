@@ -22,12 +22,12 @@ import {
   type PersonClusterMember,
 } from "../services/persons";
 
-function caseTypeLabelKey(caseType: string): string {
-  return caseType === "FACIAL" ? "caseType.facial" : "caseType.fingerprint";
+function modalityLabelKey(modality: string): string {
+  return modality === "FACIAL" ? "modality.facial" : "modality.fingerprint";
 }
 
-function caseTypeColor(caseType: string): "info" | "warning" {
-  return caseType === "FACIAL" ? "info" : "warning";
+function modalityColor(modality: string): "info" | "warning" {
+  return modality === "FACIAL" ? "info" : "warning";
 }
 
 function formatDate(iso: string, locale: string): string {
@@ -109,8 +109,8 @@ function ClusterCard({ cluster }: { cluster: PersonCluster }) {
           <span className="font-medium text-gray-800 text-theme-sm dark:text-white/90">
             {t("personProfile.clusterNumber", { id: cluster.clusterId })}
           </span>
-          <Badge size="sm" color={caseTypeColor(cluster.caseType)}>
-            {t(caseTypeLabelKey(cluster.caseType))}
+          <Badge size="sm" color={modalityColor(cluster.modality)}>
+            {t(modalityLabelKey(cluster.modality))}
           </Badge>
           {cluster.hasCaseEvidence ? (
             <Badge size="sm" color="success">
@@ -379,9 +379,9 @@ export default function PersonProfilePage() {
                         <TableCell className="px-4 py-3 text-start text-theme-sm">
                           <Badge
                             size="sm"
-                            color={caseTypeColor(relatedCase.caseType)}
+                            color={modalityColor(relatedCase.modality)}
                           >
-                            {t(caseTypeLabelKey(relatedCase.caseType))}
+                            {t(modalityLabelKey(relatedCase.modality))}
                           </Badge>
                         </TableCell>
                         <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">

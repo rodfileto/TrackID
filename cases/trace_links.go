@@ -60,7 +60,7 @@ type TraceLink struct {
 	ContentType    string `json:"contentType,omitempty"`
 
 	CaseID          string        `json:"caseId,omitempty"`
-	CaseType        string        `json:"caseType,omitempty"`
+	Modality        string        `json:"modality,omitempty"`
 	Description     string        `json:"description,omitempty"`
 	TraceID         int64         `json:"traceId,omitempty"`
 	ThumbnailFileID int64         `json:"thumbnailFileId,omitempty"`
@@ -233,7 +233,7 @@ func ListCaseClusters(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Case
 					// The trace's evidence was excluded/deleted since clustering.
 					continue
 				}
-				link = TraceLink{Kind: "QUESTIONED", CaseID: d.CaseID, CaseType: d.CaseType, Description: d.Description, TraceID: tid}
+				link = TraceLink{Kind: "QUESTIONED", CaseID: d.CaseID, Modality: d.Modality, Description: d.Description, TraceID: tid}
 				switch {
 				case d.TraceCropFileID.Valid:
 					link.ThumbnailFileID = d.TraceCropFileID.Int64

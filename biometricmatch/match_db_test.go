@@ -73,7 +73,7 @@ func TestRunOrdersPairByBytes(t *testing.T) {
 	sqlDB := testDB(t)
 
 	// A fresh database hands out case_traces ids 1..10 in order.
-	in := cases.CaseInput{CaseID: "TEST-1", CaseType: "FACIAL"}
+	in := cases.CaseInput{CaseID: "TEST-1", CaseType: cases.CaseTypeCriminal, Modality: "FACIAL"}
 	ev := cases.EvidenceInput{Sequence: 1}
 	for s := int16(1); s <= 10; s++ {
 		ev.Traces = append(ev.Traces, cases.TraceInput{Sequence: s, TraceType: "FACE_RECORD"})

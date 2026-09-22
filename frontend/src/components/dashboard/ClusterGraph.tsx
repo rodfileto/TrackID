@@ -324,12 +324,12 @@ function NodeDetailCard({
 
   const rows: [string, string][] = [];
   if (node.kind === "cluster") rows.push([t("clusters.columns.members"), String(node.size ?? 0)]);
-  if (node.caseType)
+  if (node.modality)
     rows.push([
-      t("graph.caseType"),
-      node.caseType === "FACIAL"
-        ? t("caseType.facial")
-        : t("caseType.fingerprint"),
+      t("graph.modality"),
+      node.modality === "FACIAL"
+        ? t("modality.facial")
+        : t("modality.fingerprint"),
     ]);
   if (node.caseId) rows.push([t("caseDetail.case"), node.caseId]);
   rows.push([t("graph.connections"), String(neighbours.length)]);

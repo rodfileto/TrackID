@@ -2,9 +2,13 @@ import { apiBaseUrl, requestApi } from "./api";
 import { getToken } from "./auth";
 import type { ThumbnailBox } from "./persons";
 
+/** CRIMINAL, or CIVIL for non-criminal identification (e.g. DVI, unidentified bodies). */
+export type CaseType = "CRIMINAL" | "CIVIL";
+
 export interface Case {
   caseId: string;
-  caseType: string;
+  caseType: CaseType;
+  modality: string;
   description: string;
 }
 
@@ -21,7 +25,8 @@ export interface Evidence {
 
 export interface CaseDetail {
   caseId: string;
-  caseType: string;
+  caseType: CaseType;
+  modality: string;
   description: string;
   evidences: Evidence[];
 }
@@ -76,7 +81,7 @@ export interface TraceLink {
   contentType?: string;
 
   caseId?: string;
-  caseType?: string;
+  modality?: string;
   description?: string;
   traceId?: number;
   thumbnailFileId?: number;
@@ -145,12 +150,14 @@ export interface ListCasesParams {
   page?: number;
   pageSize?: number;
   caseType?: string;
+  modality?: string;
   q?: string;
   year?: string;
 }
 
 export interface CreateCaseInput {
   caseType: string;
+  modality: string;
   description: string;
 }
 
@@ -166,6 +173,7 @@ export async function listCases(
   if (params.page) query.set("page", String(params.page));
   if (params.pageSize) query.set("page_size", String(params.pageSize));
   if (params.caseType) query.set("case_type", params.caseType);
+  if (params.modality) query.set("modality", params.modality);
   if (params.q) query.set("q", params.q);
   if (params.year) query.set("year", params.year);
 

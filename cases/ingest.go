@@ -1,7 +1,7 @@
 // Ingest is the generic case-evidence-ingestion extension contract, the QUESTIONED-side
 // counterpart to identity.Ingest's KNOWN-side. Organizations normalize their own case-management
 // source (a CSV export, a case-management API, ...) into a CaseInput and call Ingest, which
-// upserts the full criminal_cases -> case_evidences -> case_traces -> case_codifications chain,
+// upserts the full biometric_cases -> case_evidences -> case_traces -> case_codifications chain,
 // plus each trace's QUESTIONED biometricfeature, in one transaction. See MODEL.md section 2.2.
 // This package has no knowledge of any organization's source format or case-identifier
 // vocabulary.
@@ -28,7 +28,7 @@ type CodificationInput struct {
 // own face_crop. Like identity.FileInput, Ingest works from a StorageRef a caller already wrote
 // with trackid's storage client, not raw bytes: this package stays a DB-only transaction.
 //
-// HashID is required: it's part of case_files' upsert key (criminal_case_id, category,
+// HashID is required: it's part of case_files' upsert key (biometric_case_id, category,
 // hash_id), so a caller that generates its own images (e.g. trackid-sim's media.Generator)
 // supplies its own content hash rather than Ingest computing one from bytes it never sees.
 type FileInput struct {
@@ -72,12 +72,13 @@ type EvidenceInput struct {
 	Traces      []TraceInput
 }
 
-// CaseInput is one normalized criminal case. Organizations translate their own case-management
+// CaseInput is one normalized biometric case. Organizations translate their own case-management
 // source into this shape and call Ingest; this package never sees the source's own identifiers
 // or vocabulary (e.g. an organization-specific match-type code), only the generic shape.
 type CaseInput struct {
 	CaseID      string
-	CaseType    string
+	CaseType    string // CRIMINAL or CIVIL
+	Modality    string
 	Description string
 	Evidences   []EvidenceInput
 }
@@ -106,13 +107,13 @@ type EvidenceResult struct {
 
 // Result is the set of rows Ingest wrote for one CaseInput.
 type Result struct {
-	CriminalCaseID int64
+	BiometricCaseID int64
 	// Inserted is false when CaseID already existed and was updated instead.
 	Inserted  bool
 	Evidences []EvidenceResult
 }
 
-// Ingest upserts one CaseInput's full chain -- criminal_cases, case_evidences, case_traces,
+// Ingest upserts one CaseInput's full chain -- biometric_cases, case_evidences, case_traces,
 // case_codifications, and each trace's QUESTIONED biometricfeature -- in a single transaction.
 func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput) (Result, error) {
 	if sqlDB == nil {
@@ -121,8 +122,11 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput) (Result, error) {
 	if c.CaseID == "" {
 		return Result{}, fmt.Errorf("cases: CaseID is required")
 	}
-	if c.CaseType == "" {
-		return Result{}, fmt.Errorf("cases: CaseType is required")
+	if !validCaseType(c.CaseType) {
+		return Result{}, fmt.Errorf("cases: CaseType must be %s or %s, got %q", CaseTypeCriminal, CaseTypeCivil, c.CaseType)
+	}
+	if c.Modality == "" {
+		return Result{}, fmt.Errorf("cases: Modality is required")
 	}
 
 	tx, err := sqlDB.BeginTx(ctx, nil)
@@ -133,16 +137,17 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput) (Result, error) {
 
 	q := db.New(tx)
 
-	upserted, err := q.UpsertCriminalCase(ctx, db.UpsertCriminalCaseParams{
+	upserted, err := q.UpsertBiometricCase(ctx, db.UpsertBiometricCaseParams{
 		CaseID:      c.CaseID,
 		CaseType:    c.CaseType,
+		Modality:    c.Modality,
 		Description: c.Description,
 	})
 	if err != nil {
-		return Result{}, fmt.Errorf("cases: upsert criminal_cases: %w", err)
+		return Result{}, fmt.Errorf("cases: upsert biometric_cases: %w", err)
 	}
 
-	result := Result{CriminalCaseID: upserted.ID, Inserted: upserted.Inserted}
+	result := Result{BiometricCaseID: upserted.ID, Inserted: upserted.Inserted}
 
 	for _, evidence := range c.Evidences {
 		evidenceFileID, err := upsertCaseFile(ctx, q, upserted.ID, "evidence", evidence.File)
@@ -151,10 +156,10 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput) (Result, error) {
 		}
 
 		evidenceID, err := q.UpsertCaseEvidence(ctx, db.UpsertCaseEvidenceParams{
-			CriminalCaseID: upserted.ID,
-			Sequence:       evidence.Sequence,
-			CaseFileID:     evidenceFileID,
-			Description:    nullString(evidence.Description),
+			BiometricCaseID: upserted.ID,
+			Sequence:        evidence.Sequence,
+			CaseFileID:      evidenceFileID,
+			Description:     nullString(evidence.Description),
 		})
 		if err != nil {
 			return Result{}, fmt.Errorf("cases: upsert case_evidences (case %s, evidence %d): %w", c.CaseID, evidence.Sequence, err)
@@ -232,7 +237,7 @@ func nullString(s string) sql.NullString {
 // case_traces.case_file_id. mediaType is best-effort: an unrecognized ContentType (something
 // other than classifyContentType's pdf/image set) still stores the file, just with no
 // media_type.
-func upsertCaseFile(ctx context.Context, q *db.Queries, criminalCaseID int64, category string, f *FileInput) (sql.NullInt64, error) {
+func upsertCaseFile(ctx context.Context, q *db.Queries, biometricCaseID int64, category string, f *FileInput) (sql.NullInt64, error) {
 	if f == nil {
 		return sql.NullInt64{}, nil
 	}
@@ -241,14 +246,14 @@ func upsertCaseFile(ctx context.Context, q *db.Queries, criminalCaseID int64, ca
 	}
 	mediaType, _ := classifyContentType(f.ContentType)
 	row, err := q.UpsertCaseFile(ctx, db.UpsertCaseFileParams{
-		CriminalCaseID: criminalCaseID,
-		Category:       category,
-		MediaType:      nullString(mediaType),
-		HashID:         sql.NullString{String: f.HashID, Valid: true},
-		Filename:       nullString(f.Filename),
-		StorageRef:     nullString(f.StorageRef),
-		ContentType:    nullString(f.ContentType),
-		SizeBytes:      sql.NullInt64{Int64: f.SizeBytes, Valid: f.SizeBytes != 0},
+		BiometricCaseID: biometricCaseID,
+		Category:        category,
+		MediaType:       nullString(mediaType),
+		HashID:          sql.NullString{String: f.HashID, Valid: true},
+		Filename:        nullString(f.Filename),
+		StorageRef:      nullString(f.StorageRef),
+		ContentType:     nullString(f.ContentType),
+		SizeBytes:       sql.NullInt64{Int64: f.SizeBytes, Valid: f.SizeBytes != 0},
 	})
 	if err != nil {
 		return sql.NullInt64{}, fmt.Errorf("upsert case_files: %w", err)
