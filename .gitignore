@@ -30,3 +30,6 @@ papers/**/*.pdf
 papers/**/*.docx
 papers/**/*.html
 papers/**/*.tex
+
+# scripts/start_dev.sh runtime state (pids/logs of the locally-run processes).
+.run/
