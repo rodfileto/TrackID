@@ -20,12 +20,12 @@ import {
 
 const PAGE_SIZE = 25;
 
-function caseTypeLabelKey(caseType: string): string {
-  return caseType === "FACIAL" ? "caseType.facial" : "caseType.fingerprint";
+function modalityLabelKey(modality: string): string {
+  return modality === "FACIAL" ? "modality.facial" : "modality.fingerprint";
 }
 
-function caseTypeColor(caseType: string): "info" | "warning" {
-  return caseType === "FACIAL" ? "info" : "warning";
+function modalityColor(modality: string): "info" | "warning" {
+  return modality === "FACIAL" ? "info" : "warning";
 }
 
 function formatDate(iso: string, locale: string): string {
@@ -209,8 +209,8 @@ export default function Clusters() {
                       #{cluster.clusterId}
                     </TableCell>
                     <TableCell className="px-4 py-3 text-start text-theme-sm">
-                      <Badge size="sm" color={caseTypeColor(cluster.caseType)}>
-                        {t(caseTypeLabelKey(cluster.caseType))}
+                      <Badge size="sm" color={modalityColor(cluster.modality)}>
+                        {t(modalityLabelKey(cluster.modality))}
                       </Badge>
                     </TableCell>
                     <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">

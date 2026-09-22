@@ -15,12 +15,12 @@ interface CaseClustersProps {
   error: string;
 }
 
-function caseTypeLabelKey(caseType: string): string {
-  return caseType === "FACIAL" ? "caseType.facial" : "caseType.fingerprint";
+function modalityLabelKey(modality: string): string {
+  return modality === "FACIAL" ? "modality.facial" : "modality.fingerprint";
 }
 
-function caseTypeColor(caseType: string): "info" | "warning" {
-  return caseType === "FACIAL" ? "info" : "warning";
+function modalityColor(modality: string): "info" | "warning" {
+  return modality === "FACIAL" ? "info" : "warning";
 }
 
 /** How a TraceLink's decision chain reads out: unset (reached only
@@ -85,9 +85,9 @@ function LinkRow({ link }: { link: TraceLink }) {
               >
                 {link.caseId}
               </Link>
-              {link.caseType && (
-                <Badge size="sm" color={caseTypeColor(link.caseType)}>
-                  {t(caseTypeLabelKey(link.caseType))}
+              {link.modality && (
+                <Badge size="sm" color={modalityColor(link.modality)}>
+                  {t(modalityLabelKey(link.modality))}
                 </Badge>
               )}
             </div>

@@ -33,7 +33,7 @@ type ClusterMember struct {
 	// QUESTIONED fields -- a case_trace, thumbnail resolved the same way as
 	// CaseFaceSearchResult (see its doc comment).
 	CaseID          string        `json:"caseId,omitempty"`
-	CaseType        string        `json:"caseType,omitempty"`
+	Modality        string        `json:"modality,omitempty"`
 	Description     string        `json:"description,omitempty"`
 	TraceID         int64         `json:"traceId,omitempty"`
 	ThumbnailFileID int64         `json:"thumbnailFileId,omitempty"`
@@ -50,7 +50,7 @@ type ClusterMember struct {
 // to another enrollment record.
 type Cluster struct {
 	ClusterID       int64           `json:"clusterId"`
-	CaseType        string          `json:"caseType"`
+	Modality        string          `json:"modality"`
 	CreatedAt       time.Time       `json:"createdAt"`
 	MemberCount     int             `json:"memberCount"`
 	HasCaseEvidence bool            `json:"hasCaseEvidence"`
@@ -149,7 +149,7 @@ func buildClusters(ctx context.Context, q *db.Queries, clusterRows []db.ListClus
 			member := ClusterMember{
 				Kind:        "QUESTIONED",
 				CaseID:      d.CaseID,
-				CaseType:    d.CaseType,
+				Modality:    d.Modality,
 				Description: d.Description,
 				TraceID:     traceID,
 			}
@@ -201,7 +201,7 @@ func buildClusters(ctx context.Context, q *db.Queries, clusterRows []db.ListClus
 		}
 		out = append(out, Cluster{
 			ClusterID:       c.ID,
-			CaseType:        c.CaseType,
+			Modality:        c.Modality,
 			CreatedAt:       c.CreatedAt,
 			MemberCount:     len(members),
 			HasCaseEvidence: hasCaseEvidence,

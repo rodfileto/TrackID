@@ -18,7 +18,7 @@ interface TraceMarkerModalProps {
   /** Forwarded to CodificationEditorModal, which uses it to decide whether
    * to offer manual point marking (FINGERPRINT) or just image adjustment
    * (FACIAL) -- see that component. */
-  caseType: string;
+  modality: string;
   evidenceId: number;
   filename: string;
   isOpen: boolean;
@@ -39,7 +39,7 @@ function toLockedBox(trace: Trace): TraceBox {
 
 export default function TraceMarkerModal({
   caseId,
-  caseType,
+  modality,
   evidenceId,
   filename,
   isOpen,
@@ -238,7 +238,7 @@ export default function TraceMarkerModal({
       {codificationTrace && (
         <CodificationEditorModal
           caseId={caseId}
-          caseType={caseType}
+          modality={modality}
           evidenceId={evidenceId}
           traceId={Number(codificationTrace.id)}
           traceLabel={t("markTraces.traceNumber", { number: traces.findIndex((x) => x.id === codificationTrace.id) + 1 })}

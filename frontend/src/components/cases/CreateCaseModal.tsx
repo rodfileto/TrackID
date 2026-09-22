@@ -9,8 +9,14 @@ import { createCase, type Case } from "../../services/cases";
 
 const CASE_TYPES = [
   { value: "", labelKey: "createCase.selectType" },
-  { value: "FACIAL", labelKey: "caseType.facial" },
-  { value: "FINGERPRINT", labelKey: "caseType.fingerprint" },
+  { value: "CRIMINAL", labelKey: "caseType.criminal" },
+  { value: "CIVIL", labelKey: "caseType.civil" },
+];
+
+const MODALITIES = [
+  { value: "", labelKey: "createCase.selectModality" },
+  { value: "FACIAL", labelKey: "modality.facial" },
+  { value: "FINGERPRINT", labelKey: "modality.fingerprint" },
 ];
 
 interface CreateCaseModalProps {
@@ -26,11 +32,13 @@ export default function CreateCaseModal({
 }: CreateCaseModalProps) {
   const { t } = useTranslation();
   const [caseType, setCaseType] = useState("");
+  const [modality, setModality] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
 
   function reset() {
     setCaseType("");
+    setModality("");
     setDescription("");
   }
 
@@ -44,7 +52,7 @@ export default function CreateCaseModal({
     event.preventDefault();
     setCreating(true);
     try {
-      const created = await createCase({ caseType, description });
+      const created = await createCase({ caseType, modality, description });
       reset();
       onCreated(created);
       onClose();
@@ -78,6 +86,22 @@ export default function CreateCaseModal({
                 className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
               >
                 {CASE_TYPES.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {t(option.labelKey)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <Label>{t("cases.columns.modality")}</Label>
+              <select
+                value={modality}
+                onChange={(event) => setModality(event.target.value)}
+                required
+                className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+              >
+                {MODALITIES.map((option) => (
                   <option key={option.value} value={option.value}>
                     {t(option.labelKey)}
                   </option>

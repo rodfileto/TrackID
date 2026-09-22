@@ -24,7 +24,7 @@
     "dashboard": "Painel",
     "home": "Início",
     "userProfile": "Perfil do usuário",
-    "criminalCases": "Casos criminais",
+    "criminalCases": "Casos biométricos",
     "persons": "Pessoas",
     "clusters": "Clusters",
     "new": "novo",
@@ -36,13 +36,18 @@
     "support": "Suporte",
     "signOut": "Sair"
   },
-  "caseType": {
-    "all": "Todos os tipos",
+  "modality": {
+    "all": "Todas as modalidades",
     "facial": "Facial",
     "fingerprint": "Impressão digital"
   },
+  "caseType": {
+    "all": "Todos os tipos de caso",
+    "criminal": "Criminal",
+    "civil": "Civil"
+  },
   "cases": {
-    "title": "Casos criminais",
+    "title": "Casos biométricos",
     "metaDescription": "Lista de casos criminais",
     "subtitle": "Casos importados no TrackID, filtráveis por modalidade.",
     "loadError": "Não foi possível carregar os casos",
@@ -52,10 +57,11 @@
     "count_one": "{{count}} caso",
     "count_other": "{{count}} casos",
     "newCase": "Novo caso",
-    "empty": "Nenhum caso criminal encontrado.",
+    "empty": "Nenhum caso biométrico encontrado.",
     "columns": {
       "caseId": "ID do caso",
       "type": "Tipo",
+      "modality": "Modalidade",
       "description": "Descrição"
     }
   },
@@ -189,7 +195,7 @@
     "hint": "Passe o mouse sobre um nó para ver os detalhes.",
     "openPerson": "Abrir perfil da pessoa",
     "openCase": "Abrir caso",
-    "caseType": "Tipo de caso",
+    "modality": "Modalidade",
     "connections": "Conexões",
     "linkedTo": "Ligado a",
     "kind": {
@@ -199,12 +205,13 @@
     }
   },
   "createCase": {
-    "selectType": "Selecione o tipo",
+    "selectType": "Selecione o tipo de caso",
     "error": "Não foi possível criar o caso",
     "autoNumber": "O número do caso é gerado automaticamente.",
     "descriptionPlaceholder": "Breve descrição do caso",
     "creating": "Criando...",
-    "create": "Criar caso"
+    "create": "Criar caso",
+    "selectModality": "Selecione a modalidade"
   },
   "dropzone": {
     "dropHere": "Solte os arquivos aqui",

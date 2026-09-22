@@ -15,22 +15,22 @@ type SyncStats struct {
 	Features int
 }
 
-// caseRow is one criminal_cases row (a base case).
+// caseRow is one biometric_cases row (a base case).
 type caseRow struct {
 	caseID      string
-	caseType    string
+	modality    string
 	description string
 }
 
 // questionedFeatureRow is one QUESTIONED biometricfeature joined up to its
-// criminal case (via case_traces/case_evidences).
+// biometric case (via case_traces/case_evidences).
 type questionedFeatureRow struct {
 	caseTraceID int64
 	featureType string
 	caseID      string
 }
 
-// Sync materializes criminal_cases into Evidence nodes and QUESTIONED
+// Sync materializes biometric_cases into Evidence nodes and QUESTIONED
 // biometricfeature rows into BiometricFeature nodes. KNOWN features are
 // materialized by SyncIdentity (the identity chain), not here. Decisions are
 // not materialized here either — they live in Postgres (biometric_decisions)
@@ -43,7 +43,7 @@ func Sync(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) (S
 
 	evidenceParams := make([]map[string]any, 0, len(cases))
 	for _, c := range cases {
-		mapping, ok := Modalities[c.caseType]
+		mapping, ok := Modalities[c.modality]
 		if !ok {
 			continue
 		}
@@ -94,7 +94,7 @@ func SyncPlan(ctx context.Context, sqlDB *sql.DB) (SyncStats, error) {
 	}
 	evidence := 0
 	for _, c := range cases {
-		if _, ok := Modalities[c.caseType]; ok {
+		if _, ok := Modalities[c.modality]; ok {
 			evidence++
 		}
 	}
@@ -117,13 +117,13 @@ func loadSyncRows(ctx context.Context, sqlDB *sql.DB) ([]caseRow, []questionedFe
 }
 
 func loadCaseRows(ctx context.Context, sqlDB *sql.DB) ([]caseRow, error) {
-	rows, err := db.New(sqlDB).ListAllCriminalCases(ctx)
+	rows, err := db.New(sqlDB).ListAllBiometricCases(ctx)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]caseRow, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, caseRow{caseID: r.CaseID, caseType: r.CaseType, description: r.Description})
+		out = append(out, caseRow{caseID: r.CaseID, modality: r.Modality, description: r.Description})
 	}
 	return out, nil
 }

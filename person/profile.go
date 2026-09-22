@@ -9,7 +9,7 @@ import (
 )
 
 // Profile is one person's full intelligence view: their enrollment identity,
-// the biometric clusters they've resolved into, and the criminal cases
+// the biometric clusters they've resolved into, and the biometric cases
 // linked to them through those clusters. This is the shape a case-detail
 // "person profile" panel renders from -- everything in it still traces back
 // to a reviewed, CONFIRMED decision chain (see MODEL.md sections 3-4); it
