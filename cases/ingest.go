@@ -23,21 +23,52 @@ type CodificationInput struct {
 	CodificationType string
 }
 
+// FileInput is one already-uploaded file to attach to an EvidenceInput or TraceInput, stored as
+// its own case_files row (see MODEL.md section 2.2) -- the evidence image itself, or a trace's
+// own face_crop. Like identity.FileInput, Ingest works from a StorageRef a caller already wrote
+// with trackid's storage client, not raw bytes: this package stays a DB-only transaction.
+//
+// HashID is required: it's part of case_files' upsert key (criminal_case_id, category,
+// hash_id), so a caller that generates its own images (e.g. trackid-sim's media.Generator)
+// supplies its own content hash rather than Ingest computing one from bytes it never sees.
+type FileInput struct {
+	StorageRef  string
+	ContentType string
+	SizeBytes   int64
+	HashID      string
+	Filename    string // optional
+}
+
+// Box is one trace's location within its evidence image, in the image's pixel coordinates
+// (e.g. cases.DetectFaces' FaceProposal). DetectionScore of exactly 0 is stored as NULL, the
+// same simplification EvidenceInput.Description makes for "": no detector kept here scores a
+// real detection at exactly 0.
+type Box struct {
+	X1, Y1, X2, Y2 float64
+	DetectionScore float64
+}
+
 // TraceInput is one trace found within an Evidence item (e.g. one fingerprint lift on a card,
 // one detected face in a photo). TraceType determines the QUESTIONED biometricfeature Ingest
 // upserts for it, via graph.FeatureTypeForTraceType -- a trace type with no mapping (ok=false)
-// still gets its case_traces row, just no feature.
+// still gets its case_traces row, just no feature. Box and Crop are optional and independent:
+// a trace marked by hand may have neither, a detector-found trace usually has Box, and Crop is
+// for a pipeline that already produced the face crop itself.
 type TraceInput struct {
 	Sequence      int16
 	TraceType     string
+	Box           *Box
+	Crop          *FileInput // category "face_crop"
 	Codifications []CodificationInput
 }
 
 // EvidenceInput is one evidence item (a lift card, a photo, ...) within a case, and every trace
-// found on it.
+// found on it. File is optional (category "evidence"): organizations whose source has no
+// attachable image, e.g. the ones behind trace metadata alone, leave it nil.
 type EvidenceInput struct {
 	Sequence    int16
 	Description string
+	File        *FileInput
 	Traces      []TraceInput
 }
 
@@ -114,9 +145,15 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput) (Result, error) {
 	result := Result{CriminalCaseID: upserted.ID, Inserted: upserted.Inserted}
 
 	for _, evidence := range c.Evidences {
+		evidenceFileID, err := upsertCaseFile(ctx, q, upserted.ID, "evidence", evidence.File)
+		if err != nil {
+			return Result{}, fmt.Errorf("cases: evidence file (case %s, evidence %d): %w", c.CaseID, evidence.Sequence, err)
+		}
+
 		evidenceID, err := q.UpsertCaseEvidence(ctx, db.UpsertCaseEvidenceParams{
 			CriminalCaseID: upserted.ID,
 			Sequence:       evidence.Sequence,
+			CaseFileID:     evidenceFileID,
 			Description:    nullString(evidence.Description),
 		})
 		if err != nil {
@@ -125,11 +162,25 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput) (Result, error) {
 		evidenceResult := EvidenceResult{Sequence: evidence.Sequence, EvidenceID: evidenceID}
 
 		for _, trace := range evidence.Traces {
-			traceID, err := q.UpsertCaseTrace(ctx, db.UpsertCaseTraceParams{
+			cropFileID, err := upsertCaseFile(ctx, q, upserted.ID, "face_crop", trace.Crop)
+			if err != nil {
+				return Result{}, fmt.Errorf("cases: trace crop (case %s, evidence %d, trace %d): %w", c.CaseID, evidence.Sequence, trace.Sequence, err)
+			}
+
+			traceParams := db.UpsertCaseTraceParams{
 				EvidenceID: evidenceID,
 				Sequence:   trace.Sequence,
 				TraceType:  trace.TraceType,
-			})
+				CaseFileID: cropFileID,
+			}
+			if trace.Box != nil {
+				traceParams.BoxX1 = sql.NullFloat64{Float64: trace.Box.X1, Valid: true}
+				traceParams.BoxY1 = sql.NullFloat64{Float64: trace.Box.Y1, Valid: true}
+				traceParams.BoxX2 = sql.NullFloat64{Float64: trace.Box.X2, Valid: true}
+				traceParams.BoxY2 = sql.NullFloat64{Float64: trace.Box.Y2, Valid: true}
+				traceParams.DetectionScore = sql.NullFloat64{Float64: trace.Box.DetectionScore, Valid: trace.Box.DetectionScore != 0}
+			}
+			traceID, err := q.UpsertCaseTrace(ctx, traceParams)
 			if err != nil {
 				return Result{}, fmt.Errorf("cases: upsert case_traces (case %s, evidence %d, trace %d): %w", c.CaseID, evidence.Sequence, trace.Sequence, err)
 			}
@@ -174,4 +225,33 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput) (Result, error) {
 
 func nullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
+}
+
+// upsertCaseFile writes f as a case_files row under category (nil f is a no-op, returning an
+// invalid id) and returns the id to hang off case_evidences.case_file_id or
+// case_traces.case_file_id. mediaType is best-effort: an unrecognized ContentType (something
+// other than classifyContentType's pdf/image set) still stores the file, just with no
+// media_type.
+func upsertCaseFile(ctx context.Context, q *db.Queries, criminalCaseID int64, category string, f *FileInput) (sql.NullInt64, error) {
+	if f == nil {
+		return sql.NullInt64{}, nil
+	}
+	if f.HashID == "" {
+		return sql.NullInt64{}, fmt.Errorf("HashID is required")
+	}
+	mediaType, _ := classifyContentType(f.ContentType)
+	row, err := q.UpsertCaseFile(ctx, db.UpsertCaseFileParams{
+		CriminalCaseID: criminalCaseID,
+		Category:       category,
+		MediaType:      nullString(mediaType),
+		HashID:         sql.NullString{String: f.HashID, Valid: true},
+		Filename:       nullString(f.Filename),
+		StorageRef:     nullString(f.StorageRef),
+		ContentType:    nullString(f.ContentType),
+		SizeBytes:      sql.NullInt64{Int64: f.SizeBytes, Valid: f.SizeBytes != 0},
+	})
+	if err != nil {
+		return sql.NullInt64{}, fmt.Errorf("upsert case_files: %w", err)
+	}
+	return sql.NullInt64{Int64: row.ID, Valid: true}, nil
 }
