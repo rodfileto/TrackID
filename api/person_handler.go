@@ -41,7 +41,7 @@ func SearchPersonsHandler(db *sql.DB) gin.HandlerFunc {
 }
 
 // SearchPersonsByFaceHandler finds enrolled persons whose enrolled face, and
-// criminal cases whose evidence holds a matching face trace, most resemble
+// biometric cases whose evidence holds a matching face trace, most resemble
 // the face in an uploaded photo (see person.SearchByFace), for a caller to
 // disambiguate before opening a full profile or case. The image is sent as
 // multipart form field "image" and is required.
@@ -91,7 +91,7 @@ func SearchPersonsByFaceHandler(db *sql.DB, vis cases.FaceVision) gin.HandlerFun
 
 // GetPersonProfileHandler returns one person's full intelligence profile --
 // their enrollment identity, the biometric clusters they've resolved into,
-// and the criminal cases linked to them through those clusters (see
+// and the biometric cases linked to them through those clusters (see
 // person.GetProfile). This is the single call a person-profile panel needs;
 // GetPersonIdentityHandler/ListPersonClustersHandler/ListPersonCasesHandler
 // below expose the same three sections individually for callers that only
@@ -204,7 +204,7 @@ func ListPersonClustersHandler(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
-// ListPersonCasesHandler returns every criminal case linked to one person
+// ListPersonCasesHandler returns every biometric case linked to one person
 // through their resolved biometric clusters (see person.ListCases).
 func ListPersonCasesHandler(db *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {

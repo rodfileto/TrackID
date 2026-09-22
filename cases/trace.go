@@ -12,11 +12,11 @@ import (
 	"github.com/rodfileto/trackid/graph"
 )
 
-// ErrUnsupportedCaseType is returned by CreateTraces when the case's
-// case_type has no trace_type mapping (graph.TraceTypeForCaseType) -- this
-// shouldn't happen given criminal_cases.case_type's CHECK constraint, but is
+// ErrUnsupportedModality is returned by CreateTraces when the case's
+// modality has no trace_type mapping (graph.TraceTypeForModality) -- this
+// shouldn't happen given biometric_cases.modality's CHECK constraint, but is
 // guarded against rather than assumed.
-var ErrUnsupportedCaseType = errors.New("cases: unsupported case type")
+var ErrUnsupportedModality = errors.New("cases: unsupported modality")
 
 // ErrNotImage is returned by CreateTraces when the evidence file is not an
 // image (e.g. a pdf).
@@ -55,7 +55,7 @@ type Trace struct {
 // CreateTraces records one or more marked traces (see TraceDetection) found
 // within an evidence file as case_traces rows, each paired with its own
 // QUESTIONED biometricfeature and a placeholder case_codifications row
-// (graph.TraceTypeForCaseType/FeatureTypeForTraceType/
+// (graph.TraceTypeForModality/FeatureTypeForTraceType/
 // CodificationTypeForTraceType pick the right types for the case's modality).
 // It is the storage half of trace marking -- how the boxes were produced, by
 // hand or by an automatic detector, is a separate concern that calls this
@@ -90,20 +90,20 @@ func CreateTraces(ctx context.Context, sqlDB *sql.DB, queue embedding.Enqueuer, 
 
 	q := db.New(tx)
 
-	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	caseRow, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, err
 	}
-	traceType, ok := graph.TraceTypeForCaseType(caseRow.CaseType)
+	traceType, ok := graph.TraceTypeForModality(caseRow.Modality)
 	if !ok {
-		return nil, ErrUnsupportedCaseType
+		return nil, ErrUnsupportedModality
 	}
 	featureType, _ := graph.FeatureTypeForTraceType(traceType)
 
-	fileRow, err := q.GetCaseFile(ctx, db.GetCaseFileParams{ID: evidenceFileID, CriminalCaseID: caseRow.ID})
+	fileRow, err := q.GetCaseFile(ctx, db.GetCaseFileParams{ID: evidenceFileID, BiometricCaseID: caseRow.ID})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -118,13 +118,13 @@ func CreateTraces(ctx context.Context, sqlDB *sql.DB, queue embedding.Enqueuer, 
 	}
 
 	evidenceID, err := q.GetCaseEvidenceByCaseFile(ctx, db.GetCaseEvidenceByCaseFileParams{
-		CriminalCaseID: caseRow.ID,
-		CaseFileID:     sql.NullInt64{Int64: evidenceFileID, Valid: true},
+		BiometricCaseID: caseRow.ID,
+		CaseFileID:      sql.NullInt64{Int64: evidenceFileID, Valid: true},
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		evidenceID, err = q.CreateCaseEvidenceForFile(ctx, db.CreateCaseEvidenceForFileParams{
-			CriminalCaseID: caseRow.ID,
-			CaseFileID:     sql.NullInt64{Int64: evidenceFileID, Valid: true},
+			BiometricCaseID: caseRow.ID,
+			CaseFileID:      sql.NullInt64{Int64: evidenceFileID, Valid: true},
 		})
 	}
 	if err != nil {
@@ -214,7 +214,7 @@ func ListTraces(ctx context.Context, sqlDB *sql.DB, caseID string, evidenceFileI
 
 	q := db.New(sqlDB)
 
-	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	caseRow, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -223,8 +223,8 @@ func ListTraces(ctx context.Context, sqlDB *sql.DB, caseID string, evidenceFileI
 	}
 
 	rows, err := q.ListCaseTracesByCaseFile(ctx, db.ListCaseTracesByCaseFileParams{
-		CriminalCaseID: caseRow.ID,
-		CaseFileID:     sql.NullInt64{Int64: evidenceFileID, Valid: true},
+		BiometricCaseID: caseRow.ID,
+		CaseFileID:      sql.NullInt64{Int64: evidenceFileID, Valid: true},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cases: list case_traces for file %d: %w", evidenceFileID, err)
@@ -258,7 +258,7 @@ func DeleteTrace(ctx context.Context, sqlDB *sql.DB, caseID string, evidenceFile
 
 	q := db.New(sqlDB)
 
-	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	caseRow, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
@@ -267,9 +267,9 @@ func DeleteTrace(ctx context.Context, sqlDB *sql.DB, caseID string, evidenceFile
 	}
 
 	deleted, err := q.DeleteCaseTrace(ctx, db.DeleteCaseTraceParams{
-		ID:             traceID,
-		CriminalCaseID: caseRow.ID,
-		CaseFileID:     sql.NullInt64{Int64: evidenceFileID, Valid: true},
+		ID:              traceID,
+		BiometricCaseID: caseRow.ID,
+		CaseFileID:      sql.NullInt64{Int64: evidenceFileID, Valid: true},
 	})
 	if err != nil {
 		return fmt.Errorf("cases: delete case_traces %d: %w", traceID, err)

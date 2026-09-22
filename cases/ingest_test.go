@@ -71,7 +71,8 @@ func TestIngestEvidenceFileAndTraceBox(t *testing.T) {
 
 	in := cases.CaseInput{
 		CaseID:   "TEST-C2-1",
-		CaseType: "FACIAL",
+		CaseType: cases.CaseTypeCriminal,
+		Modality: "FACIAL",
 		Evidences: []cases.EvidenceInput{{
 			Sequence: 1,
 			File: &cases.FileInput{
