@@ -11,8 +11,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/hibiken/asynq"
+
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/embedding"
+	"github.com/rodfileto/trackid/fingerprint"
 	"github.com/rodfileto/trackid/graph"
 	"github.com/rodfileto/trackid/storage"
 )
@@ -123,8 +126,8 @@ func ListCaseCodifications(ctx context.Context, sqlDB *sql.DB, caseID string) ([
 // creates it, so this only actually inserts for a trace that predates that
 // (e.g. legacy data backfilled directly into case_traces). Works for any
 // modality; callers that are points-only (FINGERPRINT/MINUTIAE) additionally
-// call resolveMinutiaeCodification.
-func resolveCodification(ctx context.Context, q *db.Queries, criminalCaseID, evidenceFileID, traceID int64) (int64, error) {
+// call resolveMinutiaeCodification. It also returns the codification_type.
+func resolveCodification(ctx context.Context, q *db.Queries, criminalCaseID, evidenceFileID, traceID int64) (int64, string, error) {
 	traceRow, err := q.GetCaseTraceForFile(ctx, db.GetCaseTraceForFileParams{
 		ID:             traceID,
 		CriminalCaseID: criminalCaseID,
@@ -132,22 +135,22 @@ func resolveCodification(ctx context.Context, q *db.Queries, criminalCaseID, evi
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return 0, ErrNotFound
+			return 0, "", ErrNotFound
 		}
-		return 0, err
+		return 0, "", err
 	}
 
 	codificationType, ok := graph.CodificationTypeForTraceType(traceRow.TraceType)
 	if !ok {
-		return 0, ErrNoCodification
+		return 0, "", ErrNoCodification
 	}
 
 	codificationID, err := q.GetCaseCodificationByTrace(ctx, traceID)
 	if err == nil {
-		return codificationID, nil
+		return codificationID, codificationType, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return 0, err
+		return 0, "", err
 	}
 
 	codificationID, err = q.UpsertCaseCodification(ctx, db.UpsertCaseCodificationParams{
@@ -156,9 +159,9 @@ func resolveCodification(ctx context.Context, q *db.Queries, criminalCaseID, evi
 		CodificationType: codificationType,
 	})
 	if err != nil {
-		return 0, fmt.Errorf("cases: create case_codifications for trace %d: %w", traceID, err)
+		return 0, "", fmt.Errorf("cases: create case_codifications for trace %d: %w", traceID, err)
 	}
-	return codificationID, nil
+	return codificationID, codificationType, nil
 }
 
 // resolveMinutiaeCodification is resolveCodification plus the points-only
@@ -183,7 +186,8 @@ func resolveMinutiaeCodification(ctx context.Context, q *db.Queries, criminalCas
 	if codificationType != graph.CodificationTypeMinutiae {
 		return 0, ErrPointsNotSupported
 	}
-	return resolveCodification(ctx, q, criminalCaseID, evidenceFileID, traceID)
+	codificationID, _, err := resolveCodification(ctx, q, criminalCaseID, evidenceFileID, traceID)
+	return codificationID, err
 }
 
 func pointFromRow(id int64, sequence int16, x, y float64, pointType sql.NullString, angle sql.NullFloat64) Point {
@@ -389,9 +393,9 @@ func DeletePoint(ctx context.Context, sqlDB *sql.DB, caseID string, evidenceFile
 // else in the schema references case_files by anything other than id, so an
 // orphaned old version is harmless and (deliberately) not cleaned up here.
 //
-// On success, if queue is non-nil, it enqueues embedding.TaskTypeComputeCodification
-// so cmd/worker picks up the new image and computes/stores its embedding
-// asynchronously (see embedding.ComputeForCodification). A nil queue (Redis not
+// On success, if queue is non-nil, it enqueues the codification's processing task
+// (see enqueueCodificationTasks) so cmd/worker picks up the new image and computes
+// its embedding or fingerprint template asynchronously. A nil queue (Redis not
 // configured) or an enqueue error only logs -- the image is already saved, and the
 // embedding can still be produced later by a backfill run.
 func SaveCodificationImage(ctx context.Context, sqlDB *sql.DB, store *storage.Client, queue embedding.Enqueuer, caseID string, evidenceFileID, traceID int64, data []byte) (File, error) {
@@ -423,7 +427,7 @@ func SaveCodificationImage(ctx context.Context, sqlDB *sql.DB, store *storage.Cl
 		return File{}, err
 	}
 
-	codificationID, err := resolveCodification(ctx, q, caseRow.ID, evidenceFileID, traceID)
+	codificationID, codificationType, err := resolveCodification(ctx, q, caseRow.ID, evidenceFileID, traceID)
 	if err != nil {
 		return File{}, err
 	}
@@ -463,14 +467,7 @@ func SaveCodificationImage(ctx context.Context, sqlDB *sql.DB, store *storage.Cl
 		return File{}, err
 	}
 
-	if queue != nil {
-		task, err := embedding.NewComputeCodificationTask(codificationID)
-		if err != nil {
-			log.Printf("cases: build embed task for codification %d: %v", codificationID, err)
-		} else if _, err := queue.Enqueue(task); err != nil {
-			log.Printf("cases: enqueue embed task for codification %d: %v", codificationID, err)
-		}
-	}
+	enqueueCodificationTasks(queue, codificationType, []int64{codificationID})
 
 	return File{
 		ID:          fileRow.ID,
@@ -482,4 +479,33 @@ func SaveCodificationImage(ctx context.Context, sqlDB *sql.DB, store *storage.Cl
 		SizeBytes:   int64(len(data)),
 		CreatedAt:   fileRow.CreatedAt,
 	}, nil
+}
+
+// enqueueCodificationTasks enqueues the task that turns each codification's
+// image into what matching reads: a face embedding (embedding.ComputeForCodification)
+// for FACE_EMBEDDING, a fingerprint template (fingerprint.ExtractForCodification)
+// for MINUTIAE. A nil queue or an enqueue error only logs.
+func enqueueCodificationTasks(queue embedding.Enqueuer, codificationType string, codificationIDs []int64) {
+	if queue == nil {
+		return
+	}
+	for _, codificationID := range codificationIDs {
+		var task *asynq.Task
+		var err error
+		switch codificationType {
+		case graph.CodificationTypeFaceEmbedding:
+			task, err = embedding.NewComputeCodificationTask(codificationID)
+		case graph.CodificationTypeMinutiae:
+			task, err = fingerprint.NewExtractCodificationTask(codificationID)
+		default:
+			continue
+		}
+		if err != nil {
+			log.Printf("cases: build task for codification %d: %v", codificationID, err)
+			continue
+		}
+		if _, err := queue.Enqueue(task); err != nil {
+			log.Printf("cases: enqueue %s for codification %d: %v", task.Type(), codificationID, err)
+		}
+	}
 }

@@ -24,6 +24,11 @@ type Config struct {
 	VisionRecognizerPath    string
 	VisionSharedLibraryPath string
 	VisionUseGPU            bool
+
+	// FingerprintSidecarURL is the sourceafis-sidecar service the worker
+	// extracts and matches fingerprint templates with (see the fingerprint
+	// package). Left empty, fingerprint tasks aren't processed.
+	FingerprintSidecarURL string
 }
 
 func Load() Config {
@@ -53,5 +58,7 @@ func Load() Config {
 		VisionRecognizerPath:    os.Getenv("VISION_RECOGNIZER_PATH"),
 		VisionSharedLibraryPath: os.Getenv("VISION_SHARED_LIBRARY_PATH"),
 		VisionUseGPU:            os.Getenv("VISION_USE_GPU") == "true",
+
+		FingerprintSidecarURL: os.Getenv("FINGERPRINT_SIDECAR_URL"),
 	}
 }

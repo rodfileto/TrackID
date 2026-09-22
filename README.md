@@ -62,8 +62,12 @@ organizations import to build their import commands) and an **internal** runtime
 - `graph/` — embedded Neo4j (Cypher) schema migrations, their applier, the feature-type
   mapping, and the Postgres → Neo4j sync of evidence, the identity chain, and
   biometric features
-- `biometricmatch/` — ANN similarity search over `feature_embeddings` writing SYSTEM
+- `biometricmatch/` — ANN similarity search over `feature_embeddings` (`Run`) and
+  matcher scoring over `biometric_templates` (`RunTemplates`), both writing SYSTEM
   decisions
+- `fingerprint/` — the Go client for `sourceafis-sidecar/` (extract + match a
+  fingerprint template) and the Asynq tasks that extract on codification/enrollment
+  save and store into `biometric_templates`, the fingerprint counterpart of `embedding/`
 - `storage/` — MinIO/S3 object-storage client
 - `db/` — sqlc queries and models for the core Postgres schema (`queries.sql`) and the
   goose migrations (`db/migrations`)
@@ -87,7 +91,9 @@ organizations import to build their import commands) and an **internal** runtime
   template; `npm run build` produces the bundle `internal/web` serves
 - `quarto/` — technical report and ontology documentation
 - `scripts/` — development helpers (start/stop the stack, apply the graph schema)
-- `docker-compose.yml` — Postgres, Redis, MinIO, and optional Neo4j
+- `docker-compose.yml` — Postgres, Redis, MinIO, `sourceafis-sidecar`, and optional Neo4j
+- `sourceafis-sidecar/` — the Java sidecar `fingerprint/` talks to (SourceAFIS behind a
+  plain HTTP server; see "Models and licences")
 
 ## Extension contract
 
@@ -120,12 +126,14 @@ weights are, and they are not bundled — you download them.
 | YuNet `face_detection_yunet_2026may.onnx` (OpenCV Zoo) | detector, **default** (`VISION_DETECTOR=yunet`) | MIT. Trained on WIDER Face (CC BY-NC-ND); whether that reaches trained weights is unsettled, and the author states no restriction. |
 | AuraFace-v1 `glintr100.onnx` (fal) | recognizer | Apache-2.0; fal describes the training data as commercially and publicly available, without naming it. |
 | SCRFD `scrfd_10g_bnkps.onnx` (InsightFace) | detector, opt-in (`VISION_DETECTOR=scrfd`) | **Non-commercial research only** (InsightFace's terms). Do not use in a commercial product or service without their licence. |
+| [SourceAFIS](https://sourceafis.machinezoo.com/) 3.18.1 (machinezoo) | fingerprint extraction + matching, via `sourceafis-sidecar/` | Apache-2.0. A library, not downloaded weights -- pinned in `sourceafis-sidecar/fetch-deps.sh`, which fetches it and its runtime dependencies from Maven Central at build time. |
 
 Notes for anyone deploying this:
 
 - **Thresholds are yours to validate.** `faceMatchThreshold` and the detector's score
   threshold are defaults, not calibrated on any operational data. A laboratory should
-  validate them on its own data before casework use.
+  validate them on its own data before casework use. `fingerprint.MatchThreshold` (40)
+  is SourceAFIS's own documented threshold, not one calibrated here either.
 - **Embeddings from different detectors are not comparable** (the same face aligned by
   SCRFD vs YuNet had cosine 0.88 on average). Re-embed everything when switching.
 - Terms change; check each model's source before relying on this table.

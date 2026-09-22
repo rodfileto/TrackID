@@ -709,3 +709,41 @@ JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
 WHERE p.person_id = ANY(@person_ids::text[])
 GROUP BY p.person_id, cc.case_type
 ORDER BY p.person_id, cc.case_type;
+
+-- name: UpsertBiometricTemplate :one
+-- Re-extraction replaces the template and clears matched_at, so the new template goes
+-- through matching again (as UpsertFeatureEmbedding does for embeddings).
+INSERT INTO biometric_templates (biometricfeature_id, template_type, template, model_version)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (biometricfeature_id, template_type) DO UPDATE SET
+    template = EXCLUDED.template,
+    model_version = EXCLUDED.model_version,
+    matched_at = NULL,
+    updated_at = NOW()
+RETURNING id;
+
+-- name: ListBiometricTemplates :many
+-- Every template of a type: the gallery biometricmatch.RunTemplates scores each unmatched
+-- template against. matched_at IS NULL marks the ones still to be probed.
+SELECT id, biometricfeature_id, template, (matched_at IS NULL)::boolean AS unmatched
+FROM biometric_templates
+WHERE template_type = $1
+ORDER BY id;
+
+-- name: MarkBiometricTemplateMatched :exec
+UPDATE biometric_templates SET matched_at = NOW(), updated_at = NOW()
+WHERE id = $1;
+
+-- name: ListKnownFingerprintFeaturesMissingTemplate :many
+-- Every KNOWN FINGERPRINT_TEMPLATE biometricfeature (an enrolled ten-print) with no
+-- template of the given type yet -- what cmd/backfill-fingerprint-templates enqueues
+-- extraction for.
+SELECT bf.id
+FROM biometricfeature bf
+WHERE bf.feature_type = 'FINGERPRINT_TEMPLATE'
+  AND bf.identity_file_id IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM biometric_templates bt
+      WHERE bt.biometricfeature_id = bf.id AND bt.template_type = sqlc.arg(template_type)
+  )
+ORDER BY bf.id;

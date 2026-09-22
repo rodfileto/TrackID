@@ -16,7 +16,7 @@ import (
 
 // Stats reports what a run considered and decided.
 type Stats struct {
-	Embeddings int // unmatched embeddings considered
+	Embeddings int // unmatched embeddings (or templates, for RunTemplates) considered
 	Decisions  int // SYSTEM biometric_decisions rows written (or that would be)
 }
 
@@ -24,14 +24,16 @@ type Stats struct {
 // embedding before giving up on finding more within threshold.
 const candidatesPerEmbedding = 20
 
-// candidate is one ANN neighbor found within threshold, expressed in graph
-// feature ids (see graph.KnownFeatureID / graph.QuestionedFeatureID) with
+// candidate is one pair found within threshold, expressed in graph feature
+// ids (see graph.KnownFeatureID / graph.QuestionedFeatureID) with
 // featureAID < featureBID, matching biometric_decisions' ordering constraint.
+// confidence is the score stored on the decision: 1 - cosine distance for an
+// embedding, the matcher's own score for a template.
 type candidate struct {
 	featureAID string
 	featureBID string
 	modality   string
-	distance   float64
+	confidence float64
 }
 
 // Plan reports what Run would do for embeddingType, without writing anything.
@@ -63,16 +65,25 @@ func Run(ctx context.Context, sqlDB *sql.DB, embeddingType string, threshold flo
 	if err != nil {
 		return Stats{}, err
 	}
+	if err := recordDecisions(ctx, sqlDB, candidates, threshold, systemSource, embeddingIDs, (*db.Queries).MarkFeatureEmbeddingMatched); err != nil {
+		return Stats{}, err
+	}
+	return Stats{Embeddings: considered, Decisions: len(candidates)}, nil
+}
 
+// recordDecisions writes a SYSTEM POSITIVE decision for each candidate and
+// marks every considered id matched, in one transaction -- the write half
+// shared by Run (embeddings) and RunTemplates (templates).
+func recordDecisions(ctx context.Context, sqlDB *sql.DB, candidates []candidate, threshold float64, systemSource string,
+	consideredIDs []int64, markMatched func(*db.Queries, context.Context, int64) error) error {
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	if err != nil {
-		return Stats{}, err
+		return err
 	}
 	defer tx.Rollback()
 	q := db.New(tx)
 
 	for _, c := range candidates {
-		confidence := 1 - c.distance
 		if _, err := q.InsertBiometricDecision(ctx, db.InsertBiometricDecisionParams{
 			FeatureAID:   c.featureAID,
 			FeatureBID:   c.featureBID,
@@ -80,23 +91,20 @@ func Run(ctx context.Context, sqlDB *sql.DB, embeddingType string, threshold flo
 			Role:         "SYSTEM",
 			Decision:     "POSITIVE",
 			SystemSource: sql.NullString{String: systemSource, Valid: true},
-			Confidence:   sql.NullFloat64{Float64: confidence, Valid: true},
+			Confidence:   sql.NullFloat64{Float64: c.confidence, Valid: true},
 			Threshold:    sql.NullFloat64{Float64: threshold, Valid: true},
 		}); err != nil {
-			return Stats{}, fmt.Errorf("biometricmatch: insert decision (%s, %s): %w", c.featureAID, c.featureBID, err)
+			return fmt.Errorf("biometricmatch: insert decision (%s, %s): %w", c.featureAID, c.featureBID, err)
 		}
 	}
 
-	for _, id := range embeddingIDs {
-		if err := q.MarkFeatureEmbeddingMatched(ctx, id); err != nil {
-			return Stats{}, err
+	for _, id := range consideredIDs {
+		if err := markMatched(q, ctx, id); err != nil {
+			return err
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return Stats{}, err
-	}
-	return Stats{Embeddings: considered, Decisions: len(candidates)}, nil
+	return tx.Commit()
 }
 
 // featureInfo is a biometricfeature's graph feature id and biometric_decisions
@@ -237,7 +245,7 @@ func computeCandidates(ctx context.Context, sqlDB *sql.DB, embeddingType string,
 				featureAID: a,
 				featureBID: b,
 				modality:   sourceInfo.modality,
-				distance:   distance,
+				confidence: 1 - distance,
 			})
 		}
 	}

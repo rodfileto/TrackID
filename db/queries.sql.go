@@ -1280,6 +1280,50 @@ func (q *Queries) ListBiometricFeatures(ctx context.Context) ([]ListBiometricFea
 	return items, nil
 }
 
+const listBiometricTemplates = `-- name: ListBiometricTemplates :many
+SELECT id, biometricfeature_id, template, (matched_at IS NULL)::boolean AS unmatched
+FROM biometric_templates
+WHERE template_type = $1
+ORDER BY id
+`
+
+type ListBiometricTemplatesRow struct {
+	ID                 int64  `db:"id" json:"id"`
+	BiometricfeatureID int64  `db:"biometricfeature_id" json:"biometricfeature_id"`
+	Template           []byte `db:"template" json:"template"`
+	Unmatched          bool   `db:"unmatched" json:"unmatched"`
+}
+
+// Every template of a type: the gallery biometricmatch.RunTemplates scores each unmatched
+// template against. matched_at IS NULL marks the ones still to be probed.
+func (q *Queries) ListBiometricTemplates(ctx context.Context, templateType string) ([]ListBiometricTemplatesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBiometricTemplates, templateType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBiometricTemplatesRow
+	for rows.Next() {
+		var i ListBiometricTemplatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BiometricfeatureID,
+			&i.Template,
+			&i.Unmatched,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCaseCodificationsByCriminalCase = `-- name: ListCaseCodificationsByCriminalCase :many
 SELECT cd.id AS codification_id, cd.sequence AS codification_sequence, cd.codification_type, cd.case_file_id AS codification_file_id,
     ct.id AS trace_id, ct.sequence AS trace_sequence, ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2,
@@ -2139,6 +2183,44 @@ func (q *Queries) ListKnownFeaturePersons(ctx context.Context) ([]ListKnownFeatu
 	return items, nil
 }
 
+const listKnownFingerprintFeaturesMissingTemplate = `-- name: ListKnownFingerprintFeaturesMissingTemplate :many
+SELECT bf.id
+FROM biometricfeature bf
+WHERE bf.feature_type = 'FINGERPRINT_TEMPLATE'
+  AND bf.identity_file_id IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM biometric_templates bt
+      WHERE bt.biometricfeature_id = bf.id AND bt.template_type = $1
+  )
+ORDER BY bf.id
+`
+
+// Every KNOWN FINGERPRINT_TEMPLATE biometricfeature (an enrolled ten-print) with no
+// template of the given type yet -- what cmd/backfill-fingerprint-templates enqueues
+// extraction for.
+func (q *Queries) ListKnownFingerprintFeaturesMissingTemplate(ctx context.Context, templateType string) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listKnownFingerprintFeaturesMissingTemplate, templateType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listKnownIdentityChain = `-- name: ListKnownIdentityChain :many
 SELECT
     p.person_id,
@@ -2395,6 +2477,16 @@ func (q *Queries) ListUnmatchedFeatureEmbeddings(ctx context.Context, embeddingT
 	return items, nil
 }
 
+const markBiometricTemplateMatched = `-- name: MarkBiometricTemplateMatched :exec
+UPDATE biometric_templates SET matched_at = NOW(), updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) MarkBiometricTemplateMatched(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, markBiometricTemplateMatched, id)
+	return err
+}
+
 const markFeatureEmbeddingMatched = `-- name: MarkFeatureEmbeddingMatched :exec
 UPDATE feature_embeddings SET matched_at = NOW(), updated_at = NOW()
 WHERE id = $1
@@ -2604,6 +2696,38 @@ type UpsertBiometricFeatureFromIdentityFileParams struct {
 
 func (q *Queries) UpsertBiometricFeatureFromIdentityFile(ctx context.Context, arg UpsertBiometricFeatureFromIdentityFileParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, upsertBiometricFeatureFromIdentityFile, arg.FeatureType, arg.Provenance, arg.IdentityFileID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertBiometricTemplate = `-- name: UpsertBiometricTemplate :one
+INSERT INTO biometric_templates (biometricfeature_id, template_type, template, model_version)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (biometricfeature_id, template_type) DO UPDATE SET
+    template = EXCLUDED.template,
+    model_version = EXCLUDED.model_version,
+    matched_at = NULL,
+    updated_at = NOW()
+RETURNING id
+`
+
+type UpsertBiometricTemplateParams struct {
+	BiometricfeatureID int64          `db:"biometricfeature_id" json:"biometricfeature_id"`
+	TemplateType       string         `db:"template_type" json:"template_type"`
+	Template           []byte         `db:"template" json:"template"`
+	ModelVersion       sql.NullString `db:"model_version" json:"model_version"`
+}
+
+// Re-extraction replaces the template and clears matched_at, so the new template goes
+// through matching again (as UpsertFeatureEmbedding does for embeddings).
+func (q *Queries) UpsertBiometricTemplate(ctx context.Context, arg UpsertBiometricTemplateParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertBiometricTemplate,
+		arg.BiometricfeatureID,
+		arg.TemplateType,
+		arg.Template,
+		arg.ModelVersion,
+	)
 	var id int64
 	err := row.Scan(&id)
 	return id, err

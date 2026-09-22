@@ -51,6 +51,17 @@ type BiometricDecisionSide struct {
 	CreatedAt            time.Time       `db:"created_at" json:"created_at"`
 }
 
+type BiometricTemplate struct {
+	ID                 int64          `db:"id" json:"id"`
+	BiometricfeatureID int64          `db:"biometricfeature_id" json:"biometricfeature_id"`
+	TemplateType       string         `db:"template_type" json:"template_type"`
+	Template           []byte         `db:"template" json:"template"`
+	ModelVersion       sql.NullString `db:"model_version" json:"model_version"`
+	MatchedAt          sql.NullTime   `db:"matched_at" json:"matched_at"`
+	CreatedAt          time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt          time.Time      `db:"updated_at" json:"updated_at"`
+}
+
 type Biometricfeature struct {
 	ID             int64         `db:"id" json:"id"`
 	FeatureType    string        `db:"feature_type" json:"feature_type"`
