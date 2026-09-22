@@ -34,6 +34,13 @@ services:
     volumes:
       - trackid-minio:/data
 
+  # SourceAFIS fingerprint extraction/matching for the fingerprint package
+  # (FINGERPRINT_SIDECAR_URL=http://localhost:58090). See sourceafis-sidecar/.
+  sourceafis-sidecar:
+    build: ./sourceafis-sidecar
+    ports:
+      - "58090:8090"
+
   neo4j:
     image: neo4j:5-community
     profiles: ["graph"]

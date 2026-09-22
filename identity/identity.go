@@ -14,9 +14,11 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/hibiken/asynq"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/embedding"
+	"github.com/rodfileto/trackid/fingerprint"
 	"github.com/rodfileto/trackid/graph"
 	"github.com/sqlc-dev/pqtype"
 )
@@ -47,13 +49,15 @@ func WithNeo4jDriver(driver neo4j.DriverWithContext) Option {
 	return func(o *ingestOptions) { o.neo4jDriver = driver }
 }
 
-// WithEnqueuer makes Ingest enqueue face-embedding computation (see
-// embedding.ComputeForIdentityFeature) for every FACE_RECORD biometricfeature
-// this Enrollment's files produce, right after the Postgres transaction
-// commits -- the KNOWN-side counterpart to how cases.CreateTraces enqueues
-// embeddings for QUESTIONED case traces. Omitting this option (the default)
-// still writes the biometricfeature row, just without anything ever
-// populating feature_embeddings for it, so person.SearchByFace has nothing
+// WithEnqueuer makes Ingest enqueue processing for every biometricfeature this
+// Enrollment's files produce, right after the Postgres transaction commits --
+// the KNOWN-side counterpart to how cases.CreateTraces/enqueueCodificationTasks
+// enqueue it for QUESTIONED case traces. A FACE_RECORD feature gets face
+// embedding (embedding.ComputeForIdentityFeature); a FINGERPRINT_TEMPLATE
+// feature gets template extraction (fingerprint.ExtractForIdentityFeature).
+// Omitting this option (the default) still writes the biometricfeature row,
+// just without anything ever populating feature_embeddings/biometric_templates
+// for it, so person.SearchByFace and the fingerprint match path have nothing
 // to match against.
 func WithEnqueuer(queue embedding.Enqueuer) Option {
 	return func(o *ingestOptions) { o.enqueuer = queue }
@@ -227,16 +231,22 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, e Enrollment, opts ...Option) (R
 
 	if o.enqueuer != nil {
 		for _, feat := range result.Features {
-			if feat.FeatureType != graph.FeatureTypeFaceRecord {
+			var task *asynq.Task
+			var err error
+			switch feat.FeatureType {
+			case graph.FeatureTypeFaceRecord:
+				task, err = embedding.NewComputeIdentityFeatureTask(feat.FeatureID)
+			case graph.FeatureTypeFingerprintTemplate:
+				task, err = fingerprint.NewExtractIdentityFeatureTask(feat.FeatureID)
+			default:
 				continue
 			}
-			task, err := embedding.NewComputeIdentityFeatureTask(feat.FeatureID)
 			if err != nil {
-				log.Printf("identity: build embed task for biometricfeature %d: %v", feat.FeatureID, err)
+				log.Printf("identity: build task for biometricfeature %d: %v", feat.FeatureID, err)
 				continue
 			}
 			if _, err := o.enqueuer.Enqueue(task); err != nil {
-				log.Printf("identity: enqueue embed task for biometricfeature %d: %v", feat.FeatureID, err)
+				log.Printf("identity: enqueue %s for biometricfeature %d: %v", task.Type(), feat.FeatureID, err)
 			}
 		}
 	}

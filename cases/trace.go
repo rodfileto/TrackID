@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/rodfileto/trackid/db"
@@ -69,11 +68,11 @@ type Trace struct {
 // appends new traces after whatever is already there -- it does not replace
 // or deduplicate prior ones.
 //
-// Each FACE_EMBEDDING codification created gets its embedding computation
-// enqueued (see embedding.ComputeForCodification), the same as
-// SaveCodificationImage does -- so a trace marked and Codify'd by hand, with
-// no crop of its own, still gets a stored embedding, computed from the
-// evidence image and the trace's own box. A nil queue (Redis not configured)
+// Each codification created gets its processing enqueued (see
+// enqueueCodificationTasks), the same as SaveCodificationImage does -- so a
+// trace marked and Codify'd by hand, with no crop of its own, still gets a
+// stored face embedding or fingerprint template, computed from the evidence
+// image and the trace's own box. A nil queue (Redis not configured)
 // or an enqueue error only logs; nothing here depends on it succeeding.
 func CreateTraces(ctx context.Context, sqlDB *sql.DB, queue embedding.Enqueuer, caseID string, evidenceFileID int64, detections []TraceDetection) ([]Trace, error) {
 	if sqlDB == nil {
@@ -138,7 +137,8 @@ func CreateTraces(ctx context.Context, sqlDB *sql.DB, queue embedding.Enqueuer, 
 	}
 
 	traces := make([]Trace, 0, len(detections))
-	var faceCodificationIDs []int64
+	var codificationIDs []int64
+	codificationType, _ := graph.CodificationTypeForTraceType(traceType)
 	for _, detection := range detections {
 		nextSequence++
 
@@ -171,7 +171,7 @@ func CreateTraces(ctx context.Context, sqlDB *sql.DB, queue embedding.Enqueuer, 
 			return nil, fmt.Errorf("cases: create biometricfeature (trace %d): %w", traceID, err)
 		}
 
-		if codificationType, ok := graph.CodificationTypeForTraceType(traceType); ok {
+		if codificationType != "" {
 			codificationID, err := q.UpsertCaseCodification(ctx, db.UpsertCaseCodificationParams{
 				TraceID:          traceID,
 				Sequence:         1,
@@ -180,9 +180,7 @@ func CreateTraces(ctx context.Context, sqlDB *sql.DB, queue embedding.Enqueuer, 
 			if err != nil {
 				return nil, fmt.Errorf("cases: create case_codifications (trace %d): %w", traceID, err)
 			}
-			if codificationType == graph.CodificationTypeFaceEmbedding {
-				faceCodificationIDs = append(faceCodificationIDs, codificationID)
-			}
+			codificationIDs = append(codificationIDs, codificationID)
 		}
 
 		traces = append(traces, Trace{
@@ -202,18 +200,7 @@ func CreateTraces(ctx context.Context, sqlDB *sql.DB, queue embedding.Enqueuer, 
 		return nil, err
 	}
 
-	if queue != nil {
-		for _, codificationID := range faceCodificationIDs {
-			task, err := embedding.NewComputeCodificationTask(codificationID)
-			if err != nil {
-				log.Printf("cases: build embed task for codification %d: %v", codificationID, err)
-				continue
-			}
-			if _, err := queue.Enqueue(task); err != nil {
-				log.Printf("cases: enqueue embed task for codification %d: %v", codificationID, err)
-			}
-		}
-	}
+	enqueueCodificationTasks(queue, codificationType, codificationIDs)
 
 	return traces, nil
 }
