@@ -27,11 +27,19 @@ import {
 } from "../services/cases";
 
 function caseTypeLabelKey(caseType: string): string {
-  return caseType === "FACIAL" ? "caseType.facial" : "caseType.fingerprint";
+  return caseType === "CIVIL" ? "caseType.civil" : "caseType.criminal";
 }
 
-function caseTypeColor(caseType: string): "info" | "warning" {
-  return caseType === "FACIAL" ? "info" : "warning";
+function caseTypeColor(caseType: string): "error" | "success" {
+  return caseType === "CIVIL" ? "success" : "error";
+}
+
+function modalityLabelKey(modality: string): string {
+  return modality === "FACIAL" ? "modality.facial" : "modality.fingerprint";
+}
+
+function modalityColor(modality: string): "info" | "warning" {
+  return modality === "FACIAL" ? "info" : "warning";
 }
 
 function mediaTypeColor(mediaType: string): "info" | "warning" | "light" {
@@ -205,10 +213,13 @@ export default function CaseDetailPage() {
               <Badge size="sm" color={caseTypeColor(detail.caseType)}>
                 {t(caseTypeLabelKey(detail.caseType))}
               </Badge>
+              <Badge size="sm" color={modalityColor(detail.modality)}>
+                {t(modalityLabelKey(detail.modality))}
+              </Badge>
             </div>
           </ComponentCard>
 
-          {detail.caseType === "FACIAL" ? (
+          {detail.modality === "FACIAL" ? (
             <FacialCaseWorkspace
               caseId={caseId ?? ""}
               evidences={evidences}
@@ -398,7 +409,7 @@ export default function CaseDetailPage() {
       {traceEvidence && (
         <TraceMarkerModal
           caseId={caseId ?? ""}
-          caseType={detail?.caseType ?? ""}
+          modality={detail?.modality ?? ""}
           evidenceId={traceEvidence.id}
           filename={traceEvidence.filename}
           isOpen={!!traceEvidence}

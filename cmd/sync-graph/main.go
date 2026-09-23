@@ -1,4 +1,4 @@
-// sync-graph materializes criminal_cases and QUESTIONED biometric features from
+// sync-graph materializes biometric_cases and QUESTIONED biometric features from
 // Postgres into the Neo4j forensic graph (Evidence and BiometricFeature nodes).
 // It reads only from the database; see graph.Sync.
 //

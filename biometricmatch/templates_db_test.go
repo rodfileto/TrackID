@@ -107,7 +107,8 @@ func TestRunTemplatesFingerprintPair(t *testing.T) {
 	// QUESTIONED: a fingerprint lift on a case, feature type FINGERPRINT_LIFT.
 	caseRes, err := cases.Ingest(ctx, sqlDB, cases.CaseInput{
 		CaseID:   "CASE-FP-1",
-		CaseType: "FINGERPRINT",
+		CaseType: cases.CaseTypeCriminal,
+		Modality: "FINGERPRINT",
 		Evidences: []cases.EvidenceInput{
 			{
 				Sequence: 1,

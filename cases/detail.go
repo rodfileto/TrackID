@@ -2,9 +2,7 @@ package cases
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -34,11 +32,12 @@ type File struct {
 type CaseDetail struct {
 	CaseID      string `json:"caseId"`
 	CaseType    string `json:"caseType"`
+	Modality    string `json:"modality"`
 	Description string `json:"description"`
 	Evidences   []File `json:"evidences"`
 }
 
-// Get loads one criminal case and its evidence files by case_id.
+// Get loads one biometric case and its evidence files by case_id.
 func Get(ctx context.Context, sqlDB *sql.DB, caseID string) (CaseDetail, error) {
 	if sqlDB == nil {
 		return CaseDetail{}, fmt.Errorf("cases: nil db")
@@ -46,7 +45,7 @@ func Get(ctx context.Context, sqlDB *sql.DB, caseID string) (CaseDetail, error) 
 
 	q := db.New(sqlDB)
 
-	row, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	row, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return CaseDetail{}, ErrNotFound
@@ -54,7 +53,7 @@ func Get(ctx context.Context, sqlDB *sql.DB, caseID string) (CaseDetail, error) 
 		return CaseDetail{}, err
 	}
 
-	files, err := q.ListCaseFilesByCriminalCase(ctx, row.ID)
+	files, err := q.ListCaseFilesByBiometricCase(ctx, row.ID)
 	if err != nil {
 		return CaseDetail{}, err
 	}
@@ -70,6 +69,7 @@ func Get(ctx context.Context, sqlDB *sql.DB, caseID string) (CaseDetail, error) 
 	return CaseDetail{
 		CaseID:      row.CaseID,
 		CaseType:    row.CaseType,
+		Modality:    row.Modality,
 		Description: row.Description,
 		Evidences:   evidences,
 	}, nil
@@ -101,7 +101,7 @@ func AddEvidence(ctx context.Context, sqlDB *sql.DB, store *storage.Client, case
 
 	q := db.New(sqlDB)
 
-	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	caseRow, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return File{}, ErrNotFound
@@ -109,24 +109,21 @@ func AddEvidence(ctx context.Context, sqlDB *sql.DB, store *storage.Client, case
 		return File{}, err
 	}
 
-	hash := sha256.Sum256(input.Data)
-	hashHex := hex.EncodeToString(hash[:])
-
-	objectKey := fmt.Sprintf("evidence/%s/%s", caseID, hashHex)
-	storageRef, err := store.Upload(ctx, objectKey, input.Data, contentType)
+	uploaded, err := UploadEvidenceFile(ctx, store, caseID, input.Data, input.Filename)
 	if err != nil {
-		return File{}, fmt.Errorf("cases: upload evidence: %w", err)
+		return File{}, err
 	}
+	hashHex, storageRef := uploaded.HashID, uploaded.StorageRef
 
 	row, err := q.CreateCaseFile(ctx, db.CreateCaseFileParams{
-		CriminalCaseID: caseRow.ID,
-		Category:       "evidence",
-		MediaType:      sql.NullString{String: mediaType, Valid: true},
-		HashID:         sql.NullString{String: hashHex, Valid: true},
-		Filename:       sql.NullString{String: input.Filename, Valid: true},
-		StorageRef:     sql.NullString{String: storageRef, Valid: true},
-		ContentType:    sql.NullString{String: contentType, Valid: true},
-		SizeBytes:      sql.NullInt64{Int64: int64(len(input.Data)), Valid: true},
+		BiometricCaseID: caseRow.ID,
+		Category:        "evidence",
+		MediaType:       sql.NullString{String: mediaType, Valid: true},
+		HashID:          sql.NullString{String: hashHex, Valid: true},
+		Filename:        sql.NullString{String: input.Filename, Valid: true},
+		StorageRef:      sql.NullString{String: storageRef, Valid: true},
+		ContentType:     sql.NullString{String: contentType, Valid: true},
+		SizeBytes:       sql.NullInt64{Int64: int64(len(input.Data)), Valid: true},
 	})
 	if err != nil {
 		return File{}, fmt.Errorf("cases: create case file: %w", err)
@@ -161,7 +158,7 @@ func DeleteEvidence(ctx context.Context, sqlDB *sql.DB, caseID string, evidenceF
 
 	q := db.New(sqlDB)
 
-	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	caseRow, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
@@ -178,8 +175,8 @@ func DeleteEvidence(ctx context.Context, sqlDB *sql.DB, caseID string, evidenceF
 	}
 
 	deleted, err := q.DeleteCaseFile(ctx, db.DeleteCaseFileParams{
-		ID:             evidenceFileID,
-		CriminalCaseID: caseRow.ID,
+		ID:              evidenceFileID,
+		BiometricCaseID: caseRow.ID,
 	})
 	if err != nil {
 		return fmt.Errorf("cases: delete case_files %d: %w", evidenceFileID, err)
@@ -222,7 +219,7 @@ func DownloadEvidence(ctx context.Context, sqlDB *sql.DB, store *storage.Client,
 
 	q := db.New(sqlDB)
 
-	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	caseRow, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return EvidenceContent{}, ErrNotFound
@@ -231,8 +228,8 @@ func DownloadEvidence(ctx context.Context, sqlDB *sql.DB, store *storage.Client,
 	}
 
 	fileRow, err := q.GetCaseFile(ctx, db.GetCaseFileParams{
-		ID:             evidenceID,
-		CriminalCaseID: caseRow.ID,
+		ID:              evidenceID,
+		BiometricCaseID: caseRow.ID,
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -256,7 +253,7 @@ func DownloadEvidence(ctx context.Context, sqlDB *sql.DB, store *storage.Client,
 	}, nil
 }
 
-func fileFromRow(r db.ListCaseFilesByCriminalCaseRow) File {
+func fileFromRow(r db.ListCaseFilesByBiometricCaseRow) File {
 	return File{
 		ID:          r.ID,
 		Category:    r.Category,

@@ -317,12 +317,15 @@ const TaskTypeSyncFace = "embedding:sync_face"
 // dataset grows.
 const syncFaceDebounce = 30 * time.Second
 
-// faceMatchThreshold is the biometricmatch.Run threshold this automatic
-// pipeline applies. Deliberately separate from cmd/match-embeddings' own
-// -threshold flag (kept for an operator's ad-hoc/experimental runs at a
-// different threshold) -- this constant is what actually runs continuously,
-// so it isn't something a flag can accidentally point at the wrong value.
-const faceMatchThreshold = 0.4
+// DefaultFaceBand is what this automatic pipeline applies while no face
+// threshold version has been set in match_thresholds: similarity 0.6 (cosine
+// distance 0.4), no review band -- the cutoff it has always used. A deploying
+// organization sets its own, from its own validation, with cmd/match-threshold
+// (biometricmatch.SetBand); each version is recorded with its provenance, so
+// what actually runs continuously is never an unexplained value. Deliberately
+// separate from cmd/match-embeddings' own -threshold flag, which stays for an
+// operator's ad-hoc runs.
+var DefaultFaceBand = biometricmatch.Band{Review: 0.6, Confirm: 0.6}
 
 // NewSyncFaceTask builds the task that triggers SyncFace. It carries no
 // payload -- SyncFace always processes whatever is currently unmatched or
@@ -358,9 +361,10 @@ func HandleSyncFace(sqlDB *sql.DB, driver neo4j.DriverWithContext) func(context.
 	}
 }
 
-// SyncFace runs biometricmatch.Run for FACE_AURAFACE_512 embeddings at
-// faceMatchThreshold, then cluster.Run to reconcile clusters from whatever
-// confirmed decisions resulted -- the face-only automatic pipeline
+// SyncFace runs biometricmatch.RunBand for FACE_AURAFACE_512 embeddings under
+// the current face threshold version (read on every call, so a new version
+// applies without a restart; DefaultFaceBand when none is set), then
+// cluster.Run to reconcile clusters from whatever confirmed decisions resulted -- the face-only automatic pipeline
 // requested; fingerprint has no embedding/matching pipeline to drive yet.
 // Safe to call arbitrarily often: matching only ever touches
 // feature_embeddings rows not yet matched (marking them matched as it goes),
@@ -368,7 +372,11 @@ func HandleSyncFace(sqlDB *sql.DB, driver neo4j.DriverWithContext) func(context.
 // confirmed-decision set, so back-to-back calls with nothing new to do just
 // redo the same (cheap, index-backed) reads and write nothing.
 func SyncFace(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) error {
-	if _, err := biometricmatch.Run(ctx, sqlDB, EmbeddingType, faceMatchThreshold, EmbeddingType); err != nil {
+	version, err := biometricmatch.CurrentBand(ctx, sqlDB, EmbeddingType, DefaultFaceBand)
+	if err != nil {
+		return fmt.Errorf("embedding: sync face match: %w", err)
+	}
+	if _, err := biometricmatch.RunBand(ctx, sqlDB, EmbeddingType, version, EmbeddingType); err != nil {
 		return fmt.Errorf("embedding: sync face match: %w", err)
 	}
 	if _, err := cluster.Run(ctx, sqlDB, driver); err != nil {

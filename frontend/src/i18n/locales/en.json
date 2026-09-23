@@ -24,7 +24,7 @@
     "dashboard": "Dashboard",
     "home": "Home",
     "userProfile": "User Profile",
-    "criminalCases": "Criminal Cases",
+    "criminalCases": "Biometric Cases",
     "persons": "Persons",
     "clusters": "Clusters",
     "new": "new",
@@ -36,14 +36,19 @@
     "support": "Support",
     "signOut": "Sign out"
   },
-  "caseType": {
-    "all": "All types",
+  "modality": {
+    "all": "All modalities",
     "facial": "Facial",
     "fingerprint": "Fingerprint"
   },
+  "caseType": {
+    "all": "All case types",
+    "criminal": "Criminal",
+    "civil": "Civil"
+  },
   "cases": {
-    "title": "Criminal Cases",
-    "metaDescription": "List of criminal cases",
+    "title": "Biometric Cases",
+    "metaDescription": "List of biometric cases",
     "subtitle": "Cases imported into TrackID, filterable by modality.",
     "loadError": "Could not load cases",
     "created": "Case {{caseId}} created.",
@@ -52,10 +57,11 @@
     "count_one": "{{count}} case",
     "count_other": "{{count}} cases",
     "newCase": "New Case",
-    "empty": "No criminal cases found.",
+    "empty": "No biometric cases found.",
     "columns": {
       "caseId": "Case ID",
       "type": "Type",
+      "modality": "Modality",
       "description": "Description"
     }
   },
@@ -189,7 +195,7 @@
     "hint": "Hover a node to see its details.",
     "openPerson": "Open person profile",
     "openCase": "Open case",
-    "caseType": "Case type",
+    "modality": "Modality",
     "connections": "Connections",
     "linkedTo": "Linked to",
     "kind": {
@@ -199,12 +205,13 @@
     }
   },
   "createCase": {
-    "selectType": "Select type",
+    "selectType": "Select case type",
     "error": "Could not create case",
     "autoNumber": "The case number is generated automatically.",
     "descriptionPlaceholder": "Brief description of the case",
     "creating": "Creating...",
-    "create": "Create Case"
+    "create": "Create Case",
+    "selectModality": "Select modality"
   },
   "dropzone": {
     "dropHere": "Drop files here",

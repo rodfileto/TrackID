@@ -1,7 +1,7 @@
 # TrackID
 
 TrackID is a reusable package for intelligence and forensic agencies that manage
-criminal cases for biometric traces (fingerprints, faces, and other modalities).
+biometric cases (criminal, and civil such as DVI) for biometric traces (fingerprints, faces, and other modalities).
 
 It provides a stable core — the Postgres and Neo4j schemas plus all non-import logic —
 and a single, well-defined extension point: **import commands**. An organization builds
@@ -86,7 +86,7 @@ organizations import to build their import commands) and an **internal** runtime
 
 - `cmd/` — thin `main()` wrappers: `migrate` (Postgres schema), `trackid` (API server
   + frontend), `sync-graph`, `sync-identity`, `cluster-biometrics`, `identify`, and
-  `match-embeddings`
+  `match-embeddings`, `match-threshold` (the matcher's versioned review/confirm cutoffs)
 - `frontend/` — React + Vite, based on the [TailAdmin React](https://github.com/TailAdmin/free-react-tailwind-admin-dashboard)
   template; `npm run build` produces the bundle `internal/web` serves
 - `quarto/` — technical report and ontology documentation
@@ -102,7 +102,7 @@ To integrate with this package, an organization:
 1. depends on `github.com/rodfileto/trackid`;
 2. writes import commands that read its own formats and write into the core tables —
    the enrollment hierarchy (`person`, `identity_document`, `identity_register`,
-   `identity_file`), the evidence hierarchy (`criminal_cases`, `case_files`,
+   `identity_file`), the evidence hierarchy (`biometric_cases`, `case_files`,
    `case_evidences`, `case_traces`, `case_codifications`), the unified
    `biometricfeature`, and the `biometric_decisions` log — via the queries declared in
    `db/queries.sql`;

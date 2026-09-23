@@ -143,7 +143,7 @@ func CreateTracesHandler(db *sql.DB, queue *asynq.Client) gin.HandlerFunc {
 				context.JSON(http.StatusNotFound, gin.H{"error": "evidence not found"})
 				return
 			}
-			if errors.Is(err, cases.ErrUnsupportedCaseType) || errors.Is(err, cases.ErrNotImage) {
+			if errors.Is(err, cases.ErrUnsupportedModality) || errors.Is(err, cases.ErrNotImage) {
 				context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}

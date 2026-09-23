@@ -13,13 +13,14 @@ SELECT id, nome, ultimo_nome, matricula, cargo, username, email
 FROM users
 WHERE id = $1;
 
--- name: UpsertCriminalCase :one
+-- name: UpsertBiometricCase :one
 -- (xmax = 0) tells a real insert apart from a row that already existed: RowsAffected() is
 -- 1 either way, so callers that need to report insert-vs-update counts need this instead.
-INSERT INTO criminal_cases (case_id, case_type, description)
-VALUES ($1, $2, $3)
+INSERT INTO biometric_cases (case_id, case_type, modality, description)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT (case_id) DO UPDATE SET
     case_type = EXCLUDED.case_type,
+    modality = EXCLUDED.modality,
     description = EXCLUDED.description,
     updated_at = NOW()
 RETURNING id, (xmax = 0) AS inserted;
@@ -27,34 +28,34 @@ RETURNING id, (xmax = 0) AS inserted;
 -- name: MaxCaseNumberForYear :one
 -- Returns the highest case_number already used for a year, or 0 when none yet.
 SELECT COALESCE(MAX(case_number), 0)::int4 AS max_number
-FROM criminal_cases
+FROM biometric_cases
 WHERE case_year = sqlc.arg(case_year)::int4;
 
--- name: CreateCriminalCase :one
-INSERT INTO criminal_cases (case_id, case_type, description, case_year, case_number)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING case_id, case_type, description;
+-- name: CreateBiometricCase :one
+INSERT INTO biometric_cases (case_id, case_type, modality, description, case_year, case_number)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING case_id, case_type, modality, description;
 
--- name: CountCriminalCases :one
-SELECT COUNT(*) FROM criminal_cases;
+-- name: CountBiometricCases :one
+SELECT COUNT(*) FROM biometric_cases;
 
--- name: ListCriminalCases :many
-SELECT case_id, case_type, description
-FROM criminal_cases
+-- name: ListBiometricCases :many
+SELECT case_id, case_type, modality, description
+FROM biometric_cases
 ORDER BY case_id
 LIMIT $1 OFFSET $2;
 
--- name: GetCriminalCaseByCaseID :one
-SELECT id, case_id, case_type, description
-FROM criminal_cases
+-- name: GetBiometricCaseByCaseID :one
+SELECT id, case_id, case_type, modality, description
+FROM biometric_cases
 WHERE case_id = $1;
 
--- name: UpdateCriminalCaseDescription :exec
-UPDATE criminal_cases SET description = $2, updated_at = NOW()
+-- name: UpdateBiometricCaseDescription :exec
+UPDATE biometric_cases SET description = $2, updated_at = NOW()
 WHERE id = $1;
 
--- name: ListCriminalCaseIDsByType :many
-SELECT case_id FROM criminal_cases WHERE case_type = $1 ORDER BY case_id;
+-- name: ListBiometricCaseIDsByModality :many
+SELECT case_id FROM biometric_cases WHERE modality = $1 ORDER BY case_id;
 
 -- name: UpsertPerson :one
 INSERT INTO person (person_id, meta)
@@ -136,16 +137,16 @@ SELECT id, feature_type, provenance, identity_file_id, case_trace_id
 FROM biometricfeature
 ORDER BY id;
 
--- name: ListCaseFilesByCriminalCase :many
-SELECT id, criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes, created_at
+-- name: ListCaseFilesByBiometricCase :many
+SELECT id, biometric_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes, created_at
 FROM case_files
-WHERE criminal_case_id = $1
+WHERE biometric_case_id = $1
 ORDER BY id;
 
 -- name: GetCaseFile :one
 SELECT id, category, filename, storage_ref, content_type
 FROM case_files
-WHERE id = $1 AND criminal_case_id = $2;
+WHERE id = $1 AND biometric_case_id = $2;
 
 -- name: CountCaseTracesByCaseFile :one
 -- Traces marked on an evidence file, via case_evidences.case_file_id -- used
@@ -156,12 +157,12 @@ JOIN case_evidences ce ON ce.id = ct.evidence_id
 WHERE ce.case_file_id = $1;
 
 -- name: DeleteCaseFile :execrows
-DELETE FROM case_files WHERE id = $1 AND criminal_case_id = $2 AND category = 'evidence';
+DELETE FROM case_files WHERE id = $1 AND biometric_case_id = $2 AND category = 'evidence';
 
 -- name: UpsertCaseFile :one
-INSERT INTO case_files (criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
+INSERT INTO case_files (biometric_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-ON CONFLICT (criminal_case_id, category, hash_id) DO UPDATE SET
+ON CONFLICT (biometric_case_id, category, hash_id) DO UPDATE SET
     media_type = EXCLUDED.media_type,
     filename = EXCLUDED.filename,
     source_path = EXCLUDED.source_path,
@@ -172,14 +173,14 @@ ON CONFLICT (criminal_case_id, category, hash_id) DO UPDATE SET
 RETURNING id, created_at;
 
 -- name: CreateCaseFile :one
-INSERT INTO case_files (criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
+INSERT INTO case_files (biometric_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING id, created_at;
 
 -- name: UpsertCaseEvidence :one
-INSERT INTO case_evidences (criminal_case_id, sequence, case_file_id, description)
+INSERT INTO case_evidences (biometric_case_id, sequence, case_file_id, description)
 VALUES ($1, $2, $3, $4)
-ON CONFLICT (criminal_case_id, sequence) DO UPDATE SET
+ON CONFLICT (biometric_case_id, sequence) DO UPDATE SET
     case_file_id = EXCLUDED.case_file_id,
     description = EXCLUDED.description,
     updated_at = NOW()
@@ -187,17 +188,17 @@ RETURNING id;
 
 -- name: GetCaseEvidenceByCaseFile :one
 SELECT id FROM case_evidences
-WHERE criminal_case_id = $1 AND case_file_id = $2;
+WHERE biometric_case_id = $1 AND case_file_id = $2;
 
 -- name: CreateCaseEvidenceForFile :one
 -- Case files added through AddEvidence only get a case_files row -- case_traces
 -- hangs off case_evidences (MODEL.md section 2.2), so trace detection creates
 -- the case_evidences row for a case_file on first use. sequence is the next
 -- free slot for the case, since case_files added this way never carry one.
-INSERT INTO case_evidences (criminal_case_id, sequence, case_file_id)
+INSERT INTO case_evidences (biometric_case_id, sequence, case_file_id)
 SELECT $1, COALESCE(MAX(sequence), 0) + 1, $2
 FROM case_evidences
-WHERE criminal_case_id = $1
+WHERE biometric_case_id = $1
 RETURNING id;
 
 -- name: MaxCaseTraceSequence :one
@@ -211,10 +212,10 @@ SELECT ct.id, ct.sequence, ct.trace_type, ct.box_x1, ct.box_y1, ct.box_x2, ct.bo
 FROM case_traces ct
 JOIN case_evidences ce ON ce.id = ct.evidence_id
 LEFT JOIN biometricfeature bf ON bf.case_trace_id = ct.id
-WHERE ce.criminal_case_id = $1 AND ce.case_file_id = $2
+WHERE ce.biometric_case_id = $1 AND ce.case_file_id = $2
 ORDER BY ct.sequence;
 
--- name: ListCaseCodificationsByCriminalCase :many
+-- name: ListCaseCodificationsByBiometricCase :many
 -- Every codification recorded across every trace of a case, with enough
 -- about its trace (box, sequence), the trace's evidence file (sequence, id,
 -- filename) and its own saved image (case_file_id, if the analyst adjusted
@@ -228,7 +229,7 @@ FROM case_codifications cd
 JOIN case_traces ct ON ct.id = cd.trace_id
 JOIN case_evidences ce ON ce.id = ct.evidence_id
 JOIN case_files cf ON cf.id = ce.case_file_id
-WHERE ce.criminal_case_id = $1
+WHERE ce.biometric_case_id = $1
 ORDER BY ce.sequence, ct.sequence, cd.sequence;
 
 -- name: DeleteCaseTrace :execrows
@@ -240,7 +241,7 @@ DELETE FROM case_traces ct
 USING case_evidences ce
 WHERE ct.id = $1
   AND ct.evidence_id = ce.id
-  AND ce.criminal_case_id = $2
+  AND ce.biometric_case_id = $2
   AND ce.case_file_id = $3;
 
 -- name: UpsertCaseTrace :one
@@ -278,7 +279,7 @@ UPDATE case_codifications SET case_file_id = $2, updated_at = NOW() WHERE id = $
 SELECT ct.id, ct.trace_type
 FROM case_traces ct
 JOIN case_evidences ce ON ce.id = ct.evidence_id
-WHERE ct.id = $1 AND ce.criminal_case_id = $2 AND ce.case_file_id = $3;
+WHERE ct.id = $1 AND ce.biometric_case_id = $2 AND ce.case_file_id = $3;
 
 -- name: MaxCodificationPointSequence :one
 SELECT COALESCE(MAX(sequence), 0)::smallint AS max_sequence
@@ -365,7 +366,7 @@ LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
 LEFT JOIN case_files ccf ON ccf.id = cd.case_file_id
 LEFT JOIN biometricfeature bf ON bf.case_trace_id = ct.id
 LEFT JOIN feature_embeddings fe ON fe.biometricfeature_id = bf.id AND fe.embedding_type = sqlc.arg(embedding_type)
-WHERE cd.id = sqlc.arg(codification_id) AND ce.criminal_case_id = sqlc.arg(criminal_case_id);
+WHERE cd.id = sqlc.arg(codification_id) AND ce.biometric_case_id = sqlc.arg(biometric_case_id);
 
 -- name: ListUnmatchedFeatureEmbeddings :many
 SELECT id, biometricfeature_id, embedding_type, embedding::text AS embedding, model_version
@@ -405,7 +406,7 @@ LIMIT sqlc.arg(result_limit);
 
 -- name: FindNearestCasesByFaceEmbedding :many
 -- Nearest QUESTIONED (case evidence) face embeddings to a query vector,
--- joined up to the criminal case that owns the matching trace -- the
+-- joined up to the biometric case that owns the matching trace -- the
 -- case-evidence counterpart to FindNearestPersonsByFaceEmbedding. Only
 -- QUESTIONED features match: a KNOWN (identity_file) embedding has no
 -- case_trace_id, so the join to case_traces excludes it. A case can surface
@@ -418,7 +419,7 @@ LIMIT sqlc.arg(result_limit);
 -- already produced one -- already just the face, no box needed -- or
 -- otherwise the evidence file (evidence_file_id) plus the trace's own box
 -- to crop it down to just this face.
-SELECT cc.case_id, cc.case_type, cc.description, ct.id AS case_trace_id,
+SELECT bc.case_id, bc.modality, bc.description, ct.id AS case_trace_id,
        tcf.id AS trace_crop_file_id, ecf.id AS evidence_file_id,
        ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2,
        fe.embedding <=> sqlc.arg(embedding)::vector AS distance
@@ -426,7 +427,7 @@ FROM feature_embeddings fe
 JOIN biometricfeature bf ON bf.id = fe.biometricfeature_id
 JOIN case_traces ct ON ct.id = bf.case_trace_id
 JOIN case_evidences ce ON ce.id = ct.evidence_id
-JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+JOIN biometric_cases bc ON bc.id = ce.biometric_case_id
 LEFT JOIN case_files tcf ON tcf.id = ct.case_file_id
 LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
 WHERE fe.embedding_type = sqlc.arg(embedding_type)
@@ -462,27 +463,27 @@ UPDATE feature_embeddings SET matched_at = NOW(), updated_at = NOW()
 WHERE id = $1;
 
 -- name: InsertCaseDecision :one
-INSERT INTO case_decisions (criminal_case_id, decision, system_source, username, notes)
+INSERT INTO case_decisions (biometric_case_id, decision, system_source, username, notes)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, criminal_case_id, decision, system_source, username, notes, decided_at, created_at;
+RETURNING id, biometric_case_id, decision, system_source, username, notes, decided_at, created_at;
 
--- name: ListCaseDecisionsByCriminalCase :many
-SELECT id, criminal_case_id, decision, system_source, username, notes, decided_at, created_at
+-- name: ListCaseDecisionsByBiometricCase :many
+SELECT id, biometric_case_id, decision, system_source, username, notes, decided_at, created_at
 FROM case_decisions
-WHERE criminal_case_id = $1
+WHERE biometric_case_id = $1
 ORDER BY decided_at;
 
--- name: ListAllCriminalCases :many
-SELECT case_id, case_type, description
-FROM criminal_cases
+-- name: ListAllBiometricCases :many
+SELECT case_id, case_type, modality, description
+FROM biometric_cases
 ORDER BY case_id;
 
 -- name: ListQuestionedFeatures :many
-SELECT bf.case_trace_id, bf.feature_type, cc.case_id
+SELECT bf.case_trace_id, bf.feature_type, bc.case_id
 FROM biometricfeature bf
 JOIN case_traces tr ON tr.id = bf.case_trace_id
 JOIN case_evidences ev ON ev.id = tr.evidence_id
-JOIN criminal_cases cc ON cc.id = ev.criminal_case_id
+JOIN biometric_cases bc ON bc.id = ev.biometric_case_id
 WHERE bf.provenance = 'QUESTIONED'
 ORDER BY bf.case_trace_id;
 
@@ -515,7 +516,7 @@ JOIN person p ON p.id = d.person_id
 WHERE bf.provenance = 'KNOWN';
 
 -- name: ListClusters :many
-SELECT id, case_type
+SELECT id, modality
 FROM clusters
 ORDER BY id;
 
@@ -524,13 +525,13 @@ SELECT cluster_id, feature_id
 FROM cluster_members;
 
 -- name: ListClusterMembersJoined :many
-SELECT c.id AS cluster_id, c.case_type, m.feature_id
+SELECT c.id AS cluster_id, c.modality, m.feature_id
 FROM clusters c
 JOIN cluster_members m ON m.cluster_id = c.id
 ORDER BY c.id, m.feature_id;
 
 -- name: CreateCluster :one
-INSERT INTO clusters (case_type) VALUES ($1) RETURNING id;
+INSERT INTO clusters (modality) VALUES ($1) RETURNING id;
 
 -- name: InsertClusterMember :exec
 INSERT INTO cluster_members (cluster_id, feature_id) VALUES ($1, $2);
@@ -619,7 +620,7 @@ WHERE feature_id = ANY(@feature_ids::text[])
 ORDER BY feature_id, counterpart_id, decided_at;
 
 -- name: ListClustersByIDs :many
-SELECT id, case_type, created_at
+SELECT id, modality, created_at
 FROM clusters
 WHERE id = ANY(@cluster_ids::bigint[])
 ORDER BY id;
@@ -632,16 +633,16 @@ ORDER BY cluster_id, feature_id;
 
 -- name: ListCasesByCaseTraceIDs :many
 -- Resolves a set of case_trace ids (parsed back out of QUESTIONED cluster
--- member feature ids -- see graph.QuestionedFeatureID) to their criminal
+-- member feature ids -- see graph.QuestionedFeatureID) to their biometric
 -- cases. One case can own several of the given traces (rows are not
 -- de-duplicated by case) so a caller can re-attribute each case back to the
 -- cluster that supplied the matching trace.
-SELECT cc.case_id, cc.case_type, cc.description, ct.id AS case_trace_id
+SELECT bc.case_id, bc.modality, bc.description, ct.id AS case_trace_id
 FROM case_traces ct
 JOIN case_evidences ce ON ce.id = ct.evidence_id
-JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+JOIN biometric_cases bc ON bc.id = ce.biometric_case_id
 WHERE ct.id = ANY(@case_trace_ids::bigint[])
-ORDER BY cc.case_id, ct.id;
+ORDER BY bc.case_id, ct.id;
 
 -- name: ListKnownClusterMembers :many
 -- Resolves a set of identity_file ids (KNOWN cluster member feature ids --
@@ -662,12 +663,12 @@ WHERE f.id = ANY(@identity_file_ids::bigint[]);
 -- they belong to, for rendering a cluster's membership (see
 -- person.buildClusters). Same join and thumbnail-source resolution as
 -- FindNearestCasesByFaceEmbedding, minus the embedding distance.
-SELECT cc.case_id, cc.case_type, cc.description, ct.id AS case_trace_id,
+SELECT bc.case_id, bc.modality, bc.description, ct.id AS case_trace_id,
        tcf.id AS trace_crop_file_id, ecf.id AS evidence_file_id,
        ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2
 FROM case_traces ct
 JOIN case_evidences ce ON ce.id = ct.evidence_id
-JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+JOIN biometric_cases bc ON bc.id = ce.biometric_case_id
 LEFT JOIN case_files tcf ON tcf.id = ct.case_file_id
 LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
 WHERE ct.id = ANY(@case_trace_ids::bigint[]);
@@ -688,15 +689,15 @@ WHERE r.name ILIKE $1
 ORDER BY r.name
 LIMIT $2;
 
--- name: CountPersonCasesByType :many
--- For each of the given persons, the number of distinct criminal cases
--- linked through their resolved biometric clusters, grouped by case_type --
+-- name: CountPersonCasesByModality :many
+-- For each of the given persons, the number of distinct biometric cases
+-- linked through their resolved biometric clusters, grouped by modality --
 -- the "N facial / N fingerprint" badge a person search result shows. Same
 -- KNOWN feature -> cluster -> QUESTIONED trace -> case resolution as
 -- person.ListCases/buildCases (feature_id text format from
 -- graph.KnownFeatureID/QuestionedFeatureID), batched across every requested
 -- person in one query instead of one loadPersonAndClusterIDs call per row.
-SELECT p.person_id, cc.case_type, COUNT(DISTINCT cc.id) AS case_count
+SELECT p.person_id, bc.modality, COUNT(DISTINCT bc.id) AS case_count
 FROM person p
 JOIN identity_document d ON d.person_id = p.id
 JOIN identity_register r ON r.document_id = d.id
@@ -705,10 +706,10 @@ JOIN cluster_members known_cm ON known_cm.feature_id = f.id::text
 JOIN cluster_members quest_cm ON quest_cm.cluster_id = known_cm.cluster_id
 JOIN case_traces ct ON quest_cm.feature_id = 'TRACE:' || ct.id || '#feature'
 JOIN case_evidences ce ON ce.id = ct.evidence_id
-JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+JOIN biometric_cases bc ON bc.id = ce.biometric_case_id
 WHERE p.person_id = ANY(@person_ids::text[])
-GROUP BY p.person_id, cc.case_type
-ORDER BY p.person_id, cc.case_type;
+GROUP BY p.person_id, bc.modality
+ORDER BY p.person_id, bc.modality;
 
 -- name: UpsertBiometricTemplate :one
 -- Re-extraction replaces the template and clears matched_at, so the new template goes
@@ -747,3 +748,21 @@ WHERE bf.feature_type = 'FINGERPRINT_TEMPLATE'
       WHERE bt.biometricfeature_id = bf.id AND bt.template_type = sqlc.arg(template_type)
   )
 ORDER BY bf.id;
+
+-- name: GetCurrentMatchThreshold :one
+SELECT id, embedding_type, review_threshold, confirm_threshold, source, created_by, created_at
+FROM match_thresholds
+WHERE embedding_type = $1
+ORDER BY id DESC
+LIMIT 1;
+
+-- name: InsertMatchThreshold :one
+INSERT INTO match_thresholds (embedding_type, review_threshold, confirm_threshold, source, created_by)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, embedding_type, review_threshold, confirm_threshold, source, created_by, created_at;
+
+-- name: ListMatchThresholds :many
+SELECT id, embedding_type, review_threshold, confirm_threshold, source, created_by, created_at
+FROM match_thresholds
+WHERE embedding_type = $1
+ORDER BY id DESC;

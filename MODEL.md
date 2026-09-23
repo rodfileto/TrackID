@@ -47,19 +47,25 @@ many files; each file yields one or more features.
 ### 2.2 Evidence hierarchy (QUESTIONED)
 
 ```
-criminal_cases ──< case_files
-criminal_cases ──< case_evidences ──< case_traces ──< case_codifications
+biometric_cases ──< case_files
+biometric_cases ──< case_evidences ──< case_traces ──< case_codifications
 case_traces ── biometricfeature
 ```
 
 | Table | Role |
 | --- | --- |
-| `criminal_cases` | the base case (`case_id`, `case_type` = `FACIAL` \| `FINGERPRINT`) |
-| `case_files` | raw files attached to a case (`evidence`, `documento`, `forensic_report`) |
+| `biometric_cases` | the base case (`case_id`; `case_type` = `CRIMINAL` \| `CIVIL`; `modality` = `FACIAL` \| `FINGERPRINT`) |
+| `case_files` | raw files attached to a case (`evidence`, `documento`, `forensic_report`, `face_crop`, `codification_image`) |
 | `case_evidences` | one evidence item within a case (e.g. a lift card, an image) |
 | `case_traces` | one biometric trace within an evidence (one face in an image, one lift on a card) |
 | `case_codifications` | one processed encoding of a trace (e.g. a minutiae set, an embedding) |
 | `biometricfeature` | the typed QUESTIONED feature for a trace |
+
+A biometric case is any case with questioned biometric material to identify. `case_type`
+is its legal nature: `CRIMINAL` (e.g. latent prints from a crime scene) or `CIVIL`
+(non-criminal identification such as disaster victim identification or unidentified dead
+bodies). `modality` is the biometric the case works with. The two are independent, and
+the rest of the hierarchy is the same for both case types.
 
 A codification is a processing artifact, not a comparison record — the pairwise comparison
 outcome lives entirely in `biometric_decisions` (section 3), keyed by the two features'
@@ -84,6 +90,16 @@ a *derived view*, never written authoritatively to the graph.
 
 A pair progresses through roles (SYSTEM → VERIFICATOR → REVIEWER, with INCONSISTENCE only
 on disagreement); the full chain matters for audit, not just the outcome.
+
+The automatic matcher's cutoffs are data, not code: `match_thresholds` holds one append-only
+version per row (review and confirm cutoffs, as similarities on the scale of `confidence`, with
+their source), and the latest row per embedding type is current. A pair at or above the confirm
+cutoff gets a SYSTEM POSITIVE, which is CONFIRMED on its own; between the two cutoffs, a SYSTEM
+INCONCLUSIVE, which stays PENDING_REVIEW for an examiner — the review band; below, nothing.
+Each SYSTEM decision records the cutoff it was classified against in `threshold` and cites its
+version (`related_reference_kind = 'match_threshold'`). With no version set, faces use
+similarity 0.6 with no band. Versions are set with `cmd/match-threshold`, from each
+organization's own validation.
 
 ## 4. Clustering
 
@@ -135,12 +151,18 @@ organization import cmd ──► Postgres (the tables above)
 
 Every logic entry point reads Postgres — never an external file or a third-party system.
 
+File bytes live in object storage (MinIO/S3), referenced by `storage_ref`. The layout is
+trackid's, content-addressed by sha256: `identity/<register>/<file_type>/<sha256>`,
+`evidence/<case>/<sha256>` and `codification/<case>/<trace>/<sha256>`. An import cmd holding
+raw bytes uploads them with `identity.UploadFile` / `cases.UploadEvidenceFile`, which return the
+`FileInput` to pass to `Ingest`; `Ingest` itself never touches storage.
+
 ## 7. Implementation status
 
 Done (core), end to end:
 
-- **Schema** (`db/migrations/001`–`006`): `users`; `person`, `identity_document`,
-  `identity_register`, `identity_file` (the enrollment hierarchy); `criminal_cases`,
+- **Schema** (`db/migrations/001`–`008`): `users`; `person`, `identity_document`,
+  `identity_register`, `identity_file` (the enrollment hierarchy); `biometric_cases`,
   `case_files`, `case_evidences`, `case_traces`, `case_codifications` (+
   `case_fragment_codes` view) (the evidence hierarchy); `biometricfeature` (unified
   KNOWN+QUESTIONED, exactly-one-source constraint against `identity_file`/`case_traces`);

@@ -11,7 +11,7 @@ type edge struct {
 
 // clusterState is a persisted cluster's current shape.
 type clusterState struct {
-	caseType string
+	modality string
 	members  []string
 }
 
@@ -65,7 +65,7 @@ func (u *unionFind) union(a, b string) {
 // reconcile computes the incremental clustering plan: how existing clusters
 // extend, merge, split, and how new clusters form, given the confirmed edges.
 //
-// caseTypes maps evidence identifiers (criminal_cases.case_id) to their
+// modalities maps evidence identifiers (biometric_cases.case_id) to their
 // modality. edges are the confirmed comparisons. existing maps each persisted
 // cluster id to its current case type and members.
 //
@@ -73,9 +73,9 @@ func (u *unionFind) union(a, b string) {
 // members — so when a rejected comparison splits a cluster, the component
 // containing the anchor keeps the id and the rest form new clusters. When two
 // clusters are joined by a new edge, the oldest id survives.
-func reconcile(caseTypes map[string]string, edges []edge, existing map[int64]clusterState) plan {
+func reconcile(modalities map[string]string, edges []edge, existing map[int64]clusterState) plan {
 	nodeModality := map[string]string{}
-	for id, ct := range caseTypes {
+	for id, ct := range modalities {
 		nodeModality[id] = ct
 	}
 
@@ -84,7 +84,7 @@ func reconcile(caseTypes map[string]string, edges []edge, existing map[int64]clu
 		for _, m := range cs.members {
 			memberCluster[m] = id
 			if _, ok := nodeModality[m]; !ok {
-				nodeModality[m] = cs.caseType
+				nodeModality[m] = cs.modality
 			}
 		}
 	}

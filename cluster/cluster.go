@@ -46,14 +46,14 @@ func Run(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) (St
 		return Stats{}, err
 	}
 
-	caseTypes := make(map[string]string, len(featureInfos))
+	modalities := make(map[string]string, len(featureInfos))
 	featureTypes := make(map[string]string, len(featureInfos))
 	for id, fi := range featureInfos {
-		caseTypes[id] = fi.caseType
+		modalities[id] = fi.modality
 		featureTypes[id] = fi.featureType
 	}
 
-	p := reconcile(caseTypes, edges, existing)
+	p := reconcile(modalities, edges, existing)
 
 	if err := apply(ctx, sqlDB, p, memberCluster, existing); err != nil {
 		return Stats{}, err
@@ -83,11 +83,11 @@ func Plan(ctx context.Context, sqlDB *sql.DB) (Stats, error) {
 		return Stats{}, err
 	}
 
-	caseTypes := make(map[string]string, len(featureInfos))
+	modalities := make(map[string]string, len(featureInfos))
 	for id, fi := range featureInfos {
-		caseTypes[id] = fi.caseType
+		modalities[id] = fi.modality
 	}
-	return stats(reconcile(caseTypes, edges, existing)), nil
+	return stats(reconcile(modalities, edges, existing)), nil
 }
 
 func stats(p plan) Stats {
@@ -108,7 +108,7 @@ func stats(p plan) Stats {
 
 // featureInfo is a biometricfeature's modality (case type) and graph feature type.
 type featureInfo struct {
-	caseType    string
+	modality    string
 	featureType string
 }
 
@@ -123,7 +123,7 @@ func loadFeatures(ctx context.Context, sqlDB *sql.DB) (map[string]featureInfo, e
 
 	out := map[string]featureInfo{}
 	for _, r := range rows {
-		caseType, ok := graph.CaseTypeForFeatureType(r.FeatureType)
+		modality, ok := graph.ModalityForFeatureType(r.FeatureType)
 		if !ok {
 			continue
 		}
@@ -133,14 +133,14 @@ func loadFeatures(ctx context.Context, sqlDB *sql.DB) (map[string]featureInfo, e
 		} else {
 			featureID = graph.QuestionedFeatureID(r.CaseTraceID.Int64)
 		}
-		out[featureID] = featureInfo{caseType: caseType, featureType: r.FeatureType}
+		out[featureID] = featureInfo{modality: modality, featureType: r.FeatureType}
 	}
 	return out, nil
 }
 
 // loadConfirmedEdges reads biometric_decisions and returns the edges whose
 // derived status is CONFIRMED. The decision modality (FACE/FINGERPRINT) is
-// mapped onto the clusters table's case_type vocabulary (FACIAL/FINGERPRINT).
+// mapped onto the clusters table's modality vocabulary (FACIAL/FINGERPRINT).
 func loadConfirmedEdges(ctx context.Context, sqlDB *sql.DB) ([]edge, error) {
 	pairs, err := loadConfirmedPairs(ctx, sqlDB)
 	if err != nil {
@@ -151,7 +151,7 @@ func loadConfirmedEdges(ctx context.Context, sqlDB *sql.DB) ([]edge, error) {
 		edges = append(edges, edge{
 			left:     p.featureA,
 			right:    p.featureB,
-			modality: caseTypeForModality(p.modality),
+			modality: clusterModalityFor(p.modality),
 		})
 	}
 	return edges, nil
@@ -166,7 +166,7 @@ func loadClusters(ctx context.Context, sqlDB *sql.DB) (map[int64]clusterState, m
 	}
 	existing := map[int64]clusterState{}
 	for _, c := range clusters {
-		existing[c.ID] = clusterState{caseType: c.CaseType}
+		existing[c.ID] = clusterState{modality: c.Modality}
 	}
 
 	members, err := q.ListClusterMembers(ctx)
@@ -261,7 +261,7 @@ func materialize(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithCont
 	}
 
 	type clusterData struct {
-		caseType string
+		modality string
 		members  []string
 	}
 	var order []int64
@@ -269,7 +269,7 @@ func materialize(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithCont
 	for _, r := range rows {
 		c, ok := byID[r.ClusterID]
 		if !ok {
-			c = &clusterData{caseType: r.CaseType}
+			c = &clusterData{modality: r.Modality}
 			byID[r.ClusterID] = c
 			order = append(order, r.ClusterID)
 		}
@@ -280,7 +280,7 @@ func materialize(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithCont
 	ids := make([]string, 0, len(order))
 	for _, id := range order {
 		c := byID[id]
-		mapping, ok := graph.Modalities[c.caseType]
+		mapping, ok := graph.Modalities[c.modality]
 		if !ok {
 			continue
 		}
