@@ -141,6 +141,12 @@ organization import cmd ──► Postgres (the tables above)
 
 Every logic entry point reads Postgres — never an external file or a third-party system.
 
+File bytes live in object storage (MinIO/S3), referenced by `storage_ref`. The layout is
+trackid's, content-addressed by sha256: `identity/<register>/<file_type>/<sha256>`,
+`evidence/<case>/<sha256>` and `codification/<case>/<trace>/<sha256>`. An import cmd holding
+raw bytes uploads them with `identity.UploadFile` / `cases.UploadEvidenceFile`, which return the
+`FileInput` to pass to `Ingest`; `Ingest` itself never touches storage.
+
 ## 7. Implementation status
 
 Done (core), end to end:

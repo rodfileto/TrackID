@@ -2,9 +2,7 @@ package cases
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -111,14 +109,11 @@ func AddEvidence(ctx context.Context, sqlDB *sql.DB, store *storage.Client, case
 		return File{}, err
 	}
 
-	hash := sha256.Sum256(input.Data)
-	hashHex := hex.EncodeToString(hash[:])
-
-	objectKey := fmt.Sprintf("evidence/%s/%s", caseID, hashHex)
-	storageRef, err := store.Upload(ctx, objectKey, input.Data, contentType)
+	uploaded, err := UploadEvidenceFile(ctx, store, caseID, input.Data, input.Filename)
 	if err != nil {
-		return File{}, fmt.Errorf("cases: upload evidence: %w", err)
+		return File{}, err
 	}
+	hashHex, storageRef := uploaded.HashID, uploaded.StorageRef
 
 	row, err := q.CreateCaseFile(ctx, db.CreateCaseFileParams{
 		BiometricCaseID: caseRow.ID,

@@ -27,6 +27,7 @@ type CodificationInput struct {
 // its own case_files row (see MODEL.md section 2.2) -- the evidence image itself, or a trace's
 // own face_crop. Like identity.FileInput, Ingest works from a StorageRef a caller already wrote
 // with trackid's storage client, not raw bytes: this package stays a DB-only transaction.
+// UploadEvidenceFile does that upload in this package's object layout and returns the FileInput.
 //
 // HashID is required: it's part of case_files' upsert key (biometric_case_id, category,
 // hash_id), so a caller that generates its own images (e.g. trackid-sim's media.Generator)
