@@ -13,7 +13,7 @@ export interface ClusterPerson {
  * who it resolved to, when identified. */
 export interface ClusterSummary {
   clusterId: number;
-  caseType: string;
+  modality: string;
   createdAt: string;
   memberCount: number;
   caseCount: number;
@@ -65,7 +65,7 @@ export interface ClusterGraphNode {
   label: string;
   personId?: string;
   caseId?: string;
-  caseType?: string;
+  modality?: string;
   size?: number;
 }
 

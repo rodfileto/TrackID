@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// ModalityMapping describes how a criminal_cases.case_type maps onto Neo4j
+// ModalityMapping describes how a biometric_cases.modality maps onto Neo4j
 // labels and type values. It is the single place that connects the relational
 // modality to the graph schema (see migrations/001_init.cypher,
 // migrations/002_forensic_evidence_capture.cypher, and
@@ -21,7 +21,7 @@ type ModalityMapping struct {
 	ClusterLabel string
 }
 
-// Modalities maps each supported criminal_cases.case_type to its graph
+// Modalities maps each supported biometric_cases.modality to its graph
 // representation.
 var Modalities = map[string]ModalityMapping{
 	"FACIAL": {
@@ -97,14 +97,14 @@ func CodificationTypeForTraceType(traceType string) (string, bool) {
 	}
 }
 
-// TraceTypeForCaseType maps a criminal_cases.case_type to the
+// TraceTypeForModality maps a biometric_cases.modality to the
 // case_traces.trace_type value a trace marked on evidence of that modality
 // gets: one face in an image for FACIAL, one fingerprint lift on a card for
 // FINGERPRINT. Both are just a bounding box on the evidence image -- how the
 // box is produced (drawn by hand, or -- FACIAL only -- auto-detected) doesn't
 // change the trace_type.
-func TraceTypeForCaseType(caseType string) (string, bool) {
-	switch caseType {
+func TraceTypeForModality(modality string) (string, bool) {
+	switch modality {
 	case "FACIAL":
 		return "FACE_RECORD", true
 	case "FINGERPRINT":
@@ -114,9 +114,9 @@ func TraceTypeForCaseType(caseType string) (string, bool) {
 	}
 }
 
-// CaseTypeForFeatureType maps a feature type to its criminal_cases.case_type
+// ModalityForFeatureType maps a feature type to its biometric_cases.modality
 // (the modality vocabulary used by the clusters table and graph.Modalities).
-func CaseTypeForFeatureType(featureType string) (string, bool) {
+func ModalityForFeatureType(featureType string) (string, bool) {
 	switch featureType {
 	case FeatureTypeFaceRecord, FeatureTypeFaceCapture:
 		return "FACIAL", true

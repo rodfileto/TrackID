@@ -22,7 +22,7 @@ const searchResultLimit = 25
 // SearchByFace returns, same rationale as searchResultLimit.
 const faceSearchResultLimit = 25
 
-// caseFaceSearchResultLimit caps how many distinct criminal cases
+// caseFaceSearchResultLimit caps how many distinct biometric cases
 // SearchByFace returns.
 const caseFaceSearchResultLimit = 25
 
@@ -59,8 +59,8 @@ var supportedImageFormats = map[string]bool{
 // (e.g. an alias, or the same name spelled differently across enrollments).
 //
 // CaseCounts is the "N facial / N fingerprint" badge callers show alongside
-// each candidate -- how many distinct criminal cases this person is linked
-// to (see RelatedCase), broken down by case_type. Empty when the person has
+// each candidate -- how many distinct biometric cases this person is linked
+// to (see RelatedCase), broken down by modality. Empty when the person has
 // no linked cases.
 type SearchResult struct {
 	PersonID       string          `json:"personId"`
@@ -68,30 +68,30 @@ type SearchResult struct {
 	RegisterNumber string          `json:"registerNumber"`
 	DocumentType   string          `json:"documentType"`
 	DocumentNumber string          `json:"documentNumber"`
-	CaseCounts     []CaseTypeCount `json:"caseCounts"`
+	CaseCounts     []ModalityCount `json:"caseCounts"`
 }
 
-// CaseTypeCount is how many distinct criminal cases a search result is
-// linked to for one case_type ("FACIAL" or "FINGERPRINT").
-type CaseTypeCount struct {
-	CaseType string `json:"caseType"`
+// ModalityCount is how many distinct biometric cases a search result is
+// linked to for one modality ("FACIAL" or "FINGERPRINT").
+type ModalityCount struct {
+	Modality string `json:"modality"`
 	Count    int64  `json:"count"`
 }
 
 // caseCountsByPerson batches SearchResult.CaseCounts for every id in
-// personIDs (duplicates allowed) into one CountPersonCasesByType query,
+// personIDs (duplicates allowed) into one CountPersonCasesByModality query,
 // shared by SearchByName and SearchByFace instead of one query per row.
-func caseCountsByPerson(ctx context.Context, q *db.Queries, personIDs []string) (map[string][]CaseTypeCount, error) {
+func caseCountsByPerson(ctx context.Context, q *db.Queries, personIDs []string) (map[string][]ModalityCount, error) {
 	if len(personIDs) == 0 {
 		return nil, nil
 	}
-	rows, err := q.CountPersonCasesByType(ctx, personIDs)
+	rows, err := q.CountPersonCasesByModality(ctx, personIDs)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string][]CaseTypeCount, len(rows))
+	out := make(map[string][]ModalityCount, len(rows))
 	for _, r := range rows {
-		out[r.PersonID] = append(out[r.PersonID], CaseTypeCount{CaseType: r.CaseType, Count: r.CaseCount})
+		out[r.PersonID] = append(out[r.PersonID], ModalityCount{Modality: r.Modality, Count: r.CaseCount})
 	}
 	return out, nil
 }
@@ -167,7 +167,7 @@ type ThumbnailBox struct {
 	Y2 float64 `json:"y2"`
 }
 
-// CaseFaceSearchResult is one criminal case whose evidence holds a QUESTIONED
+// CaseFaceSearchResult is one biometric case whose evidence holds a QUESTIONED
 // face trace matching a SearchByFace query, ranked by Similarity. TraceID
 // names the best-scoring trace that put this case in the results -- a case
 // can hold several matching traces, only the closest one is kept (see
@@ -182,7 +182,7 @@ type ThumbnailBox struct {
 // evidence file was later excluded) -- a caller shows a placeholder.
 type CaseFaceSearchResult struct {
 	CaseID          string        `json:"caseId"`
-	CaseType        string        `json:"caseType"`
+	Modality        string        `json:"modality"`
 	Description     string        `json:"description"`
 	TraceID         int64         `json:"traceId"`
 	Similarity      float64       `json:"similarity"`
@@ -191,7 +191,7 @@ type CaseFaceSearchResult struct {
 }
 
 // FaceSearchResults is SearchByFace's result: enrolled persons whose KNOWN
-// face matched, and criminal cases whose evidence holds a QUESTIONED face
+// face matched, and biometric cases whose evidence holds a QUESTIONED face
 // trace that matched. The two are kept apart rather than merged into one
 // ranked list -- a KNOWN and a QUESTIONED embedding aren't guaranteed
 // comparable enough for their similarity scores to rank meaningfully against
@@ -202,7 +202,7 @@ type FaceSearchResults struct {
 }
 
 // SearchByFace finds enrolled persons whose enrolled (KNOWN) face, and
-// criminal cases whose evidence holds a QUESTIONED face trace, most resemble
+// biometric cases whose evidence holds a QUESTIONED face trace, most resemble
 // the face in imageData, using the same embedding model and
 // feature_embeddings table cases.CompareFaces/biometricmatch already use.
 // imageData is expected to be a photo where the face is the main subject
@@ -300,7 +300,7 @@ func SearchByFace(ctx context.Context, sqlDB *sql.DB, vis embedding.FaceEmbedder
 		seenCases[r.CaseID] = true
 		result := CaseFaceSearchResult{
 			CaseID:      r.CaseID,
-			CaseType:    r.CaseType,
+			Modality:    r.Modality,
 			Description: r.Description,
 			TraceID:     r.CaseTraceID,
 			Similarity:  1 - distance,

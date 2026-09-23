@@ -102,9 +102,9 @@ func decisionOutcome(d Decision, inconclusive EdgeStatus) EdgeStatus {
 	}
 }
 
-// caseTypeForModality maps a biometric_decisions.modality (FACE/FINGERPRINT) onto
-// the clusters table's case_type vocabulary (FACIAL/FINGERPRINT).
-func caseTypeForModality(modality string) string {
+// clusterModalityFor maps a biometric_decisions.modality (FACE/FINGERPRINT) onto
+// the clusters table's modality vocabulary (FACIAL/FINGERPRINT).
+func clusterModalityFor(modality string) string {
 	if modality == "FACE" {
 		return "FACIAL"
 	}

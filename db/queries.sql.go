@@ -14,6 +14,17 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+const countBiometricCases = `-- name: CountBiometricCases :one
+SELECT COUNT(*) FROM biometric_cases
+`
+
+func (q *Queries) CountBiometricCases(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countBiometricCases)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countCaseTracesByCaseFile = `-- name: CountCaseTracesByCaseFile :one
 SELECT count(*) FROM case_traces ct
 JOIN case_evidences ce ON ce.id = ct.evidence_id
@@ -30,19 +41,8 @@ func (q *Queries) CountCaseTracesByCaseFile(ctx context.Context, caseFileID sql.
 	return count, err
 }
 
-const countCriminalCases = `-- name: CountCriminalCases :one
-SELECT COUNT(*) FROM criminal_cases
-`
-
-func (q *Queries) CountCriminalCases(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countCriminalCases)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countPersonCasesByType = `-- name: CountPersonCasesByType :many
-SELECT p.person_id, cc.case_type, COUNT(DISTINCT cc.id) AS case_count
+const countPersonCasesByModality = `-- name: CountPersonCasesByModality :many
+SELECT p.person_id, bc.modality, COUNT(DISTINCT bc.id) AS case_count
 FROM person p
 JOIN identity_document d ON d.person_id = p.id
 JOIN identity_register r ON r.document_id = d.id
@@ -51,35 +51,35 @@ JOIN cluster_members known_cm ON known_cm.feature_id = f.id::text
 JOIN cluster_members quest_cm ON quest_cm.cluster_id = known_cm.cluster_id
 JOIN case_traces ct ON quest_cm.feature_id = 'TRACE:' || ct.id || '#feature'
 JOIN case_evidences ce ON ce.id = ct.evidence_id
-JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+JOIN biometric_cases bc ON bc.id = ce.biometric_case_id
 WHERE p.person_id = ANY($1::text[])
-GROUP BY p.person_id, cc.case_type
-ORDER BY p.person_id, cc.case_type
+GROUP BY p.person_id, bc.modality
+ORDER BY p.person_id, bc.modality
 `
 
-type CountPersonCasesByTypeRow struct {
+type CountPersonCasesByModalityRow struct {
 	PersonID  string `db:"person_id" json:"person_id"`
-	CaseType  string `db:"case_type" json:"case_type"`
+	Modality  string `db:"modality" json:"modality"`
 	CaseCount int64  `db:"case_count" json:"case_count"`
 }
 
-// For each of the given persons, the number of distinct criminal cases
-// linked through their resolved biometric clusters, grouped by case_type --
+// For each of the given persons, the number of distinct biometric cases
+// linked through their resolved biometric clusters, grouped by modality --
 // the "N facial / N fingerprint" badge a person search result shows. Same
 // KNOWN feature -> cluster -> QUESTIONED trace -> case resolution as
 // person.ListCases/buildCases (feature_id text format from
 // graph.KnownFeatureID/QuestionedFeatureID), batched across every requested
 // person in one query instead of one loadPersonAndClusterIDs call per row.
-func (q *Queries) CountPersonCasesByType(ctx context.Context, personIds []string) ([]CountPersonCasesByTypeRow, error) {
-	rows, err := q.db.QueryContext(ctx, countPersonCasesByType, pq.Array(personIds))
+func (q *Queries) CountPersonCasesByModality(ctx context.Context, personIds []string) ([]CountPersonCasesByModalityRow, error) {
+	rows, err := q.db.QueryContext(ctx, countPersonCasesByModality, pq.Array(personIds))
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []CountPersonCasesByTypeRow
+	var items []CountPersonCasesByModalityRow
 	for rows.Next() {
-		var i CountPersonCasesByTypeRow
-		if err := rows.Scan(&i.PersonID, &i.CaseType, &i.CaseCount); err != nil {
+		var i CountPersonCasesByModalityRow
+		if err := rows.Scan(&i.PersonID, &i.Modality, &i.CaseCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -93,17 +93,58 @@ func (q *Queries) CountPersonCasesByType(ctx context.Context, personIds []string
 	return items, nil
 }
 
+const createBiometricCase = `-- name: CreateBiometricCase :one
+INSERT INTO biometric_cases (case_id, case_type, modality, description, case_year, case_number)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING case_id, case_type, modality, description
+`
+
+type CreateBiometricCaseParams struct {
+	CaseID      string        `db:"case_id" json:"case_id"`
+	CaseType    string        `db:"case_type" json:"case_type"`
+	Modality    string        `db:"modality" json:"modality"`
+	Description string        `db:"description" json:"description"`
+	CaseYear    sql.NullInt32 `db:"case_year" json:"case_year"`
+	CaseNumber  sql.NullInt32 `db:"case_number" json:"case_number"`
+}
+
+type CreateBiometricCaseRow struct {
+	CaseID      string `db:"case_id" json:"case_id"`
+	CaseType    string `db:"case_type" json:"case_type"`
+	Modality    string `db:"modality" json:"modality"`
+	Description string `db:"description" json:"description"`
+}
+
+func (q *Queries) CreateBiometricCase(ctx context.Context, arg CreateBiometricCaseParams) (CreateBiometricCaseRow, error) {
+	row := q.db.QueryRowContext(ctx, createBiometricCase,
+		arg.CaseID,
+		arg.CaseType,
+		arg.Modality,
+		arg.Description,
+		arg.CaseYear,
+		arg.CaseNumber,
+	)
+	var i CreateBiometricCaseRow
+	err := row.Scan(
+		&i.CaseID,
+		&i.CaseType,
+		&i.Modality,
+		&i.Description,
+	)
+	return i, err
+}
+
 const createCaseEvidenceForFile = `-- name: CreateCaseEvidenceForFile :one
-INSERT INTO case_evidences (criminal_case_id, sequence, case_file_id)
+INSERT INTO case_evidences (biometric_case_id, sequence, case_file_id)
 SELECT $1, COALESCE(MAX(sequence), 0) + 1, $2
 FROM case_evidences
-WHERE criminal_case_id = $1
+WHERE biometric_case_id = $1
 RETURNING id
 `
 
 type CreateCaseEvidenceForFileParams struct {
-	CriminalCaseID int64         `db:"criminal_case_id" json:"criminal_case_id"`
-	CaseFileID     sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
+	BiometricCaseID int64         `db:"biometric_case_id" json:"biometric_case_id"`
+	CaseFileID      sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
 }
 
 // Case files added through AddEvidence only get a case_files row -- case_traces
@@ -111,28 +152,28 @@ type CreateCaseEvidenceForFileParams struct {
 // the case_evidences row for a case_file on first use. sequence is the next
 // free slot for the case, since case_files added this way never carry one.
 func (q *Queries) CreateCaseEvidenceForFile(ctx context.Context, arg CreateCaseEvidenceForFileParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, createCaseEvidenceForFile, arg.CriminalCaseID, arg.CaseFileID)
+	row := q.db.QueryRowContext(ctx, createCaseEvidenceForFile, arg.BiometricCaseID, arg.CaseFileID)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
 }
 
 const createCaseFile = `-- name: CreateCaseFile :one
-INSERT INTO case_files (criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
+INSERT INTO case_files (biometric_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING id, created_at
 `
 
 type CreateCaseFileParams struct {
-	CriminalCaseID int64          `db:"criminal_case_id" json:"criminal_case_id"`
-	Category       string         `db:"category" json:"category"`
-	MediaType      sql.NullString `db:"media_type" json:"media_type"`
-	HashID         sql.NullString `db:"hash_id" json:"hash_id"`
-	Filename       sql.NullString `db:"filename" json:"filename"`
-	SourcePath     sql.NullString `db:"source_path" json:"source_path"`
-	StorageRef     sql.NullString `db:"storage_ref" json:"storage_ref"`
-	ContentType    sql.NullString `db:"content_type" json:"content_type"`
-	SizeBytes      sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
+	BiometricCaseID int64          `db:"biometric_case_id" json:"biometric_case_id"`
+	Category        string         `db:"category" json:"category"`
+	MediaType       sql.NullString `db:"media_type" json:"media_type"`
+	HashID          sql.NullString `db:"hash_id" json:"hash_id"`
+	Filename        sql.NullString `db:"filename" json:"filename"`
+	SourcePath      sql.NullString `db:"source_path" json:"source_path"`
+	StorageRef      sql.NullString `db:"storage_ref" json:"storage_ref"`
+	ContentType     sql.NullString `db:"content_type" json:"content_type"`
+	SizeBytes       sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
 }
 
 type CreateCaseFileRow struct {
@@ -142,7 +183,7 @@ type CreateCaseFileRow struct {
 
 func (q *Queries) CreateCaseFile(ctx context.Context, arg CreateCaseFileParams) (CreateCaseFileRow, error) {
 	row := q.db.QueryRowContext(ctx, createCaseFile,
-		arg.CriminalCaseID,
+		arg.BiometricCaseID,
 		arg.Category,
 		arg.MediaType,
 		arg.HashID,
@@ -158,11 +199,11 @@ func (q *Queries) CreateCaseFile(ctx context.Context, arg CreateCaseFileParams) 
 }
 
 const createCluster = `-- name: CreateCluster :one
-INSERT INTO clusters (case_type) VALUES ($1) RETURNING id
+INSERT INTO clusters (modality) VALUES ($1) RETURNING id
 `
 
-func (q *Queries) CreateCluster(ctx context.Context, caseType string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, createCluster, caseType)
+func (q *Queries) CreateCluster(ctx context.Context, modality string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, createCluster, modality)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
@@ -195,39 +236,6 @@ func (q *Queries) CreateCodificationPoint(ctx context.Context, arg CreateCodific
 	var id int64
 	err := row.Scan(&id)
 	return id, err
-}
-
-const createCriminalCase = `-- name: CreateCriminalCase :one
-INSERT INTO criminal_cases (case_id, case_type, description, case_year, case_number)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING case_id, case_type, description
-`
-
-type CreateCriminalCaseParams struct {
-	CaseID      string        `db:"case_id" json:"case_id"`
-	CaseType    string        `db:"case_type" json:"case_type"`
-	Description string        `db:"description" json:"description"`
-	CaseYear    sql.NullInt32 `db:"case_year" json:"case_year"`
-	CaseNumber  sql.NullInt32 `db:"case_number" json:"case_number"`
-}
-
-type CreateCriminalCaseRow struct {
-	CaseID      string `db:"case_id" json:"case_id"`
-	CaseType    string `db:"case_type" json:"case_type"`
-	Description string `db:"description" json:"description"`
-}
-
-func (q *Queries) CreateCriminalCase(ctx context.Context, arg CreateCriminalCaseParams) (CreateCriminalCaseRow, error) {
-	row := q.db.QueryRowContext(ctx, createCriminalCase,
-		arg.CaseID,
-		arg.CaseType,
-		arg.Description,
-		arg.CaseYear,
-		arg.CaseNumber,
-	)
-	var i CreateCriminalCaseRow
-	err := row.Scan(&i.CaseID, &i.CaseType, &i.Description)
-	return i, err
 }
 
 const createUser = `-- name: CreateUser :one
@@ -280,16 +288,16 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 }
 
 const deleteCaseFile = `-- name: DeleteCaseFile :execrows
-DELETE FROM case_files WHERE id = $1 AND criminal_case_id = $2 AND category = 'evidence'
+DELETE FROM case_files WHERE id = $1 AND biometric_case_id = $2 AND category = 'evidence'
 `
 
 type DeleteCaseFileParams struct {
-	ID             int64 `db:"id" json:"id"`
-	CriminalCaseID int64 `db:"criminal_case_id" json:"criminal_case_id"`
+	ID              int64 `db:"id" json:"id"`
+	BiometricCaseID int64 `db:"biometric_case_id" json:"biometric_case_id"`
 }
 
 func (q *Queries) DeleteCaseFile(ctx context.Context, arg DeleteCaseFileParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteCaseFile, arg.ID, arg.CriminalCaseID)
+	result, err := q.db.ExecContext(ctx, deleteCaseFile, arg.ID, arg.BiometricCaseID)
 	if err != nil {
 		return 0, err
 	}
@@ -301,14 +309,14 @@ DELETE FROM case_traces ct
 USING case_evidences ce
 WHERE ct.id = $1
   AND ct.evidence_id = ce.id
-  AND ce.criminal_case_id = $2
+  AND ce.biometric_case_id = $2
   AND ce.case_file_id = $3
 `
 
 type DeleteCaseTraceParams struct {
-	ID             int64         `db:"id" json:"id"`
-	CriminalCaseID int64         `db:"criminal_case_id" json:"criminal_case_id"`
-	CaseFileID     sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
+	ID              int64         `db:"id" json:"id"`
+	BiometricCaseID int64         `db:"biometric_case_id" json:"biometric_case_id"`
+	CaseFileID      sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
 }
 
 // Scoped to the case + evidence file so a trace can only be deleted through
@@ -316,7 +324,7 @@ type DeleteCaseTraceParams struct {
 // biometricfeature (and, through it, feature_embeddings) cascade off
 // case_traces, so this is the only delete needed to fully remove a trace.
 func (q *Queries) DeleteCaseTrace(ctx context.Context, arg DeleteCaseTraceParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteCaseTrace, arg.ID, arg.CriminalCaseID, arg.CaseFileID)
+	result, err := q.db.ExecContext(ctx, deleteCaseTrace, arg.ID, arg.BiometricCaseID, arg.CaseFileID)
 	if err != nil {
 		return 0, err
 	}
@@ -360,7 +368,7 @@ func (q *Queries) DeleteCodificationPoint(ctx context.Context, arg DeleteCodific
 }
 
 const findNearestCasesByFaceEmbedding = `-- name: FindNearestCasesByFaceEmbedding :many
-SELECT cc.case_id, cc.case_type, cc.description, ct.id AS case_trace_id,
+SELECT bc.case_id, bc.modality, bc.description, ct.id AS case_trace_id,
        tcf.id AS trace_crop_file_id, ecf.id AS evidence_file_id,
        ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2,
        fe.embedding <=> $1::vector AS distance
@@ -368,7 +376,7 @@ FROM feature_embeddings fe
 JOIN biometricfeature bf ON bf.id = fe.biometricfeature_id
 JOIN case_traces ct ON ct.id = bf.case_trace_id
 JOIN case_evidences ce ON ce.id = ct.evidence_id
-JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+JOIN biometric_cases bc ON bc.id = ce.biometric_case_id
 LEFT JOIN case_files tcf ON tcf.id = ct.case_file_id
 LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
 WHERE fe.embedding_type = $2
@@ -384,7 +392,7 @@ type FindNearestCasesByFaceEmbeddingParams struct {
 
 type FindNearestCasesByFaceEmbeddingRow struct {
 	CaseID          string          `db:"case_id" json:"case_id"`
-	CaseType        string          `db:"case_type" json:"case_type"`
+	Modality        string          `db:"modality" json:"modality"`
 	Description     string          `db:"description" json:"description"`
 	CaseTraceID     int64           `db:"case_trace_id" json:"case_trace_id"`
 	TraceCropFileID sql.NullInt64   `db:"trace_crop_file_id" json:"trace_crop_file_id"`
@@ -397,7 +405,7 @@ type FindNearestCasesByFaceEmbeddingRow struct {
 }
 
 // Nearest QUESTIONED (case evidence) face embeddings to a query vector,
-// joined up to the criminal case that owns the matching trace -- the
+// joined up to the biometric case that owns the matching trace -- the
 // case-evidence counterpart to FindNearestPersonsByFaceEmbedding. Only
 // QUESTIONED features match: a KNOWN (identity_file) embedding has no
 // case_trace_id, so the join to case_traces excludes it. A case can surface
@@ -421,7 +429,7 @@ func (q *Queries) FindNearestCasesByFaceEmbedding(ctx context.Context, arg FindN
 		var i FindNearestCasesByFaceEmbeddingRow
 		if err := rows.Scan(
 			&i.CaseID,
-			&i.CaseType,
+			&i.Modality,
 			&i.Description,
 			&i.CaseTraceID,
 			&i.TraceCropFileID,
@@ -567,6 +575,33 @@ func (q *Queries) FindNearestPersonsByFaceEmbedding(ctx context.Context, arg Fin
 	return items, nil
 }
 
+const getBiometricCaseByCaseID = `-- name: GetBiometricCaseByCaseID :one
+SELECT id, case_id, case_type, modality, description
+FROM biometric_cases
+WHERE case_id = $1
+`
+
+type GetBiometricCaseByCaseIDRow struct {
+	ID          int64  `db:"id" json:"id"`
+	CaseID      string `db:"case_id" json:"case_id"`
+	CaseType    string `db:"case_type" json:"case_type"`
+	Modality    string `db:"modality" json:"modality"`
+	Description string `db:"description" json:"description"`
+}
+
+func (q *Queries) GetBiometricCaseByCaseID(ctx context.Context, caseID string) (GetBiometricCaseByCaseIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getBiometricCaseByCaseID, caseID)
+	var i GetBiometricCaseByCaseIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.CaseID,
+		&i.CaseType,
+		&i.Modality,
+		&i.Description,
+	)
+	return i, err
+}
+
 const getCaseCodificationByTrace = `-- name: GetCaseCodificationByTrace :one
 SELECT id FROM case_codifications WHERE trace_id = $1 AND sequence = 1
 `
@@ -580,16 +615,16 @@ func (q *Queries) GetCaseCodificationByTrace(ctx context.Context, traceID int64)
 
 const getCaseEvidenceByCaseFile = `-- name: GetCaseEvidenceByCaseFile :one
 SELECT id FROM case_evidences
-WHERE criminal_case_id = $1 AND case_file_id = $2
+WHERE biometric_case_id = $1 AND case_file_id = $2
 `
 
 type GetCaseEvidenceByCaseFileParams struct {
-	CriminalCaseID int64         `db:"criminal_case_id" json:"criminal_case_id"`
-	CaseFileID     sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
+	BiometricCaseID int64         `db:"biometric_case_id" json:"biometric_case_id"`
+	CaseFileID      sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
 }
 
 func (q *Queries) GetCaseEvidenceByCaseFile(ctx context.Context, arg GetCaseEvidenceByCaseFileParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getCaseEvidenceByCaseFile, arg.CriminalCaseID, arg.CaseFileID)
+	row := q.db.QueryRowContext(ctx, getCaseEvidenceByCaseFile, arg.BiometricCaseID, arg.CaseFileID)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
@@ -598,12 +633,12 @@ func (q *Queries) GetCaseEvidenceByCaseFile(ctx context.Context, arg GetCaseEvid
 const getCaseFile = `-- name: GetCaseFile :one
 SELECT id, category, filename, storage_ref, content_type
 FROM case_files
-WHERE id = $1 AND criminal_case_id = $2
+WHERE id = $1 AND biometric_case_id = $2
 `
 
 type GetCaseFileParams struct {
-	ID             int64 `db:"id" json:"id"`
-	CriminalCaseID int64 `db:"criminal_case_id" json:"criminal_case_id"`
+	ID              int64 `db:"id" json:"id"`
+	BiometricCaseID int64 `db:"biometric_case_id" json:"biometric_case_id"`
 }
 
 type GetCaseFileRow struct {
@@ -615,7 +650,7 @@ type GetCaseFileRow struct {
 }
 
 func (q *Queries) GetCaseFile(ctx context.Context, arg GetCaseFileParams) (GetCaseFileRow, error) {
-	row := q.db.QueryRowContext(ctx, getCaseFile, arg.ID, arg.CriminalCaseID)
+	row := q.db.QueryRowContext(ctx, getCaseFile, arg.ID, arg.BiometricCaseID)
 	var i GetCaseFileRow
 	err := row.Scan(
 		&i.ID,
@@ -631,13 +666,13 @@ const getCaseTraceForFile = `-- name: GetCaseTraceForFile :one
 SELECT ct.id, ct.trace_type
 FROM case_traces ct
 JOIN case_evidences ce ON ce.id = ct.evidence_id
-WHERE ct.id = $1 AND ce.criminal_case_id = $2 AND ce.case_file_id = $3
+WHERE ct.id = $1 AND ce.biometric_case_id = $2 AND ce.case_file_id = $3
 `
 
 type GetCaseTraceForFileParams struct {
-	ID             int64         `db:"id" json:"id"`
-	CriminalCaseID int64         `db:"criminal_case_id" json:"criminal_case_id"`
-	CaseFileID     sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
+	ID              int64         `db:"id" json:"id"`
+	BiometricCaseID int64         `db:"biometric_case_id" json:"biometric_case_id"`
+	CaseFileID      sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
 }
 
 type GetCaseTraceForFileRow struct {
@@ -649,7 +684,7 @@ type GetCaseTraceForFileRow struct {
 // GetCaseFile scopes a file to a case -- used to authorize codification/point
 // operations reached via /cases/:caseId/evidences/:evidenceId/traces/:traceId.
 func (q *Queries) GetCaseTraceForFile(ctx context.Context, arg GetCaseTraceForFileParams) (GetCaseTraceForFileRow, error) {
-	row := q.db.QueryRowContext(ctx, getCaseTraceForFile, arg.ID, arg.CriminalCaseID, arg.CaseFileID)
+	row := q.db.QueryRowContext(ctx, getCaseTraceForFile, arg.ID, arg.BiometricCaseID, arg.CaseFileID)
 	var i GetCaseTraceForFileRow
 	err := row.Scan(&i.ID, &i.TraceType)
 	return i, err
@@ -671,13 +706,13 @@ LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
 LEFT JOIN case_files ccf ON ccf.id = cd.case_file_id
 LEFT JOIN biometricfeature bf ON bf.case_trace_id = ct.id
 LEFT JOIN feature_embeddings fe ON fe.biometricfeature_id = bf.id AND fe.embedding_type = $1
-WHERE cd.id = $2 AND ce.criminal_case_id = $3
+WHERE cd.id = $2 AND ce.biometric_case_id = $3
 `
 
 type GetCodificationForComparisonParams struct {
-	EmbeddingType  string `db:"embedding_type" json:"embedding_type"`
-	CodificationID int64  `db:"codification_id" json:"codification_id"`
-	CriminalCaseID int64  `db:"criminal_case_id" json:"criminal_case_id"`
+	EmbeddingType   string `db:"embedding_type" json:"embedding_type"`
+	CodificationID  int64  `db:"codification_id" json:"codification_id"`
+	BiometricCaseID int64  `db:"biometric_case_id" json:"biometric_case_id"`
 }
 
 type GetCodificationForComparisonRow struct {
@@ -697,7 +732,7 @@ type GetCodificationForComparisonRow struct {
 // compute one from -- the analyst's adjusted codification image if saved,
 // else the evidence image plus the trace's box.
 func (q *Queries) GetCodificationForComparison(ctx context.Context, arg GetCodificationForComparisonParams) (GetCodificationForComparisonRow, error) {
-	row := q.db.QueryRowContext(ctx, getCodificationForComparison, arg.EmbeddingType, arg.CodificationID, arg.CriminalCaseID)
+	row := q.db.QueryRowContext(ctx, getCodificationForComparison, arg.EmbeddingType, arg.CodificationID, arg.BiometricCaseID)
 	var i GetCodificationForComparisonRow
 	err := row.Scan(
 		&i.CodificationID,
@@ -772,27 +807,25 @@ func (q *Queries) GetCodificationSource(ctx context.Context, id int64) (GetCodif
 	return i, err
 }
 
-const getCriminalCaseByCaseID = `-- name: GetCriminalCaseByCaseID :one
-SELECT id, case_id, case_type, description
-FROM criminal_cases
-WHERE case_id = $1
+const getCurrentMatchThreshold = `-- name: GetCurrentMatchThreshold :one
+SELECT id, embedding_type, review_threshold, confirm_threshold, source, created_by, created_at
+FROM match_thresholds
+WHERE embedding_type = $1
+ORDER BY id DESC
+LIMIT 1
 `
 
-type GetCriminalCaseByCaseIDRow struct {
-	ID          int64  `db:"id" json:"id"`
-	CaseID      string `db:"case_id" json:"case_id"`
-	CaseType    string `db:"case_type" json:"case_type"`
-	Description string `db:"description" json:"description"`
-}
-
-func (q *Queries) GetCriminalCaseByCaseID(ctx context.Context, caseID string) (GetCriminalCaseByCaseIDRow, error) {
-	row := q.db.QueryRowContext(ctx, getCriminalCaseByCaseID, caseID)
-	var i GetCriminalCaseByCaseIDRow
+func (q *Queries) GetCurrentMatchThreshold(ctx context.Context, embeddingType string) (MatchThreshold, error) {
+	row := q.db.QueryRowContext(ctx, getCurrentMatchThreshold, embeddingType)
+	var i MatchThreshold
 	err := row.Scan(
 		&i.ID,
-		&i.CaseID,
-		&i.CaseType,
-		&i.Description,
+		&i.EmbeddingType,
+		&i.ReviewThreshold,
+		&i.ConfirmThreshold,
+		&i.Source,
+		&i.CreatedBy,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -974,27 +1007,7 @@ type InsertBiometricDecisionParams struct {
 	ResponsibleUser      sql.NullString  `db:"responsible_user" json:"responsible_user"`
 }
 
-type InsertBiometricDecisionRow struct {
-	ID                   int64           `db:"id" json:"id"`
-	FeatureAID           string          `db:"feature_a_id" json:"feature_a_id"`
-	FeatureBID           string          `db:"feature_b_id" json:"feature_b_id"`
-	Modality             string          `db:"modality" json:"modality"`
-	Role                 string          `db:"role" json:"role"`
-	Decision             string          `db:"decision" json:"decision"`
-	SystemSource         sql.NullString  `db:"system_source" json:"system_source"`
-	Username             sql.NullString  `db:"username" json:"username"`
-	Confidence           sql.NullFloat64 `db:"confidence" json:"confidence"`
-	Threshold            sql.NullFloat64 `db:"threshold" json:"threshold"`
-	Notes                sql.NullString  `db:"notes" json:"notes"`
-	ComparisonType       sql.NullString  `db:"comparison_type" json:"comparison_type"`
-	RelatedReference     sql.NullString  `db:"related_reference" json:"related_reference"`
-	RelatedReferenceKind sql.NullString  `db:"related_reference_kind" json:"related_reference_kind"`
-	ResponsibleUser      sql.NullString  `db:"responsible_user" json:"responsible_user"`
-	DecidedAt            time.Time       `db:"decided_at" json:"decided_at"`
-	CreatedAt            time.Time       `db:"created_at" json:"created_at"`
-}
-
-func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometricDecisionParams) (InsertBiometricDecisionRow, error) {
+func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometricDecisionParams) (BiometricDecision, error) {
 	row := q.db.QueryRowContext(ctx, insertBiometricDecision,
 		arg.FeatureAID,
 		arg.FeatureBID,
@@ -1011,7 +1024,7 @@ func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometr
 		arg.RelatedReferenceKind,
 		arg.ResponsibleUser,
 	)
-	var i InsertBiometricDecisionRow
+	var i BiometricDecision
 	err := row.Scan(
 		&i.ID,
 		&i.FeatureAID,
@@ -1035,22 +1048,22 @@ func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometr
 }
 
 const insertCaseDecision = `-- name: InsertCaseDecision :one
-INSERT INTO case_decisions (criminal_case_id, decision, system_source, username, notes)
+INSERT INTO case_decisions (biometric_case_id, decision, system_source, username, notes)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, criminal_case_id, decision, system_source, username, notes, decided_at, created_at
+RETURNING id, biometric_case_id, decision, system_source, username, notes, decided_at, created_at
 `
 
 type InsertCaseDecisionParams struct {
-	CriminalCaseID int64          `db:"criminal_case_id" json:"criminal_case_id"`
-	Decision       string         `db:"decision" json:"decision"`
-	SystemSource   sql.NullString `db:"system_source" json:"system_source"`
-	Username       sql.NullString `db:"username" json:"username"`
-	Notes          sql.NullString `db:"notes" json:"notes"`
+	BiometricCaseID int64          `db:"biometric_case_id" json:"biometric_case_id"`
+	Decision        string         `db:"decision" json:"decision"`
+	SystemSource    sql.NullString `db:"system_source" json:"system_source"`
+	Username        sql.NullString `db:"username" json:"username"`
+	Notes           sql.NullString `db:"notes" json:"notes"`
 }
 
 func (q *Queries) InsertCaseDecision(ctx context.Context, arg InsertCaseDecisionParams) (CaseDecision, error) {
 	row := q.db.QueryRowContext(ctx, insertCaseDecision,
-		arg.CriminalCaseID,
+		arg.BiometricCaseID,
 		arg.Decision,
 		arg.SystemSource,
 		arg.Username,
@@ -1059,7 +1072,7 @@ func (q *Queries) InsertCaseDecision(ctx context.Context, arg InsertCaseDecision
 	var i CaseDecision
 	err := row.Scan(
 		&i.ID,
-		&i.CriminalCaseID,
+		&i.BiometricCaseID,
 		&i.Decision,
 		&i.SystemSource,
 		&i.Username,
@@ -1099,28 +1112,143 @@ func (q *Queries) InsertClusterMerge(ctx context.Context, arg InsertClusterMerge
 	return err
 }
 
-const listAllCriminalCases = `-- name: ListAllCriminalCases :many
-SELECT case_id, case_type, description
-FROM criminal_cases
+const insertMatchThreshold = `-- name: InsertMatchThreshold :one
+INSERT INTO match_thresholds (embedding_type, review_threshold, confirm_threshold, source, created_by)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, embedding_type, review_threshold, confirm_threshold, source, created_by, created_at
+`
+
+type InsertMatchThresholdParams struct {
+	EmbeddingType    string         `db:"embedding_type" json:"embedding_type"`
+	ReviewThreshold  float64        `db:"review_threshold" json:"review_threshold"`
+	ConfirmThreshold float64        `db:"confirm_threshold" json:"confirm_threshold"`
+	Source           string         `db:"source" json:"source"`
+	CreatedBy        sql.NullString `db:"created_by" json:"created_by"`
+}
+
+func (q *Queries) InsertMatchThreshold(ctx context.Context, arg InsertMatchThresholdParams) (MatchThreshold, error) {
+	row := q.db.QueryRowContext(ctx, insertMatchThreshold,
+		arg.EmbeddingType,
+		arg.ReviewThreshold,
+		arg.ConfirmThreshold,
+		arg.Source,
+		arg.CreatedBy,
+	)
+	var i MatchThreshold
+	err := row.Scan(
+		&i.ID,
+		&i.EmbeddingType,
+		&i.ReviewThreshold,
+		&i.ConfirmThreshold,
+		&i.Source,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listAllBiometricCases = `-- name: ListAllBiometricCases :many
+SELECT case_id, case_type, modality, description
+FROM biometric_cases
 ORDER BY case_id
 `
 
-type ListAllCriminalCasesRow struct {
+type ListAllBiometricCasesRow struct {
 	CaseID      string `db:"case_id" json:"case_id"`
 	CaseType    string `db:"case_type" json:"case_type"`
+	Modality    string `db:"modality" json:"modality"`
 	Description string `db:"description" json:"description"`
 }
 
-func (q *Queries) ListAllCriminalCases(ctx context.Context) ([]ListAllCriminalCasesRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAllCriminalCases)
+func (q *Queries) ListAllBiometricCases(ctx context.Context) ([]ListAllBiometricCasesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAllBiometricCases)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListAllCriminalCasesRow
+	var items []ListAllBiometricCasesRow
 	for rows.Next() {
-		var i ListAllCriminalCasesRow
-		if err := rows.Scan(&i.CaseID, &i.CaseType, &i.Description); err != nil {
+		var i ListAllBiometricCasesRow
+		if err := rows.Scan(
+			&i.CaseID,
+			&i.CaseType,
+			&i.Modality,
+			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBiometricCaseIDsByModality = `-- name: ListBiometricCaseIDsByModality :many
+SELECT case_id FROM biometric_cases WHERE modality = $1 ORDER BY case_id
+`
+
+func (q *Queries) ListBiometricCaseIDsByModality(ctx context.Context, modality string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listBiometricCaseIDsByModality, modality)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var case_id string
+		if err := rows.Scan(&case_id); err != nil {
+			return nil, err
+		}
+		items = append(items, case_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBiometricCases = `-- name: ListBiometricCases :many
+SELECT case_id, case_type, modality, description
+FROM biometric_cases
+ORDER BY case_id
+LIMIT $1 OFFSET $2
+`
+
+type ListBiometricCasesParams struct {
+	Limit  int32 `db:"limit" json:"limit"`
+	Offset int32 `db:"offset" json:"offset"`
+}
+
+type ListBiometricCasesRow struct {
+	CaseID      string `db:"case_id" json:"case_id"`
+	CaseType    string `db:"case_type" json:"case_type"`
+	Modality    string `db:"modality" json:"modality"`
+	Description string `db:"description" json:"description"`
+}
+
+func (q *Queries) ListBiometricCases(ctx context.Context, arg ListBiometricCasesParams) ([]ListBiometricCasesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBiometricCases, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBiometricCasesRow
+	for rows.Next() {
+		var i ListBiometricCasesRow
+		if err := rows.Scan(
+			&i.CaseID,
+			&i.CaseType,
+			&i.Modality,
+			&i.Description,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1324,7 +1452,7 @@ func (q *Queries) ListBiometricTemplates(ctx context.Context, templateType strin
 	return items, nil
 }
 
-const listCaseCodificationsByCriminalCase = `-- name: ListCaseCodificationsByCriminalCase :many
+const listCaseCodificationsByBiometricCase = `-- name: ListCaseCodificationsByBiometricCase :many
 SELECT cd.id AS codification_id, cd.sequence AS codification_sequence, cd.codification_type, cd.case_file_id AS codification_file_id,
     ct.id AS trace_id, ct.sequence AS trace_sequence, ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2,
     ce.sequence AS evidence_sequence, cf.id AS evidence_file_id, cf.filename AS evidence_filename
@@ -1332,11 +1460,11 @@ FROM case_codifications cd
 JOIN case_traces ct ON ct.id = cd.trace_id
 JOIN case_evidences ce ON ce.id = ct.evidence_id
 JOIN case_files cf ON cf.id = ce.case_file_id
-WHERE ce.criminal_case_id = $1
+WHERE ce.biometric_case_id = $1
 ORDER BY ce.sequence, ct.sequence, cd.sequence
 `
 
-type ListCaseCodificationsByCriminalCaseRow struct {
+type ListCaseCodificationsByBiometricCaseRow struct {
 	CodificationID       int64           `db:"codification_id" json:"codification_id"`
 	CodificationSequence int16           `db:"codification_sequence" json:"codification_sequence"`
 	CodificationType     string          `db:"codification_type" json:"codification_type"`
@@ -1358,15 +1486,15 @@ type ListCaseCodificationsByCriminalCaseRow struct {
 // and saved one via SaveCodificationImage) for a caller to render a
 // thumbnail and label it "<evidence sequence>-<trace sequence>-<codification
 // sequence>" without a second round trip per codification.
-func (q *Queries) ListCaseCodificationsByCriminalCase(ctx context.Context, criminalCaseID int64) ([]ListCaseCodificationsByCriminalCaseRow, error) {
-	rows, err := q.db.QueryContext(ctx, listCaseCodificationsByCriminalCase, criminalCaseID)
+func (q *Queries) ListCaseCodificationsByBiometricCase(ctx context.Context, biometricCaseID int64) ([]ListCaseCodificationsByBiometricCaseRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCaseCodificationsByBiometricCase, biometricCaseID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListCaseCodificationsByCriminalCaseRow
+	var items []ListCaseCodificationsByBiometricCaseRow
 	for rows.Next() {
-		var i ListCaseCodificationsByCriminalCaseRow
+		var i ListCaseCodificationsByBiometricCaseRow
 		if err := rows.Scan(
 			&i.CodificationID,
 			&i.CodificationSequence,
@@ -1395,15 +1523,15 @@ func (q *Queries) ListCaseCodificationsByCriminalCase(ctx context.Context, crimi
 	return items, nil
 }
 
-const listCaseDecisionsByCriminalCase = `-- name: ListCaseDecisionsByCriminalCase :many
-SELECT id, criminal_case_id, decision, system_source, username, notes, decided_at, created_at
+const listCaseDecisionsByBiometricCase = `-- name: ListCaseDecisionsByBiometricCase :many
+SELECT id, biometric_case_id, decision, system_source, username, notes, decided_at, created_at
 FROM case_decisions
-WHERE criminal_case_id = $1
+WHERE biometric_case_id = $1
 ORDER BY decided_at
 `
 
-func (q *Queries) ListCaseDecisionsByCriminalCase(ctx context.Context, criminalCaseID int64) ([]CaseDecision, error) {
-	rows, err := q.db.QueryContext(ctx, listCaseDecisionsByCriminalCase, criminalCaseID)
+func (q *Queries) ListCaseDecisionsByBiometricCase(ctx context.Context, biometricCaseID int64) ([]CaseDecision, error) {
+	rows, err := q.db.QueryContext(ctx, listCaseDecisionsByBiometricCase, biometricCaseID)
 	if err != nil {
 		return nil, err
 	}
@@ -1413,7 +1541,7 @@ func (q *Queries) ListCaseDecisionsByCriminalCase(ctx context.Context, criminalC
 		var i CaseDecision
 		if err := rows.Scan(
 			&i.ID,
-			&i.CriminalCaseID,
+			&i.BiometricCaseID,
 			&i.Decision,
 			&i.SystemSource,
 			&i.Username,
@@ -1434,39 +1562,39 @@ func (q *Queries) ListCaseDecisionsByCriminalCase(ctx context.Context, criminalC
 	return items, nil
 }
 
-const listCaseFilesByCriminalCase = `-- name: ListCaseFilesByCriminalCase :many
-SELECT id, criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes, created_at
+const listCaseFilesByBiometricCase = `-- name: ListCaseFilesByBiometricCase :many
+SELECT id, biometric_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes, created_at
 FROM case_files
-WHERE criminal_case_id = $1
+WHERE biometric_case_id = $1
 ORDER BY id
 `
 
-type ListCaseFilesByCriminalCaseRow struct {
-	ID             int64          `db:"id" json:"id"`
-	CriminalCaseID int64          `db:"criminal_case_id" json:"criminal_case_id"`
-	Category       string         `db:"category" json:"category"`
-	MediaType      sql.NullString `db:"media_type" json:"media_type"`
-	HashID         sql.NullString `db:"hash_id" json:"hash_id"`
-	Filename       sql.NullString `db:"filename" json:"filename"`
-	SourcePath     sql.NullString `db:"source_path" json:"source_path"`
-	StorageRef     sql.NullString `db:"storage_ref" json:"storage_ref"`
-	ContentType    sql.NullString `db:"content_type" json:"content_type"`
-	SizeBytes      sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
-	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
+type ListCaseFilesByBiometricCaseRow struct {
+	ID              int64          `db:"id" json:"id"`
+	BiometricCaseID int64          `db:"biometric_case_id" json:"biometric_case_id"`
+	Category        string         `db:"category" json:"category"`
+	MediaType       sql.NullString `db:"media_type" json:"media_type"`
+	HashID          sql.NullString `db:"hash_id" json:"hash_id"`
+	Filename        sql.NullString `db:"filename" json:"filename"`
+	SourcePath      sql.NullString `db:"source_path" json:"source_path"`
+	StorageRef      sql.NullString `db:"storage_ref" json:"storage_ref"`
+	ContentType     sql.NullString `db:"content_type" json:"content_type"`
+	SizeBytes       sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
+	CreatedAt       time.Time      `db:"created_at" json:"created_at"`
 }
 
-func (q *Queries) ListCaseFilesByCriminalCase(ctx context.Context, criminalCaseID int64) ([]ListCaseFilesByCriminalCaseRow, error) {
-	rows, err := q.db.QueryContext(ctx, listCaseFilesByCriminalCase, criminalCaseID)
+func (q *Queries) ListCaseFilesByBiometricCase(ctx context.Context, biometricCaseID int64) ([]ListCaseFilesByBiometricCaseRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCaseFilesByBiometricCase, biometricCaseID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListCaseFilesByCriminalCaseRow
+	var items []ListCaseFilesByBiometricCaseRow
 	for rows.Next() {
-		var i ListCaseFilesByCriminalCaseRow
+		var i ListCaseFilesByBiometricCaseRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.CriminalCaseID,
+			&i.BiometricCaseID,
 			&i.Category,
 			&i.MediaType,
 			&i.HashID,
@@ -1496,13 +1624,13 @@ SELECT ct.id, ct.sequence, ct.trace_type, ct.box_x1, ct.box_y1, ct.box_x2, ct.bo
 FROM case_traces ct
 JOIN case_evidences ce ON ce.id = ct.evidence_id
 LEFT JOIN biometricfeature bf ON bf.case_trace_id = ct.id
-WHERE ce.criminal_case_id = $1 AND ce.case_file_id = $2
+WHERE ce.biometric_case_id = $1 AND ce.case_file_id = $2
 ORDER BY ct.sequence
 `
 
 type ListCaseTracesByCaseFileParams struct {
-	CriminalCaseID int64         `db:"criminal_case_id" json:"criminal_case_id"`
-	CaseFileID     sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
+	BiometricCaseID int64         `db:"biometric_case_id" json:"biometric_case_id"`
+	CaseFileID      sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
 }
 
 type ListCaseTracesByCaseFileRow struct {
@@ -1518,7 +1646,7 @@ type ListCaseTracesByCaseFileRow struct {
 }
 
 func (q *Queries) ListCaseTracesByCaseFile(ctx context.Context, arg ListCaseTracesByCaseFileParams) ([]ListCaseTracesByCaseFileRow, error) {
-	rows, err := q.db.QueryContext(ctx, listCaseTracesByCaseFile, arg.CriminalCaseID, arg.CaseFileID)
+	rows, err := q.db.QueryContext(ctx, listCaseTracesByCaseFile, arg.BiometricCaseID, arg.CaseFileID)
 	if err != nil {
 		return nil, err
 	}
@@ -1551,23 +1679,23 @@ func (q *Queries) ListCaseTracesByCaseFile(ctx context.Context, arg ListCaseTrac
 }
 
 const listCasesByCaseTraceIDs = `-- name: ListCasesByCaseTraceIDs :many
-SELECT cc.case_id, cc.case_type, cc.description, ct.id AS case_trace_id
+SELECT bc.case_id, bc.modality, bc.description, ct.id AS case_trace_id
 FROM case_traces ct
 JOIN case_evidences ce ON ce.id = ct.evidence_id
-JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+JOIN biometric_cases bc ON bc.id = ce.biometric_case_id
 WHERE ct.id = ANY($1::bigint[])
-ORDER BY cc.case_id, ct.id
+ORDER BY bc.case_id, ct.id
 `
 
 type ListCasesByCaseTraceIDsRow struct {
 	CaseID      string `db:"case_id" json:"case_id"`
-	CaseType    string `db:"case_type" json:"case_type"`
+	Modality    string `db:"modality" json:"modality"`
 	Description string `db:"description" json:"description"`
 	CaseTraceID int64  `db:"case_trace_id" json:"case_trace_id"`
 }
 
 // Resolves a set of case_trace ids (parsed back out of QUESTIONED cluster
-// member feature ids -- see graph.QuestionedFeatureID) to their criminal
+// member feature ids -- see graph.QuestionedFeatureID) to their biometric
 // cases. One case can own several of the given traces (rows are not
 // de-duplicated by case) so a caller can re-attribute each case back to the
 // cluster that supplied the matching trace.
@@ -1582,7 +1710,7 @@ func (q *Queries) ListCasesByCaseTraceIDs(ctx context.Context, caseTraceIds []in
 		var i ListCasesByCaseTraceIDsRow
 		if err := rows.Scan(
 			&i.CaseID,
-			&i.CaseType,
+			&i.Modality,
 			&i.Description,
 			&i.CaseTraceID,
 		); err != nil {
@@ -1702,7 +1830,7 @@ func (q *Queries) ListClusterMembersByClusterIDs(ctx context.Context, clusterIds
 }
 
 const listClusterMembersJoined = `-- name: ListClusterMembersJoined :many
-SELECT c.id AS cluster_id, c.case_type, m.feature_id
+SELECT c.id AS cluster_id, c.modality, m.feature_id
 FROM clusters c
 JOIN cluster_members m ON m.cluster_id = c.id
 ORDER BY c.id, m.feature_id
@@ -1710,7 +1838,7 @@ ORDER BY c.id, m.feature_id
 
 type ListClusterMembersJoinedRow struct {
 	ClusterID int64  `db:"cluster_id" json:"cluster_id"`
-	CaseType  string `db:"case_type" json:"case_type"`
+	Modality  string `db:"modality" json:"modality"`
 	FeatureID string `db:"feature_id" json:"feature_id"`
 }
 
@@ -1723,7 +1851,7 @@ func (q *Queries) ListClusterMembersJoined(ctx context.Context) ([]ListClusterMe
 	var items []ListClusterMembersJoinedRow
 	for rows.Next() {
 		var i ListClusterMembersJoinedRow
-		if err := rows.Scan(&i.ClusterID, &i.CaseType, &i.FeatureID); err != nil {
+		if err := rows.Scan(&i.ClusterID, &i.Modality, &i.FeatureID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1775,14 +1903,14 @@ func (q *Queries) ListClusterMembershipsForFeatureIDs(ctx context.Context, featu
 }
 
 const listClusters = `-- name: ListClusters :many
-SELECT id, case_type
+SELECT id, modality
 FROM clusters
 ORDER BY id
 `
 
 type ListClustersRow struct {
 	ID       int64  `db:"id" json:"id"`
-	CaseType string `db:"case_type" json:"case_type"`
+	Modality string `db:"modality" json:"modality"`
 }
 
 func (q *Queries) ListClusters(ctx context.Context) ([]ListClustersRow, error) {
@@ -1794,7 +1922,7 @@ func (q *Queries) ListClusters(ctx context.Context) ([]ListClustersRow, error) {
 	var items []ListClustersRow
 	for rows.Next() {
 		var i ListClustersRow
-		if err := rows.Scan(&i.ID, &i.CaseType); err != nil {
+		if err := rows.Scan(&i.ID, &i.Modality); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1809,7 +1937,7 @@ func (q *Queries) ListClusters(ctx context.Context) ([]ListClustersRow, error) {
 }
 
 const listClustersByIDs = `-- name: ListClustersByIDs :many
-SELECT id, case_type, created_at
+SELECT id, modality, created_at
 FROM clusters
 WHERE id = ANY($1::bigint[])
 ORDER BY id
@@ -1817,7 +1945,7 @@ ORDER BY id
 
 type ListClustersByIDsRow struct {
 	ID        int64     `db:"id" json:"id"`
-	CaseType  string    `db:"case_type" json:"case_type"`
+	Modality  string    `db:"modality" json:"modality"`
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 }
 
@@ -1830,7 +1958,7 @@ func (q *Queries) ListClustersByIDs(ctx context.Context, clusterIds []int64) ([]
 	var items []ListClustersByIDsRow
 	for rows.Next() {
 		var i ListClustersByIDsRow
-		if err := rows.Scan(&i.ID, &i.CaseType, &i.CreatedAt); err != nil {
+		if err := rows.Scan(&i.ID, &i.Modality, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1877,74 +2005,6 @@ func (q *Queries) ListCodificationPoints(ctx context.Context, codificationID int
 			&i.PointType,
 			&i.Angle,
 		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listCriminalCaseIDsByType = `-- name: ListCriminalCaseIDsByType :many
-SELECT case_id FROM criminal_cases WHERE case_type = $1 ORDER BY case_id
-`
-
-func (q *Queries) ListCriminalCaseIDsByType(ctx context.Context, caseType string) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, listCriminalCaseIDsByType, caseType)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var case_id string
-		if err := rows.Scan(&case_id); err != nil {
-			return nil, err
-		}
-		items = append(items, case_id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listCriminalCases = `-- name: ListCriminalCases :many
-SELECT case_id, case_type, description
-FROM criminal_cases
-ORDER BY case_id
-LIMIT $1 OFFSET $2
-`
-
-type ListCriminalCasesParams struct {
-	Limit  int32 `db:"limit" json:"limit"`
-	Offset int32 `db:"offset" json:"offset"`
-}
-
-type ListCriminalCasesRow struct {
-	CaseID      string `db:"case_id" json:"case_id"`
-	CaseType    string `db:"case_type" json:"case_type"`
-	Description string `db:"description" json:"description"`
-}
-
-func (q *Queries) ListCriminalCases(ctx context.Context, arg ListCriminalCasesParams) ([]ListCriminalCasesRow, error) {
-	rows, err := q.db.QueryContext(ctx, listCriminalCases, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListCriminalCasesRow
-	for rows.Next() {
-		var i ListCriminalCasesRow
-		if err := rows.Scan(&i.CaseID, &i.CaseType, &i.Description); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2303,6 +2363,44 @@ func (q *Queries) ListKnownIdentityChain(ctx context.Context) ([]ListKnownIdenti
 	return items, nil
 }
 
+const listMatchThresholds = `-- name: ListMatchThresholds :many
+SELECT id, embedding_type, review_threshold, confirm_threshold, source, created_by, created_at
+FROM match_thresholds
+WHERE embedding_type = $1
+ORDER BY id DESC
+`
+
+func (q *Queries) ListMatchThresholds(ctx context.Context, embeddingType string) ([]MatchThreshold, error) {
+	rows, err := q.db.QueryContext(ctx, listMatchThresholds, embeddingType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MatchThreshold
+	for rows.Next() {
+		var i MatchThreshold
+		if err := rows.Scan(
+			&i.ID,
+			&i.EmbeddingType,
+			&i.ReviewThreshold,
+			&i.ConfirmThreshold,
+			&i.Source,
+			&i.CreatedBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPersonIDs = `-- name: ListPersonIDs :many
 SELECT person_id FROM person ORDER BY person_id
 `
@@ -2331,12 +2429,12 @@ func (q *Queries) ListPersonIDs(ctx context.Context) ([]string, error) {
 }
 
 const listQuestionedClusterMembers = `-- name: ListQuestionedClusterMembers :many
-SELECT cc.case_id, cc.case_type, cc.description, ct.id AS case_trace_id,
+SELECT bc.case_id, bc.modality, bc.description, ct.id AS case_trace_id,
        tcf.id AS trace_crop_file_id, ecf.id AS evidence_file_id,
        ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2
 FROM case_traces ct
 JOIN case_evidences ce ON ce.id = ct.evidence_id
-JOIN criminal_cases cc ON cc.id = ce.criminal_case_id
+JOIN biometric_cases bc ON bc.id = ce.biometric_case_id
 LEFT JOIN case_files tcf ON tcf.id = ct.case_file_id
 LEFT JOIN case_files ecf ON ecf.id = ce.case_file_id
 WHERE ct.id = ANY($1::bigint[])
@@ -2344,7 +2442,7 @@ WHERE ct.id = ANY($1::bigint[])
 
 type ListQuestionedClusterMembersRow struct {
 	CaseID          string          `db:"case_id" json:"case_id"`
-	CaseType        string          `db:"case_type" json:"case_type"`
+	Modality        string          `db:"modality" json:"modality"`
 	Description     string          `db:"description" json:"description"`
 	CaseTraceID     int64           `db:"case_trace_id" json:"case_trace_id"`
 	TraceCropFileID sql.NullInt64   `db:"trace_crop_file_id" json:"trace_crop_file_id"`
@@ -2371,7 +2469,7 @@ func (q *Queries) ListQuestionedClusterMembers(ctx context.Context, caseTraceIds
 		var i ListQuestionedClusterMembersRow
 		if err := rows.Scan(
 			&i.CaseID,
-			&i.CaseType,
+			&i.Modality,
 			&i.Description,
 			&i.CaseTraceID,
 			&i.TraceCropFileID,
@@ -2395,11 +2493,11 @@ func (q *Queries) ListQuestionedClusterMembers(ctx context.Context, caseTraceIds
 }
 
 const listQuestionedFeatures = `-- name: ListQuestionedFeatures :many
-SELECT bf.case_trace_id, bf.feature_type, cc.case_id
+SELECT bf.case_trace_id, bf.feature_type, bc.case_id
 FROM biometricfeature bf
 JOIN case_traces tr ON tr.id = bf.case_trace_id
 JOIN case_evidences ev ON ev.id = tr.evidence_id
-JOIN criminal_cases cc ON cc.id = ev.criminal_case_id
+JOIN biometric_cases bc ON bc.id = ev.biometric_case_id
 WHERE bf.provenance = 'QUESTIONED'
 ORDER BY bf.case_trace_id
 `
@@ -2499,7 +2597,7 @@ func (q *Queries) MarkFeatureEmbeddingMatched(ctx context.Context, id int64) err
 
 const maxCaseNumberForYear = `-- name: MaxCaseNumberForYear :one
 SELECT COALESCE(MAX(case_number), 0)::int4 AS max_number
-FROM criminal_cases
+FROM biometric_cases
 WHERE case_year = $1::int4
 `
 
@@ -2610,6 +2708,21 @@ func (q *Queries) SetCaseCodificationFile(ctx context.Context, arg SetCaseCodifi
 	return err
 }
 
+const updateBiometricCaseDescription = `-- name: UpdateBiometricCaseDescription :exec
+UPDATE biometric_cases SET description = $2, updated_at = NOW()
+WHERE id = $1
+`
+
+type UpdateBiometricCaseDescriptionParams struct {
+	ID          int64  `db:"id" json:"id"`
+	Description string `db:"description" json:"description"`
+}
+
+func (q *Queries) UpdateBiometricCaseDescription(ctx context.Context, arg UpdateBiometricCaseDescriptionParams) error {
+	_, err := q.db.ExecContext(ctx, updateBiometricCaseDescription, arg.ID, arg.Description)
+	return err
+}
+
 const updateCodificationPoint = `-- name: UpdateCodificationPoint :execrows
 UPDATE case_codification_points
 SET x = $3, y = $4, point_type = $5, angle = $6, updated_at = NOW()
@@ -2640,19 +2753,41 @@ func (q *Queries) UpdateCodificationPoint(ctx context.Context, arg UpdateCodific
 	return result.RowsAffected()
 }
 
-const updateCriminalCaseDescription = `-- name: UpdateCriminalCaseDescription :exec
-UPDATE criminal_cases SET description = $2, updated_at = NOW()
-WHERE id = $1
+const upsertBiometricCase = `-- name: UpsertBiometricCase :one
+INSERT INTO biometric_cases (case_id, case_type, modality, description)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (case_id) DO UPDATE SET
+    case_type = EXCLUDED.case_type,
+    modality = EXCLUDED.modality,
+    description = EXCLUDED.description,
+    updated_at = NOW()
+RETURNING id, (xmax = 0) AS inserted
 `
 
-type UpdateCriminalCaseDescriptionParams struct {
-	ID          int64  `db:"id" json:"id"`
+type UpsertBiometricCaseParams struct {
+	CaseID      string `db:"case_id" json:"case_id"`
+	CaseType    string `db:"case_type" json:"case_type"`
+	Modality    string `db:"modality" json:"modality"`
 	Description string `db:"description" json:"description"`
 }
 
-func (q *Queries) UpdateCriminalCaseDescription(ctx context.Context, arg UpdateCriminalCaseDescriptionParams) error {
-	_, err := q.db.ExecContext(ctx, updateCriminalCaseDescription, arg.ID, arg.Description)
-	return err
+type UpsertBiometricCaseRow struct {
+	ID       int64 `db:"id" json:"id"`
+	Inserted bool  `db:"inserted" json:"inserted"`
+}
+
+// (xmax = 0) tells a real insert apart from a row that already existed: RowsAffected() is
+// 1 either way, so callers that need to report insert-vs-update counts need this instead.
+func (q *Queries) UpsertBiometricCase(ctx context.Context, arg UpsertBiometricCaseParams) (UpsertBiometricCaseRow, error) {
+	row := q.db.QueryRowContext(ctx, upsertBiometricCase,
+		arg.CaseID,
+		arg.CaseType,
+		arg.Modality,
+		arg.Description,
+	)
+	var i UpsertBiometricCaseRow
+	err := row.Scan(&i.ID, &i.Inserted)
+	return i, err
 }
 
 const upsertBiometricFeatureFromCaseTrace = `-- name: UpsertBiometricFeatureFromCaseTrace :one
@@ -2756,9 +2891,9 @@ func (q *Queries) UpsertCaseCodification(ctx context.Context, arg UpsertCaseCodi
 }
 
 const upsertCaseEvidence = `-- name: UpsertCaseEvidence :one
-INSERT INTO case_evidences (criminal_case_id, sequence, case_file_id, description)
+INSERT INTO case_evidences (biometric_case_id, sequence, case_file_id, description)
 VALUES ($1, $2, $3, $4)
-ON CONFLICT (criminal_case_id, sequence) DO UPDATE SET
+ON CONFLICT (biometric_case_id, sequence) DO UPDATE SET
     case_file_id = EXCLUDED.case_file_id,
     description = EXCLUDED.description,
     updated_at = NOW()
@@ -2766,15 +2901,15 @@ RETURNING id
 `
 
 type UpsertCaseEvidenceParams struct {
-	CriminalCaseID int64          `db:"criminal_case_id" json:"criminal_case_id"`
-	Sequence       int16          `db:"sequence" json:"sequence"`
-	CaseFileID     sql.NullInt64  `db:"case_file_id" json:"case_file_id"`
-	Description    sql.NullString `db:"description" json:"description"`
+	BiometricCaseID int64          `db:"biometric_case_id" json:"biometric_case_id"`
+	Sequence        int16          `db:"sequence" json:"sequence"`
+	CaseFileID      sql.NullInt64  `db:"case_file_id" json:"case_file_id"`
+	Description     sql.NullString `db:"description" json:"description"`
 }
 
 func (q *Queries) UpsertCaseEvidence(ctx context.Context, arg UpsertCaseEvidenceParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, upsertCaseEvidence,
-		arg.CriminalCaseID,
+		arg.BiometricCaseID,
 		arg.Sequence,
 		arg.CaseFileID,
 		arg.Description,
@@ -2785,9 +2920,9 @@ func (q *Queries) UpsertCaseEvidence(ctx context.Context, arg UpsertCaseEvidence
 }
 
 const upsertCaseFile = `-- name: UpsertCaseFile :one
-INSERT INTO case_files (criminal_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
+INSERT INTO case_files (biometric_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-ON CONFLICT (criminal_case_id, category, hash_id) DO UPDATE SET
+ON CONFLICT (biometric_case_id, category, hash_id) DO UPDATE SET
     media_type = EXCLUDED.media_type,
     filename = EXCLUDED.filename,
     source_path = EXCLUDED.source_path,
@@ -2799,15 +2934,15 @@ RETURNING id, created_at
 `
 
 type UpsertCaseFileParams struct {
-	CriminalCaseID int64          `db:"criminal_case_id" json:"criminal_case_id"`
-	Category       string         `db:"category" json:"category"`
-	MediaType      sql.NullString `db:"media_type" json:"media_type"`
-	HashID         sql.NullString `db:"hash_id" json:"hash_id"`
-	Filename       sql.NullString `db:"filename" json:"filename"`
-	SourcePath     sql.NullString `db:"source_path" json:"source_path"`
-	StorageRef     sql.NullString `db:"storage_ref" json:"storage_ref"`
-	ContentType    sql.NullString `db:"content_type" json:"content_type"`
-	SizeBytes      sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
+	BiometricCaseID int64          `db:"biometric_case_id" json:"biometric_case_id"`
+	Category        string         `db:"category" json:"category"`
+	MediaType       sql.NullString `db:"media_type" json:"media_type"`
+	HashID          sql.NullString `db:"hash_id" json:"hash_id"`
+	Filename        sql.NullString `db:"filename" json:"filename"`
+	SourcePath      sql.NullString `db:"source_path" json:"source_path"`
+	StorageRef      sql.NullString `db:"storage_ref" json:"storage_ref"`
+	ContentType     sql.NullString `db:"content_type" json:"content_type"`
+	SizeBytes       sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
 }
 
 type UpsertCaseFileRow struct {
@@ -2817,7 +2952,7 @@ type UpsertCaseFileRow struct {
 
 func (q *Queries) UpsertCaseFile(ctx context.Context, arg UpsertCaseFileParams) (UpsertCaseFileRow, error) {
 	row := q.db.QueryRowContext(ctx, upsertCaseFile,
-		arg.CriminalCaseID,
+		arg.BiometricCaseID,
 		arg.Category,
 		arg.MediaType,
 		arg.HashID,
@@ -2874,36 +3009,6 @@ func (q *Queries) UpsertCaseTrace(ctx context.Context, arg UpsertCaseTraceParams
 	var id int64
 	err := row.Scan(&id)
 	return id, err
-}
-
-const upsertCriminalCase = `-- name: UpsertCriminalCase :one
-INSERT INTO criminal_cases (case_id, case_type, description)
-VALUES ($1, $2, $3)
-ON CONFLICT (case_id) DO UPDATE SET
-    case_type = EXCLUDED.case_type,
-    description = EXCLUDED.description,
-    updated_at = NOW()
-RETURNING id, (xmax = 0) AS inserted
-`
-
-type UpsertCriminalCaseParams struct {
-	CaseID      string `db:"case_id" json:"case_id"`
-	CaseType    string `db:"case_type" json:"case_type"`
-	Description string `db:"description" json:"description"`
-}
-
-type UpsertCriminalCaseRow struct {
-	ID       int64 `db:"id" json:"id"`
-	Inserted bool  `db:"inserted" json:"inserted"`
-}
-
-// (xmax = 0) tells a real insert apart from a row that already existed: RowsAffected() is
-// 1 either way, so callers that need to report insert-vs-update counts need this instead.
-func (q *Queries) UpsertCriminalCase(ctx context.Context, arg UpsertCriminalCaseParams) (UpsertCriminalCaseRow, error) {
-	row := q.db.QueryRowContext(ctx, upsertCriminalCase, arg.CaseID, arg.CaseType, arg.Description)
-	var i UpsertCriminalCaseRow
-	err := row.Scan(&i.ID, &i.Inserted)
-	return i, err
 }
 
 const upsertFeatureEmbedding = `-- name: UpsertFeatureEmbedding :one

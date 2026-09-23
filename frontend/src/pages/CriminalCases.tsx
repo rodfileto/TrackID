@@ -27,16 +27,30 @@ const PAGE_SIZE = 10;
 
 const FILTER_CASE_TYPES = [
   { value: "", labelKey: "caseType.all" },
-  { value: "FACIAL", labelKey: "caseType.facial" },
-  { value: "FINGERPRINT", labelKey: "caseType.fingerprint" },
+  { value: "CRIMINAL", labelKey: "caseType.criminal" },
+  { value: "CIVIL", labelKey: "caseType.civil" },
+];
+
+const FILTER_MODALITIES = [
+  { value: "", labelKey: "modality.all" },
+  { value: "FACIAL", labelKey: "modality.facial" },
+  { value: "FINGERPRINT", labelKey: "modality.fingerprint" },
 ];
 
 function caseTypeLabelKey(caseType: string): string {
-  return caseType === "FACIAL" ? "caseType.facial" : "caseType.fingerprint";
+  return caseType === "CIVIL" ? "caseType.civil" : "caseType.criminal";
 }
 
-function caseTypeColor(caseType: string): "info" | "warning" {
-  return caseType === "FACIAL" ? "info" : "warning";
+function caseTypeColor(caseType: string): "error" | "success" {
+  return caseType === "CIVIL" ? "success" : "error";
+}
+
+function modalityLabelKey(modality: string): string {
+  return modality === "FACIAL" ? "modality.facial" : "modality.fingerprint";
+}
+
+function modalityColor(modality: string): "info" | "warning" {
+  return modality === "FACIAL" ? "info" : "warning";
 }
 
 function parsePage(value: string | null): number {
@@ -49,6 +63,7 @@ export default function CriminalCases() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const caseType = searchParams.get("caseType") ?? "";
+  const modality = searchParams.get("modality") ?? "";
   const year = searchParams.get("year") ?? "";
   const query = searchParams.get("q") ?? "";
   const page = parsePage(searchParams.get("page"));
@@ -94,6 +109,7 @@ export default function CriminalCases() {
           page,
           pageSize: PAGE_SIZE,
           caseType: caseType || undefined,
+          modality: modality || undefined,
           year: year || undefined,
           q: query || undefined,
         });
@@ -113,10 +129,14 @@ export default function CriminalCases() {
     return () => {
       cancelled = true;
     };
-  }, [page, caseType, year, query, refreshKey, t]);
+  }, [page, caseType, modality, year, query, refreshKey, t]);
 
   function handleCaseTypeChange(value: string) {
     updateParams({ caseType: value || undefined, page: undefined });
+  }
+
+  function handleModalityChange(value: string) {
+    updateParams({ modality: value || undefined, page: undefined });
   }
 
   function handleYearChange(value: string) {
@@ -159,6 +179,18 @@ export default function CriminalCases() {
               className="h-11 rounded-lg border border-gray-200 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
             >
               {FILTER_CASE_TYPES.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {t(option.labelKey)}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={modality}
+              onChange={(event) => handleModalityChange(event.target.value)}
+              className="h-11 rounded-lg border border-gray-200 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+            >
+              {FILTER_MODALITIES.map((option) => (
                 <option key={option.value} value={option.value}>
                   {t(option.labelKey)}
                 </option>
@@ -229,6 +261,12 @@ export default function CriminalCases() {
                     isHeader
                     className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                   >
+                    {t("cases.columns.modality")}
+                  </TableCell>
+                  <TableCell
+                    isHeader
+                    className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                  >
                     {t("cases.columns.description")}
                   </TableCell>
                 </TableRow>
@@ -253,6 +291,11 @@ export default function CriminalCases() {
                     <TableCell className="px-4 py-3 text-start text-theme-sm">
                       <Badge size="sm" color={caseTypeColor(item.caseType)}>
                         {t(caseTypeLabelKey(item.caseType))}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-start text-theme-sm">
+                      <Badge size="sm" color={modalityColor(item.modality)}>
+                        {t(modalityLabelKey(item.modality))}
                       </Badge>
                     </TableCell>
                     <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">

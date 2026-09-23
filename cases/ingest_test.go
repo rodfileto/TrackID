@@ -3,17 +3,20 @@ package cases_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/hibiken/asynq"
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
 	"github.com/rodfileto/trackid/cases"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/db/migrations"
+	"github.com/rodfileto/trackid/embedding"
 )
 
 // testDB creates a throwaway database on the server named by TRACKID_TEST_DATABASE_URL (a role
@@ -71,7 +74,8 @@ func TestIngestEvidenceFileAndTraceBox(t *testing.T) {
 
 	in := cases.CaseInput{
 		CaseID:   "TEST-C2-1",
-		CaseType: "FACIAL",
+		CaseType: cases.CaseTypeCriminal,
+		Modality: "FACIAL",
 		Evidences: []cases.EvidenceInput{{
 			Sequence: 1,
 			File: &cases.FileInput{
@@ -140,5 +144,70 @@ func TestIngestEvidenceFileAndTraceBox(t *testing.T) {
 			t.Fatalf("attempt %d: expected no codification/crop image, got %+v / %+v",
 				attempt, source.CodificationStorageRef, source.TraceCropStorageRef)
 		}
+	}
+}
+
+// recordingQueue is an embedding.Enqueuer that keeps what it was given.
+type recordingQueue struct{ tasks []*asynq.Task }
+
+func (q *recordingQueue) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+	q.tasks = append(q.tasks, task)
+	return &asynq.TaskInfo{}, nil
+}
+
+// TestIngestWithEnqueuer: only traces with an image to process are enqueued -- a box on an
+// evidence with a file, or the trace's own crop -- each as its codification type's task, for
+// the codification Ingest actually wrote. A box on an evidence without a file, and a trace with
+// neither, enqueue nothing.
+func TestIngestWithEnqueuer(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+
+	face := []cases.CodificationInput{{Sequence: 1, CodificationType: "FACE_EMBEDDING"}}
+	box := &cases.Box{X1: 1, Y1: 2, X2: 30, Y2: 40}
+	file := func(hash string) *cases.FileInput {
+		return &cases.FileInput{StorageRef: "bucket/" + hash, ContentType: "image/jpeg", HashID: hash}
+	}
+	in := cases.CaseInput{
+		CaseID: "TEST-ENQ-1", CaseType: cases.CaseTypeCriminal, Modality: "FACIAL",
+		Evidences: []cases.EvidenceInput{
+			{Sequence: 1, File: file("frame"), Traces: []cases.TraceInput{
+				{Sequence: 1, TraceType: "FACE_RECORD", Box: box, Codifications: face}, // enqueued
+				{Sequence: 2, TraceType: "FACE_RECORD", Codifications: face},           // no box
+			}},
+			{Sequence: 2, Traces: []cases.TraceInput{
+				{Sequence: 1, TraceType: "FACE_RECORD", Box: box, Codifications: face},           // box, no evidence file
+				{Sequence: 2, TraceType: "FACE_RECORD", Crop: file("crop"), Codifications: face}, // enqueued
+			}},
+		},
+	}
+
+	queue := &recordingQueue{}
+	res, err := cases.Ingest(ctx, sqlDB, in, cases.WithEnqueuer(queue))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []int64{
+		res.Evidences[0].Traces[0].Codifications[0].CodificationID,
+		res.Evidences[1].Traces[1].Codifications[0].CodificationID,
+	}
+	if len(queue.tasks) != len(want) {
+		t.Fatalf("enqueued %d tasks, want %d", len(queue.tasks), len(want))
+	}
+	for i, task := range queue.tasks {
+		var payload embedding.ComputeCodificationPayload
+		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if task.Type() != embedding.TaskTypeComputeCodification || payload.CodificationID != want[i] {
+			t.Fatalf("task %d = %s %+v, want %s for codification %d", i, task.Type(), payload, embedding.TaskTypeComputeCodification, want[i])
+		}
+	}
+
+	if _, err := cases.Ingest(ctx, sqlDB, in); err != nil {
+		t.Fatal(err)
+	}
+	if len(queue.tasks) != len(want) {
+		t.Fatalf("Ingest without WithEnqueuer enqueued %d more tasks", len(queue.tasks)-len(want))
 	}
 }

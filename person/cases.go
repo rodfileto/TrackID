@@ -9,7 +9,7 @@ import (
 	"github.com/rodfileto/trackid/graph"
 )
 
-// RelatedCase is one criminal case linked to a person through a resolved
+// RelatedCase is one biometric case linked to a person through a resolved
 // biometric cluster: at least one QUESTIONED trace in the case belongs to a
 // cluster one of the person's enrolled (KNOWN) features has been confirmed
 // into. ClusterIDs names which of the person's clusters supplied the link --
@@ -22,12 +22,12 @@ import (
 // cluster in the first place.
 type RelatedCase struct {
 	CaseID      string  `json:"caseId"`
-	CaseType    string  `json:"caseType"`
+	Modality    string  `json:"modality"`
 	Description string  `json:"description"`
 	ClusterIDs  []int64 `json:"clusterIds"`
 }
 
-// ListCases returns every criminal case linked to the given person through
+// ListCases returns every biometric case linked to the given person through
 // their resolved biometric clusters. Returns ErrNotFound if no person row
 // matches.
 func ListCases(ctx context.Context, sqlDB *sql.DB, personID string) ([]RelatedCase, error) {
@@ -87,7 +87,7 @@ func buildCases(ctx context.Context, q *db.Queries, memberRows []db.ListClusterM
 	for _, r := range caseRows {
 		c, ok := cases[r.CaseID]
 		if !ok {
-			c = &RelatedCase{CaseID: r.CaseID, CaseType: r.CaseType, Description: r.Description}
+			c = &RelatedCase{CaseID: r.CaseID, Modality: r.Modality, Description: r.Description}
 			cases[r.CaseID] = c
 			clusterSeen[r.CaseID] = map[int64]struct{}{}
 			order = append(order, r.CaseID)

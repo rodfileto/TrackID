@@ -6,9 +6,11 @@
 --
 -- cluster_members groups biometric features (not raw evidence items): feature_id is the
 -- feature's graph id (bare identity_file.id, or "TRACE:<case_trace_id>#feature").
+-- modality uses biometric_cases.modality's vocabulary. A cluster spans cases, so it has no
+-- case_type: one person can link a CRIMINAL case to a CIVIL one.
 CREATE TABLE clusters (
     id BIGSERIAL PRIMARY KEY,
-    case_type TEXT NOT NULL CHECK (case_type IN ('FACIAL', 'FINGERPRINT')),
+    modality TEXT NOT NULL CHECK (modality IN ('FACIAL', 'FINGERPRINT')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -30,3 +32,8 @@ CREATE TABLE cluster_merges (
     merged_by TEXT,
     reason TEXT
 );
+
+-- +goose Down
+DROP TABLE cluster_merges;
+DROP TABLE cluster_members;
+DROP TABLE clusters;
