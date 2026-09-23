@@ -9,55 +9,55 @@ const fp = "FINGERPRINT"
 
 func TestReconcile(t *testing.T) {
 	tests := []struct {
-		name      string
-		caseTypes map[string]string
-		edges     []edge
-		existing  map[int64]clusterState
-		want      plan
+		name       string
+		modalities map[string]string
+		edges      []edge
+		existing   map[int64]clusterState
+		want       plan
 	}{
 		{
-			name:      "empty",
-			caseTypes: map[string]string{},
-			edges:     nil,
-			existing:  map[int64]clusterState{},
-			want:      plan{kept: map[int64][]string{}},
+			name:       "empty",
+			modalities: map[string]string{},
+			edges:      nil,
+			existing:   map[int64]clusterState{},
+			want:       plan{kept: map[int64][]string{}},
 		},
 		{
-			name:      "new cluster from an edge",
-			caseTypes: map[string]string{"A": fp, "B": fp},
-			edges:     []edge{{left: "A", right: "B", modality: fp}},
-			existing:  map[int64]clusterState{},
+			name:       "new cluster from an edge",
+			modalities: map[string]string{"A": fp, "B": fp},
+			edges:      []edge{{left: "A", right: "B", modality: fp}},
+			existing:   map[int64]clusterState{},
 			want: plan{
 				kept:        map[int64][]string{},
 				newClusters: []newCluster{{modality: fp, evidence: []string{"A", "B"}}},
 			},
 		},
 		{
-			name:      "singleton evidence",
-			caseTypes: map[string]string{"A": fp},
-			edges:     nil,
-			existing:  map[int64]clusterState{},
+			name:       "singleton evidence",
+			modalities: map[string]string{"A": fp},
+			edges:      nil,
+			existing:   map[int64]clusterState{},
 			want: plan{
 				kept:        map[int64][]string{},
 				newClusters: []newCluster{{modality: fp, evidence: []string{"A"}}},
 			},
 		},
 		{
-			name:      "extend existing cluster",
-			caseTypes: map[string]string{"A": fp, "B": fp, "C": fp},
-			edges:     []edge{{left: "A", right: "B", modality: fp}, {left: "B", right: "C", modality: fp}},
-			existing:  map[int64]clusterState{1: {caseType: fp, members: []string{"A", "B"}}},
+			name:       "extend existing cluster",
+			modalities: map[string]string{"A": fp, "B": fp, "C": fp},
+			edges:      []edge{{left: "A", right: "B", modality: fp}, {left: "B", right: "C", modality: fp}},
+			existing:   map[int64]clusterState{1: {modality: fp, members: []string{"A", "B"}}},
 			want: plan{
 				kept: map[int64][]string{1: {"A", "B", "C"}},
 			},
 		},
 		{
-			name:      "merge keeps oldest id",
-			caseTypes: map[string]string{"A": fp, "B": fp, "C": fp, "D": fp},
-			edges:     []edge{{left: "A", right: "B", modality: fp}, {left: "C", right: "D", modality: fp}, {left: "B", right: "C", modality: fp}},
+			name:       "merge keeps oldest id",
+			modalities: map[string]string{"A": fp, "B": fp, "C": fp, "D": fp},
+			edges:      []edge{{left: "A", right: "B", modality: fp}, {left: "C", right: "D", modality: fp}, {left: "B", right: "C", modality: fp}},
 			existing: map[int64]clusterState{
-				3: {caseType: fp, members: []string{"C", "D"}},
-				5: {caseType: fp, members: []string{"A", "B"}},
+				3: {modality: fp, members: []string{"C", "D"}},
+				5: {modality: fp, members: []string{"A", "B"}},
 			},
 			want: plan{
 				kept:   map[int64][]string{3: {"A", "B", "C", "D"}},
@@ -65,20 +65,20 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		{
-			name:      "split keeps anchor, orphan forms new cluster",
-			caseTypes: map[string]string{"A": fp, "B": fp, "C": fp},
-			edges:     []edge{{left: "A", right: "B", modality: fp}},
-			existing:  map[int64]clusterState{1: {caseType: fp, members: []string{"A", "B", "C"}}},
+			name:       "split keeps anchor, orphan forms new cluster",
+			modalities: map[string]string{"A": fp, "B": fp, "C": fp},
+			edges:      []edge{{left: "A", right: "B", modality: fp}},
+			existing:   map[int64]clusterState{1: {modality: fp, members: []string{"A", "B", "C"}}},
 			want: plan{
 				kept:        map[int64][]string{1: {"A", "B"}},
 				newClusters: []newCluster{{modality: fp, evidence: []string{"C"}}},
 			},
 		},
 		{
-			name:      "split orphan joins new evidence",
-			caseTypes: map[string]string{"A": fp, "B": fp, "C": fp, "D": fp},
-			edges:     []edge{{left: "A", right: "B", modality: fp}, {left: "C", right: "D", modality: fp}},
-			existing:  map[int64]clusterState{1: {caseType: fp, members: []string{"A", "B", "C"}}},
+			name:       "split orphan joins new evidence",
+			modalities: map[string]string{"A": fp, "B": fp, "C": fp, "D": fp},
+			edges:      []edge{{left: "A", right: "B", modality: fp}, {left: "C", right: "D", modality: fp}},
+			existing:   map[int64]clusterState{1: {modality: fp, members: []string{"A", "B", "C"}}},
 			want: plan{
 				kept:        map[int64][]string{1: {"A", "B"}},
 				newClusters: []newCluster{{modality: fp, evidence: []string{"C", "D"}}},
@@ -87,7 +87,7 @@ func TestReconcile(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := reconcile(tt.caseTypes, tt.edges, tt.existing)
+			got := reconcile(tt.modalities, tt.edges, tt.existing)
 			if !reflect.DeepEqual(got.kept, tt.want.kept) {
 				t.Fatalf("kept = %v, want %v", got.kept, tt.want.kept)
 			}

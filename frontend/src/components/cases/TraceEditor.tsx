@@ -5,7 +5,7 @@
  * move, resize, and delete bounding boxes on an evidence image. It has no
  * idea whether it's marking a face or a fingerprint lift -- a trace is just
  * a box (see cases.TraceDetection on the backend, which is the same shape
- * for either case_type). Automatic detection (facial only) is a separate
+ * for either modality). Automatic detection (facial only) is a separate
  * concern that can populate `traces` the same way a person would.
  *
  * Controlled component: the caller owns the trace list via `traces` +

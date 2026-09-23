@@ -18,6 +18,7 @@ import (
 type Stats struct {
 	Embeddings int // unmatched embeddings (or templates, for RunTemplates) considered
 	Decisions  int // SYSTEM biometric_decisions rows written (or that would be)
+	Review     int // of those, INCONCLUSIVE ones inside RunBand's review band
 }
 
 // candidatesPerEmbedding caps how many ANN neighbors are inspected per
@@ -28,12 +29,16 @@ const candidatesPerEmbedding = 20
 // ids (see graph.KnownFeatureID / graph.QuestionedFeatureID) with
 // featureAID < featureBID, matching biometric_decisions' ordering constraint.
 // confidence is the score stored on the decision: 1 - cosine distance for an
-// embedding, the matcher's own score for a template.
+// embedding, the matcher's own score for a template. decision and threshold
+// are the SYSTEM decision and the cutoff it was classified against, on the
+// same scale as confidence.
 type candidate struct {
 	featureAID string
 	featureBID string
 	modality   string
 	confidence float64
+	decision   string
+	threshold  float64
 }
 
 // Plan reports what Run would do for embeddingType, without writing anything.
@@ -51,30 +56,21 @@ func Plan(ctx context.Context, sqlDB *sql.DB, embeddingType string, threshold fl
 // Run finds ANN neighbors within threshold for every unmatched embedding of
 // embeddingType, records a SYSTEM POSITIVE biometric_decisions row for each
 // pair not already decided, and marks the embeddings considered as matched.
-// systemSource identifies what produced the vectors (e.g. "FACE_ARCFACE_512")
-// and is stored on each decision row.
+// threshold is a cosine distance (a pair qualifies at distance <= threshold);
+// the decision records it as the similarity 1 - threshold, on the same scale
+// as its confidence. systemSource identifies what produced the vectors (e.g.
+// "FACE_ARCFACE_512") and is stored on each decision row. Run is RunBand with
+// no review band and no threshold version.
 func Run(ctx context.Context, sqlDB *sql.DB, embeddingType string, threshold float64, systemSource string) (Stats, error) {
-	if sqlDB == nil {
-		return Stats{}, fmt.Errorf("database is not configured")
-	}
-	if systemSource == "" {
-		return Stats{}, fmt.Errorf("systemSource is required")
-	}
-
-	candidates, embeddingIDs, considered, err := computeCandidates(ctx, sqlDB, embeddingType, threshold)
-	if err != nil {
-		return Stats{}, err
-	}
-	if err := recordDecisions(ctx, sqlDB, candidates, threshold, systemSource, embeddingIDs, (*db.Queries).MarkFeatureEmbeddingMatched); err != nil {
-		return Stats{}, err
-	}
-	return Stats{Embeddings: considered, Decisions: len(candidates)}, nil
+	cut := 1 - threshold
+	return RunBand(ctx, sqlDB, embeddingType, Version{EmbeddingType: embeddingType, Band: Band{Review: cut, Confirm: cut}}, systemSource)
 }
 
-// recordDecisions writes a SYSTEM POSITIVE decision for each candidate and
-// marks every considered id matched, in one transaction -- the write half
-// shared by Run (embeddings) and RunTemplates (templates).
-func recordDecisions(ctx context.Context, sqlDB *sql.DB, candidates []candidate, threshold float64, systemSource string,
+// recordDecisions writes each candidate's SYSTEM decision and marks every
+// considered id matched, in one transaction -- the write half shared by
+// RunBand (embeddings) and RunTemplates (templates). thresholdRef, when set,
+// is the match_thresholds version the decisions were classified under.
+func recordDecisions(ctx context.Context, sqlDB *sql.DB, candidates []candidate, systemSource, thresholdRef string,
 	consideredIDs []int64, markMatched func(*db.Queries, context.Context, int64) error) error {
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	if err != nil {
@@ -85,14 +81,16 @@ func recordDecisions(ctx context.Context, sqlDB *sql.DB, candidates []candidate,
 
 	for _, c := range candidates {
 		if _, err := q.InsertBiometricDecision(ctx, db.InsertBiometricDecisionParams{
-			FeatureAID:   c.featureAID,
-			FeatureBID:   c.featureBID,
-			Modality:     c.modality,
-			Role:         "SYSTEM",
-			Decision:     "POSITIVE",
-			SystemSource: sql.NullString{String: systemSource, Valid: true},
-			Confidence:   sql.NullFloat64{Float64: c.confidence, Valid: true},
-			Threshold:    sql.NullFloat64{Float64: threshold, Valid: true},
+			FeatureAID:           c.featureAID,
+			FeatureBID:           c.featureBID,
+			Modality:             c.modality,
+			Role:                 "SYSTEM",
+			Decision:             c.decision,
+			SystemSource:         sql.NullString{String: systemSource, Valid: true},
+			Confidence:           sql.NullFloat64{Float64: c.confidence, Valid: true},
+			Threshold:            sql.NullFloat64{Float64: c.threshold, Valid: true},
+			RelatedReference:     sql.NullString{String: thresholdRef, Valid: thresholdRef != ""},
+			RelatedReferenceKind: sql.NullString{String: "match_threshold", Valid: thresholdRef != ""},
 		}); err != nil {
 			return fmt.Errorf("biometricmatch: insert decision (%s, %s): %w", c.featureAID, c.featureBID, err)
 		}
@@ -108,7 +106,7 @@ func recordDecisions(ctx context.Context, sqlDB *sql.DB, candidates []candidate,
 }
 
 // featureInfo is a biometricfeature's graph feature id and biometric_decisions
-// modality (FACE/FINGERPRINT, not to be confused with criminal_cases.case_type
+// modality (FACE/FINGERPRINT, not to be confused with biometric_cases.modality
 // which spells the face modality "FACIAL").
 type featureInfo struct {
 	graphID  string

@@ -20,23 +20,23 @@ import {
   searchPersonsByFace,
   searchPersonsByName,
   type CaseFaceSearchResult,
-  type CaseTypeCount,
+  type ModalityCount,
   type PersonFaceSearchResult,
   type PersonSearchResult,
 } from "../services/persons";
 
-function caseTypeLabelKey(caseType: string): string {
-  return caseType === "FACIAL" ? "caseType.facial" : "caseType.fingerprint";
+function modalityLabelKey(modality: string): string {
+  return modality === "FACIAL" ? "modality.facial" : "modality.fingerprint";
 }
 
-function caseTypeColor(caseType: string): "info" | "warning" {
-  return caseType === "FACIAL" ? "info" : "warning";
+function modalityColor(modality: string): "info" | "warning" {
+  return modality === "FACIAL" ? "info" : "warning";
 }
 
 /** The "N facial / N fingerprint" badges next to a person result -- how many
  * criminal cases (see PersonSearchResult.caseCounts) that person is linked
  * to, broken down by case type. Renders nothing when the person has none. */
-function CaseCountBadges({ caseCounts }: { caseCounts: CaseTypeCount[] | null }) {
+function CaseCountBadges({ caseCounts }: { caseCounts: ModalityCount[] | null }) {
   const { t } = useTranslation();
   if (!caseCounts || caseCounts.length === 0) {
     return <span className="text-gray-400 dark:text-white/30">—</span>;
@@ -44,8 +44,8 @@ function CaseCountBadges({ caseCounts }: { caseCounts: CaseTypeCount[] | null })
   return (
     <div className="flex flex-wrap gap-1">
       {caseCounts.map((c) => (
-        <Badge key={c.caseType} size="sm" color={caseTypeColor(c.caseType)}>
-          {c.count} {t(caseTypeLabelKey(c.caseType))}
+        <Badge key={c.modality} size="sm" color={modalityColor(c.modality)}>
+          {c.count} {t(modalityLabelKey(c.modality))}
         </Badge>
       ))}
     </div>
@@ -250,8 +250,8 @@ function CaseResultsTable({ results }: { results: CaseFaceSearchResult[] }) {
                   </Link>
                 </TableCell>
                 <TableCell className="px-4 py-3 text-start text-theme-sm">
-                  <Badge size="sm" color={caseTypeColor(result.caseType)}>
-                    {t(caseTypeLabelKey(result.caseType))}
+                  <Badge size="sm" color={modalityColor(result.modality)}>
+                    {t(modalityLabelKey(result.modality))}
                   </Badge>
                 </TableCell>
                 <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">

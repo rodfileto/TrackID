@@ -61,7 +61,7 @@ export interface PersonClusterMember {
   contentType?: string;
 
   caseId?: string;
-  caseType?: string;
+  modality?: string;
   description?: string;
   traceId?: number;
   thumbnailFileId?: number;
@@ -74,7 +74,7 @@ export interface PersonClusterMember {
  * crime-scene evidence, not just to another enrollment record. */
 export interface PersonCluster {
   clusterId: number;
-  caseType: string;
+  modality: string;
   createdAt: string;
   memberCount: number;
   hasCaseEvidence: boolean;
@@ -87,7 +87,7 @@ export interface PersonCluster {
  * evidence both resolving to this person). */
 export interface PersonRelatedCase {
   caseId: string;
-  caseType: string;
+  modality: string;
   description: string;
   clusterIds: number[];
 }
@@ -101,9 +101,9 @@ export interface PersonProfile {
 }
 
 /** How many distinct criminal cases a search result is linked to for one
- * case_type ("FACIAL" or "FINGERPRINT") -- see person.CaseTypeCount. */
-export interface CaseTypeCount {
-  caseType: string;
+ * modality ("FACIAL" or "FINGERPRINT") -- see person.ModalityCount. */
+export interface ModalityCount {
+  modality: string;
   count: number;
 }
 
@@ -122,7 +122,7 @@ export interface PersonSearchResult {
   registerNumber: string;
   documentType: string;
   documentNumber: string;
-  caseCounts: CaseTypeCount[] | null;
+  caseCounts: ModalityCount[] | null;
 }
 
 /** One identity_register whose enrolled face matched a face search --
@@ -158,7 +158,7 @@ export interface ThumbnailBox {
  * trace's own crop nor its evidence file is available anymore. */
 export interface CaseFaceSearchResult {
   caseId: string;
-  caseType: string;
+  modality: string;
   description: string;
   traceId: number;
   similarity: number;

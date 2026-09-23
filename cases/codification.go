@@ -86,7 +86,7 @@ func ListCaseCodifications(ctx context.Context, sqlDB *sql.DB, caseID string) ([
 
 	q := db.New(sqlDB)
 
-	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	caseRow, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -94,7 +94,7 @@ func ListCaseCodifications(ctx context.Context, sqlDB *sql.DB, caseID string) ([
 		return nil, err
 	}
 
-	rows, err := q.ListCaseCodificationsByCriminalCase(ctx, caseRow.ID)
+	rows, err := q.ListCaseCodificationsByBiometricCase(ctx, caseRow.ID)
 	if err != nil {
 		return nil, fmt.Errorf("cases: list case_codifications for case %d: %w", caseRow.ID, err)
 	}
@@ -127,11 +127,11 @@ func ListCaseCodifications(ctx context.Context, sqlDB *sql.DB, caseID string) ([
 // (e.g. legacy data backfilled directly into case_traces). Works for any
 // modality; callers that are points-only (FINGERPRINT/MINUTIAE) additionally
 // call resolveMinutiaeCodification. It also returns the codification_type.
-func resolveCodification(ctx context.Context, q *db.Queries, criminalCaseID, evidenceFileID, traceID int64) (int64, string, error) {
+func resolveCodification(ctx context.Context, q *db.Queries, biometricCaseID, evidenceFileID, traceID int64) (int64, string, error) {
 	traceRow, err := q.GetCaseTraceForFile(ctx, db.GetCaseTraceForFileParams{
-		ID:             traceID,
-		CriminalCaseID: criminalCaseID,
-		CaseFileID:     sql.NullInt64{Int64: evidenceFileID, Valid: true},
+		ID:              traceID,
+		BiometricCaseID: biometricCaseID,
+		CaseFileID:      sql.NullInt64{Int64: evidenceFileID, Valid: true},
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -167,11 +167,11 @@ func resolveCodification(ctx context.Context, q *db.Queries, criminalCaseID, evi
 // resolveMinutiaeCodification is resolveCodification plus the points-only
 // gate: it fails with ErrPointsNotSupported for anything but a MINUTIAE
 // (FINGERPRINT) codification.
-func resolveMinutiaeCodification(ctx context.Context, q *db.Queries, criminalCaseID, evidenceFileID, traceID int64) (int64, error) {
+func resolveMinutiaeCodification(ctx context.Context, q *db.Queries, biometricCaseID, evidenceFileID, traceID int64) (int64, error) {
 	traceRow, err := q.GetCaseTraceForFile(ctx, db.GetCaseTraceForFileParams{
-		ID:             traceID,
-		CriminalCaseID: criminalCaseID,
-		CaseFileID:     sql.NullInt64{Int64: evidenceFileID, Valid: true},
+		ID:              traceID,
+		BiometricCaseID: biometricCaseID,
+		CaseFileID:      sql.NullInt64{Int64: evidenceFileID, Valid: true},
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -186,7 +186,7 @@ func resolveMinutiaeCodification(ctx context.Context, q *db.Queries, criminalCas
 	if codificationType != graph.CodificationTypeMinutiae {
 		return 0, ErrPointsNotSupported
 	}
-	codificationID, _, err := resolveCodification(ctx, q, criminalCaseID, evidenceFileID, traceID)
+	codificationID, _, err := resolveCodification(ctx, q, biometricCaseID, evidenceFileID, traceID)
 	return codificationID, err
 }
 
@@ -210,7 +210,7 @@ func ListPoints(ctx context.Context, sqlDB *sql.DB, caseID string, evidenceFileI
 
 	q := db.New(sqlDB)
 
-	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	caseRow, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -253,7 +253,7 @@ func AddPoints(ctx context.Context, sqlDB *sql.DB, caseID string, evidenceFileID
 
 	q := db.New(tx)
 
-	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	caseRow, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -315,7 +315,7 @@ func UpdatePoint(ctx context.Context, sqlDB *sql.DB, caseID string, evidenceFile
 
 	q := db.New(sqlDB)
 
-	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	caseRow, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
@@ -353,7 +353,7 @@ func DeletePoint(ctx context.Context, sqlDB *sql.DB, caseID string, evidenceFile
 
 	q := db.New(sqlDB)
 
-	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	caseRow, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
@@ -419,7 +419,7 @@ func SaveCodificationImage(ctx context.Context, sqlDB *sql.DB, store *storage.Cl
 
 	q := db.New(tx)
 
-	caseRow, err := q.GetCriminalCaseByCaseID(ctx, caseID)
+	caseRow, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return File{}, ErrNotFound
@@ -443,14 +443,14 @@ func SaveCodificationImage(ctx context.Context, sqlDB *sql.DB, store *storage.Cl
 
 	filename := fmt.Sprintf("trace-%d-codification", traceID)
 	fileRow, err := q.UpsertCaseFile(ctx, db.UpsertCaseFileParams{
-		CriminalCaseID: caseRow.ID,
-		Category:       "codification_image",
-		MediaType:      sql.NullString{String: "image", Valid: true},
-		HashID:         sql.NullString{String: hashHex, Valid: true},
-		Filename:       sql.NullString{String: filename, Valid: true},
-		StorageRef:     sql.NullString{String: storageRef, Valid: true},
-		ContentType:    sql.NullString{String: contentType, Valid: true},
-		SizeBytes:      sql.NullInt64{Int64: int64(len(data)), Valid: true},
+		BiometricCaseID: caseRow.ID,
+		Category:        "codification_image",
+		MediaType:       sql.NullString{String: "image", Valid: true},
+		HashID:          sql.NullString{String: hashHex, Valid: true},
+		Filename:        sql.NullString{String: filename, Valid: true},
+		StorageRef:      sql.NullString{String: storageRef, Valid: true},
+		ContentType:     sql.NullString{String: contentType, Valid: true},
+		SizeBytes:       sql.NullInt64{Int64: int64(len(data)), Valid: true},
 	})
 	if err != nil {
 		return File{}, fmt.Errorf("cases: create case file: %w", err)
