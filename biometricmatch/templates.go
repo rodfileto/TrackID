@@ -46,7 +46,7 @@ func RunTemplates(ctx context.Context, sqlDB *sql.DB, matcher TemplateMatcher, t
 	if err != nil {
 		return Stats{}, err
 	}
-	if err := recordDecisions(ctx, sqlDB, candidates, threshold, systemSource, templateIDs, (*db.Queries).MarkBiometricTemplateMatched); err != nil {
+	if err := recordDecisions(ctx, sqlDB, candidates, systemSource, "", templateIDs, (*db.Queries).MarkBiometricTemplateMatched); err != nil {
 		return Stats{}, err
 	}
 	return Stats{Embeddings: len(templateIDs), Decisions: len(candidates)}, nil
@@ -138,6 +138,8 @@ func computeTemplateCandidates(ctx context.Context, sqlDB *sql.DB, matcher Templ
 					featureBID: b,
 					modality:   probeInfo.modality,
 					confidence: score,
+					decision:   "POSITIVE",
+					threshold:  threshold,
 				})
 			}
 		}

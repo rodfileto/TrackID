@@ -807,6 +807,29 @@ func (q *Queries) GetCodificationSource(ctx context.Context, id int64) (GetCodif
 	return i, err
 }
 
+const getCurrentMatchThreshold = `-- name: GetCurrentMatchThreshold :one
+SELECT id, embedding_type, review_threshold, confirm_threshold, source, created_by, created_at
+FROM match_thresholds
+WHERE embedding_type = $1
+ORDER BY id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetCurrentMatchThreshold(ctx context.Context, embeddingType string) (MatchThreshold, error) {
+	row := q.db.QueryRowContext(ctx, getCurrentMatchThreshold, embeddingType)
+	var i MatchThreshold
+	err := row.Scan(
+		&i.ID,
+		&i.EmbeddingType,
+		&i.ReviewThreshold,
+		&i.ConfirmThreshold,
+		&i.Source,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getIdentityFeatureSource = `-- name: GetIdentityFeatureSource :one
 SELECT bf.id AS biometricfeature_id, bf.feature_type, f.storage_ref
 FROM biometricfeature bf
@@ -1087,6 +1110,41 @@ type InsertClusterMergeParams struct {
 func (q *Queries) InsertClusterMerge(ctx context.Context, arg InsertClusterMergeParams) error {
 	_, err := q.db.ExecContext(ctx, insertClusterMerge, arg.FromClusterID, arg.ToClusterID, arg.Reason)
 	return err
+}
+
+const insertMatchThreshold = `-- name: InsertMatchThreshold :one
+INSERT INTO match_thresholds (embedding_type, review_threshold, confirm_threshold, source, created_by)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, embedding_type, review_threshold, confirm_threshold, source, created_by, created_at
+`
+
+type InsertMatchThresholdParams struct {
+	EmbeddingType    string         `db:"embedding_type" json:"embedding_type"`
+	ReviewThreshold  float64        `db:"review_threshold" json:"review_threshold"`
+	ConfirmThreshold float64        `db:"confirm_threshold" json:"confirm_threshold"`
+	Source           string         `db:"source" json:"source"`
+	CreatedBy        sql.NullString `db:"created_by" json:"created_by"`
+}
+
+func (q *Queries) InsertMatchThreshold(ctx context.Context, arg InsertMatchThresholdParams) (MatchThreshold, error) {
+	row := q.db.QueryRowContext(ctx, insertMatchThreshold,
+		arg.EmbeddingType,
+		arg.ReviewThreshold,
+		arg.ConfirmThreshold,
+		arg.Source,
+		arg.CreatedBy,
+	)
+	var i MatchThreshold
+	err := row.Scan(
+		&i.ID,
+		&i.EmbeddingType,
+		&i.ReviewThreshold,
+		&i.ConfirmThreshold,
+		&i.Source,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const listAllBiometricCases = `-- name: ListAllBiometricCases :many
@@ -2291,6 +2349,44 @@ func (q *Queries) ListKnownIdentityChain(ctx context.Context) ([]ListKnownIdenti
 			&i.StorageRef,
 			&i.ContentType,
 			&i.SizeBytes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMatchThresholds = `-- name: ListMatchThresholds :many
+SELECT id, embedding_type, review_threshold, confirm_threshold, source, created_by, created_at
+FROM match_thresholds
+WHERE embedding_type = $1
+ORDER BY id DESC
+`
+
+func (q *Queries) ListMatchThresholds(ctx context.Context, embeddingType string) ([]MatchThreshold, error) {
+	rows, err := q.db.QueryContext(ctx, listMatchThresholds, embeddingType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MatchThreshold
+	for rows.Next() {
+		var i MatchThreshold
+		if err := rows.Scan(
+			&i.ID,
+			&i.EmbeddingType,
+			&i.ReviewThreshold,
+			&i.ConfirmThreshold,
+			&i.Source,
+			&i.CreatedBy,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

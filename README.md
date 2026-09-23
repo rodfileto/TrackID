@@ -86,7 +86,7 @@ organizations import to build their import commands) and an **internal** runtime
 
 - `cmd/` — thin `main()` wrappers: `migrate` (Postgres schema), `trackid` (API server
   + frontend), `sync-graph`, `sync-identity`, `cluster-biometrics`, `identify`, and
-  `match-embeddings`
+  `match-embeddings`, `match-threshold` (the matcher's versioned review/confirm cutoffs)
 - `frontend/` — React + Vite, based on the [TailAdmin React](https://github.com/TailAdmin/free-react-tailwind-admin-dashboard)
   template; `npm run build` produces the bundle `internal/web` serves
 - `quarto/` — technical report and ontology documentation

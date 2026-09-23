@@ -748,3 +748,21 @@ WHERE bf.feature_type = 'FINGERPRINT_TEMPLATE'
       WHERE bt.biometricfeature_id = bf.id AND bt.template_type = sqlc.arg(template_type)
   )
 ORDER BY bf.id;
+
+-- name: GetCurrentMatchThreshold :one
+SELECT id, embedding_type, review_threshold, confirm_threshold, source, created_by, created_at
+FROM match_thresholds
+WHERE embedding_type = $1
+ORDER BY id DESC
+LIMIT 1;
+
+-- name: InsertMatchThreshold :one
+INSERT INTO match_thresholds (embedding_type, review_threshold, confirm_threshold, source, created_by)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, embedding_type, review_threshold, confirm_threshold, source, created_by, created_at;
+
+-- name: ListMatchThresholds :many
+SELECT id, embedding_type, review_threshold, confirm_threshold, source, created_by, created_at
+FROM match_thresholds
+WHERE embedding_type = $1
+ORDER BY id DESC;
