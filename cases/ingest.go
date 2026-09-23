@@ -13,6 +13,7 @@ import (
 	"fmt"
 
 	"github.com/rodfileto/trackid/db"
+	"github.com/rodfileto/trackid/embedding"
 	"github.com/rodfileto/trackid/graph"
 )
 
@@ -114,9 +115,35 @@ type Result struct {
 	Evidences []EvidenceResult
 }
 
+// Option configures optional Ingest behavior.
+type Option func(*ingestOptions)
+
+type ingestOptions struct {
+	enqueuer embedding.Enqueuer
+}
+
+// WithEnqueuer makes Ingest enqueue processing for every codification whose trace has an image
+// to process, right after the transaction commits -- the same tasks CreateTraces and
+// SaveCodificationImage enqueue for a trace marked in the UI, and the QUESTIONED-side counterpart
+// to identity.WithEnqueuer. A trace has an image when it carries its own Crop, or a Box on an
+// evidence with a File (GetCodificationSource's sources). A FACE_EMBEDDING codification gets face
+// embedding, which in turn triggers matching and clustering; a MINUTIAE one gets template
+// extraction. Traces with neither are still written, just never processed. Omitting this option
+// (the default) enqueues nothing, matching every existing caller's behavior unchanged.
+//
+// Re-ingesting enqueues again and recomputes the same embedding; matching skips pairs already
+// decided, so it writes no duplicate decisions.
+func WithEnqueuer(queue embedding.Enqueuer) Option {
+	return func(o *ingestOptions) { o.enqueuer = queue }
+}
+
 // Ingest upserts one CaseInput's full chain -- biometric_cases, case_evidences, case_traces,
 // case_codifications, and each trace's QUESTIONED biometricfeature -- in a single transaction.
-func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput) (Result, error) {
+func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput, opts ...Option) (Result, error) {
+	var o ingestOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
 	if sqlDB == nil {
 		return Result{}, fmt.Errorf("cases: nil db")
 	}
@@ -225,6 +252,20 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput) (Result, error) {
 
 	if err := tx.Commit(); err != nil {
 		return Result{}, err
+	}
+
+	if o.enqueuer != nil {
+		for i, evidence := range c.Evidences {
+			for j, trace := range evidence.Traces {
+				if trace.Crop == nil && (trace.Box == nil || evidence.File == nil) {
+					continue
+				}
+				for k, codification := range trace.Codifications {
+					id := result.Evidences[i].Traces[j].Codifications[k].CodificationID
+					enqueueCodificationTasks(o.enqueuer, codification.CodificationType, []int64{id})
+				}
+			}
+		}
 	}
 	return result, nil
 }
