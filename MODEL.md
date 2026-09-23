@@ -91,6 +91,16 @@ a *derived view*, never written authoritatively to the graph.
 A pair progresses through roles (SYSTEM → VERIFICATOR → REVIEWER, with INCONSISTENCE only
 on disagreement); the full chain matters for audit, not just the outcome.
 
+The automatic matcher's cutoffs are data, not code: `match_thresholds` holds one append-only
+version per row (review and confirm cutoffs, as similarities on the scale of `confidence`, with
+their source), and the latest row per embedding type is current. A pair at or above the confirm
+cutoff gets a SYSTEM POSITIVE, which is CONFIRMED on its own; between the two cutoffs, a SYSTEM
+INCONCLUSIVE, which stays PENDING_REVIEW for an examiner — the review band; below, nothing.
+Each SYSTEM decision records the cutoff it was classified against in `threshold` and cites its
+version (`related_reference_kind = 'match_threshold'`). With no version set, faces use
+similarity 0.6 with no band. Versions are set with `cmd/match-threshold`, from each
+organization's own validation.
+
 ## 4. Clustering
 
 `clusters` / `cluster_members` / `cluster_merges` persist stable, citable cluster numbers:
