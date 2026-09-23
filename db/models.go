@@ -241,6 +241,16 @@ type IdentityRegister struct {
 	UpdatedAt      time.Time             `db:"updated_at" json:"updated_at"`
 }
 
+type MatchThreshold struct {
+	ID               int64          `db:"id" json:"id"`
+	EmbeddingType    string         `db:"embedding_type" json:"embedding_type"`
+	ReviewThreshold  float64        `db:"review_threshold" json:"review_threshold"`
+	ConfirmThreshold float64        `db:"confirm_threshold" json:"confirm_threshold"`
+	Source           string         `db:"source" json:"source"`
+	CreatedBy        sql.NullString `db:"created_by" json:"created_by"`
+	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
+}
+
 type Person struct {
 	ID        int64                 `db:"id" json:"id"`
 	PersonID  string                `db:"person_id" json:"person_id"`
