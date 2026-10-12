@@ -855,3 +855,6 @@ JOIN locations l ON l.id = o.location_id
 WHERE ST_DWithin(l.geom, ST_SetSRID(ST_MakePoint(sqlc.arg(lon)::float8, sqlc.arg(lat)::float8), 4326)::geography, sqlc.arg(radius_m)::float8)
   AND (sqlc.arg(include_municipality_centroids)::bool OR l.precision <> 'MUNICIPALITY')
 ORDER BY distance_m, o.id;
+
+-- name: GetOccurrenceIDByNumber :one
+SELECT id FROM occurrences WHERE agency = $1 AND occurrence_number = $2;
