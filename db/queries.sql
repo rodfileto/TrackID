@@ -766,3 +766,92 @@ SELECT id, embedding_type, review_threshold, confirm_threshold, source, created_
 FROM match_thresholds
 WHERE embedding_type = $1
 ORDER BY id DESC;
+
+-- name: UpsertLocation :one
+-- geom never crosses into Go: sqlc has no type for geography, so a point goes in and out as
+-- lon/lat (WGS 84).
+INSERT INTO locations (location_id, name, geom, precision, municipality_code, uf, neighbourhood, address, place_type)
+VALUES (
+    sqlc.arg(location_id),
+    sqlc.narg(name),
+    ST_SetSRID(ST_MakePoint(sqlc.arg(lon)::float8, sqlc.arg(lat)::float8), 4326)::geography,
+    sqlc.arg(precision),
+    sqlc.arg(municipality_code),
+    sqlc.arg(uf),
+    sqlc.narg(neighbourhood),
+    sqlc.narg(address),
+    sqlc.narg(place_type)
+)
+ON CONFLICT (location_id) DO UPDATE SET
+    name = EXCLUDED.name,
+    geom = EXCLUDED.geom,
+    precision = EXCLUDED.precision,
+    municipality_code = EXCLUDED.municipality_code,
+    uf = EXCLUDED.uf,
+    neighbourhood = EXCLUDED.neighbourhood,
+    address = EXCLUDED.address,
+    place_type = EXCLUDED.place_type,
+    updated_at = NOW()
+RETURNING id, (xmax = 0) AS inserted;
+
+-- name: GetLocationByLocationID :one
+SELECT id, location_id, name,
+    ST_X(geom::geometry)::float8 AS lon,
+    ST_Y(geom::geometry)::float8 AS lat,
+    precision, municipality_code, uf, neighbourhood, address, place_type
+FROM locations
+WHERE location_id = $1;
+
+-- name: UpsertOccurrence :one
+INSERT INTO occurrences (
+    agency, occurrence_number, location_id, occurred_from, occurred_to, reported_at,
+    registered_at, attempted, offender_count, victim_count, modus_operandi, status, description
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+ON CONFLICT (agency, occurrence_number) DO UPDATE SET
+    location_id = EXCLUDED.location_id,
+    occurred_from = EXCLUDED.occurred_from,
+    occurred_to = EXCLUDED.occurred_to,
+    reported_at = EXCLUDED.reported_at,
+    registered_at = EXCLUDED.registered_at,
+    attempted = EXCLUDED.attempted,
+    offender_count = EXCLUDED.offender_count,
+    victim_count = EXCLUDED.victim_count,
+    modus_operandi = EXCLUDED.modus_operandi,
+    status = EXCLUDED.status,
+    description = EXCLUDED.description,
+    updated_at = NOW()
+RETURNING id, (xmax = 0) AS inserted;
+
+-- name: DeleteOccurrenceClassifications :exec
+-- With AddOccurrenceClassification, replaces an occurrence's types inside one transaction.
+DELETE FROM occurrence_classifications WHERE occurrence_id = $1;
+
+-- name: AddOccurrenceClassification :exec
+INSERT INTO occurrence_classifications (occurrence_id, type_code)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING;
+
+-- name: ListOccurrenceTypes :many
+SELECT code, case_type, grp FROM occurrence_types ORDER BY code;
+
+-- name: SetBiometricCaseOccurrence :execrows
+-- A NULL occurrence_id unlinks the case.
+UPDATE biometric_cases
+SET occurrence_id = sqlc.narg(occurrence_id), updated_at = NOW()
+WHERE case_id = sqlc.arg(case_id);
+
+-- name: ListOccurrencesWithinRadius :many
+-- Occurrences whose location lies within radius_m metres of a point, nearest first. Locations
+-- known only to the municipality are left out unless include_municipality_centroids: their point
+-- is a centroid, not a place.
+SELECT o.id, o.agency, o.occurrence_number, o.occurred_from, o.status,
+    l.location_id, l.precision,
+    ST_X(l.geom::geometry)::float8 AS lon,
+    ST_Y(l.geom::geometry)::float8 AS lat,
+    ST_Distance(l.geom, ST_SetSRID(ST_MakePoint(sqlc.arg(lon)::float8, sqlc.arg(lat)::float8), 4326)::geography)::float8 AS distance_m
+FROM occurrences o
+JOIN locations l ON l.id = o.location_id
+WHERE ST_DWithin(l.geom, ST_SetSRID(ST_MakePoint(sqlc.arg(lon)::float8, sqlc.arg(lat)::float8), 4326)::geography, sqlc.arg(radius_m)::float8)
+  AND (sqlc.arg(include_municipality_centroids)::bool OR l.precision <> 'MUNICIPALITY')
+ORDER BY distance_m, o.id;

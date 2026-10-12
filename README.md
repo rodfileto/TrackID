@@ -91,6 +91,7 @@ organizations import to build their import commands) and an **internal** runtime
   template; `npm run build` produces the bundle `internal/web` serves
 - `quarto/` — technical report and ontology documentation
 - `scripts/` — development helpers (start/stop the stack, apply the graph schema)
+- `db/postgres/` — the Postgres image: pgvector plus PostGIS (no official image has both)
 - `docker-compose.yml` — Postgres, Redis, MinIO, `sourceafis-sidecar`, and optional Neo4j
 - `sourceafis-sidecar/` — the Java sidecar `fingerprint/` talks to (SourceAFIS behind a
   plain HTTP server; see "Models and licences")
@@ -103,7 +104,8 @@ To integrate with this package, an organization:
 2. writes import commands that read its own formats and write into the core tables —
    the enrollment hierarchy (`person`, `identity_document`, `identity_register`,
    `identity_file`), the evidence hierarchy (`biometric_cases`, `case_files`,
-   `case_evidences`, `case_traces`, `case_codifications`), the unified
+   `case_evidences`, `case_traces`, `case_codifications`), the occurrence layer
+   (`locations`, `occurrences`, `occurrence_classifications`), the unified
    `biometricfeature`, and the `biometric_decisions` log — via the queries declared in
    `db/queries.sql`;
 3. optionally registers extra routes through the `api.Dependencies.Register` hook and
@@ -114,6 +116,11 @@ To integrate with this package, an organization:
 ```sh
 scripts/start_dev.sh   # starts the stack, migrates, and runs the API + frontend
 ```
+
+Postgres runs the image built from `db/postgres/` (pgvector + PostGIS); migrations from 011 on
+need PostGIS, so a database for `TRACKID_TEST_DATABASE_URL` must run it too. Switching an
+existing stack over: `docker compose build postgres && docker compose up -d postgres` (the
+data volume is kept).
 
 ## Models and licences
 

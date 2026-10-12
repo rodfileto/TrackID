@@ -14,6 +14,22 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+const addOccurrenceClassification = `-- name: AddOccurrenceClassification :exec
+INSERT INTO occurrence_classifications (occurrence_id, type_code)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type AddOccurrenceClassificationParams struct {
+	OccurrenceID int64  `db:"occurrence_id" json:"occurrence_id"`
+	TypeCode     string `db:"type_code" json:"type_code"`
+}
+
+func (q *Queries) AddOccurrenceClassification(ctx context.Context, arg AddOccurrenceClassificationParams) error {
+	_, err := q.db.ExecContext(ctx, addOccurrenceClassification, arg.OccurrenceID, arg.TypeCode)
+	return err
+}
+
 const countBiometricCases = `-- name: CountBiometricCases :one
 SELECT COUNT(*) FROM biometric_cases
 `
@@ -365,6 +381,16 @@ func (q *Queries) DeleteCodificationPoint(ctx context.Context, arg DeleteCodific
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const deleteOccurrenceClassifications = `-- name: DeleteOccurrenceClassifications :exec
+DELETE FROM occurrence_classifications WHERE occurrence_id = $1
+`
+
+// With AddOccurrenceClassification, replaces an occurrence's types inside one transaction.
+func (q *Queries) DeleteOccurrenceClassifications(ctx context.Context, occurrenceID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteOccurrenceClassifications, occurrenceID)
+	return err
 }
 
 const findNearestCasesByFaceEmbedding = `-- name: FindNearestCasesByFaceEmbedding :many
@@ -889,6 +915,48 @@ func (q *Queries) GetIdentityFileForPerson(ctx context.Context, arg GetIdentityF
 		&i.SourcePath,
 		&i.StorageRef,
 		&i.ContentType,
+	)
+	return i, err
+}
+
+const getLocationByLocationID = `-- name: GetLocationByLocationID :one
+SELECT id, location_id, name,
+    ST_X(geom::geometry)::float8 AS lon,
+    ST_Y(geom::geometry)::float8 AS lat,
+    precision, municipality_code, uf, neighbourhood, address, place_type
+FROM locations
+WHERE location_id = $1
+`
+
+type GetLocationByLocationIDRow struct {
+	ID               int64          `db:"id" json:"id"`
+	LocationID       string         `db:"location_id" json:"location_id"`
+	Name             sql.NullString `db:"name" json:"name"`
+	Lon              float64        `db:"lon" json:"lon"`
+	Lat              float64        `db:"lat" json:"lat"`
+	Precision        string         `db:"precision" json:"precision"`
+	MunicipalityCode string         `db:"municipality_code" json:"municipality_code"`
+	Uf               string         `db:"uf" json:"uf"`
+	Neighbourhood    sql.NullString `db:"neighbourhood" json:"neighbourhood"`
+	Address          sql.NullString `db:"address" json:"address"`
+	PlaceType        sql.NullString `db:"place_type" json:"place_type"`
+}
+
+func (q *Queries) GetLocationByLocationID(ctx context.Context, locationID string) (GetLocationByLocationIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getLocationByLocationID, locationID)
+	var i GetLocationByLocationIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.LocationID,
+		&i.Name,
+		&i.Lon,
+		&i.Lat,
+		&i.Precision,
+		&i.MunicipalityCode,
+		&i.Uf,
+		&i.Neighbourhood,
+		&i.Address,
+		&i.PlaceType,
 	)
 	return i, err
 }
@@ -2401,6 +2469,108 @@ func (q *Queries) ListMatchThresholds(ctx context.Context, embeddingType string)
 	return items, nil
 }
 
+const listOccurrenceTypes = `-- name: ListOccurrenceTypes :many
+SELECT code, case_type, grp FROM occurrence_types ORDER BY code
+`
+
+func (q *Queries) ListOccurrenceTypes(ctx context.Context) ([]OccurrenceType, error) {
+	rows, err := q.db.QueryContext(ctx, listOccurrenceTypes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OccurrenceType
+	for rows.Next() {
+		var i OccurrenceType
+		if err := rows.Scan(&i.Code, &i.CaseType, &i.Grp); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOccurrencesWithinRadius = `-- name: ListOccurrencesWithinRadius :many
+SELECT o.id, o.agency, o.occurrence_number, o.occurred_from, o.status,
+    l.location_id, l.precision,
+    ST_X(l.geom::geometry)::float8 AS lon,
+    ST_Y(l.geom::geometry)::float8 AS lat,
+    ST_Distance(l.geom, ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography)::float8 AS distance_m
+FROM occurrences o
+JOIN locations l ON l.id = o.location_id
+WHERE ST_DWithin(l.geom, ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography, $3::float8)
+  AND ($4::bool OR l.precision <> 'MUNICIPALITY')
+ORDER BY distance_m, o.id
+`
+
+type ListOccurrencesWithinRadiusParams struct {
+	Lon                          float64 `db:"lon" json:"lon"`
+	Lat                          float64 `db:"lat" json:"lat"`
+	RadiusM                      float64 `db:"radius_m" json:"radius_m"`
+	IncludeMunicipalityCentroids bool    `db:"include_municipality_centroids" json:"include_municipality_centroids"`
+}
+
+type ListOccurrencesWithinRadiusRow struct {
+	ID               int64     `db:"id" json:"id"`
+	Agency           string    `db:"agency" json:"agency"`
+	OccurrenceNumber string    `db:"occurrence_number" json:"occurrence_number"`
+	OccurredFrom     time.Time `db:"occurred_from" json:"occurred_from"`
+	Status           string    `db:"status" json:"status"`
+	LocationID       string    `db:"location_id" json:"location_id"`
+	Precision        string    `db:"precision" json:"precision"`
+	Lon              float64   `db:"lon" json:"lon"`
+	Lat              float64   `db:"lat" json:"lat"`
+	DistanceM        float64   `db:"distance_m" json:"distance_m"`
+}
+
+// Occurrences whose location lies within radius_m metres of a point, nearest first. Locations
+// known only to the municipality are left out unless include_municipality_centroids: their point
+// is a centroid, not a place.
+func (q *Queries) ListOccurrencesWithinRadius(ctx context.Context, arg ListOccurrencesWithinRadiusParams) ([]ListOccurrencesWithinRadiusRow, error) {
+	rows, err := q.db.QueryContext(ctx, listOccurrencesWithinRadius,
+		arg.Lon,
+		arg.Lat,
+		arg.RadiusM,
+		arg.IncludeMunicipalityCentroids,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOccurrencesWithinRadiusRow
+	for rows.Next() {
+		var i ListOccurrencesWithinRadiusRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Agency,
+			&i.OccurrenceNumber,
+			&i.OccurredFrom,
+			&i.Status,
+			&i.LocationID,
+			&i.Precision,
+			&i.Lon,
+			&i.Lat,
+			&i.DistanceM,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPersonIDs = `-- name: ListPersonIDs :many
 SELECT person_id FROM person ORDER BY person_id
 `
@@ -2692,6 +2862,26 @@ func (q *Queries) SearchPersonsByName(ctx context.Context, arg SearchPersonsByNa
 		return nil, err
 	}
 	return items, nil
+}
+
+const setBiometricCaseOccurrence = `-- name: SetBiometricCaseOccurrence :execrows
+UPDATE biometric_cases
+SET occurrence_id = $1, updated_at = NOW()
+WHERE case_id = $2
+`
+
+type SetBiometricCaseOccurrenceParams struct {
+	OccurrenceID sql.NullInt64 `db:"occurrence_id" json:"occurrence_id"`
+	CaseID       string        `db:"case_id" json:"case_id"`
+}
+
+// A NULL occurrence_id unlinks the case.
+func (q *Queries) SetBiometricCaseOccurrence(ctx context.Context, arg SetBiometricCaseOccurrenceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setBiometricCaseOccurrence, arg.OccurrenceID, arg.CaseID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const setCaseCodificationFile = `-- name: SetCaseCodificationFile :exec
@@ -3154,6 +3344,134 @@ func (q *Queries) UpsertIdentityRegister(ctx context.Context, arg UpsertIdentity
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const upsertLocation = `-- name: UpsertLocation :one
+INSERT INTO locations (location_id, name, geom, precision, municipality_code, uf, neighbourhood, address, place_type)
+VALUES (
+    $1,
+    $2,
+    ST_SetSRID(ST_MakePoint($3::float8, $4::float8), 4326)::geography,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10
+)
+ON CONFLICT (location_id) DO UPDATE SET
+    name = EXCLUDED.name,
+    geom = EXCLUDED.geom,
+    precision = EXCLUDED.precision,
+    municipality_code = EXCLUDED.municipality_code,
+    uf = EXCLUDED.uf,
+    neighbourhood = EXCLUDED.neighbourhood,
+    address = EXCLUDED.address,
+    place_type = EXCLUDED.place_type,
+    updated_at = NOW()
+RETURNING id, (xmax = 0) AS inserted
+`
+
+type UpsertLocationParams struct {
+	LocationID       string         `db:"location_id" json:"location_id"`
+	Name             sql.NullString `db:"name" json:"name"`
+	Lon              float64        `db:"lon" json:"lon"`
+	Lat              float64        `db:"lat" json:"lat"`
+	Precision        string         `db:"precision" json:"precision"`
+	MunicipalityCode string         `db:"municipality_code" json:"municipality_code"`
+	Uf               string         `db:"uf" json:"uf"`
+	Neighbourhood    sql.NullString `db:"neighbourhood" json:"neighbourhood"`
+	Address          sql.NullString `db:"address" json:"address"`
+	PlaceType        sql.NullString `db:"place_type" json:"place_type"`
+}
+
+type UpsertLocationRow struct {
+	ID       int64 `db:"id" json:"id"`
+	Inserted bool  `db:"inserted" json:"inserted"`
+}
+
+// geom never crosses into Go: sqlc has no type for geography, so a point goes in and out as
+// lon/lat (WGS 84).
+func (q *Queries) UpsertLocation(ctx context.Context, arg UpsertLocationParams) (UpsertLocationRow, error) {
+	row := q.db.QueryRowContext(ctx, upsertLocation,
+		arg.LocationID,
+		arg.Name,
+		arg.Lon,
+		arg.Lat,
+		arg.Precision,
+		arg.MunicipalityCode,
+		arg.Uf,
+		arg.Neighbourhood,
+		arg.Address,
+		arg.PlaceType,
+	)
+	var i UpsertLocationRow
+	err := row.Scan(&i.ID, &i.Inserted)
+	return i, err
+}
+
+const upsertOccurrence = `-- name: UpsertOccurrence :one
+INSERT INTO occurrences (
+    agency, occurrence_number, location_id, occurred_from, occurred_to, reported_at,
+    registered_at, attempted, offender_count, victim_count, modus_operandi, status, description
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+ON CONFLICT (agency, occurrence_number) DO UPDATE SET
+    location_id = EXCLUDED.location_id,
+    occurred_from = EXCLUDED.occurred_from,
+    occurred_to = EXCLUDED.occurred_to,
+    reported_at = EXCLUDED.reported_at,
+    registered_at = EXCLUDED.registered_at,
+    attempted = EXCLUDED.attempted,
+    offender_count = EXCLUDED.offender_count,
+    victim_count = EXCLUDED.victim_count,
+    modus_operandi = EXCLUDED.modus_operandi,
+    status = EXCLUDED.status,
+    description = EXCLUDED.description,
+    updated_at = NOW()
+RETURNING id, (xmax = 0) AS inserted
+`
+
+type UpsertOccurrenceParams struct {
+	Agency           string        `db:"agency" json:"agency"`
+	OccurrenceNumber string        `db:"occurrence_number" json:"occurrence_number"`
+	LocationID       int64         `db:"location_id" json:"location_id"`
+	OccurredFrom     time.Time     `db:"occurred_from" json:"occurred_from"`
+	OccurredTo       sql.NullTime  `db:"occurred_to" json:"occurred_to"`
+	ReportedAt       sql.NullTime  `db:"reported_at" json:"reported_at"`
+	RegisteredAt     time.Time     `db:"registered_at" json:"registered_at"`
+	Attempted        sql.NullBool  `db:"attempted" json:"attempted"`
+	OffenderCount    sql.NullInt16 `db:"offender_count" json:"offender_count"`
+	VictimCount      sql.NullInt16 `db:"victim_count" json:"victim_count"`
+	ModusOperandi    []string      `db:"modus_operandi" json:"modus_operandi"`
+	Status           string        `db:"status" json:"status"`
+	Description      string        `db:"description" json:"description"`
+}
+
+type UpsertOccurrenceRow struct {
+	ID       int64 `db:"id" json:"id"`
+	Inserted bool  `db:"inserted" json:"inserted"`
+}
+
+func (q *Queries) UpsertOccurrence(ctx context.Context, arg UpsertOccurrenceParams) (UpsertOccurrenceRow, error) {
+	row := q.db.QueryRowContext(ctx, upsertOccurrence,
+		arg.Agency,
+		arg.OccurrenceNumber,
+		arg.LocationID,
+		arg.OccurredFrom,
+		arg.OccurredTo,
+		arg.ReportedAt,
+		arg.RegisteredAt,
+		arg.Attempted,
+		arg.OffenderCount,
+		arg.VictimCount,
+		pq.Array(arg.ModusOperandi),
+		arg.Status,
+		arg.Description,
+	)
+	var i UpsertOccurrenceRow
+	err := row.Scan(&i.ID, &i.Inserted)
+	return i, err
 }
 
 const upsertPerson = `-- name: UpsertPerson :one
