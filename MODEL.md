@@ -71,6 +71,31 @@ A codification is a processing artifact, not a comparison record — the pairwis
 outcome lives entirely in `biometric_decisions` (section 3), keyed by the two features'
 graph ids rather than by codification.
 
+### 2.3 Occurrences and locations (POLE: Event and Location)
+
+```
+locations ──< occurrences ──< biometric_cases
+              occurrences ──< occurrence_classifications >── occurrence_types
+```
+
+| Table | Role |
+| --- | --- |
+| `locations` | a place, keyed by the importer's `location_id`: a PostGIS point (`geography`, WGS 84), how exact it is (`precision`: `EXACT` \| `GEOCODED` \| `STREET` \| `MUNICIPALITY`), IBGE municipality code, UF, address, `place_type` |
+| `occurrences` | a registered occurrence (a police report, *boletim de ocorrência*), unique per `(agency, occurrence_number)`: when (`occurred_from`/`occurred_to` window, reported, registered), where (`location_id`), crime-only facts (`attempted`, counts, `modus_operandi` tags), `status`, `description` |
+| `occurrence_types` | the fixed list of occurrence types, codes only (the frontend translates): property crimes, crimes against persons, `IDENTITY_FRAUD`, and the civil `MISSING_PERSON`, `UNIDENTIFIED_BODY`, `UNIDENTIFIED_LIVING_PERSON`, `DISASTER_VICTIM`; each with the `case_type` it opens |
+| `occurrence_classifications` | an occurrence's types (a report can carry several) |
+
+One occurrence can open many biometric cases (a FACIAL case for its CCTV, a FINGERPRINT case
+for its latents), so the link is `biometric_cases.occurrence_id`, NULL until set. An occurrence
+is not necessarily a crime: as `case_type` covers CIVIL identification, the occurrence covers
+the report that starts it. Deciding that two reports share a place is the importer's job:
+trackid neither geocodes nor deduplicates addresses.
+
+`geography` has no sqlc type, so points cross into Go as `lon`/`lat` only, and spatial
+queries (`ListOccurrencesWithinRadius`) stay in SQL. This is where intelligence analysis by
+place and time starts: when a cluster joins traces from different cases, their occurrences
+form a series to put on a map.
+
 ## 3. Decisions (`biometric_decisions`)
 
 An append-only event log of every decision made about a pair of features. This is the
@@ -171,6 +196,10 @@ Done (core), end to end:
   shipped yet, there was no reason to carry the intermediate tables (`comparisons`,
   `codifications`, `identifications`, a `case_codifications.comparison_*` set of columns)
   that an incremental build-up would otherwise leave behind.
+- **Occurrences** (`db/migrations/011`): `locations` (PostGIS), `occurrences`,
+  `occurrence_types` (seeded), `occurrence_classifications`, and
+  `biometric_cases.occurrence_id` (section 2.3). Postgres only: not yet synced to Neo4j, and
+  no ingest helper beyond the `db` queries.
 - **Sync** (`graph` package): `graph.Sync` materializes Evidence + QUESTIONED
   `BiometricFeature` nodes from the evidence hierarchy; `graph.SyncIdentity` materializes
   Person + the Identification/IdentityRegister/KNOWN-`BiometricFeature` chain from

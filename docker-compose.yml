@@ -1,6 +1,7 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    build: ./db/postgres
+    image: trackid-postgres:pg16
     environment:
       POSTGRES_DB: trackid
       POSTGRES_USER: trackid
