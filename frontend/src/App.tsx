@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router";
 import { Toaster } from "sonner";
 import SignIn from "./pages/AuthPages/SignIn";
@@ -13,6 +14,8 @@ import CaseDetailPage from "./pages/CaseDetail";
 import PersonLookup from "./pages/PersonLookup";
 import PersonProfilePage from "./pages/PersonProfile";
 import Clusters from "./pages/Clusters";
+// The map pulls in MapLibre (about 1 MB): loaded only when the page is opened.
+const OccurrenceMap = lazy(() => import("./pages/OccurrenceMap"));
 import { useTheme } from "./context/ThemeContext";
 
 export default function App() {
@@ -34,6 +37,14 @@ export default function App() {
               <Route path="/persons" element={<PersonLookup />} />
               <Route path="/persons/:personId" element={<PersonProfilePage />} />
               <Route path="/clusters" element={<Clusters />} />
+              <Route
+                path="/intelligence/map"
+                element={
+                  <Suspense fallback={null}>
+                    <OccurrenceMap />
+                  </Suspense>
+                }
+              />
             </Route>
           </Route>
 

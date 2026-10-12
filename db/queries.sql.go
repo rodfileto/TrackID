@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/lib/pq"
@@ -2499,6 +2500,129 @@ func (q *Queries) ListOccurrenceTypes(ctx context.Context) ([]OccurrenceType, er
 	for rows.Next() {
 		var i OccurrenceType
 		if err := rows.Scan(&i.Code, &i.CaseType, &i.Grp); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOccurrenceYears = `-- name: ListOccurrenceYears :many
+SELECT DISTINCT EXTRACT(YEAR FROM occurred_from AT TIME ZONE 'America/Sao_Paulo')::int4 AS year
+FROM occurrences ORDER BY year
+`
+
+func (q *Queries) ListOccurrenceYears(ctx context.Context) ([]int32, error) {
+	rows, err := q.db.QueryContext(ctx, listOccurrenceYears)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int32
+	for rows.Next() {
+		var year int32
+		if err := rows.Scan(&year); err != nil {
+			return nil, err
+		}
+		items = append(items, year)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOccurrencesForMap = `-- name: ListOccurrencesForMap :many
+SELECT o.id, o.agency, o.occurrence_number, o.occurred_from, o.occurred_to, o.registered_at,
+    o.attempted, o.status, o.modus_operandi, o.description,
+    ST_X(l.geom::geometry)::float8 AS lon,
+    ST_Y(l.geom::geometry)::float8 AS lat,
+    l.location_id, l.precision, l.place_type, l.name AS place_name, l.neighbourhood, l.municipality_code,
+    COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
+              WHERE c.occurrence_id = o.id), '[]')::jsonb AS types,
+    COALESCE((SELECT json_agg(json_build_object('caseId', b.case_id, 'modality', b.modality, 'caseType', b.case_type)
+                              ORDER BY b.case_id)
+              FROM biometric_cases b WHERE b.occurrence_id = o.id), '[]')::jsonb AS cases
+FROM occurrences o
+JOIN locations l ON l.id = o.location_id
+WHERE ($1::timestamptz IS NULL OR o.occurred_from >= $1)
+  AND ($2::timestamptz IS NULL OR o.occurred_from < $2)
+ORDER BY o.occurred_from, o.id
+LIMIT $3
+`
+
+type ListOccurrencesForMapParams struct {
+	OccurredAfter  sql.NullTime `db:"occurred_after" json:"occurred_after"`
+	OccurredBefore sql.NullTime `db:"occurred_before" json:"occurred_before"`
+	MaxRows        int32        `db:"max_rows" json:"max_rows"`
+}
+
+type ListOccurrencesForMapRow struct {
+	ID               int64           `db:"id" json:"id"`
+	Agency           string          `db:"agency" json:"agency"`
+	OccurrenceNumber string          `db:"occurrence_number" json:"occurrence_number"`
+	OccurredFrom     time.Time       `db:"occurred_from" json:"occurred_from"`
+	OccurredTo       sql.NullTime    `db:"occurred_to" json:"occurred_to"`
+	RegisteredAt     time.Time       `db:"registered_at" json:"registered_at"`
+	Attempted        sql.NullBool    `db:"attempted" json:"attempted"`
+	Status           string          `db:"status" json:"status"`
+	ModusOperandi    []string        `db:"modus_operandi" json:"modus_operandi"`
+	Description      string          `db:"description" json:"description"`
+	Lon              float64         `db:"lon" json:"lon"`
+	Lat              float64         `db:"lat" json:"lat"`
+	LocationID       string          `db:"location_id" json:"location_id"`
+	Precision        string          `db:"precision" json:"precision"`
+	PlaceType        sql.NullString  `db:"place_type" json:"place_type"`
+	PlaceName        sql.NullString  `db:"place_name" json:"place_name"`
+	Neighbourhood    sql.NullString  `db:"neighbourhood" json:"neighbourhood"`
+	MunicipalityCode string          `db:"municipality_code" json:"municipality_code"`
+	Types            json.RawMessage `db:"types" json:"types"`
+	Cases            json.RawMessage `db:"cases" json:"cases"`
+}
+
+// Occurrences with their point, types and linked cases, for the occurrence map. NULL bounds are
+// open. types is a JSON array of occurrence_types codes; cases a JSON array of
+// {caseId, modality, caseType}.
+func (q *Queries) ListOccurrencesForMap(ctx context.Context, arg ListOccurrencesForMapParams) ([]ListOccurrencesForMapRow, error) {
+	rows, err := q.db.QueryContext(ctx, listOccurrencesForMap, arg.OccurredAfter, arg.OccurredBefore, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOccurrencesForMapRow
+	for rows.Next() {
+		var i ListOccurrencesForMapRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Agency,
+			&i.OccurrenceNumber,
+			&i.OccurredFrom,
+			&i.OccurredTo,
+			&i.RegisteredAt,
+			&i.Attempted,
+			&i.Status,
+			pq.Array(&i.ModusOperandi),
+			&i.Description,
+			&i.Lon,
+			&i.Lat,
+			&i.LocationID,
+			&i.Precision,
+			&i.PlaceType,
+			&i.PlaceName,
+			&i.Neighbourhood,
+			&i.MunicipalityCode,
+			&i.Types,
+			&i.Cases,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
