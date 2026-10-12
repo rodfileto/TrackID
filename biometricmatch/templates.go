@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 
 	"github.com/rodfileto/trackid/db"
 )
@@ -20,18 +21,26 @@ type TemplateMatcher interface {
 // call.
 const templateBatch = 256
 
-// RunTemplates is Run for biometric_templates: opaque matcher templates
-// rather than vectors, so there is no ANN index to narrow the search.
-// Every unmatched template of templateType is scored by matcher against every
-// other template of that type, and each pair scoring at least threshold
-// (the matcher's own scale -- e.g. SourceAFIS's 40, not a cosine distance)
-// gets a SYSTEM POSITIVE biometric_decisions row, unless a SYSTEM decision
-// already exists for it. The unmatched templates are then marked matched.
+// RunTemplates is RunTemplatesBand with a single cutoff (no review band) and
+// no threshold version.
+func RunTemplates(ctx context.Context, sqlDB *sql.DB, matcher TemplateMatcher, templateType string, threshold float64, systemSource string) (Stats, error) {
+	return RunTemplatesBand(ctx, sqlDB, matcher, templateType, Version{EmbeddingType: templateType, Band: Band{Review: threshold, Confirm: threshold}}, systemSource)
+}
+
+// RunTemplatesBand is RunBand for biometric_templates: opaque matcher
+// templates rather than vectors, so there is no ANN index to narrow the
+// search. Every unmatched template of templateType is scored by matcher
+// against every other template of that type, on the matcher's own scale
+// (e.g. SourceAFIS's, not a cosine distance). Each pair scoring at least
+// v.Band.Review gets a SYSTEM biometric_decisions row -- POSITIVE at or above
+// v.Band.Confirm, INCONCLUSIVE below it -- unless a SYSTEM decision already
+// exists for it, citing v when v.ID is set. The unmatched templates are then
+// marked matched. Stats.Review counts the INCONCLUSIVE ones.
 //
 // The unmatched template is the probe. Two unmatched templates are scored
 // once, with the earlier one (by id) as probe. The matcher is called before
-// the write transaction opens, as Run does with its ANN reads.
-func RunTemplates(ctx context.Context, sqlDB *sql.DB, matcher TemplateMatcher, templateType string, threshold float64, systemSource string) (Stats, error) {
+// the write transaction opens, as RunBand does with its ANN reads.
+func RunTemplatesBand(ctx context.Context, sqlDB *sql.DB, matcher TemplateMatcher, templateType string, v Version, systemSource string) (Stats, error) {
 	if sqlDB == nil {
 		return Stats{}, fmt.Errorf("database is not configured")
 	}
@@ -41,18 +50,31 @@ func RunTemplates(ctx context.Context, sqlDB *sql.DB, matcher TemplateMatcher, t
 	if systemSource == "" {
 		return Stats{}, fmt.Errorf("systemSource is required")
 	}
+	if err := v.Band.Validate(); err != nil {
+		return Stats{}, err
+	}
 
-	candidates, templateIDs, err := computeTemplateCandidates(ctx, sqlDB, matcher, templateType, threshold)
+	candidates, templateIDs, err := computeTemplateCandidates(ctx, sqlDB, matcher, templateType, v.Band)
 	if err != nil {
 		return Stats{}, err
 	}
-	if err := recordDecisions(ctx, sqlDB, candidates, systemSource, "", templateIDs, (*db.Queries).MarkBiometricTemplateMatched); err != nil {
+	stats := Stats{Embeddings: len(templateIDs), Decisions: len(candidates)}
+	for _, c := range candidates {
+		if c.decision == "INCONCLUSIVE" {
+			stats.Review++
+		}
+	}
+	var ref string
+	if v.ID != 0 {
+		ref = strconv.FormatInt(v.ID, 10)
+	}
+	if err := recordDecisions(ctx, sqlDB, candidates, systemSource, ref, templateIDs, (*db.Queries).MarkBiometricTemplateMatched); err != nil {
 		return Stats{}, err
 	}
-	return Stats{Embeddings: len(templateIDs), Decisions: len(candidates)}, nil
+	return stats, nil
 }
 
-func computeTemplateCandidates(ctx context.Context, sqlDB *sql.DB, matcher TemplateMatcher, templateType string, threshold float64) ([]candidate, []int64, error) {
+func computeTemplateCandidates(ctx context.Context, sqlDB *sql.DB, matcher TemplateMatcher, templateType string, band Band) ([]candidate, []int64, error) {
 	all, err := db.New(sqlDB).ListBiometricTemplates(ctx, templateType)
 	if err != nil {
 		return nil, nil, err
@@ -114,7 +136,7 @@ func computeTemplateCandidates(ctx context.Context, sqlDB *sql.DB, matcher Templ
 			}
 
 			for k, score := range scores {
-				if score < threshold {
+				if score < band.Review {
 					continue
 				}
 				candidateInfo, ok := features[batch[k].BiometricfeatureID]
@@ -133,13 +155,14 @@ func computeTemplateCandidates(ctx context.Context, sqlDB *sql.DB, matcher Templ
 					continue
 				}
 				seen[key] = true
+				decision, cutoff := band.classify(score)
 				candidates = append(candidates, candidate{
 					featureAID: a,
 					featureBID: b,
 					modality:   probeInfo.modality,
 					confidence: score,
-					decision:   "POSITIVE",
-					threshold:  threshold,
+					decision:   decision,
+					threshold:  cutoff,
 				})
 			}
 		}

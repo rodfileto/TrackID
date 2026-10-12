@@ -8,9 +8,21 @@ func TestBand(t *testing.T) {
 			t.Errorf("%+v: %v", b, err)
 		}
 	}
-	for _, b := range []Band{{0, 0.7}, {0.7, 0.6}, {0.6, 1.1}, {-0.1, 0.5}} {
+	for _, b := range []Band{{0, 0.7}, {0.7, 0.6}, {-0.1, 0.5}} {
 		if err := b.Validate(); err == nil {
 			t.Errorf("%+v: accepted", b)
+		}
+	}
+	// A template matcher's scale is unbounded; a similarity's stops at 1.
+	if err := (Band{40, 60}).Validate(); err != nil {
+		t.Errorf("SourceAFIS band: %v", err)
+	}
+	if err := (Band{0.6, 0.7}).ValidateSimilarity(); err != nil {
+		t.Errorf("similarity band: %v", err)
+	}
+	for _, b := range []Band{{0.6, 1.1}, {40, 60}, {0, 0.5}} {
+		if err := b.ValidateSimilarity(); err == nil {
+			t.Errorf("%+v: accepted as a similarity band", b)
 		}
 	}
 	b := Band{Review: 0.6, Confirm: 0.7}

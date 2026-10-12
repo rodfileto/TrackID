@@ -40,6 +40,12 @@ const (
 // pairs only 39.5% of the time (median 13.9), and 0.08% of rolled impostors do.
 const MatchThreshold = 40.0
 
+// DefaultBand is what RunSync applies while no fingerprint threshold version
+// has been set in match_thresholds (embedding_type TemplateType): a single
+// cutoff at MatchThreshold, no review band. A deploying organization sets its
+// own with cmd/match-threshold -embedding-type FINGERPRINT_SOURCEAFIS.
+var DefaultBand = biometricmatch.Band{Review: MatchThreshold, Confirm: MatchThreshold}
+
 // Asynq task types cmd/worker registers handlers for.
 const (
 	// TaskTypeExtractCodification extracts a QUESTIONED fingerprint lift's
@@ -306,13 +312,18 @@ func HandleSync(sqlDB *sql.DB, client *Client, driver neo4j.DriverWithContext) f
 	}
 }
 
-// RunSync scores every unmatched template (biometricmatch.RunTemplates at
-// MatchThreshold), then reconciles clusters with cluster.Run when driver is
-// non-nil. Unlike embedding.SyncFace, matching doesn't wait for Neo4j: the
+// RunSync scores every unmatched template under the current fingerprint
+// threshold version (biometricmatch.RunTemplatesBand; read on every call, so a
+// new version applies without a restart; DefaultBand when none is set), then
+// reconciles clusters with cluster.Run when driver is non-nil. Unlike embedding.SyncFace, matching doesn't wait for Neo4j: the
 // decisions are written either way, and any later cluster.Run (a face sync,
 // cmd/cluster-biometrics) picks them up.
 func RunSync(ctx context.Context, sqlDB *sql.DB, client *Client, driver neo4j.DriverWithContext) error {
-	if _, err := biometricmatch.RunTemplates(ctx, sqlDB, client, TemplateType, MatchThreshold, TemplateType); err != nil {
+	version, err := biometricmatch.CurrentBand(ctx, sqlDB, TemplateType, DefaultBand)
+	if err != nil {
+		return fmt.Errorf("fingerprint: sync match: %w", err)
+	}
+	if _, err := biometricmatch.RunTemplatesBand(ctx, sqlDB, client, TemplateType, version, TemplateType); err != nil {
 		return fmt.Errorf("fingerprint: sync match: %w", err)
 	}
 	if driver == nil {
