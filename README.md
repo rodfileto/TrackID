@@ -91,6 +91,9 @@ organizations import to build their import commands) and an **internal** runtime
   template; `npm run build` produces the bundle `internal/web` serves
 - `quarto/` — technical report and ontology documentation
 - `scripts/` — development helpers (start/stop the stack, apply the graph schema)
+- `geocode/` — addresses ↔ coordinates for locations, through Nominatim (OpenStreetMap; ODbL,
+  credit "© OpenStreetMap contributors"); the public instance forbids autocomplete, so a
+  search-as-you-type picker needs a self-hosted one (`GEOCODER_URL`)
 - `db/postgres/` — the Postgres image: pgvector plus PostGIS (no official image has both)
 - `docker-compose.yml` — Postgres, Redis, MinIO, `sourceafis-sidecar`, and optional Neo4j
 - `sourceafis-sidecar/` — the Java sidecar `fingerprint/` talks to (SourceAFIS behind a
