@@ -79,6 +79,10 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.GET("clusters", ListClustersHandler(deps.DB))
 	protected.GET("clusters/graph", ClustersGraphHandler(deps.DB))
 
+	protected.GET("occurrences/map", OccurrenceMapHandler(deps.DB))
+	protected.GET("occurrences/types", OccurrenceTypesHandler(deps.DB))
+	protected.GET("occurrences/years", OccurrenceYearsHandler(deps.DB))
+
 	if deps.Register != nil {
 		deps.Register(router, protected)
 	}

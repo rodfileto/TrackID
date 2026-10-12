@@ -9,6 +9,7 @@ import {
   GridIcon,
   GroupIcon,
   HorizontaLDots,
+  PieChartIcon,
   UserCircleIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
@@ -45,6 +46,11 @@ const navItems: NavItem[] = [
     icon: <BoxCubeIcon />,
     name: "nav.clusters",
     path: "/clusters",
+  },
+  {
+    icon: <PieChartIcon />,
+    name: "nav.intelligence",
+    subItems: [{ name: "nav.occurrenceMap", path: "/intelligence/map" }],
   },
 ];
 
