@@ -148,6 +148,17 @@ Notes for anyone deploying this:
   SCRFD vs YuNet had cosine 0.88 on average). Re-embed everything when switching.
 - Terms change; check each model's source before relying on this table.
 
+### Maps
+
+The intelligence pages (`/intelligence/map`) draw with [MapLibre GL JS](https://maplibre.org/)
+(BSD-3-Clause, pinned in `frontend/package.json`). The base map is OpenStreetMap data (ODbL):
+every map must credit "© OpenStreetMap contributors", which the map's attribution control
+does. By default the tiles come from OpenStreetMap's own servers, whose
+[tile usage policy](https://operations.osmfoundation.org/policies/tiles/) allows light use
+only: a deployment sets `VITE_MAP_TILE_URL` (an XYZ template, `{z}/{x}/{y}`) and, if its
+provider requires it, `VITE_MAP_TILE_ATTRIBUTION`, at frontend build time. The same applies to
+geocoding (`geocode/`, see `.env.example`).
+
 ## Not yet in scope
 
 - Per-organization distribution modules, their import commands, and external-system

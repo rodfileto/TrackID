@@ -858,3 +858,28 @@ ORDER BY distance_m, o.id;
 
 -- name: GetOccurrenceIDByNumber :one
 SELECT id FROM occurrences WHERE agency = $1 AND occurrence_number = $2;
+
+-- name: ListOccurrencesForMap :many
+-- Occurrences with their point, types and linked cases, for the occurrence map. NULL bounds are
+-- open. types is a JSON array of occurrence_types codes; cases a JSON array of
+-- {caseId, modality, caseType}.
+SELECT o.id, o.agency, o.occurrence_number, o.occurred_from, o.occurred_to, o.registered_at,
+    o.attempted, o.status, o.modus_operandi, o.description,
+    ST_X(l.geom::geometry)::float8 AS lon,
+    ST_Y(l.geom::geometry)::float8 AS lat,
+    l.location_id, l.precision, l.place_type, l.name AS place_name, l.neighbourhood, l.municipality_code,
+    COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
+              WHERE c.occurrence_id = o.id), '[]')::jsonb AS types,
+    COALESCE((SELECT json_agg(json_build_object('caseId', b.case_id, 'modality', b.modality, 'caseType', b.case_type)
+                              ORDER BY b.case_id)
+              FROM biometric_cases b WHERE b.occurrence_id = o.id), '[]')::jsonb AS cases
+FROM occurrences o
+JOIN locations l ON l.id = o.location_id
+WHERE (sqlc.narg(occurred_after)::timestamptz IS NULL OR o.occurred_from >= sqlc.narg(occurred_after))
+  AND (sqlc.narg(occurred_before)::timestamptz IS NULL OR o.occurred_from < sqlc.narg(occurred_before))
+ORDER BY o.occurred_from, o.id
+LIMIT sqlc.arg(max_rows);
+
+-- name: ListOccurrenceYears :many
+SELECT DISTINCT EXTRACT(YEAR FROM occurred_from AT TIME ZONE 'America/Sao_Paulo')::int4 AS year
+FROM occurrences ORDER BY year;
