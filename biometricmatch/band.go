@@ -10,20 +10,34 @@ import (
 	"github.com/rodfileto/trackid/db"
 )
 
-// Band is the automatic matcher's pair of cutoffs, as similarities on the scale of
-// biometric_decisions.confidence (1 - cosine distance for an embedding). A pair at or above
-// Confirm is a SYSTEM POSITIVE (CONFIRMED on its own); at or above Review but below Confirm, a
-// SYSTEM INCONCLUSIVE (PENDING_REVIEW until an examiner decides); below Review, nothing.
-// Review == Confirm is a single cutoff with no review band.
+// Band is the automatic matcher's pair of cutoffs, on the scale of
+// biometric_decisions.confidence: a similarity in (0, 1] for an embedding (1 - cosine
+// distance), the matcher's own score for a template (SourceAFIS: unbounded, 40 its documented
+// threshold). A pair at or above Confirm is a SYSTEM POSITIVE (CONFIRMED on its own); at or
+// above Review but below Confirm, a SYSTEM INCONCLUSIVE (PENDING_REVIEW until an examiner
+// decides); below Review, nothing. Review == Confirm is a single cutoff with no review band.
 type Band struct {
 	Review  float64
 	Confirm float64
 }
 
-// Validate checks 0 < Review <= Confirm <= 1, the same rule as match_thresholds' check.
+// Validate checks 0 < Review <= Confirm, what holds on every scale and match_thresholds'
+// own check.
 func (b Band) Validate() error {
-	if !(b.Review > 0 && b.Review <= b.Confirm && b.Confirm <= 1) {
-		return fmt.Errorf("biometricmatch: band needs 0 < review <= confirm <= 1, got review %v, confirm %v", b.Review, b.Confirm)
+	if !(b.Review > 0 && b.Review <= b.Confirm) {
+		return fmt.Errorf("biometricmatch: band needs 0 < review <= confirm, got review %v, confirm %v", b.Review, b.Confirm)
+	}
+	return nil
+}
+
+// ValidateSimilarity is Validate for an embedding's band, whose cutoffs are similarities:
+// 0 < Review <= Confirm <= 1.
+func (b Band) ValidateSimilarity() error {
+	if err := b.Validate(); err != nil {
+		return err
+	}
+	if b.Confirm > 1 {
+		return fmt.Errorf("biometricmatch: a similarity band needs confirm <= 1, got %v", b.Confirm)
 	}
 	return nil
 }
@@ -64,9 +78,11 @@ func CurrentBand(ctx context.Context, sqlDB *sql.DB, embeddingType string, fallb
 	}, nil
 }
 
-// SetBand records a new threshold version for embeddingType, which becomes current. source
-// says where the numbers came from (e.g. "ROC on validation set X, FMR 1e-3"); createdBy may be
-// empty.
+// SetBand records a new threshold version for embeddingType (a feature_embeddings
+// embedding_type, or a biometric_templates template_type), which becomes current. source says
+// where the numbers came from (e.g. "ROC on validation set X, FMR 1e-3"); createdBy may be
+// empty. It checks only Validate: the caller knows whether the scale is a similarity, and
+// RunBand refuses a similarity band above 1 anyway.
 func SetBand(ctx context.Context, sqlDB *sql.DB, embeddingType string, band Band, source, createdBy string) (Version, error) {
 	if err := band.Validate(); err != nil {
 		return Version{}, err
@@ -98,7 +114,7 @@ func RunBand(ctx context.Context, sqlDB *sql.DB, embeddingType string, v Version
 	if systemSource == "" {
 		return Stats{}, fmt.Errorf("systemSource is required")
 	}
-	if err := v.Band.Validate(); err != nil {
+	if err := v.Band.ValidateSimilarity(); err != nil {
 		return Stats{}, err
 	}
 
