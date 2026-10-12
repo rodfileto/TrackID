@@ -12,15 +12,16 @@ import (
 )
 
 type BiometricCase struct {
-	ID          int64         `db:"id" json:"id"`
-	CaseID      string        `db:"case_id" json:"case_id"`
-	CaseType    string        `db:"case_type" json:"case_type"`
-	Modality    string        `db:"modality" json:"modality"`
-	Description string        `db:"description" json:"description"`
-	CaseYear    sql.NullInt32 `db:"case_year" json:"case_year"`
-	CaseNumber  sql.NullInt32 `db:"case_number" json:"case_number"`
-	CreatedAt   time.Time     `db:"created_at" json:"created_at"`
-	UpdatedAt   time.Time     `db:"updated_at" json:"updated_at"`
+	ID           int64         `db:"id" json:"id"`
+	CaseID       string        `db:"case_id" json:"case_id"`
+	CaseType     string        `db:"case_type" json:"case_type"`
+	Modality     string        `db:"modality" json:"modality"`
+	Description  string        `db:"description" json:"description"`
+	CaseYear     sql.NullInt32 `db:"case_year" json:"case_year"`
+	CaseNumber   sql.NullInt32 `db:"case_number" json:"case_number"`
+	CreatedAt    time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt    time.Time     `db:"updated_at" json:"updated_at"`
+	OccurrenceID sql.NullInt64 `db:"occurrence_id" json:"occurrence_id"`
 }
 
 type BiometricDecision struct {
@@ -241,6 +242,21 @@ type IdentityRegister struct {
 	UpdatedAt      time.Time             `db:"updated_at" json:"updated_at"`
 }
 
+type Location struct {
+	ID               int64          `db:"id" json:"id"`
+	LocationID       string         `db:"location_id" json:"location_id"`
+	Name             sql.NullString `db:"name" json:"name"`
+	Geom             interface{}    `db:"geom" json:"geom"`
+	Precision        string         `db:"precision" json:"precision"`
+	MunicipalityCode string         `db:"municipality_code" json:"municipality_code"`
+	Uf               string         `db:"uf" json:"uf"`
+	Neighbourhood    sql.NullString `db:"neighbourhood" json:"neighbourhood"`
+	Address          sql.NullString `db:"address" json:"address"`
+	PlaceType        sql.NullString `db:"place_type" json:"place_type"`
+	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt        time.Time      `db:"updated_at" json:"updated_at"`
+}
+
 type MatchThreshold struct {
 	ID               int64          `db:"id" json:"id"`
 	EmbeddingType    string         `db:"embedding_type" json:"embedding_type"`
@@ -249,6 +265,36 @@ type MatchThreshold struct {
 	Source           string         `db:"source" json:"source"`
 	CreatedBy        sql.NullString `db:"created_by" json:"created_by"`
 	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
+}
+
+type Occurrence struct {
+	ID               int64         `db:"id" json:"id"`
+	Agency           string        `db:"agency" json:"agency"`
+	OccurrenceNumber string        `db:"occurrence_number" json:"occurrence_number"`
+	LocationID       int64         `db:"location_id" json:"location_id"`
+	OccurredFrom     time.Time     `db:"occurred_from" json:"occurred_from"`
+	OccurredTo       sql.NullTime  `db:"occurred_to" json:"occurred_to"`
+	ReportedAt       sql.NullTime  `db:"reported_at" json:"reported_at"`
+	RegisteredAt     time.Time     `db:"registered_at" json:"registered_at"`
+	Attempted        sql.NullBool  `db:"attempted" json:"attempted"`
+	OffenderCount    sql.NullInt16 `db:"offender_count" json:"offender_count"`
+	VictimCount      sql.NullInt16 `db:"victim_count" json:"victim_count"`
+	ModusOperandi    []string      `db:"modus_operandi" json:"modus_operandi"`
+	Status           string        `db:"status" json:"status"`
+	Description      string        `db:"description" json:"description"`
+	CreatedAt        time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt        time.Time     `db:"updated_at" json:"updated_at"`
+}
+
+type OccurrenceClassification struct {
+	OccurrenceID int64  `db:"occurrence_id" json:"occurrence_id"`
+	TypeCode     string `db:"type_code" json:"type_code"`
+}
+
+type OccurrenceType struct {
+	Code     string `db:"code" json:"code"`
+	CaseType string `db:"case_type" json:"case_type"`
+	Grp      string `db:"grp" json:"grp"`
 }
 
 type Person struct {
