@@ -80,9 +80,9 @@ locations ──< occurrences ──< biometric_cases
 
 | Table | Role |
 | --- | --- |
-| `locations` | a place, keyed by the importer's `location_id`: a PostGIS point (`geography`, WGS 84), how exact it is (`precision`: `EXACT` \| `GEOCODED` \| `STREET` \| `MUNICIPALITY`), IBGE municipality code, UF, address, `place_type` |
+| `locations` | a place, keyed by the importer's `location_id`: a PostGIS point (`geography`, WGS 84), how exact it is (`precision`: `EXACT` \| `GEOCODED` \| `STREET` \| `NEIGHBOURHOOD` \| `MUNICIPALITY`), IBGE municipality code, UF, address, `place_type` |
 | `occurrences` | a registered occurrence (a police report, *boletim de ocorrência*), unique per `(agency, occurrence_number)`: when (`occurred_from`/`occurred_to` window, reported, registered), where (`location_id`), crime-only facts (`attempted`, counts, `modus_operandi` tags), `status`, `description` |
-| `occurrence_types` | the fixed list of occurrence types, codes only (the frontend translates): property crimes, crimes against persons, `IDENTITY_FRAUD`, and the civil `MISSING_PERSON`, `UNIDENTIFIED_BODY`, `UNIDENTIFIED_LIVING_PERSON`, `DISASTER_VICTIM`; each with the `case_type` it opens |
+| `occurrence_types` | the fixed list of occurrence types, codes only (the frontend translates), following ISP-RJ's crime classification (migration 012) in groups `LETHAL`, `PERSON`, `ROBBERY`, `THEFT`, `FRAUD`, `DRUGS`, `CIVIL`; plus `IDENTITY_FRAUD`, `UNIDENTIFIED_LIVING_PERSON` and `DISASTER_VICTIM`, which ISP does not count but which open biometric cases; each with the `case_type` it opens. Attempts are `occurrences.attempted`, not types |
 | `occurrence_classifications` | an occurrence's types (a report can carry several) |
 
 One occurrence can open many biometric cases (a FACIAL case for its CCTV, a FINGERPRINT case
@@ -90,6 +90,10 @@ for its latents), so the link is `biometric_cases.occurrence_id`, NULL until set
 is not necessarily a crime: as `case_type` covers CIVIL identification, the occurrence covers
 the report that starts it. Deciding that two reports share a place is the importer's job:
 trackid neither geocodes nor deduplicates addresses.
+
+Addresses and points are converted by the `geocode` package: a `Geocoder` interface with a
+Nominatim (OpenStreetMap) implementation, configured by `GEOCODER_*` (see `.env.example`). Its
+results are ODbL data, to be credited as "© OpenStreetMap contributors" wherever shown.
 
 `geography` has no sqlc type, so points cross into Go as `lon`/`lat` only, and spatial
 queries (`ListOccurrencesWithinRadius`) stay in SQL. This is where intelligence analysis by
@@ -196,7 +200,7 @@ Done (core), end to end:
   shipped yet, there was no reason to carry the intermediate tables (`comparisons`,
   `codifications`, `identifications`, a `case_codifications.comparison_*` set of columns)
   that an incremental build-up would otherwise leave behind.
-- **Occurrences** (`db/migrations/011`): `locations` (PostGIS), `occurrences`,
+- **Occurrences** (`db/migrations/011`, types and precision revised in `012`): `locations` (PostGIS), `occurrences`,
   `occurrence_types` (seeded), `occurrence_classifications`, and
   `biometric_cases.occurrence_id` (section 2.3). Postgres only: not yet synced to Neo4j, and
   no ingest helper beyond the `db` queries.

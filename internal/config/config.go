@@ -1,7 +1,9 @@
 package config
 
 import (
+	"log"
 	"os"
+	"time"
 )
 
 type Config struct {
@@ -29,6 +31,15 @@ type Config struct {
 	// extracts and matches fingerprint templates with (see the fingerprint
 	// package). Left empty, fingerprint tasks aren't processed.
 	FingerprintSidecarURL string
+
+	// Geocoder: Nominatim (OpenStreetMap) for locations -- the address and
+	// coordinate picker, and importers with only an address (geocode package).
+	// GeocoderURL defaults to the public instance, whose usage policy forbids
+	// autocomplete: search-as-you-type needs a self-hosted one.
+	GeocoderURL         string
+	GeocoderUserAgent   string
+	GeocoderEmail       string
+	GeocoderMinInterval time.Duration // 0: the geocode package's default (1s on the public instance)
 }
 
 func Load() Config {
@@ -39,6 +50,18 @@ func Load() Config {
 	detector := os.Getenv("VISION_DETECTOR")
 	if detector == "" {
 		detector = "yunet"
+	}
+	userAgent := os.Getenv("GEOCODER_USER_AGENT")
+	if userAgent == "" {
+		userAgent = "trackid (+https://github.com/rodfileto/trackid)"
+	}
+	var minInterval time.Duration
+	if v := os.Getenv("GEOCODER_MIN_INTERVAL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			log.Fatalf("GEOCODER_MIN_INTERVAL: %v", err)
+		}
+		minInterval = d
 	}
 
 	return Config{
@@ -60,5 +83,10 @@ func Load() Config {
 		VisionUseGPU:            os.Getenv("VISION_USE_GPU") == "true",
 
 		FingerprintSidecarURL: os.Getenv("FINGERPRINT_SIDECAR_URL"),
+
+		GeocoderURL:         os.Getenv("GEOCODER_URL"),
+		GeocoderUserAgent:   userAgent,
+		GeocoderEmail:       os.Getenv("GEOCODER_EMAIL"),
+		GeocoderMinInterval: minInterval,
 	}
 }
