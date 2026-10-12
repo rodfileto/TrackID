@@ -82,7 +82,16 @@ type CaseInput struct {
 	CaseType    string // CRIMINAL or CIVIL
 	Modality    string
 	Description string
-	Evidences   []EvidenceInput
+	// Occurrence, when set, links the case to an occurrence already ingested
+	// (occurrences.Ingest). nil leaves the case's link as it is.
+	Occurrence *OccurrenceRef
+	Evidences  []EvidenceInput
+}
+
+// OccurrenceRef names an occurrence by its business key.
+type OccurrenceRef struct {
+	Agency string
+	Number string
 }
 
 // CodificationResult is one case_codifications row Ingest wrote.
@@ -173,6 +182,18 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput, opts ...Option) (Re
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("cases: upsert biometric_cases: %w", err)
+	}
+
+	if ref := c.Occurrence; ref != nil {
+		occurrenceID, err := q.GetOccurrenceIDByNumber(ctx, db.GetOccurrenceIDByNumberParams{Agency: ref.Agency, OccurrenceNumber: ref.Number})
+		if err != nil {
+			return Result{}, fmt.Errorf("cases: occurrence %s/%s: %w", ref.Agency, ref.Number, err)
+		}
+		if _, err := q.SetBiometricCaseOccurrence(ctx, db.SetBiometricCaseOccurrenceParams{
+			OccurrenceID: sql.NullInt64{Int64: occurrenceID, Valid: true}, CaseID: c.CaseID,
+		}); err != nil {
+			return Result{}, fmt.Errorf("cases: link occurrence: %w", err)
+		}
 	}
 
 	result := Result{BiometricCaseID: upserted.ID, Inserted: upserted.Inserted}
