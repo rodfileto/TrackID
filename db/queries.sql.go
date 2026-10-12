@@ -961,6 +961,22 @@ func (q *Queries) GetLocationByLocationID(ctx context.Context, locationID string
 	return i, err
 }
 
+const getOccurrenceIDByNumber = `-- name: GetOccurrenceIDByNumber :one
+SELECT id FROM occurrences WHERE agency = $1 AND occurrence_number = $2
+`
+
+type GetOccurrenceIDByNumberParams struct {
+	Agency           string `db:"agency" json:"agency"`
+	OccurrenceNumber string `db:"occurrence_number" json:"occurrence_number"`
+}
+
+func (q *Queries) GetOccurrenceIDByNumber(ctx context.Context, arg GetOccurrenceIDByNumberParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getOccurrenceIDByNumber, arg.Agency, arg.OccurrenceNumber)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getPersonByPersonID = `-- name: GetPersonByPersonID :one
 
 SELECT id, person_id, meta, created_at, updated_at
