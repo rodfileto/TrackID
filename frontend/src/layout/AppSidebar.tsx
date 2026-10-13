@@ -50,7 +50,10 @@ const navItems: NavItem[] = [
   {
     icon: <PieChartIcon />,
     name: "nav.intelligence",
-    subItems: [{ name: "nav.occurrenceMap", path: "/intelligence/map" }],
+    subItems: [
+      { name: "nav.occurrenceMap", path: "/intelligence/map" },
+      { name: "nav.newOccurrence", path: "/intelligence/occurrences/new" },
+    ],
   },
 ];
 

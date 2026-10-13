@@ -14,8 +14,31 @@ import CaseDetailPage from "./pages/CaseDetail";
 import PersonLookup from "./pages/PersonLookup";
 import PersonProfilePage from "./pages/PersonProfile";
 import Clusters from "./pages/Clusters";
+// A lazy page whose code fails to load -- the tab predates a new build or a dev-server
+// restart, so the chunk it asks for no longer exists -- reloads once to fetch the current
+// version, instead of leaving a blank screen. The flag stops a reload loop when the failure
+// is something else (offline, server down): the error then surfaces.
+function lazyPage<T extends React.ComponentType>(load: () => Promise<{ default: T }>) {
+  return lazy(async () => {
+    const flag = "trackid.chunkReload";
+    try {
+      const page = await load();
+      sessionStorage.removeItem(flag);
+      return page;
+    } catch (err) {
+      if (!sessionStorage.getItem(flag)) {
+        sessionStorage.setItem(flag, "1");
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw err;
+    }
+  });
+}
+
 // The map pulls in MapLibre (about 1 MB): loaded only when the page is opened.
-const OccurrenceMap = lazy(() => import("./pages/OccurrenceMap"));
+const OccurrenceMap = lazyPage(() => import("./pages/OccurrenceMap"));
+const NewOccurrence = lazyPage(() => import("./pages/NewOccurrence"));
 import { useTheme } from "./context/ThemeContext";
 
 export default function App() {
@@ -42,6 +65,14 @@ export default function App() {
                 element={
                   <Suspense fallback={null}>
                     <OccurrenceMap />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/intelligence/occurrences/new"
+                element={
+                  <Suspense fallback={null}>
+                    <NewOccurrence />
                   </Suspense>
                 }
               />

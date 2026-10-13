@@ -30,7 +30,8 @@
     "new": "new",
     "pro": "pro",
     "intelligence": "Intelligence",
-    "occurrenceMap": "Occurrence map"
+    "occurrenceMap": "Occurrence map",
+    "newOccurrence": "New occurrence"
   },
   "userMenu": {
     "editProfile": "Edit profile",
@@ -213,7 +214,8 @@
     "descriptionPlaceholder": "Brief description of the case",
     "creating": "Creating...",
     "create": "Create Case",
-    "selectModality": "Select modality"
+    "selectModality": "Select modality",
+    "registerOccurrence": "Register its occurrence now"
   },
   "dropzone": {
     "dropHere": "Drop files here",
@@ -420,12 +422,12 @@
     "status": "Status",
     "place": "Place",
     "precision": "Location precision",
-    "modusOperandi": "Modus operandi",
     "cases_one": "{{count}} biometric case",
     "cases_other": "{{count}} biometric cases",
     "noCases": "No biometric case linked yet.",
     "showAll": "All",
-    "showNone": "None"
+    "showNone": "None",
+    "newOccurrence": "New occurrence"
   },
   "occurrenceType": {
     "HOMICIDE": "Homicide",
@@ -485,20 +487,12 @@
     "INQUIRY_OPENED": "Inquiry opened",
     "CLOSED": "Closed"
   },
-  "modus": {
-    "FIREARM": "Firearm",
-    "KNIFE": "Knife",
-    "MOTORCYCLE": "Motorcycle",
-    "FORCED_ENTRY": "Forced entry",
-    "EXPLOSIVES": "Explosives",
-    "ATM_HELP_SCAM": "\"Help\" at the ATM scam",
-    "FALSE_BANK_EMPLOYEE": "False bank employee"
-  },
   "placeType": {
     "PUBLIC_ROAD": "Public road",
     "RESIDENCE": "Residence",
     "COMMERCE": "Shop or business",
     "BANK": "Bank",
+    "GOVERNMENT_OFFICE": "Government office",
     "TRANSPORT": "Transport",
     "RURAL": "Rural",
     "OTHER": "Other"
@@ -509,5 +503,66 @@
     "STREET": "Street only",
     "NEIGHBOURHOOD": "Neighbourhood only",
     "MUNICIPALITY": "Municipality only"
+  },
+  "occurrenceForm": {
+    "title": "New occurrence",
+    "metaDescription": "Register an occurrence: what, when and where",
+    "whatTitle": "What happened",
+    "whatDesc": "One or more types. An occurrence is either criminal or civil; types of the other nature are disabled once one is chosen.",
+    "natureCriminal": "Criminal occurrence",
+    "natureCivil": "Civil occurrence (identification): no attempt or offenders.",
+    "typesError": "Could not load the occurrence types",
+    "whenTitle": "When",
+    "occurredFrom": "Occurred at",
+    "foundLater": "Found later (a time window)",
+    "occurredTo": "Occurred until",
+    "whereTitle": "Where",
+    "whereDesc": "Click the map to place the point, or search an address. Existing places within 50 m can be reused, so repeat places stay one location.",
+    "addressSearch": "Address search",
+    "addressPlaceholder": "Street, number, neighbourhood, city",
+    "search": "Search",
+    "searching": "Searching…",
+    "noResults": "Nothing found.",
+    "geocoderUnavailable": "The address service is unavailable; place the point on the map.",
+    "mapHint": "Click the map to place the occurrence.",
+    "nearbyTitle": "Existing places nearby",
+    "nearbyMeta_one": "{{distance}} m · {{count}} occurrence",
+    "nearbyMeta_other": "{{distance}} m · {{count}} occurrences",
+    "unnamedPlace": "Unnamed place",
+    "reusing": "Reusing an existing place: its address and type are kept.",
+    "address": "Address",
+    "neighbourhood": "Neighbourhood",
+    "placeType": "Place type",
+    "placeName": "Place name",
+    "placeNameHint": "e.g. a shop, a bank branch, a station",
+    "detailsTitle": "Report",
+    "agency": "Police agency",
+    "agencyNumber": "Agency report number",
+    "status": "Status",
+    "victimCount": "Victims",
+    "offenderCount": "Offenders",
+    "attempted": "Attempted",
+    "description": "Description",
+    "save": "Register occurrence",
+    "saving": "Saving…",
+    "saveError": "Could not register the occurrence",
+    "created": "Occurrence {{number}} registered",
+    "forCase": "This occurrence will be linked to case {{caseId}} when saved; only types of the case's nature can be chosen.",
+    "caseAlreadyLinked": "Case {{caseId}} is already linked to an occurrence: unlink it on the case page first.",
+    "backToCase": "Back to the case",
+    "caseError": "Could not load the case"
+  },
+  "caseOccurrence": {
+    "title": "Occurrence",
+    "desc": "The occurrence this case investigates.",
+    "none": "Not linked to an occurrence yet. Register a new one, or search an existing one by TrackID number (2026.0001) or police report number.",
+    "searchPlaceholder": "TrackID or police report number",
+    "link": "Link",
+    "unlink": "Unlink",
+    "linkedToast": "Case linked to the occurrence",
+    "unlinkedToast": "Case unlinked from the occurrence",
+    "linkError": "Could not change the link",
+    "searchError": "Could not search occurrences",
+    "registerNew": "Register a new occurrence"
   }
 }

@@ -32,6 +32,8 @@ export default function OccurrenceMap() {
   const { t, i18n } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const year = Number(searchParams.get("year")) || undefined;
+  // ?occurrence= selects one once the data is in (e.g. after registering it).
+  const focusId = Number(searchParams.get("occurrence")) || undefined;
   const hidden = useMemo(
     () => new Set((searchParams.get("hide") ?? "").split(",").filter(Boolean)),
     [searchParams],
@@ -66,7 +68,9 @@ export default function OccurrenceMap() {
     setSelected(null);
     getOccurrenceMap({ year })
       .then((result) => {
-        if (!cancelled) setData(result);
+        if (cancelled) return;
+        setData(result);
+        if (focusId) setSelected(result.features.find((f) => f.properties.id === focusId) ?? null);
       })
       .catch((err) => {
         if (!cancelled)
@@ -78,6 +82,8 @@ export default function OccurrenceMap() {
     return () => {
       cancelled = true;
     };
+    // focusId is read once per load, when the page opens on an occurrence.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, t]);
 
   // Groups are filtered here, not by the API, so toggling one is instant.
@@ -156,11 +162,19 @@ export default function OccurrenceMap() {
             </div>
           </div>
 
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            {loading
-              ? t("occurrenceMap.loading")
-              : t("occurrenceMap.count", { count: visible?.features.length ?? 0 })}
-          </span>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              {loading
+                ? t("occurrenceMap.loading")
+                : t("occurrenceMap.count", { count: visible?.features.length ?? 0 })}
+            </span>
+            <Link
+              to="/intelligence/occurrences/new"
+              className="inline-flex h-11 items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600"
+            >
+              {t("occurrenceMap.newOccurrence")}
+            </Link>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2" aria-label={t("occurrenceMap.legend")}>
@@ -252,7 +266,10 @@ function OccurrenceDetails({ feature, locale }: { feature: OccurrenceFeature | n
         {p.attempted && <Badge color="warning" size="sm">{t("occurrenceMap.attempted")}</Badge>}
       </div>
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
-        {row(t("occurrenceMap.report"), `${p.agency} · ${p.number}`)}
+        {row(
+          t("occurrenceMap.report"),
+          [p.trackidNumber, p.agency && p.number ? `${p.agency} · ${p.number}` : ""].filter(Boolean).join(" — "),
+        )}
         {row(
           t("occurrenceMap.when"),
           p.occurredTo
@@ -266,8 +283,6 @@ function OccurrenceDetails({ feature, locale }: { feature: OccurrenceFeature | n
             "—",
         )}
         {row(t("occurrenceMap.precision"), t(`precision.${p.precision}`))}
-        {p.modusOperandi.length > 0 &&
-          row(t("occurrenceMap.modusOperandi"), p.modusOperandi.map((m) => t(`modus.${m}`, { defaultValue: m })).join(", "))}
       </dl>
       <div className="flex flex-col gap-2">
         <h5 className="text-theme-xs text-gray-500 dark:text-gray-400">

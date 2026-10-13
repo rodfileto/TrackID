@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import PageMeta from "../components/common/PageMeta";
@@ -60,6 +60,7 @@ function parsePage(value: string | null): number {
 
 export default function CriminalCases() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const caseType = searchParams.get("caseType") ?? "";
@@ -148,8 +149,13 @@ export default function CriminalCases() {
     updateParams({ q: search || undefined, page: undefined });
   }
 
-  function handleCreated(created: Case) {
+  function handleCreated(created: Case, registerOccurrence: boolean) {
     toast.success(t("cases.created", { caseId: created.caseId }));
+    if (registerOccurrence) {
+      // Straight on to the occurrence the case investigates; saving it links the two.
+      navigate(`/intelligence/occurrences/new?case=${encodeURIComponent(created.caseId)}`);
+      return;
+    }
     updateParams({ page: undefined });
     setRefreshKey((key) => key + 1);
   }

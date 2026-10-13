@@ -59,11 +59,10 @@ func TestOccurrenceLayer(t *testing.T) {
 	occ := func(number string, location int64) int64 {
 		t.Helper()
 		row, err := q.UpsertOccurrence(ctx, db.UpsertOccurrenceParams{
-			Agency: "DP-01", OccurrenceNumber: number, LocationID: location,
+			Agency: sql.NullString{String: "DP-01", Valid: true}, OccurrenceNumber: sql.NullString{String: number, Valid: true}, LocationID: location,
 			OccurredFrom: when, RegisteredAt: when.Add(2 * time.Hour),
-			Attempted:     sql.NullBool{Bool: false, Valid: true},
-			ModusOperandi: []string{"FIREARM", "MOTORCYCLE"},
-			Status:        "REGISTERED", Description: "bank robbery " + number,
+			Attempted: sql.NullBool{Bool: false, Valid: true},
+			Status:    "REGISTERED", Description: "bank robbery " + number,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -111,7 +110,7 @@ func TestOccurrenceLayer(t *testing.T) {
 		}
 		return rows
 	}
-	if rows := near(false); len(rows) != 1 || rows[0].OccurrenceNumber != "BO-1" || rows[0].DistanceM < 400 || rows[0].DistanceM > 600 {
+	if rows := near(false); len(rows) != 1 || rows[0].OccurrenceNumber.String != "BO-1" || rows[0].DistanceM < 400 || rows[0].DistanceM > 600 {
 		t.Errorf("without centroids: %+v", rows)
 	}
 	if rows := near(true); len(rows) != 2 {

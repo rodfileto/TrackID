@@ -69,7 +69,7 @@ func TestIngestAndLink(t *testing.T) {
 			MunicipalityCode: "3304557", UF: "RJ", PlaceType: "BANK",
 		},
 		OccurredFrom: when, RegisteredAt: when.Add(time.Hour),
-		ModusOperandi: []string{"ATM_HELP_SCAM"}, Status: "REGISTERED",
+		Status:      "REGISTERED",
 		Description: "simulated", Types: []string{"FRAUD"},
 	}
 	first, err := occurrences.Ingest(ctx, sqlDB, in)
