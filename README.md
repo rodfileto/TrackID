@@ -94,6 +94,10 @@ organizations import to build their import commands) and an **internal** runtime
 - `geocode/` — addresses ↔ coordinates for locations, through Nominatim (OpenStreetMap; ODbL,
   credit "© OpenStreetMap contributors"); the public instance forbids autocomplete, so a
   search-as-you-type picker needs a self-hosted one (`GEOCODER_URL`)
+- `tools/municipalities/` — writes IBGE municipality boundaries (geobr, MIT; data by IBGE) as
+  GeoJSON for `cmd/load-municipalities`, so a location's municipality comes from its point:
+  `uv run python fetch.py --states RJ`, then
+  `go run ./cmd/load-municipalities -file tools/municipalities/municipalities.geojson -commit`
 - `db/postgres/` — the Postgres image: pgvector plus PostGIS (no official image has both)
 - `docker-compose.yml` — Postgres, Redis, MinIO, `sourceafis-sidecar`, and optional Neo4j
 - `sourceafis-sidecar/` — the Java sidecar `fingerprint/` talks to (SourceAFIS behind a

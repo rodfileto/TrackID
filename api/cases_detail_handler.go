@@ -79,6 +79,11 @@ func ListCaseClustersHandler(db *sql.DB) gin.HandlerFunc {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load case clusters"})
 			return
 		}
+		if clusters == nil {
+			// A case nothing has been matched for yet: an empty list, not null, which the
+			// case page's clusters panel would read .length of.
+			clusters = []cases.CaseCluster{}
+		}
 		context.JSON(http.StatusOK, gin.H{"clusters": clusters})
 	}
 }

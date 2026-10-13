@@ -8,6 +8,7 @@ import (
 
 	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/cases"
+	"github.com/rodfileto/trackid/geocode"
 	"github.com/rodfileto/trackid/storage"
 )
 
@@ -28,6 +29,9 @@ type Dependencies struct {
 	// comparison. Nil means detect-faces returns 503, and comparisons only
 	// work between codifications that already have stored embeddings.
 	FaceVision cases.FaceVision
+	// Geocoder backs the occurrence form's address search and map-click addresses. Nil means
+	// those endpoints return 503; occurrences can still be placed on the map.
+	Geocoder geocode.Geocoder
 	// Register is an optional hook called after the core routes are registered.
 	// It receives the engine and the authenticated route group (mounted under
 	// /api) so integrations can attach their own routes. May be nil.
@@ -82,6 +86,13 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.GET("occurrences/map", OccurrenceMapHandler(deps.DB))
 	protected.GET("occurrences/types", OccurrenceTypesHandler(deps.DB))
 	protected.GET("occurrences/years", OccurrenceYearsHandler(deps.DB))
+	protected.GET("occurrences/search", SearchOccurrencesHandler(deps.DB))
+	protected.POST("occurrences", CreateOccurrenceHandler(deps.DB))
+	protected.GET("cases/:caseId/occurrence", CaseOccurrenceHandler(deps.DB))
+	protected.PUT("cases/:caseId/occurrence", LinkCaseOccurrenceHandler(deps.DB))
+	protected.GET("locations/nearby", NearbyLocationsHandler(deps.DB))
+	protected.GET("geocode/search", GeocodeSearchHandler(deps.Geocoder))
+	protected.GET("geocode/reverse", GeocodeReverseHandler(deps.Geocoder))
 
 	if deps.Register != nil {
 		deps.Register(router, protected)

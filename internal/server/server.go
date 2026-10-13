@@ -15,6 +15,7 @@ import (
 
 	"github.com/rodfileto/trackid/api"
 	"github.com/rodfileto/trackid/cases"
+	"github.com/rodfileto/trackid/geocode"
 	"github.com/rodfileto/trackid/internal/config"
 	"github.com/rodfileto/trackid/internal/database"
 	"github.com/rodfileto/trackid/internal/env"
@@ -88,6 +89,18 @@ func Run() error {
 		log.Printf("VISION_DETECTOR_PATH/VISION_RECOGNIZER_PATH not configured; face detection and on-the-fly face comparison will return 503")
 	}
 
+	// One client for the process, so its pacing keeps the whole API within the geocoding
+	// server's rate limit.
+	var geocoder geocode.Geocoder
+	if g, err := geocode.NewNominatim(geocode.NominatimConfig{
+		BaseURL: configuration.GeocoderURL, UserAgent: configuration.GeocoderUserAgent,
+		Email: configuration.GeocoderEmail, MinInterval: configuration.GeocoderMinInterval,
+	}); err != nil {
+		log.Printf("geocoder unavailable; address search will return 503: %v", err)
+	} else {
+		geocoder = g
+	}
+
 	router := api.NewRouter(api.Dependencies{
 		DB:          db,
 		JWTSecret:   configuration.JWTSecret,
@@ -95,6 +108,7 @@ func Run() error {
 		Storage:     store,
 		Queue:       queueClient,
 		FaceVision:  faceVision,
+		Geocoder:    geocoder,
 	})
 
 	if distDir := web.DistDir(); distDir != "" {

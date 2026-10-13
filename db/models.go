@@ -267,23 +267,33 @@ type MatchThreshold struct {
 	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
 }
 
+type Municipality struct {
+	Code     string      `db:"code" json:"code"`
+	Name     string      `db:"name" json:"name"`
+	Uf       string      `db:"uf" json:"uf"`
+	Geom     interface{} `db:"geom" json:"geom"`
+	Source   string      `db:"source" json:"source"`
+	LoadedAt time.Time   `db:"loaded_at" json:"loaded_at"`
+}
+
 type Occurrence struct {
-	ID               int64         `db:"id" json:"id"`
-	Agency           string        `db:"agency" json:"agency"`
-	OccurrenceNumber string        `db:"occurrence_number" json:"occurrence_number"`
-	LocationID       int64         `db:"location_id" json:"location_id"`
-	OccurredFrom     time.Time     `db:"occurred_from" json:"occurred_from"`
-	OccurredTo       sql.NullTime  `db:"occurred_to" json:"occurred_to"`
-	ReportedAt       sql.NullTime  `db:"reported_at" json:"reported_at"`
-	RegisteredAt     time.Time     `db:"registered_at" json:"registered_at"`
-	Attempted        sql.NullBool  `db:"attempted" json:"attempted"`
-	OffenderCount    sql.NullInt16 `db:"offender_count" json:"offender_count"`
-	VictimCount      sql.NullInt16 `db:"victim_count" json:"victim_count"`
-	ModusOperandi    []string      `db:"modus_operandi" json:"modus_operandi"`
-	Status           string        `db:"status" json:"status"`
-	Description      string        `db:"description" json:"description"`
-	CreatedAt        time.Time     `db:"created_at" json:"created_at"`
-	UpdatedAt        time.Time     `db:"updated_at" json:"updated_at"`
+	ID               int64          `db:"id" json:"id"`
+	Agency           sql.NullString `db:"agency" json:"agency"`
+	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
+	LocationID       int64          `db:"location_id" json:"location_id"`
+	OccurredFrom     time.Time      `db:"occurred_from" json:"occurred_from"`
+	OccurredTo       sql.NullTime   `db:"occurred_to" json:"occurred_to"`
+	ReportedAt       sql.NullTime   `db:"reported_at" json:"reported_at"`
+	RegisteredAt     time.Time      `db:"registered_at" json:"registered_at"`
+	Attempted        sql.NullBool   `db:"attempted" json:"attempted"`
+	OffenderCount    sql.NullInt16  `db:"offender_count" json:"offender_count"`
+	VictimCount      sql.NullInt16  `db:"victim_count" json:"victim_count"`
+	Status           string         `db:"status" json:"status"`
+	Description      string         `db:"description" json:"description"`
+	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt        time.Time      `db:"updated_at" json:"updated_at"`
+	OccurrenceYear   sql.NullInt32  `db:"occurrence_year" json:"occurrence_year"`
+	OccurrenceSeq    sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
 }
 
 type OccurrenceClassification struct {

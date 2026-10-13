@@ -4,7 +4,6 @@ import {
   Map as MapLibreMap,
   NavigationControl,
   ScaleControl,
-  setWorkerUrl,
   type ExpressionSpecification,
   type GeoJSONSource,
 } from "maplibre-gl";
@@ -14,18 +13,7 @@ import type {
   OccurrenceMap,
 } from "../../services/occurrences";
 import { GROUP_COLORS, OTHER_COLOR } from "./groupColors";
-
-// The base map. OpenStreetMap's own tile servers allow light use only
-// (https://operations.osmfoundation.org/policies/tiles/): a deployment sets
-// VITE_MAP_TILE_URL to its own or a contracted tile service. Whatever serves
-// OSM data must credit its contributors.
-const TILE_URL =
-  import.meta.env.VITE_MAP_TILE_URL ??
-  "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const TILE_ATTRIBUTION =
-  import.meta.env.VITE_MAP_TILE_ATTRIBUTION ??
-  '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
-
+import { TILE_ATTRIBUTION, TILE_URL } from "./tiles";
 
 export type MapMode = "points" | "heatmap";
 
@@ -38,8 +26,6 @@ interface Props {
 
 const SOURCE = "occurrences";
 
-// Served by vite.config.ts's maplibreWorker plugin, in dev and in the build.
-setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 
 function groupColorExpression(): ExpressionSpecification {
   const pairs = Object.entries(GROUP_COLORS).flat();
@@ -143,7 +129,12 @@ export default function OccurrenceMapView({
       applySelection(m, latest.current.selectedId);
     });
     map.current = m;
+    // MapLibre measures its container once; re-measure when the layout settles or changes
+    // (lazy-loaded page, sidebar toggled, panel shown), or part of the map stays blank.
+    const resize = new ResizeObserver(() => m.resize());
+    resize.observe(container.current);
     return () => {
+      resize.disconnect();
       ready.current = false;
       m.remove();
       map.current = null;

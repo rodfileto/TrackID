@@ -30,7 +30,8 @@
     "new": "novo",
     "pro": "pro",
     "intelligence": "Inteligência",
-    "occurrenceMap": "Mapa de ocorrências"
+    "occurrenceMap": "Mapa de ocorrências",
+    "newOccurrence": "Nova ocorrência"
   },
   "userMenu": {
     "editProfile": "Editar perfil",
@@ -213,7 +214,8 @@
     "descriptionPlaceholder": "Breve descrição do caso",
     "creating": "Criando...",
     "create": "Criar caso",
-    "selectModality": "Selecione a modalidade"
+    "selectModality": "Selecione a modalidade",
+    "registerOccurrence": "Registrar a ocorrência agora"
   },
   "dropzone": {
     "dropHere": "Solte os arquivos aqui",
@@ -420,12 +422,12 @@
     "status": "Situação",
     "place": "Local",
     "precision": "Precisão da localização",
-    "modusOperandi": "Modus operandi",
     "cases_one": "{{count}} caso biométrico",
     "cases_other": "{{count}} casos biométricos",
     "noCases": "Nenhum caso biométrico vinculado ainda.",
     "showAll": "Todos",
-    "showNone": "Nenhum"
+    "showNone": "Nenhum",
+    "newOccurrence": "Nova ocorrência"
   },
   "occurrenceType": {
     "HOMICIDE": "Homicídio doloso",
@@ -485,20 +487,12 @@
     "INQUIRY_OPENED": "Inquérito instaurado",
     "CLOSED": "Encerrada"
   },
-  "modus": {
-    "FIREARM": "Arma de fogo",
-    "KNIFE": "Arma branca",
-    "MOTORCYCLE": "Motocicleta",
-    "FORCED_ENTRY": "Arrombamento",
-    "EXPLOSIVES": "Explosivos",
-    "ATM_HELP_SCAM": "Golpe da ajuda no caixa eletrônico",
-    "FALSE_BANK_EMPLOYEE": "Falso funcionário do banco"
-  },
   "placeType": {
     "PUBLIC_ROAD": "Via pública",
     "RESIDENCE": "Residência",
     "COMMERCE": "Comércio",
     "BANK": "Banco",
+    "GOVERNMENT_OFFICE": "Órgão público",
     "TRANSPORT": "Transporte",
     "RURAL": "Área rural",
     "OTHER": "Outro"
@@ -509,5 +503,66 @@
     "STREET": "Apenas a rua",
     "NEIGHBOURHOOD": "Apenas o bairro",
     "MUNICIPALITY": "Apenas o município"
+  },
+  "occurrenceForm": {
+    "title": "Nova ocorrência",
+    "metaDescription": "Registrar uma ocorrência: o quê, quando e onde",
+    "whatTitle": "O que aconteceu",
+    "whatDesc": "Um ou mais tipos. A ocorrência é criminal ou civil; os tipos da outra natureza ficam desabilitados após a primeira escolha.",
+    "natureCriminal": "Ocorrência criminal",
+    "natureCivil": "Ocorrência civil (identificação): sem tentativa ou autores.",
+    "typesError": "Não foi possível carregar os tipos de ocorrência",
+    "whenTitle": "Quando",
+    "occurredFrom": "Ocorreu em",
+    "foundLater": "Descoberta depois (um intervalo)",
+    "occurredTo": "Ocorreu até",
+    "whereTitle": "Onde",
+    "whereDesc": "Clique no mapa para marcar o ponto ou busque um endereço. Locais existentes a até 50 m podem ser reutilizados, para que locais reincidentes continuem sendo um só.",
+    "addressSearch": "Busca de endereço",
+    "addressPlaceholder": "Rua, número, bairro, cidade",
+    "search": "Buscar",
+    "searching": "Buscando…",
+    "noResults": "Nada encontrado.",
+    "geocoderUnavailable": "O serviço de endereços está indisponível; marque o ponto no mapa.",
+    "mapHint": "Clique no mapa para marcar a ocorrência.",
+    "nearbyTitle": "Locais existentes próximos",
+    "nearbyMeta_one": "{{distance}} m · {{count}} ocorrência",
+    "nearbyMeta_other": "{{distance}} m · {{count}} ocorrências",
+    "unnamedPlace": "Local sem nome",
+    "reusing": "Reutilizando um local existente: o endereço e o tipo dele são mantidos.",
+    "address": "Endereço",
+    "neighbourhood": "Bairro",
+    "placeType": "Tipo de local",
+    "placeName": "Nome do local",
+    "placeNameHint": "ex.: uma loja, uma agência bancária, uma estação",
+    "detailsTitle": "Registro",
+    "agency": "Unidade policial",
+    "agencyNumber": "Número do registro na unidade",
+    "status": "Situação",
+    "victimCount": "Vítimas",
+    "offenderCount": "Autores",
+    "attempted": "Tentativa",
+    "description": "Descrição",
+    "save": "Registrar ocorrência",
+    "saving": "Salvando…",
+    "saveError": "Não foi possível registrar a ocorrência",
+    "created": "Ocorrência {{number}} registrada",
+    "forCase": "Esta ocorrência será vinculada ao caso {{caseId}} ao salvar; só podem ser escolhidos tipos da natureza do caso.",
+    "caseAlreadyLinked": "O caso {{caseId}} já está vinculado a uma ocorrência: desvincule-o primeiro na página do caso.",
+    "backToCase": "Voltar ao caso",
+    "caseError": "Não foi possível carregar o caso"
+  },
+  "caseOccurrence": {
+    "title": "Ocorrência",
+    "desc": "A ocorrência que este caso investiga.",
+    "none": "Ainda não vinculado a uma ocorrência. Registre uma nova ou busque uma existente pelo número TrackID (2026.0001) ou do registro policial.",
+    "searchPlaceholder": "Número TrackID ou do registro policial",
+    "link": "Vincular",
+    "unlink": "Desvincular",
+    "linkedToast": "Caso vinculado à ocorrência",
+    "unlinkedToast": "Caso desvinculado da ocorrência",
+    "linkError": "Não foi possível alterar o vínculo",
+    "searchError": "Não foi possível buscar ocorrências",
+    "registerNew": "Registrar nova ocorrência"
   }
 }

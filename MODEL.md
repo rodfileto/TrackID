@@ -80,8 +80,8 @@ locations ──< occurrences ──< biometric_cases
 
 | Table | Role |
 | --- | --- |
-| `locations` | a place, keyed by the importer's `location_id`: a PostGIS point (`geography`, WGS 84), how exact it is (`precision`: `EXACT` \| `GEOCODED` \| `STREET` \| `NEIGHBOURHOOD` \| `MUNICIPALITY`), IBGE municipality code, UF, address, `place_type` |
-| `occurrences` | a registered occurrence (a police report, *boletim de ocorrência*), unique per `(agency, occurrence_number)`: when (`occurred_from`/`occurred_to` window, reported, registered), where (`location_id`), crime-only facts (`attempted`, counts, `modus_operandi` tags), `status`, `description` |
+| `locations` | a place, keyed by the importer's `location_id`: a PostGIS point (`geography`, WGS 84), how exact it is (`precision`: `EXACT` \| `GEOCODED` \| `STREET` \| `NEIGHBOURHOOD` \| `MUNICIPALITY`), IBGE municipality code, UF, address, `place_type` (`PUBLIC_ROAD`, `RESIDENCE`, `COMMERCE`, `BANK`, `GOVERNMENT_OFFICE` -- *órgão público* --, `TRANSPORT`, `RURAL`, `OTHER`) |
+| `occurrences` | a registered occurrence (a police report, *boletim de ocorrência*), unique per `(agency, occurrence_number)`: when (`occurred_from`/`occurred_to` window, reported, registered), where (`location_id`), crime-only facts (`attempted`, counts), `status`, `description` (modus operandi tags were dropped in migration 015) |
 | `occurrence_types` | the fixed list of occurrence types, codes only (the frontend translates), following ISP-RJ's crime classification (migration 012) in groups `LETHAL`, `PERSON`, `ROBBERY`, `THEFT`, `FRAUD`, `DRUGS`, `CIVIL`; plus `IDENTITY_FRAUD`, `UNIDENTIFIED_LIVING_PERSON` and `DISASTER_VICTIM`, which ISP does not count but which open biometric cases; each with the `case_type` it opens. Attempts are `occurrences.attempted`, not types |
 | `occurrence_classifications` | an occurrence's types (a report can carry several) |
 
@@ -90,6 +90,18 @@ for its latents), so the link is `biometric_cases.occurrence_id`, NULL until set
 is not necessarily a crime: as `case_type` covers CIVIL identification, the occurrence covers
 the report that starts it. Deciding that two reports share a place is the importer's job:
 trackid neither geocodes nor deduplicates addresses.
+
+**Registering** an occurrence in the app goes through `occurrences.Create` (POST
+`/api/occurrences`): it validates the input (types all criminal or all civil; crime-only fields
+empty on a civil one; not in the future; the police agency and its report number both or
+neither, unique together), numbers it `"<year>.<sequence>"` (`occurrence_year`/`occurrence_seq`,
+migration 013, as cases are numbered), and places it at an existing location or a new point. A
+new point's `municipality_code` comes from the `municipalities` table (migration 014): IBGE
+boundaries loaded by `cmd/load-municipalities` from the GeoJSON `tools/municipalities` writes
+with geobr. Occurrences an importer ingests keep their own (agency, number) and no TrackID number.
+A case is linked from its page through `occurrences.LinkCase` (PUT
+`/api/cases/:caseId/occurrence`), which refuses a criminal case on a civil occurrence or the
+reverse.
 
 Addresses and points are converted by the `geocode` package: a `Geocoder` interface with a
 Nominatim (OpenStreetMap) implementation, configured by `GEOCODER_*` (see `.env.example`). Its
@@ -200,7 +212,8 @@ Done (core), end to end:
   shipped yet, there was no reason to carry the intermediate tables (`comparisons`,
   `codifications`, `identifications`, a `case_codifications.comparison_*` set of columns)
   that an incremental build-up would otherwise leave behind.
-- **Occurrences** (`db/migrations/011`, types and precision revised in `012`): `locations` (PostGIS), `occurrences`,
+- **Occurrences** (`db/migrations/011`, types and precision revised in `012`, TrackID
+  numbering in `013`, municipalities in `014`): `locations` (PostGIS), `occurrences`,
   `occurrence_types` (seeded), `occurrence_classifications`, and
   `biometric_cases.occurrence_id` (section 2.3). Postgres only: not yet synced to Neo4j, and
   no ingest helper beyond the `db` queries.
