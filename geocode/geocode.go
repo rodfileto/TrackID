@@ -42,22 +42,25 @@ type Query struct {
 
 // Result is one geocoded place.
 type Result struct {
-	Lon, Lat  float64
-	Precision string // one of the Precision constants
+	// JSON names differ from the field names only in case, so results encoded before the tags
+	// existed (e.g. a client's cache) still decode.
+	Lon       float64 `json:"lon"`
+	Lat       float64 `json:"lat"`
+	Precision string  `json:"precision"` // one of the Precision constants
 
-	DisplayName   string
-	HouseNumber   string
-	Street        string
-	Neighbourhood string
-	City          string
-	State         string
-	StateCode     string // ISO 3166-2, e.g. "BR-RJ"
-	Postcode      string
-	CountryCode   string // ISO 3166-1 alpha-2, lower case
+	DisplayName   string `json:"displayName"`
+	HouseNumber   string `json:"houseNumber,omitempty"`
+	Street        string `json:"street,omitempty"`
+	Neighbourhood string `json:"neighbourhood,omitempty"`
+	City          string `json:"city,omitempty"`
+	State         string `json:"state,omitempty"`
+	StateCode     string `json:"stateCode,omitempty"` // ISO 3166-2, e.g. "BR-RJ"
+	Postcode      string `json:"postcode,omitempty"`
+	CountryCode   string `json:"countryCode,omitempty"` // ISO 3166-1 alpha-2, lower case
 
 	// Source identifies the provider's object, e.g. "osm:way/123456", for
 	// tracing a stored point back to where it came from.
-	Source string
+	Source string `json:"source"`
 }
 
 // Geocoder resolves addresses to points (Search) and points to addresses

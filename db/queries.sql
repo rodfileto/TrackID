@@ -805,9 +805,9 @@ WHERE location_id = $1;
 -- name: UpsertOccurrence :one
 INSERT INTO occurrences (
     agency, occurrence_number, location_id, occurred_from, occurred_to, reported_at,
-    registered_at, attempted, offender_count, victim_count, modus_operandi, status, description
+    registered_at, attempted, offender_count, victim_count, status, description
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (agency, occurrence_number) DO UPDATE SET
     location_id = EXCLUDED.location_id,
     occurred_from = EXCLUDED.occurred_from,
@@ -817,7 +817,6 @@ ON CONFLICT (agency, occurrence_number) DO UPDATE SET
     attempted = EXCLUDED.attempted,
     offender_count = EXCLUDED.offender_count,
     victim_count = EXCLUDED.victim_count,
-    modus_operandi = EXCLUDED.modus_operandi,
     status = EXCLUDED.status,
     description = EXCLUDED.description,
     updated_at = NOW()
@@ -863,8 +862,9 @@ SELECT id FROM occurrences WHERE agency = $1 AND occurrence_number = $2;
 -- Occurrences with their point, types and linked cases, for the occurrence map. NULL bounds are
 -- open. types is a JSON array of occurrence_types codes; cases a JSON array of
 -- {caseId, modality, caseType}.
-SELECT o.id, o.agency, o.occurrence_number, o.occurred_from, o.occurred_to, o.registered_at,
-    o.attempted, o.status, o.modus_operandi, o.description,
+SELECT o.id, o.agency, o.occurrence_number, o.occurrence_year, o.occurrence_seq,
+    o.occurred_from, o.occurred_to, o.registered_at,
+    o.attempted, o.status, o.description,
     ST_X(l.geom::geometry)::float8 AS lon,
     ST_Y(l.geom::geometry)::float8 AS lat,
     l.location_id, l.precision, l.place_type, l.name AS place_name, l.neighbourhood, l.municipality_code,
@@ -883,3 +883,91 @@ LIMIT sqlc.arg(max_rows);
 -- name: ListOccurrenceYears :many
 SELECT DISTINCT EXTRACT(YEAR FROM occurred_from AT TIME ZONE 'America/Sao_Paulo')::int4 AS year
 FROM occurrences ORDER BY year;
+
+-- name: MaxOccurrenceSeqForYear :one
+-- The highest TrackID sequence already used for a year, or 0.
+SELECT COALESCE(MAX(occurrence_seq), 0)::int4 AS max_seq
+FROM occurrences
+WHERE occurrence_year = sqlc.arg(occurrence_year)::int4;
+
+-- name: CreateOccurrence :one
+-- An occurrence registered in TrackID: numbered by occurrences.Create, the police agency's own
+-- number optional.
+INSERT INTO occurrences (
+    occurrence_year, occurrence_seq, agency, occurrence_number, location_id, occurred_from, occurred_to,
+    reported_at, registered_at, attempted, offender_count, victim_count, status, description
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12, $13)
+RETURNING id, registered_at;
+
+-- name: GetLocationByID :one
+SELECT id, location_id FROM locations WHERE id = $1;
+
+-- name: ListLocationsNear :many
+-- Existing locations within radius_m metres of a point, nearest first, with how many occurrences
+-- each holds: offered for reuse when registering an occurrence, so a repeat place stays one row.
+SELECT l.id, l.location_id, l.name, l.address, l.neighbourhood, l.place_type, l.precision,
+    ST_X(l.geom::geometry)::float8 AS lon,
+    ST_Y(l.geom::geometry)::float8 AS lat,
+    ST_Distance(l.geom, ST_SetSRID(ST_MakePoint(sqlc.arg(lon)::float8, sqlc.arg(lat)::float8), 4326)::geography)::float8 AS distance_m,
+    (SELECT COUNT(*) FROM occurrences o WHERE o.location_id = l.id)::int4 AS occurrence_count
+FROM locations l
+WHERE ST_DWithin(l.geom, ST_SetSRID(ST_MakePoint(sqlc.arg(lon)::float8, sqlc.arg(lat)::float8), 4326)::geography, sqlc.arg(radius_m)::float8)
+ORDER BY distance_m, l.id
+LIMIT 10;
+
+-- name: SearchOccurrences :many
+-- Occurrences whose TrackID number ("2026.0001") or police number contains q, newest first: the
+-- case page's link search.
+SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.occurred_from, o.status,
+    l.name AS place_name, l.neighbourhood,
+    COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
+              WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
+FROM occurrences o
+JOIN locations l ON l.id = o.location_id
+WHERE (o.occurrence_year::text || '.' || lpad(o.occurrence_seq::text, 4, '0')) ILIKE '%' || sqlc.arg(q)::text || '%'
+   OR o.occurrence_number ILIKE '%' || sqlc.arg(q)::text || '%'
+   OR o.agency ILIKE '%' || sqlc.arg(q)::text || '%'
+ORDER BY o.occurred_from DESC, o.id DESC
+LIMIT 20;
+
+-- name: GetOccurrenceSummary :one
+-- One occurrence as a case page shows it.
+SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.occurred_from, o.status,
+    l.name AS place_name, l.neighbourhood,
+    COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
+              WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
+FROM occurrences o
+JOIN locations l ON l.id = o.location_id
+WHERE o.id = $1;
+
+-- name: ListOccurrenceCaseTypes :many
+-- The case types (CRIMINAL, CIVIL) of an occurrence's types: a case links only to an occurrence
+-- of its own nature.
+SELECT DISTINCT t.case_type
+FROM occurrence_classifications c
+JOIN occurrence_types t ON t.code = c.type_code
+WHERE c.occurrence_id = $1;
+
+-- name: GetCaseOccurrenceID :one
+SELECT id, case_type, occurrence_id FROM biometric_cases WHERE case_id = $1;
+
+-- name: UpsertMunicipality :exec
+-- geojson is the boundary as a GeoJSON MultiPolygon (or Polygon) in WGS 84.
+INSERT INTO municipalities (code, name, uf, geom, source)
+VALUES (
+    sqlc.arg(code), sqlc.arg(name), sqlc.arg(uf),
+    ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(sqlc.arg(geojson)::text), 4326))::geography,
+    sqlc.arg(source)
+)
+ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name, uf = EXCLUDED.uf, geom = EXCLUDED.geom, source = EXCLUDED.source, loaded_at = NOW();
+
+-- name: GetMunicipalityAt :one
+-- The municipality whose boundary covers a point.
+SELECT code, name, uf FROM municipalities
+WHERE ST_Covers(geom, ST_SetSRID(ST_MakePoint(sqlc.arg(lon)::float8, sqlc.arg(lat)::float8), 4326)::geography)
+LIMIT 1;
+
+-- name: CountMunicipalities :one
+SELECT COUNT(*) FROM municipalities;

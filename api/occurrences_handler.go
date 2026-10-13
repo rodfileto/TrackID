@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,17 +33,19 @@ type OccurrenceCase struct {
 }
 
 // OccurrenceProperties are a map feature's properties. Codes (types, group, status, precision,
-// placeType, modusOperandi) are untranslated: the frontend translates them.
+// placeType) are untranslated: the frontend translates them.
 type OccurrenceProperties struct {
-	ID            int64            `json:"id"`
-	Agency        string           `json:"agency"`
-	Number        string           `json:"number"`
+	ID int64 `json:"id"`
+	// TrackIDNumber is "<year>.<sequence>" for an occurrence registered in TrackID; Agency and
+	// Number are the police agency's own report number, when known. At least one is set.
+	TrackIDNumber string           `json:"trackidNumber,omitempty"`
+	Agency        string           `json:"agency,omitempty"`
+	Number        string           `json:"number,omitempty"`
 	OccurredFrom  time.Time        `json:"occurredFrom"`
 	OccurredTo    *time.Time       `json:"occurredTo,omitempty"`
 	RegisteredAt  time.Time        `json:"registeredAt"`
 	Attempted     *bool            `json:"attempted,omitempty"`
 	Status        string           `json:"status"`
-	ModusOperandi []string         `json:"modusOperandi"`
 	Description   string           `json:"description"`
 	Types         []string         `json:"types"`
 	Group         string           `json:"group"`    // the first type's group
@@ -139,14 +142,12 @@ func occurrenceFeatures(rows []db.ListOccurrencesForMapRow, types []db.Occurrenc
 	out := make([]OccurrenceFeature, 0, len(rows))
 	for _, r := range rows {
 		p := OccurrenceProperties{
-			ID: r.ID, Agency: r.Agency, Number: r.OccurrenceNumber,
-			OccurredFrom: r.OccurredFrom, RegisteredAt: r.RegisteredAt,
-			Status: r.Status, ModusOperandi: r.ModusOperandi, Description: r.Description,
+			ID: r.ID, Agency: r.Agency.String, Number: r.OccurrenceNumber.String,
+			TrackIDNumber: trackidNumber(r.OccurrenceYear, r.OccurrenceSeq),
+			OccurredFrom:  r.OccurredFrom, RegisteredAt: r.RegisteredAt,
+			Status: r.Status, Description: r.Description,
 			LocationID: r.LocationID, Precision: r.Precision,
 			PlaceType: r.PlaceType.String, PlaceName: r.PlaceName.String, Neighbourhood: r.Neighbourhood.String,
-		}
-		if p.ModusOperandi == nil {
-			p.ModusOperandi = []string{}
 		}
 		if r.OccurredTo.Valid {
 			p.OccurredTo = &r.OccurredTo.Time
@@ -215,4 +216,13 @@ func OccurrenceYearsHandler(sqlDB *sql.DB) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, gin.H{"years": years})
 	}
+}
+
+// trackidNumber formats a registered occurrence's TrackID number, "2026.0001"; "" for one
+// without (ingested with the police number only).
+func trackidNumber(year, seq sql.NullInt32) string {
+	if !year.Valid || !seq.Valid {
+		return ""
+	}
+	return fmt.Sprintf("%d.%04d", year.Int32, seq.Int32)
 }

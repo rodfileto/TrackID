@@ -58,6 +58,17 @@ func (q *Queries) CountCaseTracesByCaseFile(ctx context.Context, caseFileID sql.
 	return count, err
 }
 
+const countMunicipalities = `-- name: CountMunicipalities :one
+SELECT COUNT(*) FROM municipalities
+`
+
+func (q *Queries) CountMunicipalities(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countMunicipalities)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPersonCasesByModality = `-- name: CountPersonCasesByModality :many
 SELECT p.person_id, bc.modality, COUNT(DISTINCT bc.id) AS case_count
 FROM person p
@@ -253,6 +264,59 @@ func (q *Queries) CreateCodificationPoint(ctx context.Context, arg CreateCodific
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const createOccurrence = `-- name: CreateOccurrence :one
+INSERT INTO occurrences (
+    occurrence_year, occurrence_seq, agency, occurrence_number, location_id, occurred_from, occurred_to,
+    reported_at, registered_at, attempted, offender_count, victim_count, status, description
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12, $13)
+RETURNING id, registered_at
+`
+
+type CreateOccurrenceParams struct {
+	OccurrenceYear   sql.NullInt32  `db:"occurrence_year" json:"occurrence_year"`
+	OccurrenceSeq    sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
+	Agency           sql.NullString `db:"agency" json:"agency"`
+	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
+	LocationID       int64          `db:"location_id" json:"location_id"`
+	OccurredFrom     time.Time      `db:"occurred_from" json:"occurred_from"`
+	OccurredTo       sql.NullTime   `db:"occurred_to" json:"occurred_to"`
+	ReportedAt       sql.NullTime   `db:"reported_at" json:"reported_at"`
+	Attempted        sql.NullBool   `db:"attempted" json:"attempted"`
+	OffenderCount    sql.NullInt16  `db:"offender_count" json:"offender_count"`
+	VictimCount      sql.NullInt16  `db:"victim_count" json:"victim_count"`
+	Status           string         `db:"status" json:"status"`
+	Description      string         `db:"description" json:"description"`
+}
+
+type CreateOccurrenceRow struct {
+	ID           int64     `db:"id" json:"id"`
+	RegisteredAt time.Time `db:"registered_at" json:"registered_at"`
+}
+
+// An occurrence registered in TrackID: numbered by occurrences.Create, the police agency's own
+// number optional.
+func (q *Queries) CreateOccurrence(ctx context.Context, arg CreateOccurrenceParams) (CreateOccurrenceRow, error) {
+	row := q.db.QueryRowContext(ctx, createOccurrence,
+		arg.OccurrenceYear,
+		arg.OccurrenceSeq,
+		arg.Agency,
+		arg.OccurrenceNumber,
+		arg.LocationID,
+		arg.OccurredFrom,
+		arg.OccurredTo,
+		arg.ReportedAt,
+		arg.Attempted,
+		arg.OffenderCount,
+		arg.VictimCount,
+		arg.Status,
+		arg.Description,
+	)
+	var i CreateOccurrenceRow
+	err := row.Scan(&i.ID, &i.RegisteredAt)
+	return i, err
 }
 
 const createUser = `-- name: CreateUser :one
@@ -689,6 +753,23 @@ func (q *Queries) GetCaseFile(ctx context.Context, arg GetCaseFileParams) (GetCa
 	return i, err
 }
 
+const getCaseOccurrenceID = `-- name: GetCaseOccurrenceID :one
+SELECT id, case_type, occurrence_id FROM biometric_cases WHERE case_id = $1
+`
+
+type GetCaseOccurrenceIDRow struct {
+	ID           int64         `db:"id" json:"id"`
+	CaseType     string        `db:"case_type" json:"case_type"`
+	OccurrenceID sql.NullInt64 `db:"occurrence_id" json:"occurrence_id"`
+}
+
+func (q *Queries) GetCaseOccurrenceID(ctx context.Context, caseID string) (GetCaseOccurrenceIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getCaseOccurrenceID, caseID)
+	var i GetCaseOccurrenceIDRow
+	err := row.Scan(&i.ID, &i.CaseType, &i.OccurrenceID)
+	return i, err
+}
+
 const getCaseTraceForFile = `-- name: GetCaseTraceForFile :one
 SELECT ct.id, ct.trace_type
 FROM case_traces ct
@@ -920,6 +1001,22 @@ func (q *Queries) GetIdentityFileForPerson(ctx context.Context, arg GetIdentityF
 	return i, err
 }
 
+const getLocationByID = `-- name: GetLocationByID :one
+SELECT id, location_id FROM locations WHERE id = $1
+`
+
+type GetLocationByIDRow struct {
+	ID         int64  `db:"id" json:"id"`
+	LocationID string `db:"location_id" json:"location_id"`
+}
+
+func (q *Queries) GetLocationByID(ctx context.Context, id int64) (GetLocationByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getLocationByID, id)
+	var i GetLocationByIDRow
+	err := row.Scan(&i.ID, &i.LocationID)
+	return i, err
+}
+
 const getLocationByLocationID = `-- name: GetLocationByLocationID :one
 SELECT id, location_id, name,
     ST_X(geom::geometry)::float8 AS lon,
@@ -962,13 +1059,38 @@ func (q *Queries) GetLocationByLocationID(ctx context.Context, locationID string
 	return i, err
 }
 
+const getMunicipalityAt = `-- name: GetMunicipalityAt :one
+SELECT code, name, uf FROM municipalities
+WHERE ST_Covers(geom, ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography)
+LIMIT 1
+`
+
+type GetMunicipalityAtParams struct {
+	Lon float64 `db:"lon" json:"lon"`
+	Lat float64 `db:"lat" json:"lat"`
+}
+
+type GetMunicipalityAtRow struct {
+	Code string `db:"code" json:"code"`
+	Name string `db:"name" json:"name"`
+	Uf   string `db:"uf" json:"uf"`
+}
+
+// The municipality whose boundary covers a point.
+func (q *Queries) GetMunicipalityAt(ctx context.Context, arg GetMunicipalityAtParams) (GetMunicipalityAtRow, error) {
+	row := q.db.QueryRowContext(ctx, getMunicipalityAt, arg.Lon, arg.Lat)
+	var i GetMunicipalityAtRow
+	err := row.Scan(&i.Code, &i.Name, &i.Uf)
+	return i, err
+}
+
 const getOccurrenceIDByNumber = `-- name: GetOccurrenceIDByNumber :one
 SELECT id FROM occurrences WHERE agency = $1 AND occurrence_number = $2
 `
 
 type GetOccurrenceIDByNumberParams struct {
-	Agency           string `db:"agency" json:"agency"`
-	OccurrenceNumber string `db:"occurrence_number" json:"occurrence_number"`
+	Agency           sql.NullString `db:"agency" json:"agency"`
+	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
 }
 
 func (q *Queries) GetOccurrenceIDByNumber(ctx context.Context, arg GetOccurrenceIDByNumberParams) (int64, error) {
@@ -976,6 +1098,48 @@ func (q *Queries) GetOccurrenceIDByNumber(ctx context.Context, arg GetOccurrence
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getOccurrenceSummary = `-- name: GetOccurrenceSummary :one
+SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.occurred_from, o.status,
+    l.name AS place_name, l.neighbourhood,
+    COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
+              WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
+FROM occurrences o
+JOIN locations l ON l.id = o.location_id
+WHERE o.id = $1
+`
+
+type GetOccurrenceSummaryRow struct {
+	ID               int64           `db:"id" json:"id"`
+	OccurrenceYear   sql.NullInt32   `db:"occurrence_year" json:"occurrence_year"`
+	OccurrenceSeq    sql.NullInt32   `db:"occurrence_seq" json:"occurrence_seq"`
+	Agency           sql.NullString  `db:"agency" json:"agency"`
+	OccurrenceNumber sql.NullString  `db:"occurrence_number" json:"occurrence_number"`
+	OccurredFrom     time.Time       `db:"occurred_from" json:"occurred_from"`
+	Status           string          `db:"status" json:"status"`
+	PlaceName        sql.NullString  `db:"place_name" json:"place_name"`
+	Neighbourhood    sql.NullString  `db:"neighbourhood" json:"neighbourhood"`
+	Types            json.RawMessage `db:"types" json:"types"`
+}
+
+// One occurrence as a case page shows it.
+func (q *Queries) GetOccurrenceSummary(ctx context.Context, id int64) (GetOccurrenceSummaryRow, error) {
+	row := q.db.QueryRowContext(ctx, getOccurrenceSummary, id)
+	var i GetOccurrenceSummaryRow
+	err := row.Scan(
+		&i.ID,
+		&i.OccurrenceYear,
+		&i.OccurrenceSeq,
+		&i.Agency,
+		&i.OccurrenceNumber,
+		&i.OccurredFrom,
+		&i.Status,
+		&i.PlaceName,
+		&i.Neighbourhood,
+		&i.Types,
+	)
+	return i, err
 }
 
 const getPersonByPersonID = `-- name: GetPersonByPersonID :one
@@ -2448,6 +2612,75 @@ func (q *Queries) ListKnownIdentityChain(ctx context.Context) ([]ListKnownIdenti
 	return items, nil
 }
 
+const listLocationsNear = `-- name: ListLocationsNear :many
+SELECT l.id, l.location_id, l.name, l.address, l.neighbourhood, l.place_type, l.precision,
+    ST_X(l.geom::geometry)::float8 AS lon,
+    ST_Y(l.geom::geometry)::float8 AS lat,
+    ST_Distance(l.geom, ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography)::float8 AS distance_m,
+    (SELECT COUNT(*) FROM occurrences o WHERE o.location_id = l.id)::int4 AS occurrence_count
+FROM locations l
+WHERE ST_DWithin(l.geom, ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography, $3::float8)
+ORDER BY distance_m, l.id
+LIMIT 10
+`
+
+type ListLocationsNearParams struct {
+	Lon     float64 `db:"lon" json:"lon"`
+	Lat     float64 `db:"lat" json:"lat"`
+	RadiusM float64 `db:"radius_m" json:"radius_m"`
+}
+
+type ListLocationsNearRow struct {
+	ID              int64          `db:"id" json:"id"`
+	LocationID      string         `db:"location_id" json:"location_id"`
+	Name            sql.NullString `db:"name" json:"name"`
+	Address         sql.NullString `db:"address" json:"address"`
+	Neighbourhood   sql.NullString `db:"neighbourhood" json:"neighbourhood"`
+	PlaceType       sql.NullString `db:"place_type" json:"place_type"`
+	Precision       string         `db:"precision" json:"precision"`
+	Lon             float64        `db:"lon" json:"lon"`
+	Lat             float64        `db:"lat" json:"lat"`
+	DistanceM       float64        `db:"distance_m" json:"distance_m"`
+	OccurrenceCount int32          `db:"occurrence_count" json:"occurrence_count"`
+}
+
+// Existing locations within radius_m metres of a point, nearest first, with how many occurrences
+// each holds: offered for reuse when registering an occurrence, so a repeat place stays one row.
+func (q *Queries) ListLocationsNear(ctx context.Context, arg ListLocationsNearParams) ([]ListLocationsNearRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLocationsNear, arg.Lon, arg.Lat, arg.RadiusM)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLocationsNearRow
+	for rows.Next() {
+		var i ListLocationsNearRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.LocationID,
+			&i.Name,
+			&i.Address,
+			&i.Neighbourhood,
+			&i.PlaceType,
+			&i.Precision,
+			&i.Lon,
+			&i.Lat,
+			&i.DistanceM,
+			&i.OccurrenceCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMatchThresholds = `-- name: ListMatchThresholds :many
 SELECT id, embedding_type, review_threshold, confirm_threshold, source, created_by, created_at
 FROM match_thresholds
@@ -2476,6 +2709,38 @@ func (q *Queries) ListMatchThresholds(ctx context.Context, embeddingType string)
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOccurrenceCaseTypes = `-- name: ListOccurrenceCaseTypes :many
+SELECT DISTINCT t.case_type
+FROM occurrence_classifications c
+JOIN occurrence_types t ON t.code = c.type_code
+WHERE c.occurrence_id = $1
+`
+
+// The case types (CRIMINAL, CIVIL) of an occurrence's types: a case links only to an occurrence
+// of its own nature.
+func (q *Queries) ListOccurrenceCaseTypes(ctx context.Context, occurrenceID int64) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listOccurrenceCaseTypes, occurrenceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var case_type string
+		if err := rows.Scan(&case_type); err != nil {
+			return nil, err
+		}
+		items = append(items, case_type)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -2542,8 +2807,9 @@ func (q *Queries) ListOccurrenceYears(ctx context.Context) ([]int32, error) {
 }
 
 const listOccurrencesForMap = `-- name: ListOccurrencesForMap :many
-SELECT o.id, o.agency, o.occurrence_number, o.occurred_from, o.occurred_to, o.registered_at,
-    o.attempted, o.status, o.modus_operandi, o.description,
+SELECT o.id, o.agency, o.occurrence_number, o.occurrence_year, o.occurrence_seq,
+    o.occurred_from, o.occurred_to, o.registered_at,
+    o.attempted, o.status, o.description,
     ST_X(l.geom::geometry)::float8 AS lon,
     ST_Y(l.geom::geometry)::float8 AS lat,
     l.location_id, l.precision, l.place_type, l.name AS place_name, l.neighbourhood, l.municipality_code,
@@ -2568,14 +2834,15 @@ type ListOccurrencesForMapParams struct {
 
 type ListOccurrencesForMapRow struct {
 	ID               int64           `db:"id" json:"id"`
-	Agency           string          `db:"agency" json:"agency"`
-	OccurrenceNumber string          `db:"occurrence_number" json:"occurrence_number"`
+	Agency           sql.NullString  `db:"agency" json:"agency"`
+	OccurrenceNumber sql.NullString  `db:"occurrence_number" json:"occurrence_number"`
+	OccurrenceYear   sql.NullInt32   `db:"occurrence_year" json:"occurrence_year"`
+	OccurrenceSeq    sql.NullInt32   `db:"occurrence_seq" json:"occurrence_seq"`
 	OccurredFrom     time.Time       `db:"occurred_from" json:"occurred_from"`
 	OccurredTo       sql.NullTime    `db:"occurred_to" json:"occurred_to"`
 	RegisteredAt     time.Time       `db:"registered_at" json:"registered_at"`
 	Attempted        sql.NullBool    `db:"attempted" json:"attempted"`
 	Status           string          `db:"status" json:"status"`
-	ModusOperandi    []string        `db:"modus_operandi" json:"modus_operandi"`
 	Description      string          `db:"description" json:"description"`
 	Lon              float64         `db:"lon" json:"lon"`
 	Lat              float64         `db:"lat" json:"lat"`
@@ -2605,12 +2872,13 @@ func (q *Queries) ListOccurrencesForMap(ctx context.Context, arg ListOccurrences
 			&i.ID,
 			&i.Agency,
 			&i.OccurrenceNumber,
+			&i.OccurrenceYear,
+			&i.OccurrenceSeq,
 			&i.OccurredFrom,
 			&i.OccurredTo,
 			&i.RegisteredAt,
 			&i.Attempted,
 			&i.Status,
-			pq.Array(&i.ModusOperandi),
 			&i.Description,
 			&i.Lon,
 			&i.Lat,
@@ -2657,16 +2925,16 @@ type ListOccurrencesWithinRadiusParams struct {
 }
 
 type ListOccurrencesWithinRadiusRow struct {
-	ID               int64     `db:"id" json:"id"`
-	Agency           string    `db:"agency" json:"agency"`
-	OccurrenceNumber string    `db:"occurrence_number" json:"occurrence_number"`
-	OccurredFrom     time.Time `db:"occurred_from" json:"occurred_from"`
-	Status           string    `db:"status" json:"status"`
-	LocationID       string    `db:"location_id" json:"location_id"`
-	Precision        string    `db:"precision" json:"precision"`
-	Lon              float64   `db:"lon" json:"lon"`
-	Lat              float64   `db:"lat" json:"lat"`
-	DistanceM        float64   `db:"distance_m" json:"distance_m"`
+	ID               int64          `db:"id" json:"id"`
+	Agency           sql.NullString `db:"agency" json:"agency"`
+	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
+	OccurredFrom     time.Time      `db:"occurred_from" json:"occurred_from"`
+	Status           string         `db:"status" json:"status"`
+	LocationID       string         `db:"location_id" json:"location_id"`
+	Precision        string         `db:"precision" json:"precision"`
+	Lon              float64        `db:"lon" json:"lon"`
+	Lat              float64        `db:"lat" json:"lat"`
+	DistanceM        float64        `db:"distance_m" json:"distance_m"`
 }
 
 // Occurrences whose location lies within radius_m metres of a point, nearest first. Locations
@@ -2943,6 +3211,83 @@ func (q *Queries) MaxCodificationPointSequence(ctx context.Context, codification
 	var max_sequence int16
 	err := row.Scan(&max_sequence)
 	return max_sequence, err
+}
+
+const maxOccurrenceSeqForYear = `-- name: MaxOccurrenceSeqForYear :one
+SELECT COALESCE(MAX(occurrence_seq), 0)::int4 AS max_seq
+FROM occurrences
+WHERE occurrence_year = $1::int4
+`
+
+// The highest TrackID sequence already used for a year, or 0.
+func (q *Queries) MaxOccurrenceSeqForYear(ctx context.Context, occurrenceYear int32) (int32, error) {
+	row := q.db.QueryRowContext(ctx, maxOccurrenceSeqForYear, occurrenceYear)
+	var max_seq int32
+	err := row.Scan(&max_seq)
+	return max_seq, err
+}
+
+const searchOccurrences = `-- name: SearchOccurrences :many
+SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.occurred_from, o.status,
+    l.name AS place_name, l.neighbourhood,
+    COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
+              WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
+FROM occurrences o
+JOIN locations l ON l.id = o.location_id
+WHERE (o.occurrence_year::text || '.' || lpad(o.occurrence_seq::text, 4, '0')) ILIKE '%' || $1::text || '%'
+   OR o.occurrence_number ILIKE '%' || $1::text || '%'
+   OR o.agency ILIKE '%' || $1::text || '%'
+ORDER BY o.occurred_from DESC, o.id DESC
+LIMIT 20
+`
+
+type SearchOccurrencesRow struct {
+	ID               int64           `db:"id" json:"id"`
+	OccurrenceYear   sql.NullInt32   `db:"occurrence_year" json:"occurrence_year"`
+	OccurrenceSeq    sql.NullInt32   `db:"occurrence_seq" json:"occurrence_seq"`
+	Agency           sql.NullString  `db:"agency" json:"agency"`
+	OccurrenceNumber sql.NullString  `db:"occurrence_number" json:"occurrence_number"`
+	OccurredFrom     time.Time       `db:"occurred_from" json:"occurred_from"`
+	Status           string          `db:"status" json:"status"`
+	PlaceName        sql.NullString  `db:"place_name" json:"place_name"`
+	Neighbourhood    sql.NullString  `db:"neighbourhood" json:"neighbourhood"`
+	Types            json.RawMessage `db:"types" json:"types"`
+}
+
+// Occurrences whose TrackID number ("2026.0001") or police number contains q, newest first: the
+// case page's link search.
+func (q *Queries) SearchOccurrences(ctx context.Context, q_ string) ([]SearchOccurrencesRow, error) {
+	rows, err := q.db.QueryContext(ctx, searchOccurrences, q_)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchOccurrencesRow
+	for rows.Next() {
+		var i SearchOccurrencesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OccurrenceYear,
+			&i.OccurrenceSeq,
+			&i.Agency,
+			&i.OccurrenceNumber,
+			&i.OccurredFrom,
+			&i.Status,
+			&i.PlaceName,
+			&i.Neighbourhood,
+			&i.Types,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const searchPersonsByName = `-- name: SearchPersonsByName :many
@@ -3550,12 +3895,43 @@ func (q *Queries) UpsertLocation(ctx context.Context, arg UpsertLocationParams) 
 	return i, err
 }
 
+const upsertMunicipality = `-- name: UpsertMunicipality :exec
+INSERT INTO municipalities (code, name, uf, geom, source)
+VALUES (
+    $1, $2, $3,
+    ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($4::text), 4326))::geography,
+    $5
+)
+ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name, uf = EXCLUDED.uf, geom = EXCLUDED.geom, source = EXCLUDED.source, loaded_at = NOW()
+`
+
+type UpsertMunicipalityParams struct {
+	Code    string `db:"code" json:"code"`
+	Name    string `db:"name" json:"name"`
+	Uf      string `db:"uf" json:"uf"`
+	Geojson string `db:"geojson" json:"geojson"`
+	Source  string `db:"source" json:"source"`
+}
+
+// geojson is the boundary as a GeoJSON MultiPolygon (or Polygon) in WGS 84.
+func (q *Queries) UpsertMunicipality(ctx context.Context, arg UpsertMunicipalityParams) error {
+	_, err := q.db.ExecContext(ctx, upsertMunicipality,
+		arg.Code,
+		arg.Name,
+		arg.Uf,
+		arg.Geojson,
+		arg.Source,
+	)
+	return err
+}
+
 const upsertOccurrence = `-- name: UpsertOccurrence :one
 INSERT INTO occurrences (
     agency, occurrence_number, location_id, occurred_from, occurred_to, reported_at,
-    registered_at, attempted, offender_count, victim_count, modus_operandi, status, description
+    registered_at, attempted, offender_count, victim_count, status, description
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (agency, occurrence_number) DO UPDATE SET
     location_id = EXCLUDED.location_id,
     occurred_from = EXCLUDED.occurred_from,
@@ -3565,7 +3941,6 @@ ON CONFLICT (agency, occurrence_number) DO UPDATE SET
     attempted = EXCLUDED.attempted,
     offender_count = EXCLUDED.offender_count,
     victim_count = EXCLUDED.victim_count,
-    modus_operandi = EXCLUDED.modus_operandi,
     status = EXCLUDED.status,
     description = EXCLUDED.description,
     updated_at = NOW()
@@ -3573,19 +3948,18 @@ RETURNING id, (xmax = 0) AS inserted
 `
 
 type UpsertOccurrenceParams struct {
-	Agency           string        `db:"agency" json:"agency"`
-	OccurrenceNumber string        `db:"occurrence_number" json:"occurrence_number"`
-	LocationID       int64         `db:"location_id" json:"location_id"`
-	OccurredFrom     time.Time     `db:"occurred_from" json:"occurred_from"`
-	OccurredTo       sql.NullTime  `db:"occurred_to" json:"occurred_to"`
-	ReportedAt       sql.NullTime  `db:"reported_at" json:"reported_at"`
-	RegisteredAt     time.Time     `db:"registered_at" json:"registered_at"`
-	Attempted        sql.NullBool  `db:"attempted" json:"attempted"`
-	OffenderCount    sql.NullInt16 `db:"offender_count" json:"offender_count"`
-	VictimCount      sql.NullInt16 `db:"victim_count" json:"victim_count"`
-	ModusOperandi    []string      `db:"modus_operandi" json:"modus_operandi"`
-	Status           string        `db:"status" json:"status"`
-	Description      string        `db:"description" json:"description"`
+	Agency           sql.NullString `db:"agency" json:"agency"`
+	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
+	LocationID       int64          `db:"location_id" json:"location_id"`
+	OccurredFrom     time.Time      `db:"occurred_from" json:"occurred_from"`
+	OccurredTo       sql.NullTime   `db:"occurred_to" json:"occurred_to"`
+	ReportedAt       sql.NullTime   `db:"reported_at" json:"reported_at"`
+	RegisteredAt     time.Time      `db:"registered_at" json:"registered_at"`
+	Attempted        sql.NullBool   `db:"attempted" json:"attempted"`
+	OffenderCount    sql.NullInt16  `db:"offender_count" json:"offender_count"`
+	VictimCount      sql.NullInt16  `db:"victim_count" json:"victim_count"`
+	Status           string         `db:"status" json:"status"`
+	Description      string         `db:"description" json:"description"`
 }
 
 type UpsertOccurrenceRow struct {
@@ -3605,7 +3979,6 @@ func (q *Queries) UpsertOccurrence(ctx context.Context, arg UpsertOccurrencePara
 		arg.Attempted,
 		arg.OffenderCount,
 		arg.VictimCount,
-		pq.Array(arg.ModusOperandi),
 		arg.Status,
 		arg.Description,
 	)

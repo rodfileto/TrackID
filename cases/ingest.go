@@ -185,7 +185,9 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput, opts ...Option) (Re
 	}
 
 	if ref := c.Occurrence; ref != nil {
-		occurrenceID, err := q.GetOccurrenceIDByNumber(ctx, db.GetOccurrenceIDByNumberParams{Agency: ref.Agency, OccurrenceNumber: ref.Number})
+		occurrenceID, err := q.GetOccurrenceIDByNumber(ctx, db.GetOccurrenceIDByNumberParams{
+			Agency: sql.NullString{String: ref.Agency, Valid: true}, OccurrenceNumber: sql.NullString{String: ref.Number, Valid: true},
+		})
 		if err != nil {
 			return Result{}, fmt.Errorf("cases: occurrence %s/%s: %w", ref.Agency, ref.Number, err)
 		}

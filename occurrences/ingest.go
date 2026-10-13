@@ -28,7 +28,7 @@ type LocationInput struct {
 }
 
 // Input is one registered occurrence, keyed by (Agency, Number). Pointer fields are optional;
-// the crime-only ones (Attempted, OffenderCount, ModusOperandi) stay empty on a civil
+// the crime-only ones (Attempted, OffenderCount) stay empty on a civil
 // occurrence.
 type Input struct {
 	Agency       string
@@ -42,7 +42,6 @@ type Input struct {
 
 	OffenderCount *int16
 	VictimCount   *int16
-	ModusOperandi []string
 	Status        string // REGISTERED, UNDER_INVESTIGATION, INQUIRY_OPENED or CLOSED
 	Description   string
 	// Types are occurrence_types codes; they replace the occurrence's types.
@@ -84,16 +83,12 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, in Input) (Result, error) {
 		return Result{}, fmt.Errorf("occurrences: location %s: %w", l.LocationID, err)
 	}
 
-	modus := in.ModusOperandi
-	if modus == nil {
-		modus = []string{}
-	}
 	occ, err := q.UpsertOccurrence(ctx, db.UpsertOccurrenceParams{
-		Agency: in.Agency, OccurrenceNumber: in.Number, LocationID: loc.ID,
+		Agency: nullString(in.Agency), OccurrenceNumber: nullString(in.Number), LocationID: loc.ID,
 		OccurredFrom: in.OccurredFrom, OccurredTo: nullTime(in.OccurredTo), ReportedAt: nullTime(in.ReportedAt),
 		RegisteredAt: in.RegisteredAt, Attempted: nullBool(in.Attempted),
 		OffenderCount: nullInt16(in.OffenderCount), VictimCount: nullInt16(in.VictimCount),
-		ModusOperandi: modus, Status: in.Status, Description: in.Description,
+		Status: in.Status, Description: in.Description,
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("occurrences: %s/%s: %w", in.Agency, in.Number, err)

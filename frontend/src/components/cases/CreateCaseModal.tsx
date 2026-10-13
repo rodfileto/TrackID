@@ -22,7 +22,8 @@ const MODALITIES = [
 interface CreateCaseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreated: (created: Case) => void;
+  /** registerOccurrence: the user asked to register the case's occurrence next. */
+  onCreated: (created: Case, registerOccurrence: boolean) => void;
 }
 
 export default function CreateCaseModal({
@@ -34,6 +35,7 @@ export default function CreateCaseModal({
   const [caseType, setCaseType] = useState("");
   const [modality, setModality] = useState("");
   const [description, setDescription] = useState("");
+  const [registerOccurrence, setRegisterOccurrence] = useState(true);
   const [creating, setCreating] = useState(false);
 
   function reset() {
@@ -54,7 +56,7 @@ export default function CreateCaseModal({
     try {
       const created = await createCase({ caseType, modality, description });
       reset();
-      onCreated(created);
+      onCreated(created, registerOccurrence);
       onClose();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("createCase.error"));
@@ -120,6 +122,15 @@ export default function CreateCaseModal({
               />
             </div>
           </div>
+
+          <label className="mt-5 flex items-center gap-2 px-2 text-sm text-gray-700 dark:text-gray-400">
+            <input
+              type="checkbox"
+              checked={registerOccurrence}
+              onChange={(event) => setRegisterOccurrence(event.target.checked)}
+            />
+            {t("createCase.registerOccurrence")}
+          </label>
 
           <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
             <button
