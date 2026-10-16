@@ -178,26 +178,46 @@ case has none. An analysis is `OPEN` until its report is issued. Each has one re
 it `"<year>.<sequence>"` per report type and closes the analysis; the document itself is not
 generated yet (`case_file_id` will point at it).
 
-**Distribution** (`distribution` package) gives each analysis one responsible examiner, who takes
-the first human step (VERIFICATOR); reviewers and inconsistence examiners are chosen later.
-`analysis_assignments` is an append-only history: an analysis's current examiner is its latest
-row (`current_analysis_assignments`), and an open analysis with none is pending.
-`distribution.Distribute` assigns up to a requested number of pending analyses, oldest first, each
-to the active examiner of its modality with the fewest open analyses (lowest user id on a tie),
-and leaves the rest pending; it can be limited to one analysis type and previewed as a dry run. An
-admin can reassign an open analysis or unassign it back to pending (`distribution.Assign`, method
-`MANUAL`, recording who did it). Both take a transaction-scoped advisory lock, so two
-distributions cannot hand out the same analysis.
+**Stages and decisions** (`examination` package, migration 018). An open analysis goes through
+stages, each worked by one examiner in one step -- the `biometric_decisions` role their decisions
+take:
+
+| Stage | Step | Who | Decides |
+| --- | --- | --- | --- |
+| `EXAMINATION` | `VERIFICATOR` | the first examiner (FISWG's practitioner) | every pair |
+| `VERIFICATION` | `REVIEWER` | a second examiner, blind to the first (FISWG's verification) | every pair |
+| `INCONSISTENCE` | `INCONSISTENCE` | a third examiner, only when the first two disagreed | the disputed pairs |
+| `REPORT` | -- | the first examiner | issues the report, closing the analysis |
+
+A review's pairs are the matcher's candidates for the case's faces (every SYSTEM decision touching
+one, ranked by score, scores shown); a comparison's are the pairs an admin listed. Only pairs whose
+other side is an enrolled person or another face of the same case are examined. An examiner's
+decisions are drafts (`analysis_decision_drafts`), changeable until they submit the step; the
+submit writes them to `biometric_decisions` with the analysis id and moves the analysis on (an
+analysis with no pairs goes from EXAMINATION straight to REPORT), and the API then enqueues the
+face sync so clusters follow. Drafts are shown only to their examiner, and a reassignment of the
+step discards them.
+
+**Distribution** (`distribution` package) hands out each step when its stage comes:
+`analysis_assignments` is an append-only history with one current examiner per step
+(`current_analysis_assignments`), and an open analysis whose current stage has none is pending.
+`distribution.Distribute` assigns up to a requested number of pending items, oldest first, each to
+the active examiner of the modality with the fewest open items who holds no other step of that
+analysis (lowest user id on a tie), and leaves the rest pending; it can be limited to one analysis
+type and previewed as a dry run. An admin can reassign the current step or unassign it back to
+pending (`distribution.Assign`, method `MANUAL`, recording who did it). Both take a
+transaction-scoped advisory lock, so two distributions cannot hand out the same item.
 
 **Who sees and decides.** An ADMIN or SUPER_ADMIN opens every case; anyone else lists and opens
-only the cases where they hold an analysis, open or closed (`distribution.CanOpen`, enforced on
+only the cases where they hold a step of an analysis, open or closed (`distribution.CanOpen`, enforced on
 every `cases/:caseId` route and when an occurrence links a case). Working on an analysis --
-deciding on its pairs, issuing its report -- is narrower and the same for everyone, admins
-included: only its current examiner, while they examine its modality and it is open
-(`analyses.CanDecide`). A user who creates a case of a modality they examine takes its automatic
-analyses at once (a `MANUAL` row by themselves); otherwise they stay pending. Persons, clusters and
-the occurrence map are not filtered by assignment. Pairs that do not sit in one case -- trace vs
-trace across cases, enrollment vs enrollment -- are not in any analysis yet.
+deciding on its pairs, submitting, issuing its report -- is narrower and the same for everyone,
+admins included: only the examiner holding the step of its current stage, while they examine its
+modality and it is open (`analyses.CanWork`). A user who creates a case of a modality they examine
+takes the first step of its automatic analyses at once (a `MANUAL` row by themselves); otherwise
+they stay pending. Persons, clusters and the occurrence map are not filtered by assignment. Pairs
+that do not sit in one case -- trace vs trace across cases, enrollment vs enrollment -- are not in
+any analysis yet.
 
 ## 4. Clustering
 

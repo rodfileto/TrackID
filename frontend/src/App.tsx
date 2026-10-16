@@ -13,6 +13,9 @@ import CaseDetailPage from "./pages/CaseDetail";
 import PersonLookup from "./pages/PersonLookup";
 import PersonProfilePage from "./pages/PersonProfile";
 import Clusters from "./pages/Clusters";
+import AnalysisWorkspace from "./pages/AnalysisWorkspace";
+import MyAnalyses from "./pages/MyAnalyses";
+import Distribution from "./pages/Distribution";
 // A lazy page whose code fails to load -- the tab predates a new build or a dev-server
 // restart, so the chunk it asks for no longer exists -- reloads once to fetch the current
 // version, instead of leaving a blank screen. The flag stops a reload loop when the failure
@@ -56,6 +59,9 @@ export default function App() {
               <Route path="/profile" element={<UserProfiles />} />
               <Route path="/cases" element={<CriminalCases />} />
               <Route path="/cases/:caseId" element={<CaseDetailPage />} />
+              <Route path="/cases/:caseId/analyses/:analysisId" element={<AnalysisWorkspace />} />
+              <Route path="/analyses" element={<MyAnalyses />} />
+              <Route path="/admin/distribution" element={<Distribution />} />
               <Route path="/persons" element={<PersonLookup />} />
               <Route path="/persons/:personId" element={<PersonProfilePage />} />
               <Route path="/clusters" element={<Clusters />} />

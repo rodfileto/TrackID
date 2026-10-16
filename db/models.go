@@ -18,6 +18,18 @@ type AnalysisAssignment struct {
 	Method         string        `db:"method" json:"method"`
 	AssignedBy     sql.NullInt64 `db:"assigned_by" json:"assigned_by"`
 	AssignedAt     time.Time     `db:"assigned_at" json:"assigned_at"`
+	Step           string        `db:"step" json:"step"`
+}
+
+type AnalysisDecisionDraft struct {
+	CaseAnalysisID int64          `db:"case_analysis_id" json:"case_analysis_id"`
+	Step           string         `db:"step" json:"step"`
+	FeatureAID     string         `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID     string         `db:"feature_b_id" json:"feature_b_id"`
+	Decision       string         `db:"decision" json:"decision"`
+	Notes          sql.NullString `db:"notes" json:"notes"`
+	UserID         int64          `db:"user_id" json:"user_id"`
+	UpdatedAt      time.Time      `db:"updated_at" json:"updated_at"`
 }
 
 type AnalysisReport struct {
@@ -118,6 +130,7 @@ type CaseAnalysis struct {
 	RequestedBy     sql.NullInt64 `db:"requested_by" json:"requested_by"`
 	CreatedAt       time.Time     `db:"created_at" json:"created_at"`
 	ClosedAt        sql.NullTime  `db:"closed_at" json:"closed_at"`
+	Stage           string        `db:"stage" json:"stage"`
 }
 
 type CaseAnalysisPair struct {
@@ -234,6 +247,7 @@ type ClusterMerge struct {
 type CurrentAnalysisAssignment struct {
 	ID             int64         `db:"id" json:"id"`
 	CaseAnalysisID int64         `db:"case_analysis_id" json:"case_analysis_id"`
+	Step           string        `db:"step" json:"step"`
 	UserID         sql.NullInt64 `db:"user_id" json:"user_id"`
 	Method         string        `db:"method" json:"method"`
 	AssignedBy     sql.NullInt64 `db:"assigned_by" json:"assigned_by"`
