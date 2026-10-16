@@ -142,6 +142,18 @@ version (`related_reference_kind = 'match_threshold'`). With no version set, fac
 similarity 0.6 with no band. Versions are set with `cmd/match-threshold`, from each
 organization's own validation.
 
+**Who may decide** is a user profile (`users`, migration 016), the same for fingerprints and
+faces. `account_role` (`SUPER_ADMIN` | `ADMIN` | `USER`) is account management only: a SUPER_ADMIN
+manages admins and users, an ADMIN manages plain users, and nobody changes their own role or
+deactivates themselves (`auth.CheckAccountChange`). What a user examines is separate:
+`examines_fingerprint` and `examines_facial`, either, both or neither (`UserProfile.Examines`).
+Within a modality they examine, a user may take any of the three human steps (VERIFICATOR,
+REVIEWER, INCONSISTENCE), with independence -- never two steps on the same pair -- to be checked
+where human decisions are recorded. Users are
+deactivated (`is_active`), never deleted, and a username never changes, because decision rows
+name their decider by username. The first SUPER_ADMIN comes from `cmd/create-superuser`; there is
+no public sign-up.
+
 ## 4. Clustering
 
 `clusters` / `cluster_members` / `cluster_merges` persist stable, citable cluster numbers:
@@ -202,7 +214,7 @@ raw bytes uploads them with `identity.UploadFile` / `cases.UploadEvidenceFile`, 
 
 Done (core), end to end:
 
-- **Schema** (`db/migrations/001`–`008`): `users`; `person`, `identity_document`,
+- **Schema** (`db/migrations/001`–`008`): `users` (profiles added in 016); `person`, `identity_document`,
   `identity_register`, `identity_file` (the enrollment hierarchy); `biometric_cases`,
   `case_files`, `case_evidences`, `case_traces`, `case_codifications` (+
   `case_fragment_codes` view) (the evidence hierarchy); `biometricfeature` (unified

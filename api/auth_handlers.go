@@ -4,24 +4,12 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/rodfileto/trackid/auth"
-	"github.com/rodfileto/trackid/db"
 )
-
-type registerRequest struct {
-	Nome       string `json:"nome" binding:"required"`
-	UltimoNome string `json:"ultimo_nome" binding:"required"`
-	Matricula  string `json:"matricula" binding:"required"`
-	Cargo      string `json:"cargo" binding:"required"`
-	Username   string `json:"username" binding:"required"`
-	Password   string `json:"password" binding:"required,min=8"`
-}
 
 type loginRequest struct {
 	Matricula string `json:"matricula" binding:"required"`
@@ -31,52 +19,6 @@ type loginRequest struct {
 type loginResponse struct {
 	Token string           `json:"token"`
 	User  auth.UserProfile `json:"user"`
-}
-
-func RegisterHandler(repo *auth.Repository, emailDomain string) gin.HandlerFunc {
-	return func(context *gin.Context) {
-		if repo == nil {
-			context.Status(http.StatusServiceUnavailable)
-			return
-		}
-		var request registerRequest
-		if err := context.ShouldBindJSON(&request); err != nil {
-			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid registration data"})
-			return
-		}
-		passwordHash, err := bcrypt.GenerateFromPassword([]byte(request.Password), bcrypt.DefaultCost)
-		if err != nil {
-			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not secure password"})
-			return
-		}
-		username := strings.ToLower(strings.TrimSpace(request.Username))
-		email := username
-		if emailDomain != "" {
-			email = username + "@" + emailDomain
-		}
-		user, err := repo.CreateUser(context.Request.Context(), db.CreateUserParams{
-			Nome:         request.Nome,
-			UltimoNome:   request.UltimoNome,
-			Matricula:    request.Matricula,
-			Cargo:        request.Cargo,
-			Username:     username,
-			Email:        email,
-			PasswordHash: string(passwordHash),
-		})
-		if err != nil {
-			if strings.Contains(err.Error(), "users_matricula_key") {
-				context.JSON(http.StatusConflict, gin.H{"error": "matricula already exists"})
-				return
-			}
-			if strings.Contains(err.Error(), "users_username_key") || strings.Contains(err.Error(), "users_email_key") {
-				context.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
-				return
-			}
-			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not create user"})
-			return
-		}
-		context.JSON(http.StatusCreated, user)
-	}
 }
 
 func LoginHandler(repo *auth.Repository, jwtSecret string) gin.HandlerFunc {
@@ -103,6 +45,10 @@ func LoginHandler(repo *auth.Repository, jwtSecret string) gin.HandlerFunc {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not authenticate user"})
 			return
 		}
+		if !authenticated.Profile.IsActive {
+			context.JSON(http.StatusForbidden, gin.H{"error": "account is deactivated"})
+			return
+		}
 		token, err := auth.IssueToken(authenticated.Profile, jwtSecret)
 		if err != nil {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not create token"})
@@ -112,31 +58,9 @@ func LoginHandler(repo *auth.Repository, jwtSecret string) gin.HandlerFunc {
 	}
 }
 
-func MeHandler(repo *auth.Repository) gin.HandlerFunc {
+// MeHandler returns the signed-in user's profile, as ActiveUser loaded it.
+func MeHandler() gin.HandlerFunc {
 	return func(context *gin.Context) {
-		if repo == nil {
-			context.Status(http.StatusServiceUnavailable)
-			return
-		}
-		userID, ok := context.Get("userID")
-		if !ok {
-			context.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-		id, err := strconv.ParseInt(userID.(string), 10, 64)
-		if err != nil {
-			context.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-		user, err := repo.FindByID(context.Request.Context(), id)
-		if errors.Is(err, sql.ErrNoRows) {
-			context.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-			return
-		}
-		if err != nil {
-			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load profile"})
-			return
-		}
-		context.JSON(http.StatusOK, user)
+		context.JSON(http.StatusOK, currentUser(context))
 	}
 }
