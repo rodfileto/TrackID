@@ -8,20 +8,16 @@ export interface UserProfile {
   cargo: string;
   username: string;
   email: string;
+  account_role: "SUPER_ADMIN" | "ADMIN" | "USER";
+  /** Which biometrics the user may sign decisions on: either, both, or neither. */
+  examines_fingerprint: boolean;
+  examines_facial: boolean;
+  is_active: boolean;
 }
 
 interface LoginResponse {
   token: string;
   user: UserProfile;
-}
-
-interface RegisterRequest {
-  nome: string;
-  ultimo_nome: string;
-  matricula: string;
-  cargo: string;
-  username: string;
-  password: string;
 }
 
 const sessionTokenKey = "trackid.session.token";
@@ -48,13 +44,6 @@ export async function login(
   userStorage.setItem(userKey, JSON.stringify(response.user));
 
   return response.user;
-}
-
-export async function register(request: RegisterRequest): Promise<UserProfile> {
-  return requestApi<UserProfile>("/auth/register", {
-    method: "POST",
-    body: JSON.stringify(request),
-  });
 }
 
 export function getToken(): string | null {

@@ -86,7 +86,8 @@ organizations import to build their import commands) and an **internal** runtime
 
 - `cmd/` — thin `main()` wrappers: `migrate` (Postgres schema), `trackid` (API server
   + frontend), `sync-graph`, `sync-identity`, `cluster-biometrics`, `identify`, and
-  `match-embeddings`, `match-threshold` (the matcher's versioned review/confirm cutoffs)
+  `match-embeddings`, `match-threshold` (the matcher's versioned review/confirm cutoffs),
+  `create-superuser` (the first SUPER_ADMIN account)
 - `frontend/` — React + Vite, based on the [TailAdmin React](https://github.com/TailAdmin/free-react-tailwind-admin-dashboard)
   template; `npm run build` produces the bundle `internal/web` serves
 - `quarto/` — technical report and ontology documentation
@@ -123,6 +124,9 @@ To integrate with this package, an organization:
 ```sh
 scripts/start_dev.sh   # starts the stack, migrates, and runs the API + frontend
 ```
+
+There is no public sign-up. Create the first account with `cmd/create-superuser` (see its
+package comment); that SUPER_ADMIN then creates the others under `/api/admin/users`.
 
 Postgres runs the image built from `db/postgres/` (pgvector + PostGIS); migrations from 011 on
 need PostGIS, so a database for `TRACKID_TEST_DATABASE_URL` must run it too. Switching an
