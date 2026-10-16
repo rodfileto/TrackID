@@ -11,7 +11,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/db"
+	"github.com/rodfileto/trackid/distribution"
 	"github.com/rodfileto/trackid/geocode"
 	"github.com/rodfileto/trackid/occurrences"
 )
@@ -52,6 +54,17 @@ func CreateOccurrenceHandler(sqlDB *sql.DB) gin.HandlerFunc {
 		if err := c.ShouldBindJSON(&r); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 			return
+		}
+		// Linking a case is working on it: the same rule as the cases/:caseId routes (CaseAccess).
+		if caseID := strings.TrimSpace(r.CaseID); caseID != "" {
+			switch err := distribution.CanOpen(c.Request.Context(), sqlDB, currentUser(c), caseID); {
+			case errors.Is(err, distribution.ErrNotAssigned):
+				c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+				return
+			case err != nil && !errors.Is(err, analyses.ErrCaseNotFound): // an unknown case is occurrences.Create's to report
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "could not check case access"})
+				return
+			}
 		}
 		created, err := occurrences.Create(c.Request.Context(), sqlDB, occurrences.CreateInput{
 			Types: r.Types, Attempted: r.Attempted, OccurredFrom: r.OccurredFrom, OccurredTo: r.OccurredTo,
