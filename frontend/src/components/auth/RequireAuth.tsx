@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from "react-router";
 import { getToken } from "../../services/auth";
+import { CurrentUserProvider } from "../../context/CurrentUserContext";
 
 export default function RequireAuth() {
   const location = useLocation();
@@ -8,5 +9,9 @@ export default function RequireAuth() {
     return <Navigate to="/signin" replace state={{ from: location }} />;
   }
 
-  return <Outlet />;
+  return (
+    <CurrentUserProvider>
+      <Outlet />
+    </CurrentUserProvider>
+  );
 }

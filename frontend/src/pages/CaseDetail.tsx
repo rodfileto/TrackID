@@ -6,6 +6,7 @@ import PageMeta from "../components/common/PageMeta";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import ComponentCard from "../components/common/ComponentCard";
 import CaseOccurrenceCard from "../components/cases/CaseOccurrenceCard";
+import CaseAnalysesCard from "../components/analyses/CaseAnalysesCard";
 import {
   Table,
   TableBody,
@@ -221,6 +222,8 @@ export default function CaseDetailPage() {
           </ComponentCard>
 
           <CaseOccurrenceCard caseId={detail.caseId} />
+
+          <CaseAnalysesCard caseId={detail.caseId} />
 
           {detail.modality === "FACIAL" ? (
             <FacialCaseWorkspace

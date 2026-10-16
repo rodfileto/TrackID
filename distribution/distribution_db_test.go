@@ -19,6 +19,7 @@ import (
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/db/migrations"
 	"github.com/rodfileto/trackid/distribution"
+	"github.com/rodfileto/trackid/examination"
 	"github.com/rodfileto/trackid/graph"
 )
 
@@ -61,16 +62,16 @@ func testDB(t *testing.T) *sql.DB {
 	return sqlDB
 }
 
-// TestAnalysesDistributionAndAccess walks the whole flow: every FACIAL case gets its review (once,
-// even when re-ingested; a FINGERPRINT case gets none); a distribution hands out only the
-// requested number, balanced, and leaves the rest pending; an admin opens a comparison on pairs
-// of a case and it is distributed in turn; access follows the analyses a user holds, an admin
-// opens every case but decides only on what they hold; issuing a report numbers it and closes the
-// analysis; a manual reassignment checks the examiner's modality and keeps the history.
-func TestAnalysesDistributionAndAccess(t *testing.T) {
+// TestDecisionFlow walks a FACIAL_REVIEW through every stage with real users: distribution hands
+// out each step to a different examiner; the first examiner's drafts can change until submitted;
+// verification is blind; a disagreement goes to a third examiner for that pair only; the first
+// examiner issues the report. Then a comparison checks the reassignment rules, and a case with no
+// faces goes straight to its report.
+func TestDecisionFlow(t *testing.T) {
 	ctx := context.Background()
 	sqlDB := testDB(t)
 	repo := auth.NewRepository(sqlDB)
+	q := db.New(sqlDB)
 	user := func(username string, fp, facial bool, role auth.AccountRole) auth.UserProfile {
 		t.Helper()
 		u, err := repo.Create(ctx, auth.NewUser{Nome: username, UltimoNome: "Test", Matricula: username, Cargo: "Perito",
@@ -83,154 +84,228 @@ func TestAnalysesDistributionAndAccess(t *testing.T) {
 	}
 	chief := user("chief", false, false, auth.AccountRoleSuperAdmin)
 	ana := user("ana", false, true, auth.AccountRoleUser)
-	bia := user("bia", true, true, auth.AccountRoleUser)
-	caio := user("caio", true, false, auth.AccountRoleUser)
+	bia := user("bia", false, true, auth.AccountRoleUser)
+	caio := user("caio", false, true, auth.AccountRoleUser)
+	duda := user("duda", true, false, auth.AccountRoleUser)
 
-	ingest := func(caseID, modality string, traces int) cases.Result {
-		t.Helper()
-		ev := cases.EvidenceInput{Sequence: 1}
-		for i := 1; i <= traces; i++ {
-			ev.Traces = append(ev.Traces, cases.TraceInput{Sequence: int16(i), TraceType: "FACE_RECORD"})
-		}
-		r, err := cases.Ingest(ctx, sqlDB, cases.CaseInput{CaseID: caseID, CaseType: cases.CaseTypeCriminal, Modality: modality,
-			Description: "test", Evidences: []cases.EvidenceInput{ev}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return r
-	}
-	f1 := ingest("F1", "FACIAL", 2)
-	ingest("F1", "FACIAL", 2) // re-ingesting opens no second review
-	ingest("F2", "FACIAL", 1)
-	ingest("F3", "FACIAL", 1)
-	ingest("P1", "FINGERPRINT", 0)
-
-	status, err := distribution.GetStatus(ctx, sqlDB)
-	if err != nil || status.Pending[analyses.FacialReview] != 3 || status.Pending[analyses.FacialComparison] != 0 {
-		t.Fatalf("status = %+v, %v; want 3 pending reviews", status, err)
-	}
-	if list, err := analyses.List(ctx, sqlDB, "P1"); err != nil || len(list) != 0 {
-		t.Fatalf("fingerprint case analyses = %+v, %v; want none", list, err)
-	}
-
-	if _, err := distribution.Distribute(ctx, sqlDB, distribution.Request{Count: 0}); !errors.Is(err, distribution.ErrInvalidCount) {
-		t.Fatalf("count 0: %v", err)
-	}
-	if dry, err := distribution.Distribute(ctx, sqlDB, distribution.Request{Count: 2, DryRun: true}); err != nil || len(dry.Assigned) != 2 {
-		t.Fatalf("dry run = %+v, %v", dry, err)
-	}
-	res, err := distribution.Distribute(ctx, sqlDB, distribution.Request{Count: 2})
+	ev := cases.EvidenceInput{Sequence: 1, Traces: []cases.TraceInput{{Sequence: 1, TraceType: "FACE_RECORD"}, {Sequence: 2, TraceType: "FACE_RECORD"}}}
+	f1, err := cases.Ingest(ctx, sqlDB, cases.CaseInput{CaseID: "F1", CaseType: cases.CaseTypeCriminal, Modality: "FACIAL", Description: "test",
+		Evidences: []cases.EvidenceInput{ev}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// F1 and F2's reviews: ana and bia both at 0, ana has the lower id; then bia. F3 stays pending.
-	if got := fmt.Sprint(names(res.Assigned)); got != "[F1:ana F2:bia]" || res.StillPending != 1 {
-		t.Fatalf("distribution = %s (still pending %d), want [F1:ana F2:bia] with 1 pending", got, res.StillPending)
-	}
-
-	// The admin opens a comparison on F1's two faces against an enrolled face.
 	trace1 := graph.QuestionedFeatureID(f1.Evidences[0].Traces[0].TraceID)
 	trace2 := graph.QuestionedFeatureID(f1.Evidences[0].Traces[1].TraceID)
-	if _, err := analyses.Open(ctx, sqlDB, "F1", analyses.FacialComparison, nil, chief.ID); !errors.Is(err, analyses.ErrNeedsPairs) {
-		t.Fatalf("comparison without pairs: %v", err)
+	pair := func(a, b string) examination.Pair {
+		if a > b {
+			a, b = b, a
+		}
+		return examination.Pair{FeatureA: a, FeatureB: b}
 	}
-	if _, err := analyses.Open(ctx, sqlDB, "F1", analyses.FacialComparison, []analyses.Pair{{FeatureA: "3401", FeatureB: "77"}}, chief.ID); !errors.Is(err, analyses.ErrInvalidPair) {
-		t.Fatalf("pair with no face of the case: %v", err)
+	system := func(p examination.Pair, decision string, score float64) {
+		t.Helper()
+		if _, err := q.InsertBiometricDecision(ctx, db.InsertBiometricDecisionParams{FeatureAID: p.FeatureA, FeatureBID: p.FeatureB,
+			Modality: "FACE", Role: "SYSTEM", Decision: decision, SystemSource: sql.NullString{String: "test", Valid: true},
+			Confidence: sql.NullFloat64{Float64: score, Valid: true}}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if _, err := analyses.Open(ctx, sqlDB, "P1", analyses.FacialReview, nil, chief.ID); !errors.Is(err, analyses.ErrWrongModality) {
-		t.Fatalf("facial review on a fingerprint case: %v", err)
-	}
-	comparison, err := analyses.Open(ctx, sqlDB, "F1", analyses.FacialComparison,
-		[]analyses.Pair{{FeatureA: trace1, FeatureB: "3401"}, {FeatureA: "3401", FeatureB: trace1}, {FeatureA: trace2, FeatureB: "3401"}}, chief.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	list, err := analyses.List(ctx, sqlDB, "F1")
-	if err != nil || len(list) != 2 || list[1].Sequence != 2 || list[1].Type != analyses.FacialComparison ||
-		len(list[1].Pairs) != 2 || list[1].RequestedBy != "chief" || list[1].Report.Type != "FACIAL_COMPARISON_REPORT" ||
-		list[1].Report.Status != analyses.ReportDraft || list[0].Examiner != "ana" {
-		t.Fatalf("F1 analyses = %+v, %v", list, err)
-	}
-
-	// The rest, oldest first: F3's review to ana (ana and bia at 1, ana has the lower id), then
-	// the comparison to bia. caio examines only fingerprints and gets neither.
-	res, err = distribution.Distribute(ctx, sqlDB, distribution.Request{Count: 5})
-	if err != nil || fmt.Sprint(names(res.Assigned)) != "[F3:ana F1:bia]" || res.StillPending != 0 {
-		t.Fatalf("second distribution = %v, %v", names(res.Assigned), err)
-	}
+	p1, p2, p3 := pair(trace1, "101"), pair(trace1, "102"), pair(trace2, "103")
+	system(p1, "POSITIVE", 0.91)
+	system(p2, "INCONCLUSIVE", 0.65)
+	system(p3, "INCONCLUSIVE", 0.62)
+	system(pair(trace2, "TRACE:999999#feature"), "INCONCLUSIVE", 0.70) // another case's face: not examined here
 
 	check := func(what string, got, want error) {
 		t.Helper()
 		if !errors.Is(got, want) {
-			t.Errorf("%s: got %v, want %v", what, got, want)
+			t.Fatalf("%s: got %v, want %v", what, got, want)
 		}
 	}
-	target := func(id int64) analyses.Target {
+	distribute := func(want string) {
 		t.Helper()
-		tg, err := analyses.GetTarget(ctx, db.New(sqlDB), id)
+		res, err := distribution.Distribute(ctx, sqlDB, distribution.Request{Count: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return tg
+		var got []string
+		for _, a := range res.Assigned {
+			got = append(got, a.CaseID+":"+string(a.Step)+":"+a.Username)
+		}
+		if fmt.Sprint(got) != want {
+			t.Fatalf("distribution = %v, want %s", got, want)
+		}
 	}
-	check("ana opens F1 (its review)", distribution.CanOpen(ctx, sqlDB, ana, "F1"), nil)
-	check("bia opens F1 (its comparison)", distribution.CanOpen(ctx, sqlDB, bia, "F1"), nil)
-	check("caio opens F1", distribution.CanOpen(ctx, sqlDB, caio, "F1"), distribution.ErrNotAssigned)
-	check("caio opens the fingerprint case", distribution.CanOpen(ctx, sqlDB, caio, "P1"), distribution.ErrNotAssigned)
-	check("the admin opens anything", distribution.CanOpen(ctx, sqlDB, chief, "P1"), nil)
-	check("unknown case", distribution.CanOpen(ctx, sqlDB, chief, "NOPE"), analyses.ErrCaseNotFound)
-	check("bia decides on the comparison", analyses.CanDecide(bia, target(comparison)), nil)
-	check("ana does not decide on the comparison", analyses.CanDecide(ana, target(comparison)), analyses.ErrCannotDecide)
-	check("the admin does not decide on it either", analyses.CanDecide(chief, target(comparison)), analyses.ErrCannotDecide)
-
-	// Manual reassignment: not to a fingerprint-only examiner; to ana, keeping the history.
-	check("comparison to caio", distribution.Assign(ctx, sqlDB, comparison, &caio.ID, chief.ID), distribution.ErrNotExaminer)
-	check("comparison to bia again", distribution.Assign(ctx, sqlDB, comparison, &bia.ID, chief.ID), distribution.ErrUnchanged)
-	check("comparison to ana", distribution.Assign(ctx, sqlDB, comparison, &ana.ID, chief.ID), nil)
-	check("bia lost F1", distribution.CanOpen(ctx, sqlDB, bia, "F1"), distribution.ErrNotAssigned)
-	history, err := distribution.History(ctx, sqlDB, comparison)
-	if err != nil || len(history) != 2 || history[0].Username != "bia" || history[0].Method != distribution.MethodAutomatic ||
-		history[1].Username != "ana" || history[1].AssignedBy != "chief" {
-		t.Fatalf("comparison history = %+v, %v", history, err)
+	worksheet := func(u auth.UserProfile, id int64) examination.Worksheet {
+		t.Helper()
+		ws, err := examination.GetWorksheet(ctx, sqlDB, u, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ws
+	}
+	draft := func(u auth.UserProfile, id int64, p examination.Pair, decision string) error {
+		return examination.SaveDraft(ctx, sqlDB, u, id, p, decision, "")
 	}
 
-	// Issuing: only the examiner; numbered per report type and year; closes the analysis.
+	// EXAMINATION: ana, the least-loaded facial examiner.
+	distribute("[F1:VERIFICATOR:ana]")
+	review := worksheet(ana, mustReview(t, sqlDB, "F1"))
+	if review.YourStep != analyses.StepVerificator || len(review.Pairs) != 3 || review.Pairs[0].Pair != p1 || *review.Pairs[0].Score != 0.91 {
+		t.Fatalf("ana's worksheet = %+v; want the 3 candidates of the case's faces, best score first", review)
+	}
+	id := review.AnalysisID
+	var incomplete examination.IncompleteError
+	if _, err := examination.Submit(ctx, sqlDB, ana, id); !errors.As(err, &incomplete) || incomplete.Missing != 3 {
+		t.Fatalf("submitting with nothing decided: %v", err)
+	}
+	check("ana drafts p1", draft(ana, id, p1, "POSITIVE"), nil)
+	check("ana drafts p2", draft(ana, id, p2, "NEGATIVE"), nil)
+	check("ana drafts p3", draft(ana, id, p3, "POSITIVE"), nil)
+	check("ana changes her mind on p3", draft(ana, id, p3, "INCONCLUSIVE"), nil)
+	check("a pair outside the analysis", draft(ana, id, pair(trace2, "TRACE:999999#feature"), "POSITIVE"), examination.ErrNotInScope)
+	check("an invalid decision", draft(ana, id, p1, "MAYBE"), examination.ErrInvalidDecision)
+	check("bia drafting on ana's step", draft(bia, id, p1, "POSITIVE"), analyses.ErrCannotDecide)
+	check("the admin drafting", draft(chief, id, p1, "POSITIVE"), analyses.ErrCannotDecide)
+	if ws := worksheet(chief, id); ws.YourStep != "" || ws.Drafted != 0 || ws.Pairs[0].Draft != nil {
+		t.Fatalf("the admin sees ana's drafts: %+v", ws)
+	}
+	res, err := examination.Submit(ctx, sqlDB, ana, id)
+	if err != nil || res.Decisions != 3 || res.Stage != analyses.StageVerification {
+		t.Fatalf("ana's submit = %+v, %v", res, err)
+	}
+	check("ana drafting after submitting", draft(ana, id, p1, "NEGATIVE"), analyses.ErrCannotDecide)
+
+	// VERIFICATION: never ana; bia, blind to ana's decisions.
+	distribute("[F1:REVIEWER:bia]")
+	if ws := worksheet(bia, id); ws.YourStep != analyses.StepReviewer || len(ws.Pairs) != 3 || len(ws.Pairs[0].Decisions) != 0 {
+		t.Fatalf("bia's worksheet = %+v; want 3 pairs and no decision of ana's", ws)
+	}
+	if ws := worksheet(chief, id); len(ws.Pairs[0].Decisions) != 1 || ws.Pairs[0].Decisions[0].Username != "ana" {
+		t.Fatalf("the admin's view = %+v; want ana's decisions", ws.Pairs[0].Decisions)
+	}
+	check("bia p1", draft(bia, id, p1, "POSITIVE"), nil)
+	check("bia p2", draft(bia, id, p2, "NEGATIVE"), nil)
+	check("bia p3", draft(bia, id, p3, "POSITIVE"), nil) // ana said INCONCLUSIVE
+	if res, err := examination.Submit(ctx, sqlDB, bia, id); err != nil || res.Stage != analyses.StageInconsistence {
+		t.Fatalf("bia's submit = %+v, %v; want INCONSISTENCE", res, err)
+	}
+
+	// INCONSISTENCE: neither ana nor bia; caio, on the disputed pair only, seeing both decisions.
+	distribute("[F1:INCONSISTENCE:caio]")
+	ws := worksheet(caio, id)
+	if ws.YourStep != analyses.StepInconsistence || len(ws.Pairs) != 1 || ws.Pairs[0].Pair != p3 || len(ws.Pairs[0].Decisions) != 2 || !ws.Pairs[0].Disputed {
+		t.Fatalf("caio's worksheet = %+v; want p3 with both decisions", ws)
+	}
+	check("caio p3", draft(caio, id, p3, "POSITIVE"), nil)
+	if res, err := examination.Submit(ctx, sqlDB, caio, id); err != nil || res.Decisions != 1 || res.Stage != analyses.StageReport {
+		t.Fatalf("caio's submit = %+v, %v; want REPORT", res, err)
+	}
+	if rows, err := q.ListAnalysisDecisions(ctx, sql.NullInt64{Int64: id, Valid: true}); err != nil || len(rows) != 7 {
+		t.Fatalf("decisions recorded = %d, %v; want 3 + 3 + 1", len(rows), err)
+	}
+	check("caio opens F1", distribution.CanOpen(ctx, sqlDB, caio, "F1"), nil)
+	check("duda does not", distribution.CanOpen(ctx, sqlDB, duda, "F1"), distribution.ErrNotAssigned)
+
+	// REPORT: only ana, the first examiner.
 	now := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
-	if _, err := analyses.IssueReport(ctx, sqlDB, comparison, chief, now); !errors.Is(err, analyses.ErrCannotDecide) {
-		t.Fatalf("the admin issuing ana's report: %v", err)
+	if _, err := analyses.IssueReport(ctx, sqlDB, id, caio, now); !errors.Is(err, analyses.ErrCannotDecide) {
+		t.Fatalf("caio issuing the report: %v", err)
 	}
-	report, err := analyses.IssueReport(ctx, sqlDB, comparison, ana, now)
-	if err != nil || report.Number != "2026.0001" || report.Status != analyses.ReportIssued || report.IssuedBy != "ana" {
-		t.Fatalf("issued comparison report = %+v, %v", report, err)
+	if report, err := analyses.IssueReport(ctx, sqlDB, id, ana, now); err != nil || report.Number != "2026.0001" {
+		t.Fatalf("ana's report = %+v, %v", report, err)
 	}
-	reviewF1 := list[0].ID
-	report, err = analyses.IssueReport(ctx, sqlDB, reviewF1, ana, now)
-	if err != nil || report.Number != "2026.0001" || report.Type != "FACIAL_REVIEW_REPORT" {
-		t.Fatalf("issued review report = %+v, %v; want its own numbering", report, err)
-	}
-	check("deciding on a closed analysis", analyses.CanDecide(ana, target(comparison)), analyses.ErrCannotDecide)
-	check("reassigning a closed analysis", distribution.Assign(ctx, sqlDB, comparison, &bia.ID, chief.ID), distribution.ErrClosed)
-	check("ana still opens F1 after closing it", distribution.CanOpen(ctx, sqlDB, ana, "F1"), nil)
 
-	mine, err := distribution.AnalysesOf(ctx, sqlDB, ana.ID)
-	if err != nil || len(mine) != 3 || mine[0].Status != analyses.StatusOpen || mine[0].CaseID != "F3" {
-		t.Fatalf("ana's analyses = %+v, %v; want F3's open review first, then F1's two closed ones", mine, err)
-	}
-	status, err = distribution.GetStatus(ctx, sqlDB)
+	// A comparison: manual assignment, the never-two-steps rule, and a reassignment discarding drafts.
+	cmp, err := analyses.Open(ctx, sqlDB, "F1", analyses.FacialComparison, []analyses.Pair{{FeatureA: trace1, FeatureB: "101"}}, chief.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, e := range status.Examiners {
-		if e.Username == "ana" && e.OpenAnalyses != 1 {
-			t.Errorf("ana's open analyses = %d, want 1 (closed ones do not count)", e.OpenAnalyses)
-		}
+	if _, err := analyses.Open(ctx, sqlDB, "F1", analyses.FacialComparison, []analyses.Pair{{FeatureA: trace1, FeatureB: "TRACE:999999#feature"}}, chief.ID); !errors.Is(err, analyses.ErrInvalidPair) {
+		t.Fatalf("a comparison with another case's face: %v", err)
+	}
+	if _, err := analyses.IssueReport(ctx, sqlDB, cmp, ana, now); !errors.Is(err, analyses.ErrNotReportStage) {
+		t.Fatalf("issuing before deciding: %v", err)
+	}
+	check("comparison to ana", distribution.Assign(ctx, sqlDB, cmp, &ana.ID, chief.ID), nil)
+	check("ana decides it", draft(ana, cmp, p1, "POSITIVE"), nil)
+	if _, err := examination.Submit(ctx, sqlDB, ana, cmp); err != nil {
+		t.Fatal(err)
+	}
+	check("verification to ana herself", distribution.Assign(ctx, sqlDB, cmp, &ana.ID, chief.ID), distribution.ErrOtherStep)
+	check("verification to a fingerprint examiner", distribution.Assign(ctx, sqlDB, cmp, &duda.ID, chief.ID), distribution.ErrNotExaminer)
+	check("verification to bia", distribution.Assign(ctx, sqlDB, cmp, &bia.ID, chief.ID), nil)
+	check("bia drafts", draft(bia, cmp, p1, "NEGATIVE"), nil)
+	check("reassigned to caio", distribution.Assign(ctx, sqlDB, cmp, &caio.ID, chief.ID), nil)
+	if ws := worksheet(caio, cmp); ws.YourStep != analyses.StepReviewer || ws.Drafted != 0 {
+		t.Fatalf("caio's worksheet after the reassignment = %+v; want bia's draft gone", ws)
+	}
+
+	// A case with no faces: its review has nothing to decide and goes straight to REPORT.
+	if _, err := cases.Ingest(ctx, sqlDB, cases.CaseInput{CaseID: "F2", CaseType: cases.CaseTypeCriminal, Modality: "FACIAL", Description: "empty"}); err != nil {
+		t.Fatal(err)
+	}
+	empty := mustReview(t, sqlDB, "F2")
+	check("F2 to bia", distribution.Assign(ctx, sqlDB, empty, &bia.ID, chief.ID), nil)
+	if res, err := examination.Submit(ctx, sqlDB, bia, empty); err != nil || res.Decisions != 0 || res.Stage != analyses.StageReport {
+		t.Fatalf("submitting an empty review = %+v, %v; want REPORT", res, err)
 	}
 }
 
-func names(as []distribution.Assignment) []string {
-	var out []string
-	for _, a := range as {
-		out = append(out, a.CaseID+":"+a.Username)
+// mustReview returns the id of a case's automatic FACIAL_REVIEW.
+func mustReview(t *testing.T, sqlDB *sql.DB, caseID string) int64 {
+	t.Helper()
+	list, err := analyses.List(context.Background(), sqlDB, caseID)
+	if err != nil || len(list) == 0 || list[0].Type != analyses.FacialReview {
+		t.Fatalf("%s analyses = %+v, %v", caseID, list, err)
 	}
-	return out
+	return list[0].ID
+}
+
+// TestAutomaticReviewAndAccess: a FACIAL case gets one review however often it is ingested, a
+// FINGERPRINT case none; admins open every case and examiners only those they hold a step of.
+func TestAutomaticReviewAndAccess(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	repo := auth.NewRepository(sqlDB)
+	chief, err := repo.Create(ctx, auth.NewUser{Nome: "c", UltimoNome: "c", Matricula: "c", Cargo: "c", Username: "chief", Password: "password-1",
+		Access: auth.Access{AccountRole: auth.AccountRoleAdmin, IsActive: true}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ana, err := repo.Create(ctx, auth.NewUser{Nome: "a", UltimoNome: "a", Matricula: "a", Cargo: "a", Username: "ana", Password: "password-1",
+		Access: auth.Access{AccountRole: auth.AccountRoleUser, ExaminesFacial: true, IsActive: true}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, in := range []cases.CaseInput{
+		{CaseID: "F1", CaseType: cases.CaseTypeCriminal, Modality: "FACIAL", Description: "x"},
+		{CaseID: "F1", CaseType: cases.CaseTypeCriminal, Modality: "FACIAL", Description: "x"},
+		{CaseID: "P1", CaseType: cases.CaseTypeCriminal, Modality: "FINGERPRINT", Description: "x"},
+	} {
+		if _, err := cases.Ingest(ctx, sqlDB, in); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if list, err := analyses.List(ctx, sqlDB, "F1"); err != nil || len(list) != 1 {
+		t.Fatalf("F1 analyses = %+v, %v; want one review", list, err)
+	}
+	if list, err := analyses.List(ctx, sqlDB, "P1"); err != nil || len(list) != 0 {
+		t.Fatalf("P1 analyses = %+v, %v; want none", list, err)
+	}
+	if err := distribution.CanOpen(ctx, sqlDB, chief, "P1"); err != nil {
+		t.Fatalf("the admin opening P1: %v", err)
+	}
+	if err := distribution.CanOpen(ctx, sqlDB, ana, "F1"); !errors.Is(err, distribution.ErrNotAssigned) {
+		t.Fatalf("ana opening F1 before holding anything: %v", err)
+	}
+	if _, err := distribution.Distribute(ctx, sqlDB, distribution.Request{Count: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := distribution.CanOpen(ctx, sqlDB, ana, "F1"); err != nil {
+		t.Fatalf("ana opening F1 once distributed: %v", err)
+	}
+	if err := distribution.CanOpen(ctx, sqlDB, chief, "NOPE"); !errors.Is(err, analyses.ErrCaseNotFound) {
+		t.Fatalf("an unknown case: %v", err)
+	}
 }

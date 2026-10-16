@@ -135,8 +135,8 @@ func AnalysisAssignmentsHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	}
 }
 
-// IssueReportHandler issues an analysis's report (analyses.IssueReport): only its examiner may,
-// and it closes the analysis.
+// IssueReportHandler issues an analysis's report (analyses.IssueReport): only its first examiner,
+// once every pair is settled; it closes the analysis.
 func IssueReportHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		target, ok := caseAnalysis(context, sqlDB)
@@ -147,7 +147,7 @@ func IssueReportHandler(sqlDB *sql.DB) gin.HandlerFunc {
 		switch {
 		case errors.Is(err, analyses.ErrCannotDecide):
 			context.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
-		case errors.Is(err, analyses.ErrNotDraft):
+		case errors.Is(err, analyses.ErrNotDraft), errors.Is(err, analyses.ErrNotReportStage):
 			context.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		case err != nil:
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not issue report"})
@@ -162,7 +162,8 @@ type assignAnalysisRequest struct {
 	UserID *int64 `json:"userId"`
 }
 
-// AssignAnalysisHandler is an admin's manual assignment of one analysis (distribution.Assign).
+// AssignAnalysisHandler is an admin's manual assignment of the current step of one analysis
+// (distribution.Assign).
 func AssignAnalysisHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		id, err := strconv.ParseInt(context.Param("analysisId"), 10, 64)
@@ -179,7 +180,7 @@ func AssignAnalysisHandler(sqlDB *sql.DB) gin.HandlerFunc {
 		switch {
 		case errors.Is(err, analyses.ErrAnalysisNotFound), errors.Is(err, distribution.ErrUserNotFound):
 			context.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		case errors.Is(err, distribution.ErrNotExaminer):
+		case errors.Is(err, distribution.ErrNotExaminer), errors.Is(err, distribution.ErrOtherStep):
 			context.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		case errors.Is(err, distribution.ErrUnchanged), errors.Is(err, distribution.ErrClosed):
 			context.JSON(http.StatusConflict, gin.H{"error": err.Error()})

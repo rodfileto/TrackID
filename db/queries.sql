@@ -1015,24 +1015,37 @@ JOIN case_evidences ce ON ce.id = ct.evidence_id
 WHERE ce.biometric_case_id = $1;
 
 -- name: GetCaseAnalysis :one
--- One analysis with its case and current examiner (NULL when pending).
-SELECT ca.id, ca.sequence, ca.analysis_type, ca.status, bc.case_id, bc.modality, caa.user_id
+-- One analysis with its case and its current examiner for each step (NULL while unassigned).
+SELECT ca.id, ca.sequence, ca.analysis_type, ca.status, ca.stage, bc.id AS biometric_case_id, bc.case_id, bc.modality,
+       v.user_id AS verificator_id, r.user_id AS reviewer_id, i.user_id AS inconsistence_id
 FROM case_analyses ca
 JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
-LEFT JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
+LEFT JOIN current_analysis_assignments v ON v.case_analysis_id = ca.id AND v.step = 'VERIFICATOR'
+LEFT JOIN current_analysis_assignments r ON r.case_analysis_id = ca.id AND r.step = 'REVIEWER'
+LEFT JOIN current_analysis_assignments i ON i.case_analysis_id = ca.id AND i.step = 'INCONSISTENCE'
 WHERE ca.id = $1;
 
+-- name: SetCaseAnalysisStage :exec
+UPDATE case_analyses SET stage = $2 WHERE id = $1;
+
 -- name: ListCaseAnalyses :many
--- A case's analyses in order, with who requested each, its current examiner and its report.
-SELECT ca.id, ca.sequence, ca.analysis_type, ca.status, ca.created_at, ca.closed_at,
-       rq.username AS requested_by, ex.id AS examiner_id, ex.username AS examiner,
+-- A case's analyses in order, with who requested each, its examiner per step and its report.
+SELECT ca.id, ca.sequence, ca.analysis_type, ca.status, ca.stage, ca.created_at, ca.closed_at,
+       rq.username AS requested_by,
+       vu.id AS verificator_id, vu.username AS verificator,
+       ru.id AS reviewer_id, ru.username AS reviewer,
+       iu.id AS inconsistence_id, iu.username AS inconsistence,
        ar.report_type, ar.status AS report_status, ar.report_year, ar.report_number, ar.issued_at,
        ib.username AS issued_by
 FROM case_analyses ca
 JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
 LEFT JOIN users rq ON rq.id = ca.requested_by
-LEFT JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
-LEFT JOIN users ex ON ex.id = caa.user_id
+LEFT JOIN current_analysis_assignments v ON v.case_analysis_id = ca.id AND v.step = 'VERIFICATOR'
+LEFT JOIN users vu ON vu.id = v.user_id
+LEFT JOIN current_analysis_assignments r ON r.case_analysis_id = ca.id AND r.step = 'REVIEWER'
+LEFT JOIN users ru ON ru.id = r.user_id
+LEFT JOIN current_analysis_assignments i ON i.case_analysis_id = ca.id AND i.step = 'INCONSISTENCE'
+LEFT JOIN users iu ON iu.id = i.user_id
 LEFT JOIN analysis_reports ar ON ar.case_analysis_id = ca.id
 LEFT JOIN users ib ON ib.id = ar.issued_by
 WHERE bc.case_id = $1
@@ -1046,48 +1059,56 @@ JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
 WHERE bc.case_id = $1
 ORDER BY cap.case_analysis_id, cap.id;
 
+-- name: ListAnalysisPairs :many
+SELECT feature_a_id, feature_b_id FROM case_analysis_pairs WHERE case_analysis_id = $1 ORDER BY id;
+
 -- name: InsertAnalysisAssignment :one
-INSERT INTO analysis_assignments (case_analysis_id, user_id, method, assigned_by)
-VALUES ($1, $2, $3, $4)
+INSERT INTO analysis_assignments (case_analysis_id, step, user_id, method, assigned_by)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id;
 
 -- name: LockCaseDistribution :exec
 -- Serializes distributions and manual assignments (transaction-scoped), so two admins
--- distributing at once cannot hand the same pending analysis out twice. The key is arbitrary.
+-- distributing at once cannot hand the same pending work out twice. The key is arbitrary.
 SELECT pg_advisory_xact_lock(7461001);
 
--- name: ListPendingAnalyses :many
--- OPEN analyses with no current examiner, oldest first: the order distribution.Distribute hands
--- them out in. analysis_type filters when non-NULL.
-SELECT ca.id, ca.sequence, ca.analysis_type, bc.case_id
+-- name: ListPendingWork :many
+-- Open analyses whose current stage has no examiner yet, oldest first: the order
+-- distribution.Distribute hands them out in, with who holds the other steps (an examiner never
+-- takes two steps of one analysis). analysis_type filters when non-NULL.
+SELECT ca.id, ca.sequence, ca.analysis_type, ca.stage, bc.case_id,
+       v.user_id AS verificator_id, r.user_id AS reviewer_id
 FROM case_analyses ca
 JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
-LEFT JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
-WHERE ca.status = 'OPEN' AND caa.user_id IS NULL
+LEFT JOIN current_analysis_assignments v ON v.case_analysis_id = ca.id AND v.step = 'VERIFICATOR'
+LEFT JOIN current_analysis_assignments r ON r.case_analysis_id = ca.id AND r.step = 'REVIEWER'
+LEFT JOIN current_analysis_assignments cur ON cur.case_analysis_id = ca.id AND cur.step = (CASE ca.stage WHEN 'VERIFICATION' THEN 'REVIEWER' WHEN 'INCONSISTENCE' THEN 'INCONSISTENCE' ELSE 'VERIFICATOR' END)
+WHERE ca.status = 'OPEN' AND ca.stage <> 'REPORT' AND cur.user_id IS NULL
   AND (sqlc.narg('analysis_type')::text IS NULL OR ca.analysis_type = sqlc.narg('analysis_type'))
 ORDER BY ca.created_at, ca.id;
 
 -- name: ListExaminerLoads :many
--- Every active examiner with the number of OPEN analyses currently assigned to them.
+-- Every active examiner with the number of open analyses whose current stage is theirs to work
+-- (the report counting for the first examiner).
 SELECT u.id, u.username, u.examines_fingerprint, u.examines_facial,
-       COUNT(ca.id) AS open_analyses
+       COUNT(ca.id) AS open_work
 FROM users u
 LEFT JOIN current_analysis_assignments caa ON caa.user_id = u.id
-LEFT JOIN case_analyses ca ON ca.id = caa.case_analysis_id AND ca.status = 'OPEN'
+LEFT JOIN case_analyses ca ON ca.id = caa.case_analysis_id AND ca.status = 'OPEN' AND caa.step = (CASE ca.stage WHEN 'VERIFICATION' THEN 'REVIEWER' WHEN 'INCONSISTENCE' THEN 'INCONSISTENCE' ELSE 'VERIFICATOR' END)
 WHERE u.is_active AND (u.examines_fingerprint OR u.examines_facial)
 GROUP BY u.id
 ORDER BY u.id;
 
--- name: CountPendingAnalysesByType :many
-SELECT ca.analysis_type, COUNT(*) AS pending
+-- name: CountPendingWork :many
+SELECT ca.analysis_type, ca.stage, COUNT(*) AS pending
 FROM case_analyses ca
-LEFT JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
-WHERE ca.status = 'OPEN' AND caa.user_id IS NULL
-GROUP BY ca.analysis_type
-ORDER BY ca.analysis_type;
+LEFT JOIN current_analysis_assignments cur ON cur.case_analysis_id = ca.id AND cur.step = (CASE ca.stage WHEN 'VERIFICATION' THEN 'REVIEWER' WHEN 'INCONSISTENCE' THEN 'INCONSISTENCE' ELSE 'VERIFICATOR' END)
+WHERE ca.status = 'OPEN' AND ca.stage <> 'REPORT' AND cur.user_id IS NULL
+GROUP BY ca.analysis_type, ca.stage
+ORDER BY ca.analysis_type, ca.stage;
 
 -- name: ListAnalysisAssignmentHistory :many
-SELECT aa.id, u.username, aa.method, ab.username AS assigned_by_username, aa.assigned_at
+SELECT aa.id, aa.step, u.username, aa.method, ab.username AS assigned_by_username, aa.assigned_at
 FROM analysis_assignments aa
 LEFT JOIN users u ON u.id = aa.user_id
 LEFT JOIN users ab ON ab.id = aa.assigned_by
@@ -1095,9 +1116,9 @@ WHERE aa.case_analysis_id = $1
 ORDER BY aa.id;
 
 -- name: ListAnalysesAssignedTo :many
--- The analyses a user is currently responsible for, open ones first, newest assignment first.
-SELECT bc.case_id, bc.case_type, bc.description, ca.id, ca.sequence, ca.analysis_type, ca.status,
-       caa.method, caa.assigned_at
+-- Every step a user currently holds, open analyses first, newest assignment first.
+SELECT bc.case_id, bc.case_type, bc.description, ca.id, ca.sequence, ca.analysis_type, ca.status, ca.stage,
+       caa.step, caa.method, caa.assigned_at
 FROM current_analysis_assignments caa
 JOIN case_analyses ca ON ca.id = caa.case_analysis_id
 JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
@@ -1105,7 +1126,7 @@ WHERE caa.user_id = $1
 ORDER BY ca.status DESC, caa.assigned_at DESC, ca.id DESC;
 
 -- name: GetCaseAccess :one
--- Whether a user currently holds any analysis of a case (open or closed).
+-- Whether a user currently holds any step of any analysis of a case (open or closed).
 SELECT bc.id, EXISTS (
     SELECT 1 FROM case_analyses ca
     JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
@@ -1113,6 +1134,34 @@ SELECT bc.id, EXISTS (
 ) AS holds_analysis
 FROM biometric_cases bc
 WHERE bc.case_id = @case_id::text;
+
+-- name: UpsertDecisionDraft :exec
+INSERT INTO analysis_decision_drafts (case_analysis_id, step, feature_a_id, feature_b_id, decision, notes, user_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (case_analysis_id, step, feature_a_id, feature_b_id) DO UPDATE SET
+    decision = EXCLUDED.decision, notes = EXCLUDED.notes, user_id = EXCLUDED.user_id, updated_at = NOW();
+
+-- name: ListDecisionDrafts :many
+SELECT feature_a_id, feature_b_id, decision, notes
+FROM analysis_decision_drafts
+WHERE case_analysis_id = $1 AND step = $2;
+
+-- name: DeleteDecisionDrafts :exec
+DELETE FROM analysis_decision_drafts WHERE case_analysis_id = $1 AND step = $2;
+
+-- name: ListAnalysisDecisions :many
+-- The human decisions submitted in one analysis.
+SELECT feature_a_id, feature_b_id, role, decision, username, notes, decided_at
+FROM biometric_decisions
+WHERE case_analysis_id = $1
+ORDER BY feature_a_id, feature_b_id, id;
+
+-- name: ListSystemDecisionsForFeatures :many
+-- The SYSTEM decisions (the matcher's candidates) touching any of the given features.
+SELECT feature_a_id, feature_b_id, decision, confidence
+FROM biometric_decisions
+WHERE role = 'SYSTEM' AND (feature_a_id = ANY(@feature_ids::text[]) OR feature_b_id = ANY(@feature_ids::text[]))
+ORDER BY confidence DESC NULLS LAST, feature_a_id, feature_b_id;
 
 -- name: MaxReportNumber :one
 SELECT COALESCE(MAX(report_number), 0)::integer
