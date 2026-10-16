@@ -320,29 +320,36 @@ func (q *Queries) CreateOccurrence(ctx context.Context, arg CreateOccurrencePara
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (nome, ultimo_nome, matricula, cargo, username, email, password_hash)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, nome, ultimo_nome, matricula, cargo, username, email
+INSERT INTO users (nome, ultimo_nome, matricula, cargo, username, email, password_hash, account_role, examines_fingerprint, examines_facial)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active
 `
 
 type CreateUserParams struct {
-	Nome         string `db:"nome" json:"nome"`
-	UltimoNome   string `db:"ultimo_nome" json:"ultimo_nome"`
-	Matricula    string `db:"matricula" json:"matricula"`
-	Cargo        string `db:"cargo" json:"cargo"`
-	Username     string `db:"username" json:"username"`
-	Email        string `db:"email" json:"email"`
-	PasswordHash string `db:"password_hash" json:"password_hash"`
+	Nome                string `db:"nome" json:"nome"`
+	UltimoNome          string `db:"ultimo_nome" json:"ultimo_nome"`
+	Matricula           string `db:"matricula" json:"matricula"`
+	Cargo               string `db:"cargo" json:"cargo"`
+	Username            string `db:"username" json:"username"`
+	Email               string `db:"email" json:"email"`
+	PasswordHash        string `db:"password_hash" json:"password_hash"`
+	AccountRole         string `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
 }
 
 type CreateUserRow struct {
-	ID         int64  `db:"id" json:"id"`
-	Nome       string `db:"nome" json:"nome"`
-	UltimoNome string `db:"ultimo_nome" json:"ultimo_nome"`
-	Matricula  string `db:"matricula" json:"matricula"`
-	Cargo      string `db:"cargo" json:"cargo"`
-	Username   string `db:"username" json:"username"`
-	Email      string `db:"email" json:"email"`
+	ID                  int64  `db:"id" json:"id"`
+	Nome                string `db:"nome" json:"nome"`
+	UltimoNome          string `db:"ultimo_nome" json:"ultimo_nome"`
+	Matricula           string `db:"matricula" json:"matricula"`
+	Cargo               string `db:"cargo" json:"cargo"`
+	Username            string `db:"username" json:"username"`
+	Email               string `db:"email" json:"email"`
+	AccountRole         string `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	IsActive            bool   `db:"is_active" json:"is_active"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
@@ -354,6 +361,9 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		arg.Username,
 		arg.Email,
 		arg.PasswordHash,
+		arg.AccountRole,
+		arg.ExaminesFingerprint,
+		arg.ExaminesFacial,
 	)
 	var i CreateUserRow
 	err := row.Scan(
@@ -364,6 +374,10 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		&i.Cargo,
 		&i.Username,
 		&i.Email,
+		&i.AccountRole,
+		&i.ExaminesFingerprint,
+		&i.ExaminesFacial,
+		&i.IsActive,
 	)
 	return i, err
 }
@@ -1167,19 +1181,23 @@ func (q *Queries) GetPersonByPersonID(ctx context.Context, personID string) (Per
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, nome, ultimo_nome, matricula, cargo, username, email
+SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active
 FROM users
 WHERE id = $1
 `
 
 type GetUserByIDRow struct {
-	ID         int64  `db:"id" json:"id"`
-	Nome       string `db:"nome" json:"nome"`
-	UltimoNome string `db:"ultimo_nome" json:"ultimo_nome"`
-	Matricula  string `db:"matricula" json:"matricula"`
-	Cargo      string `db:"cargo" json:"cargo"`
-	Username   string `db:"username" json:"username"`
-	Email      string `db:"email" json:"email"`
+	ID                  int64  `db:"id" json:"id"`
+	Nome                string `db:"nome" json:"nome"`
+	UltimoNome          string `db:"ultimo_nome" json:"ultimo_nome"`
+	Matricula           string `db:"matricula" json:"matricula"`
+	Cargo               string `db:"cargo" json:"cargo"`
+	Username            string `db:"username" json:"username"`
+	Email               string `db:"email" json:"email"`
+	AccountRole         string `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	IsActive            bool   `db:"is_active" json:"is_active"`
 }
 
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error) {
@@ -1193,25 +1211,33 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 		&i.Cargo,
 		&i.Username,
 		&i.Email,
+		&i.AccountRole,
+		&i.ExaminesFingerprint,
+		&i.ExaminesFacial,
+		&i.IsActive,
 	)
 	return i, err
 }
 
 const getUserByMatricula = `-- name: GetUserByMatricula :one
-SELECT id, nome, ultimo_nome, matricula, cargo, username, email, password_hash
+SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active, password_hash
 FROM users
 WHERE matricula = $1
 `
 
 type GetUserByMatriculaRow struct {
-	ID           int64  `db:"id" json:"id"`
-	Nome         string `db:"nome" json:"nome"`
-	UltimoNome   string `db:"ultimo_nome" json:"ultimo_nome"`
-	Matricula    string `db:"matricula" json:"matricula"`
-	Cargo        string `db:"cargo" json:"cargo"`
-	Username     string `db:"username" json:"username"`
-	Email        string `db:"email" json:"email"`
-	PasswordHash string `db:"password_hash" json:"password_hash"`
+	ID                  int64  `db:"id" json:"id"`
+	Nome                string `db:"nome" json:"nome"`
+	UltimoNome          string `db:"ultimo_nome" json:"ultimo_nome"`
+	Matricula           string `db:"matricula" json:"matricula"`
+	Cargo               string `db:"cargo" json:"cargo"`
+	Username            string `db:"username" json:"username"`
+	Email               string `db:"email" json:"email"`
+	AccountRole         string `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	IsActive            bool   `db:"is_active" json:"is_active"`
+	PasswordHash        string `db:"password_hash" json:"password_hash"`
 }
 
 func (q *Queries) GetUserByMatricula(ctx context.Context, matricula string) (GetUserByMatriculaRow, error) {
@@ -1225,6 +1251,10 @@ func (q *Queries) GetUserByMatricula(ctx context.Context, matricula string) (Get
 		&i.Cargo,
 		&i.Username,
 		&i.Email,
+		&i.AccountRole,
+		&i.ExaminesFingerprint,
+		&i.ExaminesFacial,
+		&i.IsActive,
 		&i.PasswordHash,
 	)
 	return i, err
@@ -3153,6 +3183,61 @@ func (q *Queries) ListUnmatchedFeatureEmbeddings(ctx context.Context, embeddingT
 	return items, nil
 }
 
+const listUsers = `-- name: ListUsers :many
+SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active
+FROM users
+ORDER BY ultimo_nome, nome, id
+`
+
+type ListUsersRow struct {
+	ID                  int64  `db:"id" json:"id"`
+	Nome                string `db:"nome" json:"nome"`
+	UltimoNome          string `db:"ultimo_nome" json:"ultimo_nome"`
+	Matricula           string `db:"matricula" json:"matricula"`
+	Cargo               string `db:"cargo" json:"cargo"`
+	Username            string `db:"username" json:"username"`
+	Email               string `db:"email" json:"email"`
+	AccountRole         string `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	IsActive            bool   `db:"is_active" json:"is_active"`
+}
+
+func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersRow
+	for rows.Next() {
+		var i ListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Nome,
+			&i.UltimoNome,
+			&i.Matricula,
+			&i.Cargo,
+			&i.Username,
+			&i.Email,
+			&i.AccountRole,
+			&i.ExaminesFingerprint,
+			&i.ExaminesFacial,
+			&i.IsActive,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markBiometricTemplateMatched = `-- name: MarkBiometricTemplateMatched :exec
 UPDATE biometric_templates SET matched_at = NOW(), updated_at = NOW()
 WHERE id = $1
@@ -3426,6 +3511,61 @@ func (q *Queries) UpdateCodificationPoint(ctx context.Context, arg UpdateCodific
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const updateUserAccess = `-- name: UpdateUserAccess :one
+UPDATE users
+SET account_role = $2, examines_fingerprint = $3, examines_facial = $4, is_active = $5, updated_at = NOW()
+WHERE id = $1
+RETURNING id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active
+`
+
+type UpdateUserAccessParams struct {
+	ID                  int64  `db:"id" json:"id"`
+	AccountRole         string `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	IsActive            bool   `db:"is_active" json:"is_active"`
+}
+
+type UpdateUserAccessRow struct {
+	ID                  int64  `db:"id" json:"id"`
+	Nome                string `db:"nome" json:"nome"`
+	UltimoNome          string `db:"ultimo_nome" json:"ultimo_nome"`
+	Matricula           string `db:"matricula" json:"matricula"`
+	Cargo               string `db:"cargo" json:"cargo"`
+	Username            string `db:"username" json:"username"`
+	Email               string `db:"email" json:"email"`
+	AccountRole         string `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	IsActive            bool   `db:"is_active" json:"is_active"`
+}
+
+// Username, matricula and email are not updatable: decisions name their decider by username.
+func (q *Queries) UpdateUserAccess(ctx context.Context, arg UpdateUserAccessParams) (UpdateUserAccessRow, error) {
+	row := q.db.QueryRowContext(ctx, updateUserAccess,
+		arg.ID,
+		arg.AccountRole,
+		arg.ExaminesFingerprint,
+		arg.ExaminesFacial,
+		arg.IsActive,
+	)
+	var i UpdateUserAccessRow
+	err := row.Scan(
+		&i.ID,
+		&i.Nome,
+		&i.UltimoNome,
+		&i.Matricula,
+		&i.Cargo,
+		&i.Username,
+		&i.Email,
+		&i.AccountRole,
+		&i.ExaminesFingerprint,
+		&i.ExaminesFacial,
+		&i.IsActive,
+	)
+	return i, err
 }
 
 const upsertBiometricCase = `-- name: UpsertBiometricCase :one

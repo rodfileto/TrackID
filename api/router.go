@@ -46,12 +46,19 @@ func NewRouter(deps Dependencies) *gin.Engine {
 
 	api := router.Group("/api")
 	authRepository := auth.NewRepository(deps.DB)
-	api.POST("/auth/register", RegisterHandler(authRepository, deps.EmailDomain))
+	// There is no public sign-up: the first SUPER_ADMIN comes from cmd/create-superuser and
+	// admins create every other account.
 	api.POST("/auth/login", LoginHandler(authRepository, deps.JWTSecret))
 
 	protected := api.Group("/")
-	protected.Use(Middleware(deps.JWTSecret))
-	protected.GET("me", MeHandler(authRepository))
+	protected.Use(Middleware(deps.JWTSecret), ActiveUser(authRepository))
+	protected.GET("me", MeHandler())
+
+	admin := protected.Group("admin")
+	admin.Use(RequireAdmin())
+	admin.GET("users", ListUsersHandler(authRepository))
+	admin.POST("users", CreateUserHandler(authRepository, deps.EmailDomain))
+	admin.PATCH("users/:userId", UpdateUserAccessHandler(authRepository))
 	protected.GET("cases", ListCasesHandler(deps.DB))
 	protected.POST("cases", CreateCaseHandler(deps.DB))
 	protected.GET("cases/years", ListCaseYearsHandler(deps.DB))

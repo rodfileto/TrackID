@@ -1,17 +1,29 @@
 -- name: CreateUser :one
-INSERT INTO users (nome, ultimo_nome, matricula, cargo, username, email, password_hash)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, nome, ultimo_nome, matricula, cargo, username, email;
+INSERT INTO users (nome, ultimo_nome, matricula, cargo, username, email, password_hash, account_role, examines_fingerprint, examines_facial)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active;
 
 -- name: GetUserByMatricula :one
-SELECT id, nome, ultimo_nome, matricula, cargo, username, email, password_hash
+SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active, password_hash
 FROM users
 WHERE matricula = $1;
 
 -- name: GetUserByID :one
-SELECT id, nome, ultimo_nome, matricula, cargo, username, email
+SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active
 FROM users
 WHERE id = $1;
+
+-- name: ListUsers :many
+SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active
+FROM users
+ORDER BY ultimo_nome, nome, id;
+
+-- name: UpdateUserAccess :one
+-- Username, matricula and email are not updatable: decisions name their decider by username.
+UPDATE users
+SET account_role = $2, examines_fingerprint = $3, examines_facial = $4, is_active = $5, updated_at = NOW()
+WHERE id = $1
+RETURNING id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active;
 
 -- name: UpsertBiometricCase :one
 -- (xmax = 0) tells a real insert apart from a row that already existed: RowsAffected() is

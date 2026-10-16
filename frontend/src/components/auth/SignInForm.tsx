@@ -18,7 +18,6 @@ export default function SignInForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const signupMessage = (location.state?.message as string | undefined) ?? "";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,11 +60,6 @@ export default function SignInForm() {
               {t("auth.signInSubtitle")}
             </p>
           </div>
-          {signupMessage && (
-            <div className="mb-5 rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700 dark:border-success-500/30 dark:bg-success-500/10 dark:text-success-400">
-              {signupMessage}
-            </div>
-          )}
           <div>
             <form onSubmit={handleSubmit}>
               <div className="space-y-6">
@@ -135,13 +129,7 @@ export default function SignInForm() {
 
             <div className="mt-5">
               <p className="text-sm font-normal text-center text-gray-700 dark:text-gray-400 sm:text-start">
-                {t("auth.noAccount")} {""}
-                <Link
-                  to="/signup"
-                  className="text-brand-500 hover:text-brand-600 dark:text-brand-400"
-                >
-                  {t("auth.signUp")}
-                </Link>
+                {t("auth.accountsByAdmin")}
               </p>
             </div>
           </div>
