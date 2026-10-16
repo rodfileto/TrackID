@@ -9,14 +9,16 @@ import (
 
 func TestPlan(t *testing.T) {
 	review, comparison := analyses.FacialReview, analyses.FacialComparison
-	pending := []PendingAnalysis{
+	pending := []PendingWork{
 		{ID: 1, CaseID: "C1", Type: review},
 		{ID: 2, CaseID: "C2", Type: review},
 		{ID: 3, CaseID: "C1", Sequence: 2, Type: comparison},
 		{ID: 4, CaseID: "C3", Type: review},
 		{ID: 5, CaseID: "C4", Type: review},
 	}
-	ana := Examiner{UserID: 1, Username: "ana", ExaminesFacial: true, OpenAnalyses: 2}
+	// C5's review awaits verification: bia examined it, so she is never its verifier.
+	verification := []PendingWork{{ID: 6, CaseID: "C5", Type: review, Step: analyses.StepReviewer, Exclude: []int64{2}}}
+	ana := Examiner{UserID: 1, Username: "ana", ExaminesFacial: true, OpenWork: 2}
 	bia := Examiner{UserID: 2, Username: "bia", ExaminesFacial: true, ExaminesFingerprint: true}
 	caio := Examiner{UserID: 3, Username: "caio", ExaminesFacial: true}
 	fp := Examiner{UserID: 4, Username: "fp", ExaminesFingerprint: true}
@@ -49,6 +51,12 @@ func TestPlan(t *testing.T) {
 		{"no examiners",
 			nil, 3,
 			nil, []int64{1, 2, 3, 4, 5}},
+	}
+	if got, _ := plan(verification, []Examiner{bia, caio}, 1); len(got) != 1 || got[0].Username != "caio" || got[0].Step != analyses.StepReviewer {
+		t.Errorf("verification of bia's own analysis went to %+v, want caio as REVIEWER", got)
+	}
+	if got, none := plan(verification, []Examiner{bia}, 1); len(got) != 0 || len(none) != 1 {
+		t.Errorf("only its first examiner available: assigned %+v, want it left pending", got)
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

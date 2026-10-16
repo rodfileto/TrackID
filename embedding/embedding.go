@@ -342,6 +342,12 @@ func NewSyncFaceTask() *asynq.Task {
 // (e.g. a caller with no queue configured), in which case this is a no-op:
 // the embedding still gets stored, it just won't be matched/clustered until
 // something else triggers a sync.
+// EnqueueSyncFace is enqueueSyncFace for callers outside this package -- the API after examiners
+// submit decisions -- so clusters are reconciled with the new decisions.
+func EnqueueSyncFace(queue Enqueuer) {
+	enqueueSyncFace(queue)
+}
+
 func enqueueSyncFace(queue Enqueuer) {
 	if queue == nil {
 		return

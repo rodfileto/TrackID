@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 
@@ -9,19 +9,24 @@ import {
   GridIcon,
   GroupIcon,
   HorizontaLDots,
+  ListIcon,
   PieChartIcon,
+  TableIcon,
   UserCircleIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
+import { useCurrentUser } from "../context/CurrentUserContext";
 
 type NavItem = {
   name: string;
   icon: React.ReactNode;
   path?: string;
+  /** Shown only to ADMIN and SUPER_ADMIN users. */
+  adminOnly?: boolean;
   subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
 };
 
-const navItems: NavItem[] = [
+const allNavItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: "nav.dashboard",
@@ -36,6 +41,17 @@ const navItems: NavItem[] = [
     icon: <FolderIcon />,
     name: "nav.criminalCases",
     path: "/cases",
+  },
+  {
+    icon: <ListIcon />,
+    name: "nav.myAnalyses",
+    path: "/analyses",
+  },
+  {
+    icon: <TableIcon />,
+    name: "nav.distribution",
+    path: "/admin/distribution",
+    adminOnly: true,
   },
   {
     icon: <GroupIcon />,
@@ -60,6 +76,8 @@ const navItems: NavItem[] = [
 const AppSidebar: React.FC = () => {
   const { t } = useTranslation();
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
+  const { isAdmin } = useCurrentUser();
+  const navItems = useMemo(() => allNavItems.filter((item) => !item.adminOnly || isAdmin), [isAdmin]);
   const location = useLocation();
 
   const [openSubmenu, setOpenSubmenu] = useState<{
@@ -92,7 +110,7 @@ const AppSidebar: React.FC = () => {
     if (!submenuMatched) {
       setOpenSubmenu(null);
     }
-  }, [location, isActive]);
+  }, [location, isActive, navItems]);
 
   useEffect(() => {
     if (openSubmenu !== null) {

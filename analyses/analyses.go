@@ -40,6 +40,11 @@ func (t Type) Modality() auth.Modality {
 	return auth.ModalityFacial
 }
 
+// DecisionModality is how biometric_decisions.modality names the modality of type t.
+func (t Type) DecisionModality() string {
+	return "FACE"
+}
+
 // ReportType is the report an analysis of type t leads to (analysis_reports.report_type): for a
 // review, a report of investigative leads; for a comparison, a forensic report (laudo).
 func (t Type) ReportType() string {
@@ -55,6 +60,43 @@ const (
 	ReportIssued = "ISSUED"
 )
 
+// Stage is where an open analysis is (case_analyses.stage, migration 018): each stage but the
+// last is worked by one examiner, in one Step.
+type Stage string
+
+const (
+	StageExamination   Stage = "EXAMINATION"
+	StageVerification  Stage = "VERIFICATION"
+	StageInconsistence Stage = "INCONSISTENCE"
+	StageReport        Stage = "REPORT"
+)
+
+// Step is one examiner's part in an analysis, named after the biometric_decisions role their
+// decisions take: the first examiner (VERIFICATOR, FISWG's practitioner), the second, blind one
+// (REVIEWER, FISWG's verification) and the third, on disagreement (INCONSISTENCE).
+type Step string
+
+const (
+	StepVerificator   Step = "VERIFICATOR"
+	StepReviewer      Step = "REVIEWER"
+	StepInconsistence Step = "INCONSISTENCE"
+)
+
+// Steps lists every step in order.
+var Steps = []Step{StepVerificator, StepReviewer, StepInconsistence}
+
+// ActiveStep is the step whose examiner works stage s: the one deciding in it, or, at REPORT, the
+// first examiner, who issues the report.
+func (s Stage) ActiveStep() Step {
+	switch s {
+	case StageVerification:
+		return StepReviewer
+	case StageInconsistence:
+		return StepInconsistence
+	}
+	return StepVerificator
+}
+
 // Errors returned to callers.
 var (
 	ErrInvalidType      = errors.New("invalid analysis type")
@@ -63,8 +105,9 @@ var (
 	ErrWrongModality    = errors.New("the analysis type does not match the case's modality")
 	ErrNeedsPairs       = errors.New("a comparison needs at least one pair")
 	ErrUnexpectedPairs  = errors.New("only a comparison lists pairs")
-	ErrInvalidPair      = errors.New("each pair needs two different features, at least one a face of this case")
-	ErrCannotDecide     = errors.New("only the analysis's examiner, examining its modality, can work on it while it is open")
+	ErrInvalidPair      = errors.New("each pair needs two different features: a face of this case, and another face of it or an enrolled person")
+	ErrCannotDecide     = errors.New("only the examiner of the analysis's current stage, examining its modality, can work on it while it is open")
+	ErrNotReportStage   = errors.New("the report can only be issued once every pair is settled")
 	ErrNotDraft         = errors.New("the report is already issued")
 )
 
@@ -83,19 +126,25 @@ type Report struct {
 	IssuedAt *time.Time `json:"issuedAt,omitempty"`
 }
 
+// Examiner is who holds one step of an analysis.
+type Examiner struct {
+	UserID   int64  `json:"userId"`
+	Username string `json:"username"`
+}
+
 // Analysis is one analysis of a case.
 type Analysis struct {
-	ID          int64      `json:"id"`
-	Sequence    int16      `json:"sequence"`
-	Type        Type       `json:"type"`
-	Status      string     `json:"status"`
-	RequestedBy string     `json:"requestedBy,omitempty"` // empty: opened automatically with the case
-	Examiner    string     `json:"examiner,omitempty"`    // empty: pending
-	ExaminerID  int64      `json:"examinerId,omitempty"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	ClosedAt    *time.Time `json:"closedAt,omitempty"`
-	Pairs       []Pair     `json:"pairs"` // a comparison's pairs; empty for a review
-	Report      Report     `json:"report"`
+	ID          int64             `json:"id"`
+	Sequence    int16             `json:"sequence"`
+	Type        Type              `json:"type"`
+	Status      string            `json:"status"`
+	Stage       Stage             `json:"stage"`
+	RequestedBy string            `json:"requestedBy,omitempty"` // empty: opened automatically with the case
+	Examiners   map[Step]Examiner `json:"examiners"`             // current examiner per step; a missing step is unassigned
+	CreatedAt   time.Time         `json:"createdAt"`
+	ClosedAt    *time.Time        `json:"closedAt,omitempty"`
+	Pairs       []Pair            `json:"pairs"` // a comparison's pairs; empty for a review
+	Report      Report            `json:"report"`
 }
 
 func reportNumber(year, number int32) string {
@@ -177,7 +226,9 @@ func Open(ctx context.Context, sqlDB *sql.DB, caseID string, t Type, pairs []Pai
 		if a > b {
 			a, b = b, a
 		}
-		if a == b || !validFeatureID(a) || !validFeatureID(b) || !(ofCase[a] || ofCase[b]) {
+		// A face of this case against another face of it or an enrolled person: an examiner holding
+		// the analysis can see both sides (pairs across cases are not distributed yet).
+		if a == b || !(ofCase[a] || ofCase[b]) || !(ofCase[a] || isKnown(a)) || !(ofCase[b] || isKnown(b)) {
 			return 0, fmt.Errorf("%w: %s / %s", ErrInvalidPair, p.FeatureA, p.FeatureB)
 		}
 		if !seen[Pair{a, b}] {
@@ -198,12 +249,8 @@ func Open(ctx context.Context, sqlDB *sql.DB, caseID string, t Type, pairs []Pai
 	return id, tx.Commit()
 }
 
-// validFeatureID accepts the two graph feature id forms: a QUESTIONED "TRACE:<id>#feature" or a
-// KNOWN bare identity_file id.
-func validFeatureID(id string) bool {
-	if _, ok := graph.ParseQuestionedFeatureID(id); ok {
-		return true
-	}
+// isKnown reports whether id is a KNOWN feature id: a bare identity_file id.
+func isKnown(id string) bool {
 	n, err := strconv.ParseInt(id, 10, 64)
 	return err == nil && n > 0
 }
@@ -230,12 +277,17 @@ func List(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Analysis, error)
 	}
 	out := make([]Analysis, len(rows))
 	for i, r := range rows {
-		a := Analysis{ID: r.ID, Sequence: r.Sequence, Type: Type(r.AnalysisType), Status: r.Status,
-			RequestedBy: r.RequestedBy.String, Examiner: r.Examiner.String, ExaminerID: r.ExaminerID.Int64,
-			CreatedAt: r.CreatedAt, Pairs: pairs[r.ID],
+		a := Analysis{ID: r.ID, Sequence: r.Sequence, Type: Type(r.AnalysisType), Status: r.Status, Stage: Stage(r.Stage),
+			RequestedBy: r.RequestedBy.String, Examiners: map[Step]Examiner{}, CreatedAt: r.CreatedAt, Pairs: pairs[r.ID],
 			Report: Report{Type: r.ReportType.String, Status: r.ReportStatus.String, IssuedBy: r.IssuedBy.String}}
 		if a.Pairs == nil {
 			a.Pairs = []Pair{}
+		}
+		for step, id := range map[Step]sql.NullInt64{StepVerificator: r.VerificatorID, StepReviewer: r.ReviewerID, StepInconsistence: r.InconsistenceID} {
+			if id.Valid {
+				name := map[Step]sql.NullString{StepVerificator: r.Verificator, StepReviewer: r.Reviewer, StepInconsistence: r.Inconsistence}[step]
+				a.Examiners[step] = Examiner{UserID: id.Int64, Username: name.String}
+			}
 		}
 		if r.ClosedAt.Valid {
 			a.ClosedAt = &r.ClosedAt.Time
@@ -251,13 +303,30 @@ func List(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Analysis, error)
 	return out, nil
 }
 
-// Target is an analysis with its case and current examiner, as GetTarget reads it.
+// Target is an analysis with its case and its current examiner per step, as GetTarget reads it.
 type Target struct {
-	ID         int64
-	Type       Type
-	Status     string
-	CaseID     string
-	ExaminerID int64 // 0 when pending
+	ID              int64
+	Type            Type
+	Status          string
+	Stage           Stage
+	BiometricCaseID int64
+	CaseID          string
+	Examiners       map[Step]int64 // user id per step; a missing step is unassigned
+}
+
+// ActiveExaminer is the user id holding the step of the analysis's current stage, 0 if none.
+func (t Target) ActiveExaminer() int64 {
+	return t.Examiners[t.Stage.ActiveStep()]
+}
+
+// StepOf returns the step user holds in the analysis, if any (one person never holds two).
+func (t Target) StepOf(userID int64) (Step, bool) {
+	for _, step := range Steps {
+		if id, ok := t.Examiners[step]; ok && id == userID {
+			return step, true
+		}
+	}
+	return "", false
 }
 
 // GetTarget reads one analysis, or ErrAnalysisNotFound.
@@ -269,21 +338,31 @@ func GetTarget(ctx context.Context, q *db.Queries, analysisID int64) (Target, er
 	if err != nil {
 		return Target{}, err
 	}
-	return Target{ID: r.ID, Type: Type(r.AnalysisType), Status: r.Status, CaseID: r.CaseID, ExaminerID: r.UserID.Int64}, nil
-}
-
-// CanDecide reports whether user may work on an analysis -- record its human decisions, issue its
-// report: only its current examiner, while they are active and examine its modality, and only
-// while it is open. Being an admin lets nobody decide on an analysis they do not hold.
-func CanDecide(user auth.UserProfile, t Target) error {
-	if t.ExaminerID != 0 && t.ExaminerID == user.ID && user.Examines(t.Type.Modality()) && t.Status == StatusOpen {
-		return nil
+	t := Target{ID: r.ID, Type: Type(r.AnalysisType), Status: r.Status, Stage: Stage(r.Stage), BiometricCaseID: r.BiometricCaseID,
+		CaseID: r.CaseID, Examiners: map[Step]int64{}}
+	for step, id := range map[Step]sql.NullInt64{StepVerificator: r.VerificatorID, StepReviewer: r.ReviewerID, StepInconsistence: r.InconsistenceID} {
+		if id.Valid {
+			t.Examiners[step] = id.Int64
+		}
 	}
-	return ErrCannotDecide
+	return t, nil
 }
 
-// IssueReport issues an analysis's report: it numbers it "<year>.<sequence>" per report type and
-// year, records who issued it, and closes the analysis. Only CanDecide's user may.
+// CanWork reports whether user may work on an analysis now -- decide on its pairs, submit, or, at
+// REPORT, issue its report -- and in which step: only the examiner holding the step of its current
+// stage, while they are active and examine its modality, and only while it is open. Being an
+// admin lets nobody work on an analysis step they do not hold.
+func CanWork(user auth.UserProfile, t Target) (Step, error) {
+	step := t.Stage.ActiveStep()
+	if t.Status == StatusOpen && t.ActiveExaminer() == user.ID && user.ID != 0 && user.Examines(t.Type.Modality()) {
+		return step, nil
+	}
+	return "", ErrCannotDecide
+}
+
+// IssueReport issues an analysis's report once every pair is settled (stage REPORT): it numbers it
+// "<year>.<sequence>" per report type and year, records who issued it, and closes the analysis.
+// Only its first examiner may (CanWork at REPORT).
 func IssueReport(ctx context.Context, sqlDB *sql.DB, analysisID int64, user auth.UserProfile, now time.Time) (Report, error) {
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	if err != nil {
@@ -295,7 +374,10 @@ func IssueReport(ctx context.Context, sqlDB *sql.DB, analysisID int64, user auth
 	if err != nil {
 		return Report{}, err
 	}
-	if err := CanDecide(user, t); err != nil {
+	if t.Status == StatusOpen && t.Stage != StageReport {
+		return Report{}, ErrNotReportStage
+	}
+	if _, err := CanWork(user, t); err != nil {
 		return Report{}, err
 	}
 	if err := q.LockReportNumbering(ctx); err != nil {

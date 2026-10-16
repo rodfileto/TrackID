@@ -151,50 +151,18 @@ func ListCaseClusters(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Case
 	}
 
 	membersByCluster := map[int64][]string{}
-	var identityFileIDs, otherTraceIDs []int64
-	seenIdentityFile := map[int64]bool{}
-	seenOtherTrace := map[int64]bool{}
+	var memberIDs []string
 	memberRows, err := q.ListClusterMembersByClusterIDs(ctx, clusterIDs)
 	if err != nil {
 		return nil, err
 	}
 	for _, m := range memberRows {
 		membersByCluster[m.ClusterID] = append(membersByCluster[m.ClusterID], m.FeatureID)
-		if tid, ok := graph.ParseQuestionedFeatureID(m.FeatureID); ok {
-			if !seenOtherTrace[tid] {
-				seenOtherTrace[tid] = true
-				otherTraceIDs = append(otherTraceIDs, tid)
-			}
-			continue
-		}
-		if id, err := strconv.ParseInt(m.FeatureID, 10, 64); err == nil {
-			if !seenIdentityFile[id] {
-				seenIdentityFile[id] = true
-				identityFileIDs = append(identityFileIDs, id)
-			}
-		}
+		memberIDs = append(memberIDs, m.FeatureID)
 	}
-
-	knownByFile := map[int64]db.ListKnownClusterMembersRow{}
-	if len(identityFileIDs) > 0 {
-		rows, err := q.ListKnownClusterMembers(ctx, identityFileIDs)
-		if err != nil {
-			return nil, err
-		}
-		for _, r := range rows {
-			knownByFile[r.IdentityFileID] = r
-		}
-	}
-
-	questionedByTrace := map[int64]db.ListQuestionedClusterMembersRow{}
-	if len(otherTraceIDs) > 0 {
-		rows, err := q.ListQuestionedClusterMembers(ctx, otherTraceIDs)
-		if err != nil {
-			return nil, err
-		}
-		for _, r := range rows {
-			questionedByTrace[r.CaseTraceID] = r
-		}
+	described, err := DescribeFeatures(ctx, q, memberIDs)
+	if err != nil {
+		return nil, err
 	}
 
 	decisionRows, err := q.ListBiometricDecisionsForFeatures(ctx, featureIDs)
@@ -226,31 +194,9 @@ func ListCaseClusters(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Case
 				continue // one of this case's own faces, listed via LocalTraceIDs instead
 			}
 
-			var link TraceLink
-			if tid, ok := graph.ParseQuestionedFeatureID(m); ok {
-				d, ok := questionedByTrace[tid]
-				if !ok {
-					// The trace's evidence was excluded/deleted since clustering.
-					continue
-				}
-				link = TraceLink{Kind: "QUESTIONED", CaseID: d.CaseID, Modality: d.Modality, Description: d.Description, TraceID: tid}
-				switch {
-				case d.TraceCropFileID.Valid:
-					link.ThumbnailFileID = d.TraceCropFileID.Int64
-				case d.EvidenceFileID.Valid && d.BoxX1.Valid:
-					link.ThumbnailFileID = d.EvidenceFileID.Int64
-					link.ThumbnailBox = &ThumbnailBox{X1: d.BoxX1.Float64, Y1: d.BoxY1.Float64, X2: d.BoxX2.Float64, Y2: d.BoxY2.Float64}
-				}
-			} else {
-				id, err := strconv.ParseInt(m, 10, 64)
-				if err != nil {
-					continue
-				}
-				d, ok := knownByFile[id]
-				if !ok {
-					continue
-				}
-				link = TraceLink{Kind: "KNOWN", PersonID: d.PersonID, Name: d.Name, IdentityFileID: d.IdentityFileID, ContentType: d.ContentType.String}
+			link, ok := described[m]
+			if !ok {
+				continue // e.g. the trace's evidence was excluded/deleted since clustering
 			}
 
 			if role, decidedBy, automatic, confidence, ok := bestDecision(localTraceIDs, m, chainsByOwn); ok {
@@ -354,4 +300,54 @@ func decisiveEntry(rows []db.ListBiometricDecisionsForFeaturesRow) (role, decide
 		confidence = &v
 	}
 	return pick.Role, decidedBy, confidence
+}
+
+// DescribeFeatures resolves graph feature ids into what a caller needs to show them: for a KNOWN
+// feature, its enrolled person and identity file; for a QUESTIONED one, its case and how to render
+// its thumbnail (see TraceLink). Only the descriptive fields are set, none of the decision ones. An
+// id that resolves to nothing (malformed, or its evidence since excluded) is left out.
+func DescribeFeatures(ctx context.Context, q *db.Queries, featureIDs []string) (map[string]TraceLink, error) {
+	var identityFileIDs, traceIDs []int64
+	seen := map[string]bool{}
+	for _, id := range featureIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		if tid, ok := graph.ParseQuestionedFeatureID(id); ok {
+			traceIDs = append(traceIDs, tid)
+		} else if fid, err := strconv.ParseInt(id, 10, 64); err == nil {
+			identityFileIDs = append(identityFileIDs, fid)
+		}
+	}
+
+	out := map[string]TraceLink{}
+	if len(identityFileIDs) > 0 {
+		rows, err := q.ListKnownClusterMembers(ctx, identityFileIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range rows {
+			out[graph.KnownFeatureID(d.IdentityFileID)] = TraceLink{Kind: "KNOWN", PersonID: d.PersonID, Name: d.Name,
+				IdentityFileID: d.IdentityFileID, ContentType: d.ContentType.String}
+		}
+	}
+	if len(traceIDs) > 0 {
+		rows, err := q.ListQuestionedClusterMembers(ctx, traceIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range rows {
+			link := TraceLink{Kind: "QUESTIONED", CaseID: d.CaseID, Modality: d.Modality, Description: d.Description, TraceID: d.CaseTraceID}
+			switch {
+			case d.TraceCropFileID.Valid:
+				link.ThumbnailFileID = d.TraceCropFileID.Int64
+			case d.EvidenceFileID.Valid && d.BoxX1.Valid:
+				link.ThumbnailFileID = d.EvidenceFileID.Int64
+				link.ThumbnailBox = &ThumbnailBox{X1: d.BoxX1.Float64, Y1: d.BoxY1.Float64, X2: d.BoxX2.Float64, Y2: d.BoxY2.Float64}
+			}
+			out[graph.QuestionedFeatureID(d.CaseTraceID)] = link
+		}
+	}
+	return out, nil
 }
