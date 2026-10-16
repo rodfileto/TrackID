@@ -49,7 +49,7 @@ func LoginHandler(repo *auth.Repository, jwtSecret string) gin.HandlerFunc {
 			context.JSON(http.StatusForbidden, gin.H{"error": "account is deactivated"})
 			return
 		}
-		token, err := auth.IssueToken(authenticated.Profile, jwtSecret)
+		token, err := IssueToken(authenticated.Profile, jwtSecret)
 		if err != nil {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not create token"})
 			return

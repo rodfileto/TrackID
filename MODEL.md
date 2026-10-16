@@ -127,10 +127,17 @@ a *derived view*, never written authoritatively to the graph.
 | `system_source` / `username` | who/what decided (exactly one set, per role) |
 | `confidence`, `threshold` | score and the cutoff it was classified against (SYSTEM only) |
 | `notes` | examiner rationale (esp. on INCONSISTENCE) |
+| `case_analysis_id` | the analysis a human decision was made in (NULL for SYSTEM) |
 | `decided_at` | when |
 
 A pair progresses through roles (SYSTEM → VERIFICATOR → REVIEWER, with INCONSISTENCE only
-on disagreement); the full chain matters for audit, not just the outcome.
+on disagreement); the full chain matters for audit, not just the outcome. Human decisions belong
+to an analysis (section 3.1), one row per role per analysis, so a pair can be decided again in a
+later round. Each round is judged on its own -- round 0 is the SYSTEM decision (with any human
+decisions from before analyses), then one round per analysis -- and the pair keeps the outcome of
+its latest *settled* round, CONFIRMED or REJECTED (`cluster.DecidingRound`). A later round that is
+still pending, disputed or ends inconclusive does not undo it: a pair a review confirmed stays
+confirmed while a comparison is under way, and if the comparison lacks the quality to conclude.
 
 The automatic matcher's cutoffs are data, not code: `match_thresholds` holds one append-only
 version per row (review and confirm cutoffs, as similarities on the scale of `confidence`, with
@@ -153,6 +160,44 @@ where human decisions are recorded. Users are
 deactivated (`is_active`), never deleted, and a username never changes, because decision rows
 name their decider by username. The first SUPER_ADMIN comes from `cmd/create-superuser`; there is
 no public sign-up.
+
+### 3.1 Analyses, distribution and reports
+
+A biometric case is worked through **analyses** (`case_analyses`, migration 017; `analyses`
+package): rounds of examination, each of a type that fixes its modality, its methodology and the
+report it leads to. For faces, following FISWG:
+
+| Type | What | Opened | Report |
+| --- | --- | --- | --- |
+| `FACIAL_REVIEW` | one-to-many: the facial recognition system's candidates for the case's faces; an investigative lead or a negative result, not a forensic examination | automatically, one per FACIAL case (`analyses.OpenAutomatic`, from `cases.Create` and `cases.Ingest`) | `FACIAL_REVIEW_REPORT` |
+| `FACIAL_COMPARISON` | one-to-one forensic examination of specific pairs (`case_analysis_pairs`), each with a face of the case | by an admin (`analyses.Open`) | `FACIAL_COMPARISON_REPORT` (laudo) |
+
+Fingerprint analyses (crime scene, laboratory, documents) are not modelled yet, so a FINGERPRINT
+case has none. An analysis is `OPEN` until its report is issued. Each has one report
+(`analysis_reports`), a `DRAFT` until its examiner issues it (`analyses.IssueReport`), which numbers
+it `"<year>.<sequence>"` per report type and closes the analysis; the document itself is not
+generated yet (`case_file_id` will point at it).
+
+**Distribution** (`distribution` package) gives each analysis one responsible examiner, who takes
+the first human step (VERIFICATOR); reviewers and inconsistence examiners are chosen later.
+`analysis_assignments` is an append-only history: an analysis's current examiner is its latest
+row (`current_analysis_assignments`), and an open analysis with none is pending.
+`distribution.Distribute` assigns up to a requested number of pending analyses, oldest first, each
+to the active examiner of its modality with the fewest open analyses (lowest user id on a tie),
+and leaves the rest pending; it can be limited to one analysis type and previewed as a dry run. An
+admin can reassign an open analysis or unassign it back to pending (`distribution.Assign`, method
+`MANUAL`, recording who did it). Both take a transaction-scoped advisory lock, so two
+distributions cannot hand out the same analysis.
+
+**Who sees and decides.** An ADMIN or SUPER_ADMIN opens every case; anyone else lists and opens
+only the cases where they hold an analysis, open or closed (`distribution.CanOpen`, enforced on
+every `cases/:caseId` route and when an occurrence links a case). Working on an analysis --
+deciding on its pairs, issuing its report -- is narrower and the same for everyone, admins
+included: only its current examiner, while they examine its modality and it is open
+(`analyses.CanDecide`). A user who creates a case of a modality they examine takes its automatic
+analyses at once (a `MANUAL` row by themselves); otherwise they stay pending. Persons, clusters and
+the occurrence map are not filtered by assignment. Pairs that do not sit in one case -- trace vs
+trace across cases, enrollment vs enrollment -- are not in any analysis yet.
 
 ## 4. Clustering
 

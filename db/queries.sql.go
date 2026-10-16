@@ -31,12 +31,37 @@ func (q *Queries) AddOccurrenceClassification(ctx context.Context, arg AddOccurr
 	return err
 }
 
+const closeCaseAnalysis = `-- name: CloseCaseAnalysis :exec
+UPDATE case_analyses SET status = 'CLOSED', closed_at = NOW() WHERE id = $1 AND status = 'OPEN'
+`
+
+func (q *Queries) CloseCaseAnalysis(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, closeCaseAnalysis, id)
+	return err
+}
+
 const countBiometricCases = `-- name: CountBiometricCases :one
 SELECT COUNT(*) FROM biometric_cases
 `
 
 func (q *Queries) CountBiometricCases(ctx context.Context) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countBiometricCases)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countCaseAnalysesOfType = `-- name: CountCaseAnalysesOfType :one
+SELECT COUNT(*) FROM case_analyses WHERE biometric_case_id = $1 AND analysis_type = $2
+`
+
+type CountCaseAnalysesOfTypeParams struct {
+	BiometricCaseID int64  `db:"biometric_case_id" json:"biometric_case_id"`
+	AnalysisType    string `db:"analysis_type" json:"analysis_type"`
+}
+
+func (q *Queries) CountCaseAnalysesOfType(ctx context.Context, arg CountCaseAnalysesOfTypeParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countCaseAnalysesOfType, arg.BiometricCaseID, arg.AnalysisType)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -67,6 +92,43 @@ func (q *Queries) CountMunicipalities(ctx context.Context) (int64, error) {
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const countPendingAnalysesByType = `-- name: CountPendingAnalysesByType :many
+SELECT ca.analysis_type, COUNT(*) AS pending
+FROM case_analyses ca
+LEFT JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
+WHERE ca.status = 'OPEN' AND caa.user_id IS NULL
+GROUP BY ca.analysis_type
+ORDER BY ca.analysis_type
+`
+
+type CountPendingAnalysesByTypeRow struct {
+	AnalysisType string `db:"analysis_type" json:"analysis_type"`
+	Pending      int64  `db:"pending" json:"pending"`
+}
+
+func (q *Queries) CountPendingAnalysesByType(ctx context.Context) ([]CountPendingAnalysesByTypeRow, error) {
+	rows, err := q.db.QueryContext(ctx, countPendingAnalysesByType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountPendingAnalysesByTypeRow
+	for rows.Next() {
+		var i CountPendingAnalysesByTypeRow
+		if err := rows.Scan(&i.AnalysisType, &i.Pending); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const countPersonCasesByModality = `-- name: CountPersonCasesByModality :many
@@ -124,7 +186,7 @@ func (q *Queries) CountPersonCasesByModality(ctx context.Context, personIds []st
 const createBiometricCase = `-- name: CreateBiometricCase :one
 INSERT INTO biometric_cases (case_id, case_type, modality, description, case_year, case_number)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING case_id, case_type, modality, description
+RETURNING id, case_id, case_type, modality, description
 `
 
 type CreateBiometricCaseParams struct {
@@ -137,6 +199,7 @@ type CreateBiometricCaseParams struct {
 }
 
 type CreateBiometricCaseRow struct {
+	ID          int64  `db:"id" json:"id"`
 	CaseID      string `db:"case_id" json:"case_id"`
 	CaseType    string `db:"case_type" json:"case_type"`
 	Modality    string `db:"modality" json:"modality"`
@@ -154,6 +217,7 @@ func (q *Queries) CreateBiometricCase(ctx context.Context, arg CreateBiometricCa
 	)
 	var i CreateBiometricCaseRow
 	err := row.Scan(
+		&i.ID,
 		&i.CaseID,
 		&i.CaseType,
 		&i.Modality,
@@ -704,6 +768,85 @@ func (q *Queries) GetBiometricCaseByCaseID(ctx context.Context, caseID string) (
 		&i.Modality,
 		&i.Description,
 	)
+	return i, err
+}
+
+const getCaseAccess = `-- name: GetCaseAccess :one
+SELECT bc.id, EXISTS (
+    SELECT 1 FROM case_analyses ca
+    JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
+    WHERE ca.biometric_case_id = bc.id AND caa.user_id = $1::bigint
+) AS holds_analysis
+FROM biometric_cases bc
+WHERE bc.case_id = $2::text
+`
+
+type GetCaseAccessParams struct {
+	UserID int64  `db:"user_id" json:"user_id"`
+	CaseID string `db:"case_id" json:"case_id"`
+}
+
+type GetCaseAccessRow struct {
+	ID            int64 `db:"id" json:"id"`
+	HoldsAnalysis bool  `db:"holds_analysis" json:"holds_analysis"`
+}
+
+// Whether a user currently holds any analysis of a case (open or closed).
+func (q *Queries) GetCaseAccess(ctx context.Context, arg GetCaseAccessParams) (GetCaseAccessRow, error) {
+	row := q.db.QueryRowContext(ctx, getCaseAccess, arg.UserID, arg.CaseID)
+	var i GetCaseAccessRow
+	err := row.Scan(&i.ID, &i.HoldsAnalysis)
+	return i, err
+}
+
+const getCaseAnalysis = `-- name: GetCaseAnalysis :one
+SELECT ca.id, ca.sequence, ca.analysis_type, ca.status, bc.case_id, bc.modality, caa.user_id
+FROM case_analyses ca
+JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
+LEFT JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
+WHERE ca.id = $1
+`
+
+type GetCaseAnalysisRow struct {
+	ID           int64         `db:"id" json:"id"`
+	Sequence     int16         `db:"sequence" json:"sequence"`
+	AnalysisType string        `db:"analysis_type" json:"analysis_type"`
+	Status       string        `db:"status" json:"status"`
+	CaseID       string        `db:"case_id" json:"case_id"`
+	Modality     string        `db:"modality" json:"modality"`
+	UserID       sql.NullInt64 `db:"user_id" json:"user_id"`
+}
+
+// One analysis with its case and current examiner (NULL when pending).
+func (q *Queries) GetCaseAnalysis(ctx context.Context, id int64) (GetCaseAnalysisRow, error) {
+	row := q.db.QueryRowContext(ctx, getCaseAnalysis, id)
+	var i GetCaseAnalysisRow
+	err := row.Scan(
+		&i.ID,
+		&i.Sequence,
+		&i.AnalysisType,
+		&i.Status,
+		&i.CaseID,
+		&i.Modality,
+		&i.UserID,
+	)
+	return i, err
+}
+
+const getCaseByCaseID = `-- name: GetCaseByCaseID :one
+SELECT id, case_id, modality FROM biometric_cases WHERE case_id = $1
+`
+
+type GetCaseByCaseIDRow struct {
+	ID       int64  `db:"id" json:"id"`
+	CaseID   string `db:"case_id" json:"case_id"`
+	Modality string `db:"modality" json:"modality"`
+}
+
+func (q *Queries) GetCaseByCaseID(ctx context.Context, caseID string) (GetCaseByCaseIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getCaseByCaseID, caseID)
+	var i GetCaseByCaseIDRow
+	err := row.Scan(&i.ID, &i.CaseID, &i.Modality)
 	return i, err
 }
 
@@ -1260,13 +1403,52 @@ func (q *Queries) GetUserByMatricula(ctx context.Context, matricula string) (Get
 	return i, err
 }
 
+const insertAnalysisAssignment = `-- name: InsertAnalysisAssignment :one
+INSERT INTO analysis_assignments (case_analysis_id, user_id, method, assigned_by)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type InsertAnalysisAssignmentParams struct {
+	CaseAnalysisID int64         `db:"case_analysis_id" json:"case_analysis_id"`
+	UserID         sql.NullInt64 `db:"user_id" json:"user_id"`
+	Method         string        `db:"method" json:"method"`
+	AssignedBy     sql.NullInt64 `db:"assigned_by" json:"assigned_by"`
+}
+
+func (q *Queries) InsertAnalysisAssignment(ctx context.Context, arg InsertAnalysisAssignmentParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, insertAnalysisAssignment,
+		arg.CaseAnalysisID,
+		arg.UserID,
+		arg.Method,
+		arg.AssignedBy,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertAnalysisReport = `-- name: InsertAnalysisReport :exec
+INSERT INTO analysis_reports (case_analysis_id, report_type) VALUES ($1, $2)
+`
+
+type InsertAnalysisReportParams struct {
+	CaseAnalysisID int64  `db:"case_analysis_id" json:"case_analysis_id"`
+	ReportType     string `db:"report_type" json:"report_type"`
+}
+
+func (q *Queries) InsertAnalysisReport(ctx context.Context, arg InsertAnalysisReportParams) error {
+	_, err := q.db.ExecContext(ctx, insertAnalysisReport, arg.CaseAnalysisID, arg.ReportType)
+	return err
+}
+
 const insertBiometricDecision = `-- name: InsertBiometricDecision :one
 INSERT INTO biometric_decisions
     (feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
-     comparison_type, related_reference, related_reference_kind, responsible_user)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+     comparison_type, related_reference, related_reference_kind, responsible_user, case_analysis_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 RETURNING id, feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
-    comparison_type, related_reference, related_reference_kind, responsible_user, decided_at, created_at
+    comparison_type, related_reference, related_reference_kind, responsible_user, decided_at, created_at, case_analysis_id
 `
 
 type InsertBiometricDecisionParams struct {
@@ -1284,6 +1466,7 @@ type InsertBiometricDecisionParams struct {
 	RelatedReference     sql.NullString  `db:"related_reference" json:"related_reference"`
 	RelatedReferenceKind sql.NullString  `db:"related_reference_kind" json:"related_reference_kind"`
 	ResponsibleUser      sql.NullString  `db:"responsible_user" json:"responsible_user"`
+	CaseAnalysisID       sql.NullInt64   `db:"case_analysis_id" json:"case_analysis_id"`
 }
 
 func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometricDecisionParams) (BiometricDecision, error) {
@@ -1302,6 +1485,7 @@ func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometr
 		arg.RelatedReference,
 		arg.RelatedReferenceKind,
 		arg.ResponsibleUser,
+		arg.CaseAnalysisID,
 	)
 	var i BiometricDecision
 	err := row.Scan(
@@ -1322,8 +1506,51 @@ func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometr
 		&i.ResponsibleUser,
 		&i.DecidedAt,
 		&i.CreatedAt,
+		&i.CaseAnalysisID,
 	)
 	return i, err
+}
+
+const insertCaseAnalysis = `-- name: InsertCaseAnalysis :one
+INSERT INTO case_analyses (biometric_case_id, sequence, analysis_type, requested_by)
+SELECT $1::bigint, COALESCE(MAX(sequence), 0) + 1, $2::text, $3::bigint
+FROM case_analyses
+WHERE biometric_case_id = $1::bigint
+RETURNING id, sequence
+`
+
+type InsertCaseAnalysisParams struct {
+	BiometricCaseID int64         `db:"biometric_case_id" json:"biometric_case_id"`
+	AnalysisType    string        `db:"analysis_type" json:"analysis_type"`
+	RequestedBy     sql.NullInt64 `db:"requested_by" json:"requested_by"`
+}
+
+type InsertCaseAnalysisRow struct {
+	ID       int64 `db:"id" json:"id"`
+	Sequence int16 `db:"sequence" json:"sequence"`
+}
+
+// The case's next analysis, numbered after its last one (lock the case first: LockBiometricCase).
+func (q *Queries) InsertCaseAnalysis(ctx context.Context, arg InsertCaseAnalysisParams) (InsertCaseAnalysisRow, error) {
+	row := q.db.QueryRowContext(ctx, insertCaseAnalysis, arg.BiometricCaseID, arg.AnalysisType, arg.RequestedBy)
+	var i InsertCaseAnalysisRow
+	err := row.Scan(&i.ID, &i.Sequence)
+	return i, err
+}
+
+const insertCaseAnalysisPair = `-- name: InsertCaseAnalysisPair :exec
+INSERT INTO case_analysis_pairs (case_analysis_id, feature_a_id, feature_b_id) VALUES ($1, $2, $3)
+`
+
+type InsertCaseAnalysisPairParams struct {
+	CaseAnalysisID int64  `db:"case_analysis_id" json:"case_analysis_id"`
+	FeatureAID     string `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID     string `db:"feature_b_id" json:"feature_b_id"`
+}
+
+func (q *Queries) InsertCaseAnalysisPair(ctx context.Context, arg InsertCaseAnalysisPairParams) error {
+	_, err := q.db.ExecContext(ctx, insertCaseAnalysisPair, arg.CaseAnalysisID, arg.FeatureAID, arg.FeatureBID)
+	return err
 }
 
 const insertCaseDecision = `-- name: InsertCaseDecision :one
@@ -1426,6 +1653,44 @@ func (q *Queries) InsertMatchThreshold(ctx context.Context, arg InsertMatchThres
 	return i, err
 }
 
+const issueAnalysisReport = `-- name: IssueAnalysisReport :one
+UPDATE analysis_reports
+SET status = 'ISSUED', report_year = $2, report_number = $3, issued_by = $4, issued_at = NOW()
+WHERE case_analysis_id = $1 AND status = 'DRAFT'
+RETURNING report_type, report_year, report_number, issued_at
+`
+
+type IssueAnalysisReportParams struct {
+	CaseAnalysisID int64         `db:"case_analysis_id" json:"case_analysis_id"`
+	ReportYear     sql.NullInt32 `db:"report_year" json:"report_year"`
+	ReportNumber   sql.NullInt32 `db:"report_number" json:"report_number"`
+	IssuedBy       sql.NullInt64 `db:"issued_by" json:"issued_by"`
+}
+
+type IssueAnalysisReportRow struct {
+	ReportType   string        `db:"report_type" json:"report_type"`
+	ReportYear   sql.NullInt32 `db:"report_year" json:"report_year"`
+	ReportNumber sql.NullInt32 `db:"report_number" json:"report_number"`
+	IssuedAt     sql.NullTime  `db:"issued_at" json:"issued_at"`
+}
+
+func (q *Queries) IssueAnalysisReport(ctx context.Context, arg IssueAnalysisReportParams) (IssueAnalysisReportRow, error) {
+	row := q.db.QueryRowContext(ctx, issueAnalysisReport,
+		arg.CaseAnalysisID,
+		arg.ReportYear,
+		arg.ReportNumber,
+		arg.IssuedBy,
+	)
+	var i IssueAnalysisReportRow
+	err := row.Scan(
+		&i.ReportType,
+		&i.ReportYear,
+		&i.ReportNumber,
+		&i.IssuedAt,
+	)
+	return i, err
+}
+
 const listAllBiometricCases = `-- name: ListAllBiometricCases :many
 SELECT case_id, case_type, modality, description
 FROM biometric_cases
@@ -1453,6 +1718,108 @@ func (q *Queries) ListAllBiometricCases(ctx context.Context) ([]ListAllBiometric
 			&i.CaseType,
 			&i.Modality,
 			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAnalysesAssignedTo = `-- name: ListAnalysesAssignedTo :many
+SELECT bc.case_id, bc.case_type, bc.description, ca.id, ca.sequence, ca.analysis_type, ca.status,
+       caa.method, caa.assigned_at
+FROM current_analysis_assignments caa
+JOIN case_analyses ca ON ca.id = caa.case_analysis_id
+JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
+WHERE caa.user_id = $1
+ORDER BY ca.status DESC, caa.assigned_at DESC, ca.id DESC
+`
+
+type ListAnalysesAssignedToRow struct {
+	CaseID       string    `db:"case_id" json:"case_id"`
+	CaseType     string    `db:"case_type" json:"case_type"`
+	Description  string    `db:"description" json:"description"`
+	ID           int64     `db:"id" json:"id"`
+	Sequence     int16     `db:"sequence" json:"sequence"`
+	AnalysisType string    `db:"analysis_type" json:"analysis_type"`
+	Status       string    `db:"status" json:"status"`
+	Method       string    `db:"method" json:"method"`
+	AssignedAt   time.Time `db:"assigned_at" json:"assigned_at"`
+}
+
+// The analyses a user is currently responsible for, open ones first, newest assignment first.
+func (q *Queries) ListAnalysesAssignedTo(ctx context.Context, userID sql.NullInt64) ([]ListAnalysesAssignedToRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAnalysesAssignedTo, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAnalysesAssignedToRow
+	for rows.Next() {
+		var i ListAnalysesAssignedToRow
+		if err := rows.Scan(
+			&i.CaseID,
+			&i.CaseType,
+			&i.Description,
+			&i.ID,
+			&i.Sequence,
+			&i.AnalysisType,
+			&i.Status,
+			&i.Method,
+			&i.AssignedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAnalysisAssignmentHistory = `-- name: ListAnalysisAssignmentHistory :many
+SELECT aa.id, u.username, aa.method, ab.username AS assigned_by_username, aa.assigned_at
+FROM analysis_assignments aa
+LEFT JOIN users u ON u.id = aa.user_id
+LEFT JOIN users ab ON ab.id = aa.assigned_by
+WHERE aa.case_analysis_id = $1
+ORDER BY aa.id
+`
+
+type ListAnalysisAssignmentHistoryRow struct {
+	ID                 int64          `db:"id" json:"id"`
+	Username           sql.NullString `db:"username" json:"username"`
+	Method             string         `db:"method" json:"method"`
+	AssignedByUsername sql.NullString `db:"assigned_by_username" json:"assigned_by_username"`
+	AssignedAt         time.Time      `db:"assigned_at" json:"assigned_at"`
+}
+
+func (q *Queries) ListAnalysisAssignmentHistory(ctx context.Context, caseAnalysisID int64) ([]ListAnalysisAssignmentHistoryRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAnalysisAssignmentHistory, caseAnalysisID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAnalysisAssignmentHistoryRow
+	for rows.Next() {
+		var i ListAnalysisAssignmentHistoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.Method,
+			&i.AssignedByUsername,
+			&i.AssignedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1542,20 +1909,21 @@ func (q *Queries) ListBiometricCases(ctx context.Context, arg ListBiometricCases
 }
 
 const listBiometricDecisions = `-- name: ListBiometricDecisions :many
-SELECT feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence
+SELECT feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, case_analysis_id
 FROM biometric_decisions
 ORDER BY feature_a_id, feature_b_id, decided_at
 `
 
 type ListBiometricDecisionsRow struct {
-	FeatureAID   string          `db:"feature_a_id" json:"feature_a_id"`
-	FeatureBID   string          `db:"feature_b_id" json:"feature_b_id"`
-	Modality     string          `db:"modality" json:"modality"`
-	Role         string          `db:"role" json:"role"`
-	Decision     string          `db:"decision" json:"decision"`
-	SystemSource sql.NullString  `db:"system_source" json:"system_source"`
-	Username     sql.NullString  `db:"username" json:"username"`
-	Confidence   sql.NullFloat64 `db:"confidence" json:"confidence"`
+	FeatureAID     string          `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID     string          `db:"feature_b_id" json:"feature_b_id"`
+	Modality       string          `db:"modality" json:"modality"`
+	Role           string          `db:"role" json:"role"`
+	Decision       string          `db:"decision" json:"decision"`
+	SystemSource   sql.NullString  `db:"system_source" json:"system_source"`
+	Username       sql.NullString  `db:"username" json:"username"`
+	Confidence     sql.NullFloat64 `db:"confidence" json:"confidence"`
+	CaseAnalysisID sql.NullInt64   `db:"case_analysis_id" json:"case_analysis_id"`
 }
 
 func (q *Queries) ListBiometricDecisions(ctx context.Context) ([]ListBiometricDecisionsRow, error) {
@@ -1576,6 +1944,7 @@ func (q *Queries) ListBiometricDecisions(ctx context.Context) ([]ListBiometricDe
 			&i.SystemSource,
 			&i.Username,
 			&i.Confidence,
+			&i.CaseAnalysisID,
 		); err != nil {
 			return nil, err
 		}
@@ -1591,20 +1960,21 @@ func (q *Queries) ListBiometricDecisions(ctx context.Context) ([]ListBiometricDe
 }
 
 const listBiometricDecisionsForFeatures = `-- name: ListBiometricDecisionsForFeatures :many
-SELECT feature_id, counterpart_id, role, decision, system_source, username, confidence
+SELECT feature_id, counterpart_id, role, decision, system_source, username, confidence, case_analysis_id
 FROM biometric_decision_sides
 WHERE feature_id = ANY($1::text[])
 ORDER BY feature_id, counterpart_id, decided_at
 `
 
 type ListBiometricDecisionsForFeaturesRow struct {
-	FeatureID     string          `db:"feature_id" json:"feature_id"`
-	CounterpartID string          `db:"counterpart_id" json:"counterpart_id"`
-	Role          string          `db:"role" json:"role"`
-	Decision      string          `db:"decision" json:"decision"`
-	SystemSource  sql.NullString  `db:"system_source" json:"system_source"`
-	Username      sql.NullString  `db:"username" json:"username"`
-	Confidence    sql.NullFloat64 `db:"confidence" json:"confidence"`
+	FeatureID      string          `db:"feature_id" json:"feature_id"`
+	CounterpartID  string          `db:"counterpart_id" json:"counterpart_id"`
+	Role           string          `db:"role" json:"role"`
+	Decision       string          `db:"decision" json:"decision"`
+	SystemSource   sql.NullString  `db:"system_source" json:"system_source"`
+	Username       sql.NullString  `db:"username" json:"username"`
+	Confidence     sql.NullFloat64 `db:"confidence" json:"confidence"`
+	CaseAnalysisID sql.NullInt64   `db:"case_analysis_id" json:"case_analysis_id"`
 }
 
 // Every biometric_decisions row touching any of the given feature ids, seen
@@ -1630,6 +2000,7 @@ func (q *Queries) ListBiometricDecisionsForFeatures(ctx context.Context, feature
 			&i.SystemSource,
 			&i.Username,
 			&i.Confidence,
+			&i.CaseAnalysisID,
 		); err != nil {
 			return nil, err
 		}
@@ -1718,6 +2089,118 @@ func (q *Queries) ListBiometricTemplates(ctx context.Context, templateType strin
 			&i.Template,
 			&i.Unmatched,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCaseAnalyses = `-- name: ListCaseAnalyses :many
+SELECT ca.id, ca.sequence, ca.analysis_type, ca.status, ca.created_at, ca.closed_at,
+       rq.username AS requested_by, ex.id AS examiner_id, ex.username AS examiner,
+       ar.report_type, ar.status AS report_status, ar.report_year, ar.report_number, ar.issued_at,
+       ib.username AS issued_by
+FROM case_analyses ca
+JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
+LEFT JOIN users rq ON rq.id = ca.requested_by
+LEFT JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
+LEFT JOIN users ex ON ex.id = caa.user_id
+LEFT JOIN analysis_reports ar ON ar.case_analysis_id = ca.id
+LEFT JOIN users ib ON ib.id = ar.issued_by
+WHERE bc.case_id = $1
+ORDER BY ca.sequence
+`
+
+type ListCaseAnalysesRow struct {
+	ID           int64          `db:"id" json:"id"`
+	Sequence     int16          `db:"sequence" json:"sequence"`
+	AnalysisType string         `db:"analysis_type" json:"analysis_type"`
+	Status       string         `db:"status" json:"status"`
+	CreatedAt    time.Time      `db:"created_at" json:"created_at"`
+	ClosedAt     sql.NullTime   `db:"closed_at" json:"closed_at"`
+	RequestedBy  sql.NullString `db:"requested_by" json:"requested_by"`
+	ExaminerID   sql.NullInt64  `db:"examiner_id" json:"examiner_id"`
+	Examiner     sql.NullString `db:"examiner" json:"examiner"`
+	ReportType   sql.NullString `db:"report_type" json:"report_type"`
+	ReportStatus sql.NullString `db:"report_status" json:"report_status"`
+	ReportYear   sql.NullInt32  `db:"report_year" json:"report_year"`
+	ReportNumber sql.NullInt32  `db:"report_number" json:"report_number"`
+	IssuedAt     sql.NullTime   `db:"issued_at" json:"issued_at"`
+	IssuedBy     sql.NullString `db:"issued_by" json:"issued_by"`
+}
+
+// A case's analyses in order, with who requested each, its current examiner and its report.
+func (q *Queries) ListCaseAnalyses(ctx context.Context, caseID string) ([]ListCaseAnalysesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCaseAnalyses, caseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCaseAnalysesRow
+	for rows.Next() {
+		var i ListCaseAnalysesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Sequence,
+			&i.AnalysisType,
+			&i.Status,
+			&i.CreatedAt,
+			&i.ClosedAt,
+			&i.RequestedBy,
+			&i.ExaminerID,
+			&i.Examiner,
+			&i.ReportType,
+			&i.ReportStatus,
+			&i.ReportYear,
+			&i.ReportNumber,
+			&i.IssuedAt,
+			&i.IssuedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCaseAnalysisPairs = `-- name: ListCaseAnalysisPairs :many
+SELECT cap.case_analysis_id, cap.feature_a_id, cap.feature_b_id
+FROM case_analysis_pairs cap
+JOIN case_analyses ca ON ca.id = cap.case_analysis_id
+JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
+WHERE bc.case_id = $1
+ORDER BY cap.case_analysis_id, cap.id
+`
+
+type ListCaseAnalysisPairsRow struct {
+	CaseAnalysisID int64  `db:"case_analysis_id" json:"case_analysis_id"`
+	FeatureAID     string `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID     string `db:"feature_b_id" json:"feature_b_id"`
+}
+
+func (q *Queries) ListCaseAnalysisPairs(ctx context.Context, caseID string) ([]ListCaseAnalysisPairsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCaseAnalysisPairs, caseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCaseAnalysisPairsRow
+	for rows.Next() {
+		var i ListCaseAnalysisPairsRow
+		if err := rows.Scan(&i.CaseAnalysisID, &i.FeatureAID, &i.FeatureBID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1887,6 +2370,36 @@ func (q *Queries) ListCaseFilesByBiometricCase(ctx context.Context, biometricCas
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCaseTraceIDs = `-- name: ListCaseTraceIDs :many
+SELECT ct.id
+FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+WHERE ce.biometric_case_id = $1
+`
+
+func (q *Queries) ListCaseTraceIDs(ctx context.Context, biometricCaseID int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listCaseTraceIDs, biometricCaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -2283,6 +2796,55 @@ func (q *Queries) ListCodificationPoints(ctx context.Context, codificationID int
 			&i.Y,
 			&i.PointType,
 			&i.Angle,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExaminerLoads = `-- name: ListExaminerLoads :many
+SELECT u.id, u.username, u.examines_fingerprint, u.examines_facial,
+       COUNT(ca.id) AS open_analyses
+FROM users u
+LEFT JOIN current_analysis_assignments caa ON caa.user_id = u.id
+LEFT JOIN case_analyses ca ON ca.id = caa.case_analysis_id AND ca.status = 'OPEN'
+WHERE u.is_active AND (u.examines_fingerprint OR u.examines_facial)
+GROUP BY u.id
+ORDER BY u.id
+`
+
+type ListExaminerLoadsRow struct {
+	ID                  int64  `db:"id" json:"id"`
+	Username            string `db:"username" json:"username"`
+	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	OpenAnalyses        int64  `db:"open_analyses" json:"open_analyses"`
+}
+
+// Every active examiner with the number of OPEN analyses currently assigned to them.
+func (q *Queries) ListExaminerLoads(ctx context.Context) ([]ListExaminerLoadsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listExaminerLoads)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExaminerLoadsRow
+	for rows.Next() {
+		var i ListExaminerLoadsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.ExaminesFingerprint,
+			&i.ExaminesFacial,
+			&i.OpenAnalyses,
 		); err != nil {
 			return nil, err
 		}
@@ -3009,6 +3571,53 @@ func (q *Queries) ListOccurrencesWithinRadius(ctx context.Context, arg ListOccur
 	return items, nil
 }
 
+const listPendingAnalyses = `-- name: ListPendingAnalyses :many
+SELECT ca.id, ca.sequence, ca.analysis_type, bc.case_id
+FROM case_analyses ca
+JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
+LEFT JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
+WHERE ca.status = 'OPEN' AND caa.user_id IS NULL
+  AND ($1::text IS NULL OR ca.analysis_type = $1)
+ORDER BY ca.created_at, ca.id
+`
+
+type ListPendingAnalysesRow struct {
+	ID           int64  `db:"id" json:"id"`
+	Sequence     int16  `db:"sequence" json:"sequence"`
+	AnalysisType string `db:"analysis_type" json:"analysis_type"`
+	CaseID       string `db:"case_id" json:"case_id"`
+}
+
+// OPEN analyses with no current examiner, oldest first: the order distribution.Distribute hands
+// them out in. analysis_type filters when non-NULL.
+func (q *Queries) ListPendingAnalyses(ctx context.Context, analysisType sql.NullString) ([]ListPendingAnalysesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingAnalyses, analysisType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingAnalysesRow
+	for rows.Next() {
+		var i ListPendingAnalysesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Sequence,
+			&i.AnalysisType,
+			&i.CaseID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPersonIDs = `-- name: ListPersonIDs :many
 SELECT person_id FROM person ORDER BY person_id
 `
@@ -3238,6 +3847,39 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 	return items, nil
 }
 
+const lockBiometricCase = `-- name: LockBiometricCase :one
+SELECT id FROM biometric_cases WHERE id = $1 FOR UPDATE
+`
+
+// Serializes the analyses of one case, so two at once cannot take the same sequence.
+func (q *Queries) LockBiometricCase(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, lockBiometricCase, id)
+	var id_2 int64
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const lockCaseDistribution = `-- name: LockCaseDistribution :exec
+SELECT pg_advisory_xact_lock(7461001)
+`
+
+// Serializes distributions and manual assignments (transaction-scoped), so two admins
+// distributing at once cannot hand the same pending analysis out twice. The key is arbitrary.
+func (q *Queries) LockCaseDistribution(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, lockCaseDistribution)
+	return err
+}
+
+const lockReportNumbering = `-- name: LockReportNumbering :exec
+SELECT pg_advisory_xact_lock(7461002)
+`
+
+// Serializes report numbering (transaction-scoped): MaxReportNumber + 1 is then safe.
+func (q *Queries) LockReportNumbering(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, lockReportNumbering)
+	return err
+}
+
 const markBiometricTemplateMatched = `-- name: MarkBiometricTemplateMatched :exec
 UPDATE biometric_templates SET matched_at = NOW(), updated_at = NOW()
 WHERE id = $1
@@ -3310,6 +3952,24 @@ func (q *Queries) MaxOccurrenceSeqForYear(ctx context.Context, occurrenceYear in
 	var max_seq int32
 	err := row.Scan(&max_seq)
 	return max_seq, err
+}
+
+const maxReportNumber = `-- name: MaxReportNumber :one
+SELECT COALESCE(MAX(report_number), 0)::integer
+FROM analysis_reports
+WHERE report_type = $1 AND report_year = $2
+`
+
+type MaxReportNumberParams struct {
+	ReportType string        `db:"report_type" json:"report_type"`
+	ReportYear sql.NullInt32 `db:"report_year" json:"report_year"`
+}
+
+func (q *Queries) MaxReportNumber(ctx context.Context, arg MaxReportNumberParams) (int32, error) {
+	row := q.db.QueryRowContext(ctx, maxReportNumber, arg.ReportType, arg.ReportYear)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const searchOccurrences = `-- name: SearchOccurrences :many

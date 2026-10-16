@@ -46,7 +46,7 @@ WHERE case_year = sqlc.arg(case_year)::int4;
 -- name: CreateBiometricCase :one
 INSERT INTO biometric_cases (case_id, case_type, modality, description, case_year, case_number)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING case_id, case_type, modality, description;
+RETURNING id, case_id, case_type, modality, description;
 
 -- name: CountBiometricCases :one
 SELECT COUNT(*) FROM biometric_cases;
@@ -134,13 +134,13 @@ RETURNING id;
 -- name: InsertBiometricDecision :one
 INSERT INTO biometric_decisions
     (feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
-     comparison_type, related_reference, related_reference_kind, responsible_user)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+     comparison_type, related_reference, related_reference_kind, responsible_user, case_analysis_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 RETURNING id, feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
-    comparison_type, related_reference, related_reference_kind, responsible_user, decided_at, created_at;
+    comparison_type, related_reference, related_reference_kind, responsible_user, decided_at, created_at, case_analysis_id;
 
 -- name: ListBiometricDecisions :many
-SELECT feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence
+SELECT feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, case_analysis_id
 FROM biometric_decisions
 ORDER BY feature_a_id, feature_b_id, decided_at;
 
@@ -626,7 +626,7 @@ WHERE feature_id = ANY(@feature_ids::text[]);
 -- cluster.DeriveEdgeStatus) and who/what decided it (see
 -- cases.ListCaseClusters). A decision between two of the given features
 -- appears once from each side.
-SELECT feature_id, counterpart_id, role, decision, system_source, username, confidence
+SELECT feature_id, counterpart_id, role, decision, system_source, username, confidence, case_analysis_id
 FROM biometric_decision_sides
 WHERE feature_id = ANY(@feature_ids::text[])
 ORDER BY feature_id, counterpart_id, decided_at;
@@ -983,3 +983,151 @@ LIMIT 1;
 
 -- name: CountMunicipalities :one
 SELECT COUNT(*) FROM municipalities;
+
+-- name: LockBiometricCase :one
+-- Serializes the analyses of one case, so two at once cannot take the same sequence.
+SELECT id FROM biometric_cases WHERE id = $1 FOR UPDATE;
+
+-- name: InsertCaseAnalysis :one
+-- The case's next analysis, numbered after its last one (lock the case first: LockBiometricCase).
+INSERT INTO case_analyses (biometric_case_id, sequence, analysis_type, requested_by)
+SELECT @biometric_case_id::bigint, COALESCE(MAX(sequence), 0) + 1, @analysis_type::text, sqlc.narg('requested_by')::bigint
+FROM case_analyses
+WHERE biometric_case_id = @biometric_case_id::bigint
+RETURNING id, sequence;
+
+-- name: CountCaseAnalysesOfType :one
+SELECT COUNT(*) FROM case_analyses WHERE biometric_case_id = $1 AND analysis_type = $2;
+
+-- name: InsertAnalysisReport :exec
+INSERT INTO analysis_reports (case_analysis_id, report_type) VALUES ($1, $2);
+
+-- name: InsertCaseAnalysisPair :exec
+INSERT INTO case_analysis_pairs (case_analysis_id, feature_a_id, feature_b_id) VALUES ($1, $2, $3);
+
+-- name: GetCaseByCaseID :one
+SELECT id, case_id, modality FROM biometric_cases WHERE case_id = $1;
+
+-- name: ListCaseTraceIDs :many
+SELECT ct.id
+FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+WHERE ce.biometric_case_id = $1;
+
+-- name: GetCaseAnalysis :one
+-- One analysis with its case and current examiner (NULL when pending).
+SELECT ca.id, ca.sequence, ca.analysis_type, ca.status, bc.case_id, bc.modality, caa.user_id
+FROM case_analyses ca
+JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
+LEFT JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
+WHERE ca.id = $1;
+
+-- name: ListCaseAnalyses :many
+-- A case's analyses in order, with who requested each, its current examiner and its report.
+SELECT ca.id, ca.sequence, ca.analysis_type, ca.status, ca.created_at, ca.closed_at,
+       rq.username AS requested_by, ex.id AS examiner_id, ex.username AS examiner,
+       ar.report_type, ar.status AS report_status, ar.report_year, ar.report_number, ar.issued_at,
+       ib.username AS issued_by
+FROM case_analyses ca
+JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
+LEFT JOIN users rq ON rq.id = ca.requested_by
+LEFT JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
+LEFT JOIN users ex ON ex.id = caa.user_id
+LEFT JOIN analysis_reports ar ON ar.case_analysis_id = ca.id
+LEFT JOIN users ib ON ib.id = ar.issued_by
+WHERE bc.case_id = $1
+ORDER BY ca.sequence;
+
+-- name: ListCaseAnalysisPairs :many
+SELECT cap.case_analysis_id, cap.feature_a_id, cap.feature_b_id
+FROM case_analysis_pairs cap
+JOIN case_analyses ca ON ca.id = cap.case_analysis_id
+JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
+WHERE bc.case_id = $1
+ORDER BY cap.case_analysis_id, cap.id;
+
+-- name: InsertAnalysisAssignment :one
+INSERT INTO analysis_assignments (case_analysis_id, user_id, method, assigned_by)
+VALUES ($1, $2, $3, $4)
+RETURNING id;
+
+-- name: LockCaseDistribution :exec
+-- Serializes distributions and manual assignments (transaction-scoped), so two admins
+-- distributing at once cannot hand the same pending analysis out twice. The key is arbitrary.
+SELECT pg_advisory_xact_lock(7461001);
+
+-- name: ListPendingAnalyses :many
+-- OPEN analyses with no current examiner, oldest first: the order distribution.Distribute hands
+-- them out in. analysis_type filters when non-NULL.
+SELECT ca.id, ca.sequence, ca.analysis_type, bc.case_id
+FROM case_analyses ca
+JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
+LEFT JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
+WHERE ca.status = 'OPEN' AND caa.user_id IS NULL
+  AND (sqlc.narg('analysis_type')::text IS NULL OR ca.analysis_type = sqlc.narg('analysis_type'))
+ORDER BY ca.created_at, ca.id;
+
+-- name: ListExaminerLoads :many
+-- Every active examiner with the number of OPEN analyses currently assigned to them.
+SELECT u.id, u.username, u.examines_fingerprint, u.examines_facial,
+       COUNT(ca.id) AS open_analyses
+FROM users u
+LEFT JOIN current_analysis_assignments caa ON caa.user_id = u.id
+LEFT JOIN case_analyses ca ON ca.id = caa.case_analysis_id AND ca.status = 'OPEN'
+WHERE u.is_active AND (u.examines_fingerprint OR u.examines_facial)
+GROUP BY u.id
+ORDER BY u.id;
+
+-- name: CountPendingAnalysesByType :many
+SELECT ca.analysis_type, COUNT(*) AS pending
+FROM case_analyses ca
+LEFT JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
+WHERE ca.status = 'OPEN' AND caa.user_id IS NULL
+GROUP BY ca.analysis_type
+ORDER BY ca.analysis_type;
+
+-- name: ListAnalysisAssignmentHistory :many
+SELECT aa.id, u.username, aa.method, ab.username AS assigned_by_username, aa.assigned_at
+FROM analysis_assignments aa
+LEFT JOIN users u ON u.id = aa.user_id
+LEFT JOIN users ab ON ab.id = aa.assigned_by
+WHERE aa.case_analysis_id = $1
+ORDER BY aa.id;
+
+-- name: ListAnalysesAssignedTo :many
+-- The analyses a user is currently responsible for, open ones first, newest assignment first.
+SELECT bc.case_id, bc.case_type, bc.description, ca.id, ca.sequence, ca.analysis_type, ca.status,
+       caa.method, caa.assigned_at
+FROM current_analysis_assignments caa
+JOIN case_analyses ca ON ca.id = caa.case_analysis_id
+JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
+WHERE caa.user_id = $1
+ORDER BY ca.status DESC, caa.assigned_at DESC, ca.id DESC;
+
+-- name: GetCaseAccess :one
+-- Whether a user currently holds any analysis of a case (open or closed).
+SELECT bc.id, EXISTS (
+    SELECT 1 FROM case_analyses ca
+    JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id
+    WHERE ca.biometric_case_id = bc.id AND caa.user_id = @user_id::bigint
+) AS holds_analysis
+FROM biometric_cases bc
+WHERE bc.case_id = @case_id::text;
+
+-- name: MaxReportNumber :one
+SELECT COALESCE(MAX(report_number), 0)::integer
+FROM analysis_reports
+WHERE report_type = $1 AND report_year = $2;
+
+-- name: IssueAnalysisReport :one
+UPDATE analysis_reports
+SET status = 'ISSUED', report_year = $2, report_number = $3, issued_by = $4, issued_at = NOW()
+WHERE case_analysis_id = $1 AND status = 'DRAFT'
+RETURNING report_type, report_year, report_number, issued_at;
+
+-- name: CloseCaseAnalysis :exec
+UPDATE case_analyses SET status = 'CLOSED', closed_at = NOW() WHERE id = $1 AND status = 'OPEN';
+
+-- name: LockReportNumbering :exec
+-- Serializes report numbering (transaction-scoped): MaxReportNumber + 1 is then safe.
+SELECT pg_advisory_xact_lock(7461002);

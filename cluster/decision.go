@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"database/sql"
+	"slices"
 
 	"github.com/rodfileto/trackid/db"
 )
@@ -44,12 +45,68 @@ const (
 type ChainEntry struct {
 	Role     Role
 	Decision Decision
+	// Analysis is the case_analysis_id a human decision was made in; 0 for SYSTEM, or for a
+	// human decision recorded before analyses existed.
+	Analysis int64
+}
+
+// Counts reports whether e is part of round's chain: a SYSTEM decision, which counts in every
+// round, or a human one made in that analysis. Round 0 is the SYSTEM decision with any human
+// decisions recorded before analyses existed.
+func (e ChainEntry) Counts(round int64) bool {
+	return e.Role == RoleSystem || e.Analysis == round
+}
+
+// DecidingRound is the round whose outcome is the pair's status, and that status. A pair can be
+// decided in several rounds -- the SYSTEM decision (round 0), a FACIAL_REVIEW, a
+// FACIAL_COMPARISON -- each judged on its own by the rules of DeriveEdgeStatus. The pair keeps
+// the outcome of its latest *settled* round (CONFIRMED or REJECTED): a later round that is still
+// pending, disputed, or ended inconclusive (e.g. a comparison without the quality a review had)
+// does not undo it. With no settled round, the latest round's status stands. ok is false only
+// for an empty chain.
+func DecidingRound(chain []ChainEntry) (round int64, status EdgeStatus, ok bool) {
+	seen := map[int64]bool{}
+	var rounds []int64
+	for _, e := range chain {
+		r := e.Analysis
+		if e.Role == RoleSystem {
+			r = 0
+		}
+		if !seen[r] {
+			seen[r] = true
+			rounds = append(rounds, r)
+		}
+	}
+	slices.Sort(rounds)
+
+	settled := false
+	for _, r := range rounds {
+		var roundChain []ChainEntry
+		for _, e := range chain {
+			if e.Counts(r) {
+				roundChain = append(roundChain, e)
+			}
+		}
+		s, _ := deriveRound(roundChain)
+		isSettled := s == EdgeStatusConfirmed || s == EdgeStatusRejected
+		if isSettled || !settled {
+			round, status, ok = r, s, true
+			settled = settled || isSettled
+		}
+	}
+	return round, status, ok
 }
 
 // DeriveEdgeStatus is a pure function mapping a pair's full decision chain to its
-// derived state. ok is false only for an empty chain (nothing decided yet).
-//
-// The rules, in order:
+// derived state. ok is false only for an empty chain (nothing decided yet). It is the status of
+// the pair's deciding round (DecidingRound).
+func DeriveEdgeStatus(chain []ChainEntry) (status EdgeStatus, ok bool) {
+	_, status, ok = DecidingRound(chain)
+	return status, ok
+}
+
+// deriveRound maps one round's chain -- the SYSTEM decision and the human decisions of one
+// analysis -- to its state. The rules, in order:
 //   - INCONSISTENCE, if present, is final: POSITIVE confirms, NEGATIVE rejects,
 //     INCONCLUSIVE leaves the pair DISPUTED.
 //   - VERIFICATOR and REVIEWER together settle the pair by agreement: matching
@@ -58,7 +115,7 @@ type ChainEntry struct {
 //   - VERIFICATOR alone is always PENDING_REVIEW.
 //   - SYSTEM alone is CONFIRMED for a POSITIVE score, PENDING_REVIEW for
 //     INCONCLUSIVE, or REJECTED for an explicit NEGATIVE.
-func DeriveEdgeStatus(chain []ChainEntry) (status EdgeStatus, ok bool) {
+func deriveRound(chain []ChainEntry) (status EdgeStatus, ok bool) {
 	var system, verificator, reviewer, inconsistence *Decision
 	for i := range chain {
 		switch chain[i].Role {
@@ -146,18 +203,24 @@ func loadConfirmedPairs(ctx context.Context, sqlDB *sql.DB) ([]confirmedPair, er
 		rowsForPair := chains[k]
 		chain := make([]ChainEntry, len(rowsForPair))
 		for i, r := range rowsForPair {
-			chain[i] = ChainEntry{Role: Role(r.Role), Decision: Decision(r.Decision)}
+			chain[i] = ChainEntry{Role: Role(r.Role), Decision: Decision(r.Decision), Analysis: r.CaseAnalysisID.Int64}
 		}
-		status, ok := DeriveEdgeStatus(chain)
+		round, status, ok := DecidingRound(chain)
 		if !ok || status != EdgeStatusConfirmed {
 			continue
+		}
+		current := rowsForPair[:0:0]
+		for i, r := range rowsForPair {
+			if chain[i].Counts(round) {
+				current = append(current, r)
+			}
 		}
 		pairs = append(pairs, confirmedPair{
 			featureA:     k.a,
 			featureB:     k.b,
 			modality:     rowsForPair[0].Modality,
-			confidence:   chainConfidence(rowsForPair),
-			identifiedBy: chainIdentifiedBy(rowsForPair),
+			confidence:   chainConfidence(current),
+			identifiedBy: chainIdentifiedBy(current),
 		})
 	}
 	return pairs, nil

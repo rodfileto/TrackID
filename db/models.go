@@ -11,6 +11,28 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+type AnalysisAssignment struct {
+	ID             int64         `db:"id" json:"id"`
+	CaseAnalysisID int64         `db:"case_analysis_id" json:"case_analysis_id"`
+	UserID         sql.NullInt64 `db:"user_id" json:"user_id"`
+	Method         string        `db:"method" json:"method"`
+	AssignedBy     sql.NullInt64 `db:"assigned_by" json:"assigned_by"`
+	AssignedAt     time.Time     `db:"assigned_at" json:"assigned_at"`
+}
+
+type AnalysisReport struct {
+	ID             int64         `db:"id" json:"id"`
+	CaseAnalysisID int64         `db:"case_analysis_id" json:"case_analysis_id"`
+	ReportType     string        `db:"report_type" json:"report_type"`
+	Status         string        `db:"status" json:"status"`
+	ReportYear     sql.NullInt32 `db:"report_year" json:"report_year"`
+	ReportNumber   sql.NullInt32 `db:"report_number" json:"report_number"`
+	IssuedBy       sql.NullInt64 `db:"issued_by" json:"issued_by"`
+	IssuedAt       sql.NullTime  `db:"issued_at" json:"issued_at"`
+	CaseFileID     sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
+	CreatedAt      time.Time     `db:"created_at" json:"created_at"`
+}
+
 type BiometricCase struct {
 	ID           int64         `db:"id" json:"id"`
 	CaseID       string        `db:"case_id" json:"case_id"`
@@ -42,6 +64,7 @@ type BiometricDecision struct {
 	ResponsibleUser      sql.NullString  `db:"responsible_user" json:"responsible_user"`
 	DecidedAt            time.Time       `db:"decided_at" json:"decided_at"`
 	CreatedAt            time.Time       `db:"created_at" json:"created_at"`
+	CaseAnalysisID       sql.NullInt64   `db:"case_analysis_id" json:"case_analysis_id"`
 }
 
 type BiometricDecisionSide struct {
@@ -62,6 +85,7 @@ type BiometricDecisionSide struct {
 	ResponsibleUser      sql.NullString  `db:"responsible_user" json:"responsible_user"`
 	DecidedAt            time.Time       `db:"decided_at" json:"decided_at"`
 	CreatedAt            time.Time       `db:"created_at" json:"created_at"`
+	CaseAnalysisID       sql.NullInt64   `db:"case_analysis_id" json:"case_analysis_id"`
 }
 
 type BiometricTemplate struct {
@@ -83,6 +107,25 @@ type Biometricfeature struct {
 	CaseTraceID    sql.NullInt64 `db:"case_trace_id" json:"case_trace_id"`
 	CreatedAt      time.Time     `db:"created_at" json:"created_at"`
 	UpdatedAt      time.Time     `db:"updated_at" json:"updated_at"`
+}
+
+type CaseAnalysis struct {
+	ID              int64         `db:"id" json:"id"`
+	BiometricCaseID int64         `db:"biometric_case_id" json:"biometric_case_id"`
+	Sequence        int16         `db:"sequence" json:"sequence"`
+	AnalysisType    string        `db:"analysis_type" json:"analysis_type"`
+	Status          string        `db:"status" json:"status"`
+	RequestedBy     sql.NullInt64 `db:"requested_by" json:"requested_by"`
+	CreatedAt       time.Time     `db:"created_at" json:"created_at"`
+	ClosedAt        sql.NullTime  `db:"closed_at" json:"closed_at"`
+}
+
+type CaseAnalysisPair struct {
+	ID             int64     `db:"id" json:"id"`
+	CaseAnalysisID int64     `db:"case_analysis_id" json:"case_analysis_id"`
+	FeatureAID     string    `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID     string    `db:"feature_b_id" json:"feature_b_id"`
+	CreatedAt      time.Time `db:"created_at" json:"created_at"`
 }
 
 type CaseCodification struct {
@@ -186,6 +229,15 @@ type ClusterMerge struct {
 	MergedAt      time.Time      `db:"merged_at" json:"merged_at"`
 	MergedBy      sql.NullString `db:"merged_by" json:"merged_by"`
 	Reason        sql.NullString `db:"reason" json:"reason"`
+}
+
+type CurrentAnalysisAssignment struct {
+	ID             int64         `db:"id" json:"id"`
+	CaseAnalysisID int64         `db:"case_analysis_id" json:"case_analysis_id"`
+	UserID         sql.NullInt64 `db:"user_id" json:"user_id"`
+	Method         string        `db:"method" json:"method"`
+	AssignedBy     sql.NullInt64 `db:"assigned_by" json:"assigned_by"`
+	AssignedAt     time.Time     `db:"assigned_at" json:"assigned_at"`
 }
 
 type FeatureEmbedding struct {

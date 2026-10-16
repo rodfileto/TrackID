@@ -10,13 +10,21 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/rodfileto/trackid/analyses"
+	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/cases"
+	"github.com/rodfileto/trackid/distribution"
 )
 
 // caseYearPattern matches a single case_id segment (case_ids are dot-separated,
 // e.g. "01.2026.01.SRMG.00270" or "2026.0001") that looks like a year, whichever
 // position it appears in.
 var caseYearPattern = regexp.MustCompile(`^(19|20)\d{2}$`)
+
+// assignedToFilter, completed with a user id placeholder and ")", keeps the biometric_cases where
+// that user currently holds an analysis: what a non-admin may list (see distribution.CanOpen).
+const assignedToFilter = "id IN (SELECT ca.biometric_case_id FROM case_analyses ca" +
+	" JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id WHERE caa.user_id ="
 
 type ListResponse struct {
 	Items      []cases.Case `json:"items"`
@@ -57,6 +65,19 @@ func CreateCaseHandler(db *sql.DB) gin.HandlerFunc {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not create case"})
 			return
 		}
+		// A creator who examines the case's modality takes its automatic analyses (a FACIAL case's
+		// review) from the start; otherwise they stay pending until distributed.
+		user := currentUser(context)
+		if user.Examines(auth.Modality(created.Modality)) {
+			list, err := analyses.List(context.Request.Context(), db, created.CaseID)
+			for i := 0; err == nil && i < len(list); i++ {
+				err = distribution.Assign(context.Request.Context(), db, list[i].ID, &user.ID, user.ID)
+			}
+			if err != nil {
+				context.JSON(http.StatusInternalServerError, gin.H{"error": "case created but its analyses could not be assigned to you"})
+				return
+			}
+		}
 		context.JSON(http.StatusCreated, created)
 	}
 }
@@ -91,6 +112,10 @@ func ListCasesHandler(db *sql.DB) gin.HandlerFunc {
 		addFilter("modality =", strings.ToUpper(context.Query("modality")))
 		if year := strings.TrimSpace(context.Query("year")); year != "" && caseYearPattern.MatchString(year) {
 			addFilter("case_id ~", `(^|\.)`+year+`(\.|$)`)
+		}
+		if user := currentUser(context); !user.AccountRole.IsAdmin() {
+			args = append(args, user.ID)
+			filters = append(filters, assignedToFilter+" $"+strconv.Itoa(len(args))+")")
 		}
 		where := ""
 		if len(filters) > 0 {
@@ -137,11 +162,15 @@ func ListCaseYearsHandler(db *sql.DB) gin.HandlerFunc {
 			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
 			return
 		}
+		where, args := "", []any{}
+		if user := currentUser(context); !user.AccountRole.IsAdmin() {
+			where, args = " WHERE "+assignedToFilter+" $1)", []any{user.ID}
+		}
 		rows, err := db.QueryContext(context.Request.Context(), `
 			SELECT DISTINCT seg
-			FROM (SELECT unnest(string_to_array(case_id, '.')) AS seg FROM biometric_cases) parts
+			FROM (SELECT unnest(string_to_array(case_id, '.')) AS seg FROM biometric_cases`+where+`) parts
 			WHERE seg ~ '^(19|20)[0-9]{2}$'
-			ORDER BY seg DESC`)
+			ORDER BY seg DESC`, args...)
 		if err != nil {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not list case years"})
 			return

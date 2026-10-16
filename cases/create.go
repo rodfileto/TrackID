@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/db"
 )
 
@@ -96,6 +97,9 @@ func createNumbered(ctx context.Context, sqlDB *sql.DB, year int, caseType, moda
 	})
 	if err != nil {
 		return Case{}, fmt.Errorf("cases: create biometric case: %w", err)
+	}
+	if _, err := analyses.OpenAutomatic(ctx, q, row.ID, row.Modality); err != nil {
+		return Case{}, fmt.Errorf("cases: open the case's automatic analyses: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
