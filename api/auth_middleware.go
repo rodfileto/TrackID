@@ -10,7 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 
+	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/auth"
+	"github.com/rodfileto/trackid/distribution"
 )
 
 // Middleware authenticates the request's Bearer token and, on success, sets the
@@ -97,4 +99,25 @@ func currentUser(context *gin.Context) auth.UserProfile {
 	user, _ := context.Get(currentUserKey)
 	profile, _ := user.(auth.UserProfile)
 	return profile
+}
+
+// CaseAccess guards every route under cases/:caseId: it runs after ActiveUser and lets through
+// an admin, or a user who holds one of the case's analyses (distribution.CanOpen).
+func CaseAccess(sqlDB *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if sqlDB == nil {
+			context.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		switch err := distribution.CanOpen(context.Request.Context(), sqlDB, currentUser(context), context.Param("caseId")); {
+		case err == nil:
+			context.Next()
+		case errors.Is(err, analyses.ErrCaseNotFound):
+			context.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "case not found"})
+		case errors.Is(err, distribution.ErrNotAssigned):
+			context.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		default:
+			context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "could not check case access"})
+		}
+	}
 }

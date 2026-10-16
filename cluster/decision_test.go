@@ -128,3 +128,58 @@ func TestDeriveEdgeStatus(t *testing.T) {
 		})
 	}
 }
+
+// TestDeriveEdgeStatusRounds: a pair decided in several rounds keeps the outcome of its latest
+// settled round (CONFIRMED or REJECTED); a later round that is pending, disputed or inconclusive
+// does not undo it.
+func TestDeriveEdgeStatusRounds(t *testing.T) {
+	sysInconclusive := ChainEntry{Role: RoleSystem, Decision: DecisionInconclusive}
+	sysPositive := ChainEntry{Role: RoleSystem, Decision: DecisionPositive}
+	review := func(role Role, d Decision) ChainEntry { return ChainEntry{Role: role, Decision: d, Analysis: 7} }
+	comparison := func(role Role, d Decision) ChainEntry { return ChainEntry{Role: role, Decision: d, Analysis: 9} }
+	reviewConfirmed := []ChainEntry{sysInconclusive, review(RoleVerificator, DecisionPositive), review(RoleReviewer, DecisionPositive)}
+	with := func(base []ChainEntry, more ...ChainEntry) []ChainEntry {
+		return append(append([]ChainEntry{}, base...), more...)
+	}
+
+	tests := []struct {
+		name      string
+		chain     []ChainEntry
+		want      EdgeStatus
+		wantRound int64
+	}{
+		{"a review agreeing positive confirms", reviewConfirmed, EdgeStatusConfirmed, 7},
+		{"a comparison under way does not unconfirm it",
+			with(reviewConfirmed, comparison(RoleVerificator, DecisionPositive)), EdgeStatusConfirmed, 7},
+		{"nor a comparison both examiners found inconclusive (no quality)",
+			with(reviewConfirmed, comparison(RoleVerificator, DecisionInconclusive), comparison(RoleReviewer, DecisionInconclusive)), EdgeStatusConfirmed, 7},
+		{"nor a disputed comparison",
+			with(reviewConfirmed, comparison(RoleVerificator, DecisionPositive), comparison(RoleReviewer, DecisionNegative)), EdgeStatusConfirmed, 7},
+		{"a comparison settling negative rejects what the review confirmed",
+			with(reviewConfirmed, comparison(RoleVerificator, DecisionNegative), comparison(RoleReviewer, DecisionNegative)), EdgeStatusRejected, 9},
+		{"a comparison settling positive after a rejecting review confirms",
+			[]ChainEntry{sysInconclusive, review(RoleVerificator, DecisionNegative), review(RoleReviewer, DecisionNegative),
+				comparison(RoleVerificator, DecisionPositive), comparison(RoleReviewer, DecisionPositive)}, EdgeStatusConfirmed, 9},
+		{"an inconsistence settles its own round",
+			[]ChainEntry{sysInconclusive, review(RoleVerificator, DecisionPositive), review(RoleReviewer, DecisionNegative),
+				review(RoleInconsistence, DecisionPositive)}, EdgeStatusConfirmed, 7},
+		{"a SYSTEM POSITIVE stays confirmed while a review is under way",
+			[]ChainEntry{sysPositive, review(RoleVerificator, DecisionNegative)}, EdgeStatusConfirmed, 0},
+		{"until the review settles it",
+			[]ChainEntry{sysPositive, review(RoleVerificator, DecisionNegative), review(RoleReviewer, DecisionNegative)}, EdgeStatusRejected, 7},
+		{"with nothing settled, the latest round's state stands",
+			[]ChainEntry{sysInconclusive, review(RoleVerificator, DecisionPositive), review(RoleReviewer, DecisionNegative),
+				comparison(RoleVerificator, DecisionPositive)}, EdgeStatusPendingReview, 9},
+		{"rows in any order",
+			[]ChainEntry{comparison(RoleReviewer, DecisionNegative), review(RoleReviewer, DecisionPositive), sysInconclusive,
+				comparison(RoleVerificator, DecisionNegative), review(RoleVerificator, DecisionPositive)}, EdgeStatusRejected, 9},
+		{"human rows from before analyses are round 0, with the SYSTEM row",
+			[]ChainEntry{sysPositive, {Role: RoleVerificator, Decision: DecisionNegative}, review(RoleVerificator, DecisionPositive)}, EdgeStatusPendingReview, 7},
+	}
+	for _, tt := range tests {
+		round, got, ok := DecidingRound(tt.chain)
+		if !ok || got != tt.want || round != tt.wantRound {
+			t.Errorf("%s: got %s in round %d (%v); want %s in round %d", tt.name, got, round, ok, tt.want, tt.wantRound)
+		}
+	}
+}

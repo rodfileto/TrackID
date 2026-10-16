@@ -288,13 +288,19 @@ func bestDecision(localTraceIDs []int64, member string, chainsByOwn map[string]m
 		}
 		entries := make([]cluster.ChainEntry, len(chain))
 		for i, r := range chain {
-			entries[i] = cluster.ChainEntry{Role: cluster.Role(r.Role), Decision: cluster.Decision(r.Decision)}
+			entries[i] = cluster.ChainEntry{Role: cluster.Role(r.Role), Decision: cluster.Decision(r.Decision), Analysis: r.CaseAnalysisID.Int64}
 		}
-		status, derived := cluster.DeriveEdgeStatus(entries)
+		round, status, derived := cluster.DecidingRound(entries)
 		if !derived || status != cluster.EdgeStatusConfirmed {
 			continue
 		}
-		candidateRole, candidateDecidedBy, candidateConfidence := decisiveEntry(chain)
+		var current []db.ListBiometricDecisionsForFeaturesRow
+		for i, r := range chain {
+			if entries[i].Counts(round) {
+				current = append(current, r)
+			}
+		}
+		candidateRole, candidateDecidedBy, candidateConfidence := decisiveEntry(current)
 		candidateAutomatic := candidateRole == string(cluster.RoleSystem)
 		if !ok || (!candidateAutomatic && automatic) {
 			role, decidedBy, automatic, confidence, ok = candidateRole, candidateDecidedBy, candidateAutomatic, candidateConfidence, true
