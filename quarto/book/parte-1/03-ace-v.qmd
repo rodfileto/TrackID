@@ -1,0 +1,26 @@
+# ACE-V e a comparação forense {#sec-ace-v}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+Análise, Comparação, Avaliação e Verificação: o método que torna uma comparação defensável. O
+capítulo traça a origem do ACE-V na datiloscopia, sua extensão às faces, a distinção entre revisão
+um-para-muitos e comparação um-para-um, e o papel da verificação independente e cega. Discute também
+as críticas ao método e as respostas a elas, e o efeito do contexto sobre o julgamento do perito.
+:::
+
+## Seções previstas
+
+- Origem: o ACE-V na datiloscopia
+- As quatro etapas e o que cada uma produz
+- Faces: revisão facial (um-para-muitos) e comparação facial (um-para-um)
+- Verificação independente, verificação cega e resolução de inconsistências
+- Viés cognitivo, informação contextual e revelação sequencial
+- Críticas (NAS 2009, PCAST 2016) e estudos de exatidão e reprodutibilidade
+- Uma nota de nomenclatura: o VERIFICATOR do TrackID é o examinador do ACE-V; o REVIEWER é a verificação
+
+::: {.callout-warning appearance="simple"}
+## Fontes candidatas
+
+A conferir com o original antes de citar: [@ashbaugh1999; @fiswg2026review; @fiswgoverview; @nas2009; @pcast2016; @dror2006; @dror2015; @ulery2011; @ulery2012].
+:::

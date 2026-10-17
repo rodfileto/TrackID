@@ -1,0 +1,30 @@
+# Da decisão à inteligência {#sec-decisao-inteligencia}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+Como vínculos confirmados viram clusters, identificações e séries, e como o mapa de ocorrências
+situa essas séries. O capítulo mostra o que muda quando uma decisão é revista -- clusters que se
+fundem ou se dividem sem perder seus números -- e fecha o ciclo aberto no capítulo sobre inteligência
+forense.
+:::
+
+## Seções previstas
+
+- De pares confirmados a clusters
+- Identificação: o cluster que encontra um cadastro
+- Sujeitos desconhecidos e séries
+- O mapa de ocorrências
+- Revisões: fusões, divisões e números estáveis
+
+::: {.callout-tip appearance="simple"}
+## No TrackID
+
+`cluster.Run`, `cluster.Identify`; telas Clusters e Mapa de ocorrências.
+:::
+
+::: {.callout-warning appearance="simple"}
+## Fontes candidatas
+
+A conferir com o original antes de citar: [@ribaux2006].
+:::

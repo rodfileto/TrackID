@@ -1,0 +1,28 @@
+# Avaliando as decisões {#sec-avaliacao}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+As decisões da turma confrontadas com a verdade: por estudante, por pares genuínos e impostores,
+por faixa do algoritmo, e as mudanças que causaram nos clusters. O capítulo compara o acerto
+individual com o coletivo -- o lado empírico do capítulo sobre inteligência coletiva.
+:::
+
+## Seções previstas
+
+- Medidas por decisão: acertos, erros, inconclusivos
+- Por estudante, por tipo de par, por faixa do algoritmo
+- Efeito nos clusters: fusões e divisões causadas
+- Individual versus coletivo
+
+::: {.callout-tip appearance="simple"}
+## No TrackID
+
+`trackid-sim eval`; pontuação por decisão (a construir, bloco D do roteiro do simulador).
+:::
+
+::: {.callout-warning appearance="simple"}
+## Fontes candidatas
+
+A conferir com o original antes de citar: [@phillips2018; @ulery2011].
+:::

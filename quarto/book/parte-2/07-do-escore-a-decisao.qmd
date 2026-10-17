@@ -1,0 +1,22 @@
+# Do escore à decisão {#sec-escore}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+O que o sistema decide sozinho e o que entrega às pessoas. O algoritmo registra decisões do papel
+SYSTEM; versões de limiar definem o que é confirmado automaticamente e o que cai na faixa de revisão.
+O capítulo mostra esse caminho e por que os limiares são dados versionados, não código.
+:::
+
+## Seções previstas
+
+- Decisões SYSTEM: positivo, inconclusivo, nada
+- Versões de limiar e a faixa de revisão
+- O que vai para a revisão humana
+- Por que os limiares pertencem a cada laboratório
+
+::: {.callout-tip appearance="simple"}
+## No TrackID
+
+`biometricmatch`, `match_thresholds`, `cmd/match-threshold`.
+:::

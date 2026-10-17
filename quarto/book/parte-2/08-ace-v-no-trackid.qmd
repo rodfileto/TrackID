@@ -1,0 +1,32 @@
+# ACE-V no TrackID: análises, etapas e laudos {#sec-ace-v-trackid}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+Como o ACE-V se torna fluxo de trabalho. Cada caso passa por análises -- a revisão facial, aberta
+automaticamente, e a comparação facial, aberta sob demanda -- e cada análise por etapas: exame,
+verificação cega, inconsistência e documento. As decisões são rascunhos até serem enviadas; o
+documento recebe número e encerra a análise. O capítulo mostra também como um par decidido em várias
+rodadas mantém o último resultado concluído.
+:::
+
+## Seções previstas
+
+- Análises como rodadas: revisão facial e comparação facial
+- Etapas: exame, verificação (cega), inconsistência, documento
+- Rascunhos, envio e o registro das decisões
+- Documentos: relatório de revisão e laudo de comparação
+- Várias rodadas sobre o mesmo par: o último resultado concluído prevalece
+- Correspondência com o ACE-V e com as diretrizes da FISWG
+
+::: {.callout-tip appearance="simple"}
+## No TrackID
+
+pacotes `analyses`, `examination`; `cluster.DecidingRound`; migrações 017-018; a tela de trabalho da análise.
+:::
+
+::: {.callout-warning appearance="simple"}
+## Fontes candidatas
+
+A conferir com o original antes de citar: [@fiswg2026review].
+:::
