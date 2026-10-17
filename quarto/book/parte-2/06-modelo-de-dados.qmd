@@ -1,0 +1,24 @@
+# O modelo de dados: traços, características e decisões {#sec-modelo}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+Como o TrackID representa o problema: duas hierarquias -- o cadastro (padrão) e o vestígio
+(questionado) -- que se encontram na característica biométrica; toda decisão é tomada entre duas
+características; o registro das decisões é a fonte da verdade, e os clusters são uma visão derivada,
+com números estáveis e citáveis. Ocorrências e lugares situam os casos no tempo e no espaço.
+:::
+
+## Seções previstas
+
+- A característica biométrica como unidade
+- Hierarquia do cadastro e hierarquia do vestígio
+- A decisão entre dois traços e o registro só-de-acréscimo
+- Clusters: derivados, estáveis, citáveis
+- Ocorrências e lugares
+
+::: {.callout-tip appearance="simple"}
+## No TrackID
+
+`MODEL.md` §1-5; tabelas `biometric_decisions`, `clusters`, `occurrences`.
+:::

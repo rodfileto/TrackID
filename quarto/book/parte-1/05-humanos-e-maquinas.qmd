@@ -1,0 +1,23 @@
+# Humanos e máquinas na identificação {#sec-humanos-maquinas}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+O lugar do algoritmo de comparação: o que é um escore e o que ele não é, por que limiares são uma
+escolha de cada laboratório, e como o excesso de confiança na automação afeta quem revisa. O capítulo
+discute quem responde por uma decisão automática e faz a ponte entre os fundamentos e o sistema.
+:::
+
+## Seções previstas
+
+- O escore e seus limites: semelhança não é razão de verossimilhança sem validação
+- Limiares como dado: faixa de revisão e confirmação automática
+- Viés de automação e complacência
+- Desempenho e efeitos demográficos dos algoritmos
+- Responsabilidade pela decisão automática
+
+::: {.callout-warning appearance="simple"}
+## Fontes candidatas
+
+A conferir com o original antes de citar: [@parasuraman2010; @grother2019demographic; @phillips2018].
+:::

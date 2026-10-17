@@ -1,0 +1,24 @@
+# Um mundo sintético com verdade conhecida {#sec-mundo-sintetico}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+Por que o exercício usa dados sintéticos: nenhuma pessoa real, e uma verdade conhecida contra a
+qual avaliar. O capítulo descreve como o mundo é gerado -- população, nomes, cadastros, ocorrências
+no Rio de Janeiro, faces e impressões digitais geradas por nós -- e o que dados sintéticos podem e não
+podem mostrar.
+:::
+
+## Seções previstas
+
+- Por que sintético: privacidade e verdade conhecida
+- População, nomes e cadastros
+- Ocorrências e lugares
+- Faces e impressões digitais geradas
+- O que o sintético não mostra: taxas de erro de campo e viés demográfico
+
+::: {.callout-tip appearance="simple"}
+## No TrackID
+
+`trackid-sim`: `generate`, `load`; `docs/PLAN.md`, `docs/OCCURRENCE.md`, `docs/LICENSES.md`.
+:::

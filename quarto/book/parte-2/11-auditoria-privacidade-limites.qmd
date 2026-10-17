@@ -1,0 +1,29 @@
+# Auditoria, privacidade e limites {#sec-limites}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+O que o sistema guarda, o que protege e o que ainda não faz. Registros só-de-acréscimo dizem quem
+decidiu o quê e quando; dados biométricos pedem cuidado especial sob a LGPD. O capítulo lista também
+os limites atuais: não há razão de verossimilhança, pares entre casos ainda não são distribuídos e as
+análises de impressão digital ainda não foram modeladas.
+:::
+
+## Seções previstas
+
+- Trilha de auditoria: decisões, atribuições, documentos
+- Dados biométricos e a LGPD
+- Limites atuais do sistema
+- Limites de qualquer sistema: o que o software não substitui
+
+::: {.callout-tip appearance="simple"}
+## No TrackID
+
+`MODEL.md`; histórico de atribuições; `biometric_decisions`.
+:::
+
+::: {.callout-warning appearance="simple"}
+## Fontes candidatas
+
+A conferir com o original antes de citar: [@lgpd2018].
+:::

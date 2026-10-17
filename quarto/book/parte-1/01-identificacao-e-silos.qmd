@@ -1,0 +1,25 @@
+# Identificação de pessoas e seus silos {#sec-silos}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+Como a identificação de pessoas costuma se organizar: cadastros civis e criminais de um lado,
+vestígios questionados de outro, e pedidos atendidos caso a caso. Impressões digitais e faces seguem
+lógicas de trabalho separadas, em sistemas que não conversam. O capítulo descreve esse arranjo em
+termos gerais e mostra o que ele impede de ver: o mesmo autor em casos diferentes, o desconhecido que
+reaparece.
+:::
+
+## Seções previstas
+
+- Cadastros (padrões) e vestígios (questionados)
+- O pedido caso a caso e o laudo como produto
+- Modalidades separadas: datiloscopia e reconhecimento facial
+- Sistemas automatizados (AFIS/ABIS) e os arquivos de casos
+- O que os silos escondem: vínculos entre casos, séries, sujeitos desconhecidos
+
+::: {.callout-warning appearance="simple"}
+## Fontes candidatas
+
+A conferir com o original antes de citar: [@nas2009; @ribaux2006].
+:::

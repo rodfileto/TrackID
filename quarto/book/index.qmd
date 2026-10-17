@@ -1,0 +1,19 @@
+# Prefácio {.unnumbered}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+Este livro nasceu de um sistema e de uma aula. O sistema é o TrackID, um software aberto para gerir
+traços biométricos -- impressões digitais e faces -- de modo que cada vínculo entre eles seja uma
+decisão registrada, com autor e método. A aula é um exercício em que estudantes examinam, verificam
+e decidem pares de imagens de um mundo sintético cuja verdade é conhecida, e depois veem o efeito
+coletivo das suas decisões.
+:::
+
+## Seções previstas
+
+- Por que este livro: identificação de pessoas vista como inteligência, e não só como serviço caso a caso
+- A quem se destina: estudantes e profissionais; nenhum conhecimento de programação é pressuposto
+- Como ler: estudantes, em ordem; profissionais, a Parte I e o capítulo sobre ACE-V no TrackID; leitores técnicos, a Parte II com o `MODEL.md` do repositório
+- O que o livro não faz: não descreve procedimentos de nenhuma instituição; apoia-se apenas em fontes públicas e no próprio TrackID
+- Agradecimentos

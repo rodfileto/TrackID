@@ -1,0 +1,31 @@
+# Distribuição e papéis {#sec-distribuicao}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+Quem faz o quê. Perfis separam a administração das contas da competência para examinar, e cada
+examinador declara as modalidades que examina. A distribuição entrega cada etapa a quem tem menos
+trabalho em aberto, nunca duas etapas da mesma análise à mesma pessoa; o acesso a um caso segue as
+etapas que se tem nele. O capítulo explica essas escolhas pela independência, pela responsabilidade e
+pela carga de trabalho.
+:::
+
+## Seções previstas
+
+- Perfis: administrador, super administrador, examinador; modalidades
+- Distribuição automática: quantos, quais, para quem
+- Independência: nunca duas etapas da mesma análise
+- Acesso pelo que se tem atribuído
+- Verificação cega na interface
+
+::: {.callout-tip appearance="simple"}
+## No TrackID
+
+pacotes `auth`, `distribution`; telas Distribuição e Minhas análises.
+:::
+
+::: {.callout-warning appearance="simple"}
+## Fontes candidatas
+
+A conferir com o original antes de citar: [@dror2015].
+:::
