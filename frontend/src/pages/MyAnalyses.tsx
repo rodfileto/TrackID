@@ -47,38 +47,48 @@ export default function MyAnalyses() {
                 </TableRow>
               </TableHeader>
               <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-                {items.map((item) => (
-                  <TableRow key={`${item.analysisId}-${item.step}`}>
-                    <TableCell className={cellClass}>
-                      <Link to={`/cases/${encodeURIComponent(item.caseId)}`} className="font-medium text-brand-500 hover:underline">
-                        {item.caseId}
-                      </Link>
-                      <div className="text-theme-xs text-gray-500">{item.description}</div>
-                    </TableCell>
-                    <TableCell className={cellClass}>
-                      {t(typeKey(item.type))} #{item.sequence}
-                    </TableCell>
-                    <TableCell className={cellClass}>{t(`analyses.step.${item.step}`)}</TableCell>
-                    <TableCell className={cellClass}>
-                      <Badge size="sm" color={stageColor(item.stage, item.status)}>
-                        {item.status === "CLOSED" ? t("analyses.closed") : t(`analyses.stage.${item.stage}`)}
-                      </Badge>
-                      {item.yourTurn && (
-                        <Badge size="sm" color="primary">
-                          {t("analyses.yourTurn")}
+                {items.map((item) => {
+                  // A verification still to do is blind: no case, nothing to lead to it.
+                  const blind = item.yourTurn && item.step === "REVIEWER";
+                  return (
+                    <TableRow key={`${item.analysisId}-${item.step}`}>
+                      <TableCell className={cellClass}>
+                        {blind ? (
+                          <span className="text-gray-500">{t("analyses.blindCase")}</span>
+                        ) : (
+                          <>
+                            <Link to={`/cases/${encodeURIComponent(item.caseId)}`} className="font-medium text-brand-500 hover:underline">
+                              {item.caseId}
+                            </Link>
+                            <div className="text-theme-xs text-gray-500">{item.description}</div>
+                          </>
+                        )}
+                      </TableCell>
+                      <TableCell className={cellClass}>
+                        {blind ? t(typeKey(item.type)) : `${t(typeKey(item.type))} #${item.sequence}`}
+                      </TableCell>
+                      <TableCell className={cellClass}>{t(`analyses.step.${item.step}`)}</TableCell>
+                      <TableCell className={cellClass}>
+                        <Badge size="sm" color={stageColor(item.stage, item.status)}>
+                          {item.status === "CLOSED" ? t("analyses.closed") : t(`analyses.stage.${item.stage}`)}
                         </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className={cellClass}>
-                      <Link
-                        to={`/cases/${encodeURIComponent(item.caseId)}/analyses/${item.analysisId}`}
-                        className="text-sm font-medium text-brand-500 hover:underline"
-                      >
-                        {item.yourTurn ? t("analyses.work") : t("analyses.view")}
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                        {item.yourTurn && (
+                          <Badge size="sm" color="primary">
+                            {t("analyses.yourTurn")}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className={cellClass}>
+                        <Link
+                          to={`/cases/${encodeURIComponent(item.caseId)}/analyses/${item.analysisId}`}
+                          className="text-sm font-medium text-brand-500 hover:underline"
+                        >
+                          {item.yourTurn ? t("analyses.work") : t("analyses.view")}
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
