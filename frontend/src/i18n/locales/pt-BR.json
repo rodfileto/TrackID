@@ -638,7 +638,7 @@
     "issueReport": "Emitir documento",
     "issueConfirm": "Emitir o documento? Isso encerra a análise.",
     "issued": "Documento {{number}} emitido.",
-    "blindHint": "Verificação cega: as decisões do primeiro perito ficam ocultas até você enviar.",
+    "blindHint": "Verificação cega: decida apenas pelas imagens. O caso, o escore do sistema e as decisões do primeiro perito ficam ocultos.",
     "inconsistenceHint": "Estes são os pares em que os dois primeiros peritos discordaram. Sua decisão os resolve.",
     "readOnlyHint": "Você está consultando esta análise; não é sua vez de decidir.",
     "noPairs": "Não há pares a decidir nesta análise.",
@@ -651,7 +651,12 @@
     "caseFace": "Face {{traceId}} do caso {{caseId}}",
     "notesPlaceholder": "Observações (opcional): semelhanças, diferenças, qualidade da imagem…",
     "loadError": "Não foi possível carregar",
-    "saveError": "Não foi possível salvar"
+    "saveError": "Não foi possível salvar",
+    "blindTitle": "Verificação cega",
+    "blindQuestioned": "Imagem questionada",
+    "blindReference": "Imagem padrão",
+    "blindCase": "Verificação cega",
+    "backToMyAnalyses": "Voltar às minhas análises"
   },
   "distribution": {
     "title": "Distribuição",
