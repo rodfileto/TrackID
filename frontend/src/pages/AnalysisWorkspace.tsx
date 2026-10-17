@@ -35,16 +35,20 @@ function describe(face: TraceLink, t: (key: string, opts?: Record<string, unknow
 }
 
 /** One pair: the two faces side by side, what the matcher said, the decisions the viewer may see,
- * and -- when it is their step -- their own decision and notes. */
+ * and -- when it is their step -- their own decision and notes. Blind (verification) shows only the
+ * two images and the decision: no score, no matcher decision, nothing naming who or which case is
+ * on them. */
 function PairCard({
   pair,
   index,
   editable,
+  blind,
   onDecide,
 }: {
   pair: PairView;
   index: number;
   editable: boolean;
+  blind: boolean;
   onDecide: (pair: PairView, decision: DecisionValue, notes: string) => Promise<void>;
 }) {
   const { t } = useTranslation();
@@ -74,17 +78,17 @@ function PairCard({
         <span className="text-sm font-medium text-gray-800 dark:text-white/90">
           {t("analyses.pairNumber", { n: index + 1 })}
         </span>
-        {pair.score !== undefined && (
+        {!blind && pair.score !== undefined && (
           <Badge size="sm" color="light">
             {t("analyses.score", { score: pair.score.toFixed(3) })}
           </Badge>
         )}
-        {pair.systemDecision && (
+        {!blind && pair.systemDecision && (
           <Badge size="sm" color={decisionColor(pair.systemDecision)}>
             {t("analyses.system")}: {t(`analyses.decision.${pair.systemDecision}`)}
           </Badge>
         )}
-        {pair.disputed && (
+        {!blind && pair.disputed && (
           <Badge size="sm" color="warning">
             {t("analyses.disputed")}
           </Badge>
@@ -92,11 +96,11 @@ function PairCard({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <FaceImage face={pair.questioned} label={describe(pair.questioned, t)} />
-        <FaceImage face={pair.counterpart} label={describe(pair.counterpart, t)} />
+        <FaceImage face={pair.questioned} label={blind ? t("analyses.blindQuestioned") : describe(pair.questioned, t)} />
+        <FaceImage face={pair.counterpart} label={blind ? t("analyses.blindReference") : describe(pair.counterpart, t)} />
       </div>
 
-      {pair.decisions.length > 0 && (
+      {!blind && pair.decisions.length > 0 && (
         <ul className="mt-3 space-y-1">
           {pair.decisions.map((d) => (
             <li key={d.step} className="flex flex-wrap items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
@@ -218,7 +222,12 @@ export default function AnalysisWorkspace() {
     }
   }
 
-  const title = analysis
+  // Blind verification: the verifier sees only the images and makes the decision -- no case, no
+  // links to it or its clusters, no scores (FISWG: verification without contextual information).
+  const blind = worksheet?.yourStep === "REVIEWER";
+  const title = blind
+    ? t("analyses.blindTitle")
+    : analysis
     ? t("analyses.workspaceTitle", { type: t(typeKey(analysis.type)), sequence: analysis.sequence, caseId })
     : t("analyses.workspaceTitleShort", { caseId });
   const editable = !!worksheet?.yourStep;
@@ -234,9 +243,15 @@ export default function AnalysisWorkspace() {
       <PageBreadcrumb pageTitle={title} />
 
       <div className="mb-6">
-        <Link to={`/cases/${encodeURIComponent(caseId)}`} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400">
-          ← {t("analyses.backToCase", { caseId })}
-        </Link>
+        {blind ? (
+          <Link to="/analyses" className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400">
+            ← {t("analyses.backToMyAnalyses")}
+          </Link>
+        ) : (
+          <Link to={`/cases/${encodeURIComponent(caseId)}`} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400">
+            ← {t("analyses.backToCase", { caseId })}
+          </Link>
+        )}
       </div>
 
       {error && <p className="text-sm text-error-500">{error}</p>}
@@ -253,7 +268,7 @@ export default function AnalysisWorkspace() {
                   {t("analyses.yourStep", { step: t(`analyses.step.${worksheet.yourStep}`) })}
                 </Badge>
               )}
-              {analysis?.report.number && (
+              {!blind && analysis?.report.number && (
                 <Badge size="sm" color="success">
                   {t("analyses.reportNumber", { number: analysis.report.number })}
                 </Badge>
@@ -291,7 +306,7 @@ export default function AnalysisWorkspace() {
             <p className="text-sm text-gray-500 dark:text-gray-400">{t("analyses.noPairs")}</p>
           ) : (
             worksheet.pairs.map((pair, index) => (
-              <PairCard key={pairKey(pair)} pair={pair} index={index} editable={editable} onDecide={onDecide} />
+              <PairCard key={pairKey(pair)} pair={pair} index={index} editable={editable} blind={blind} onDecide={onDecide} />
             ))
           )}
         </div>

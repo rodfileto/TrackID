@@ -638,7 +638,7 @@
     "issueReport": "Issue report",
     "issueConfirm": "Issue the report? This closes the analysis.",
     "issued": "Report {{number}} issued.",
-    "blindHint": "Blind verification: the first examiner’s decisions are hidden until you submit.",
+    "blindHint": "Blind verification: decide from the images alone. The case, the matcher’s score and the first examiner’s decisions are hidden.",
     "inconsistenceHint": "These are the pairs the first two examiners decided differently. Your decision settles them.",
     "readOnlyHint": "You are viewing this analysis; it is not your turn to decide.",
     "noPairs": "There are no pairs to decide in this analysis.",
@@ -651,7 +651,12 @@
     "caseFace": "Face {{traceId}} of case {{caseId}}",
     "notesPlaceholder": "Notes (optional): similarities, dissimilarities, image quality…",
     "loadError": "Could not load",
-    "saveError": "Could not save"
+    "saveError": "Could not save",
+    "blindTitle": "Blind verification",
+    "blindQuestioned": "Questioned image",
+    "blindReference": "Reference image",
+    "blindCase": "Blind verification",
+    "backToMyAnalyses": "Back to my analyses"
   },
   "distribution": {
     "title": "Distribution",
