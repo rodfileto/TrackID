@@ -4,6 +4,8 @@ Each subfolder here is a self-contained Quarto project (its own `_quarto.yml`), 
 are added as sibling folders rather than growing a single shared project.
 
 - `technical-report/` — TrackID technical report.
+- `book/` — the book on forensic intelligence, ACE-V and collective intelligence (pt-BR; plan in
+  `book-plan.md`). Renders to HTML and PDF in `book/_book/`.
 
 ## Rendering
 

@@ -1,0 +1,21 @@
+# Instalação do ambiente {#sec-instalacao}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+Como preparar o TrackID e o trackid-sim para o exercício: requisitos, o ambiente de
+desenvolvimento, a geração e a carga do mundo sintético e a criação dos usuários.
+:::
+
+## Seções previstas
+
+- Requisitos
+- TrackID: infraestrutura, API, worker e interface
+- trackid-sim: gerar e carregar um mundo
+- Usuários do exercício
+
+::: {.callout-tip appearance="simple"}
+## No TrackID
+
+`scripts/start_dev.sh`; `trackid-sim generate`, `load`, `users`.
+:::
