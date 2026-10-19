@@ -1,5 +1,5 @@
 import { apiBaseUrl, requestApi } from "./api";
-import { getToken, type UserProfile } from "./auth";
+import { getToken } from "./auth";
 import type { TraceLink } from "./cases";
 
 export type AnalysisType = "FACIAL_REVIEW" | "FACIAL_COMPARISON";
@@ -228,7 +228,3 @@ export async function assignAnalysis(analysisId: number, userId: number | null):
   });
 }
 
-/** Admin: every account, to pick an examiner from. */
-export async function listUsers(): Promise<UserProfile[]> {
-  return requestApi<UserProfile[]>("/admin/users", { headers: authHeaders() });
-}

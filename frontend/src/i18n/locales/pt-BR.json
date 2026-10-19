@@ -1,4 +1,12 @@
 {
+  "access": {
+    "deniedTitle": "Indisponível para o seu perfil",
+    "denied": {
+      "coordinator": "A distribuição de análises é para coordenadores.",
+      "intelligence": "Esta página é para analistas de inteligência.",
+      "persons": "A busca de pessoas é para peritos e analistas de inteligência."
+    }
+  },
   "common": {
     "logo": "Logotipo",
     "user": "Usuário",

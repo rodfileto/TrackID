@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useCurrentUser } from "../context/CurrentUserContext";
 import PageMeta from "../components/common/PageMeta";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import ComponentCard from "../components/common/ComponentCard";
@@ -35,7 +36,8 @@ function modalityColor(modality: string): "info" | "warning" {
 
 /** The "N facial / N fingerprint" badges next to a person result -- how many
  * criminal cases (see PersonSearchResult.caseCounts) that person is linked
- * to, broken down by case type. Renders nothing when the person has none. */
+ * to, broken down by case type. Renders nothing when the person has none -- and for anyone but
+ * an analyst, whom the server sends no counts. */
 function CaseCountBadges({ caseCounts }: { caseCounts: ModalityCount[] | null }) {
   const { t } = useTranslation();
   if (!caseCounts || caseCounts.length === 0) {
@@ -443,6 +445,8 @@ function FaceSearch() {
 export default function PersonLookup() {
   const { t } = useTranslation();
   const [mode, setMode] = useState<SearchMode>("name");
+  // Face search returns cases and clusters: analysts only.
+  const { isIntelligence } = useCurrentUser();
 
   return (
     <>
@@ -457,7 +461,7 @@ export default function PersonLookup() {
         desc={t("personLookup.subtitle")}
       >
         <div className="flex gap-2">
-          {tabs.map((tab) => (
+          {tabs.filter((tab) => tab.mode === "name" || isIntelligence).map((tab) => (
             <button
               key={tab.mode}
               type="button"
@@ -469,7 +473,7 @@ export default function PersonLookup() {
           ))}
         </div>
 
-        {mode === "name" ? <NameSearch /> : <FaceSearch />}
+        {mode === "name" || !isIntelligence ? <NameSearch /> : <FaceSearch />}
       </ComponentCard>
     </>
   );

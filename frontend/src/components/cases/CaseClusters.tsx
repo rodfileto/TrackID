@@ -119,7 +119,7 @@ function LinkRow({
   onAnalysisOpened?: () => void;
 }) {
   const { t } = useTranslation();
-  const { isAdmin } = useCurrentUser();
+  const { isCoordinator } = useCurrentUser();
   return (
     <li className="flex items-center gap-3 px-3 py-2.5">
       <div className="shrink-0">
@@ -177,7 +177,7 @@ function LinkRow({
 
       <div className="flex shrink-0 flex-col items-end">
         <DecisionBadge link={link} />
-        {isAdmin && !link.direct && (
+        {isCoordinator && !link.direct && (
           <RequestComparison caseId={caseId} link={link} onOpened={onAnalysisOpened} />
         )}
       </div>

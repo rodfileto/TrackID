@@ -34,6 +34,8 @@ func main() {
 	username := flag.String("username", "", "username, which names the user on every decision they sign and never changes")
 	examinesFingerprint := flag.Bool("examines-fingerprint", false, "also let the account sign fingerprint decisions")
 	examinesFacial := flag.Bool("examines-facial", false, "also let the account sign facial decisions")
+	intelligence := flag.Bool("intelligence", false, "also make the account an intelligence analyst (every case and person, read-only)")
+	coordinator := flag.Bool("coordinator", false, "also let the account distribute analyses and open comparisons")
 	flag.Parse()
 
 	if *matricula == "" {
@@ -52,6 +54,8 @@ func main() {
 			AccountRole:         auth.AccountRoleSuperAdmin,
 			ExaminesFingerprint: existing.Profile.ExaminesFingerprint || *examinesFingerprint,
 			ExaminesFacial:      existing.Profile.ExaminesFacial || *examinesFacial,
+			IntelligenceAnalyst: existing.Profile.IntelligenceAnalyst || *intelligence,
+			Coordinator:         existing.Profile.Coordinator || *coordinator,
 			IsActive:            true,
 		})
 		cmdutil.Fatal(err)
@@ -68,7 +72,8 @@ func main() {
 	cmdutil.Fatal(err)
 	user, err := repo.Create(ctx, auth.NewUser{
 		Nome: *nome, UltimoNome: *ultimoNome, Matricula: *matricula, Cargo: *cargo, Username: *username, Password: password,
-		Access: auth.Access{AccountRole: auth.AccountRoleSuperAdmin, ExaminesFingerprint: *examinesFingerprint, ExaminesFacial: *examinesFacial, IsActive: true},
+		Access: auth.Access{AccountRole: auth.AccountRoleSuperAdmin, ExaminesFingerprint: *examinesFingerprint, ExaminesFacial: *examinesFacial,
+			IntelligenceAnalyst: *intelligence, Coordinator: *coordinator, IsActive: true},
 	}, os.Getenv("EMAIL_DOMAIN"))
 	cmdutil.Fatal(err)
 	log.Printf("created %s %s (matricula %s, username %s)", user.AccountRole, user.Nome, user.Matricula, user.Username)
