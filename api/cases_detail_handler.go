@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/cases"
 	"github.com/rodfileto/trackid/distribution"
 	"github.com/rodfileto/trackid/storage"
@@ -92,9 +91,9 @@ func ListCaseClustersHandler(db *sql.DB) gin.HandlerFunc {
 
 // ListCaseIdentityDecisionsHandler returns, for each codified face of a case, every enrolled
 // identity decided for it at or above the review threshold, with its state (see
-// cases.ListCaseIdentityDecisions). A user who is the case's blind verifier right now -- holding
-// the REVIEWER step of one of its analyses while it is at VERIFICATION -- gets none ("blind":
-// true): the list carries the first examiner's outcomes.
+// cases.ListCaseIdentityDecisions). A user working one of the case's analyses blind right now
+// (distribution.BlindIn) gets none ("blind": true): the list carries the other examiners'
+// outcomes. CaseAccess already keeps a non-admin from this route then; an admin can be blind too.
 func ListCaseIdentityDecisionsHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		if sqlDB == nil {
@@ -124,20 +123,10 @@ func ListCaseIdentityDecisionsHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	}
 }
 
-// verifyingBlind reports whether the signed-in user is the blind verifier of one of the case's
-// open analyses right now: they hold its REVIEWER step and it is at VERIFICATION.
+// verifyingBlind reports whether the signed-in user works one of the case's open analyses blind
+// right now (distribution.BlindIn).
 func verifyingBlind(context *gin.Context, sqlDB *sql.DB, caseID string) (bool, error) {
-	mine, err := distribution.AnalysesOf(context.Request.Context(), sqlDB, currentUser(context).ID)
-	if err != nil {
-		return false, err
-	}
-	for _, a := range mine {
-		if a.CaseID == caseID && a.Status == analyses.StatusOpen && a.Stage == analyses.StageVerification &&
-			a.Step == analyses.StepReviewer {
-			return true, nil
-		}
-	}
-	return false, nil
+	return distribution.BlindIn(context.Request.Context(), sqlDB, currentUser(context).ID, caseID)
 }
 
 type compareFacesRequest struct {

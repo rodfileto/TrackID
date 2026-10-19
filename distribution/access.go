@@ -30,3 +30,20 @@ func CanOpen(ctx context.Context, sqlDB *sql.DB, user auth.UserProfile, caseID s
 	}
 	return ErrNotAssigned
 }
+
+// BlindIn reports whether userID works one of the case's open analyses blind right now
+// (analyses.BlindWork). Until they submit, the case shows them only that work: anything else on
+// the case -- its analyses and examiners, its clusters, its decisions -- could tell them what
+// others concluded.
+func BlindIn(ctx context.Context, sqlDB *sql.DB, userID int64, caseID string) (bool, error) {
+	mine, err := AnalysesOf(ctx, sqlDB, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, a := range mine {
+		if a.CaseID == caseID && a.Blind {
+			return true, nil
+		}
+	}
+	return false, nil
+}

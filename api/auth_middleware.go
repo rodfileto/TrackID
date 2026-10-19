@@ -101,16 +101,38 @@ func currentUser(context *gin.Context) auth.UserProfile {
 	return profile
 }
 
+// blindRoutes are the cases/:caseId routes left to a user who works one of the case's analyses
+// blind (distribution.BlindIn): the workspace and its pairs' images.
+var blindRoutes = map[string]bool{
+	"/api/cases/:caseId/analyses/:analysisId/pairs":       true,
+	"/api/cases/:caseId/analyses/:analysisId/decisions":   true,
+	"/api/cases/:caseId/analyses/:analysisId/submit":      true,
+	"/api/cases/:caseId/analyses/:analysisId/pairs/image": true,
+}
+
 // CaseAccess guards every route under cases/:caseId: it runs after ActiveUser and lets through
-// an admin, or a user who holds one of the case's analyses (distribution.CanOpen).
+// an admin, or a user who holds one of the case's analyses (distribution.CanOpen) -- only to
+// blindRoutes while they work one of them blind.
 func CaseAccess(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		if sqlDB == nil {
 			context.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
 			return
 		}
-		switch err := distribution.CanOpen(context.Request.Context(), sqlDB, currentUser(context), context.Param("caseId")); {
+		user, caseID := currentUser(context), context.Param("caseId")
+		switch err := distribution.CanOpen(context.Request.Context(), sqlDB, user, caseID); {
 		case err == nil:
+			if !user.AccountRole.IsAdmin() && !blindRoutes[context.FullPath()] {
+				blind, err := distribution.BlindIn(context.Request.Context(), sqlDB, user.ID, caseID)
+				if err != nil {
+					context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "could not check case access"})
+					return
+				}
+				if blind {
+					context.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "blind work: only the analysis is open to you until you submit it"})
+					return
+				}
+			}
 			context.Next()
 		case errors.Is(err, analyses.ErrCaseNotFound):
 			context.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "case not found"})
