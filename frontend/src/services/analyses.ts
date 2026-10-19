@@ -1,4 +1,4 @@
-import { requestApi } from "./api";
+import { apiBaseUrl, requestApi } from "./api";
 import { getToken, type UserProfile } from "./auth";
 import type { TraceLink } from "./cases";
 
@@ -69,6 +69,8 @@ export interface Worksheet {
   status: "OPEN" | "CLOSED";
   stage: AnalysisStage;
   yourStep?: AnalysisStep;
+  /** The viewer works it blind (verification, inconsistence): the server sends only the images. */
+  blind: boolean;
   pairs: PairView[];
   drafted: number;
 }
@@ -84,6 +86,8 @@ export interface AssignedAnalysis {
   stage: AnalysisStage;
   step: AnalysisStep;
   yourTurn: boolean;
+  /** Worked blind: no case type or description is sent. */
+  blind: boolean;
   method: string;
   assignedAt: string;
 }
@@ -142,6 +146,20 @@ export async function openAnalysis(
     headers: authHeaders(),
     body: JSON.stringify({ type, pairs }),
   });
+}
+
+/** One face of the analysis's pairs, by its feature id, as an object URL (the caller revokes it).
+ * The server cuts a case's face to its box, so the workspace never needs the evidence itself. */
+export async function getPairImageUrl(caseId: string, analysisId: number, featureId: string): Promise<string> {
+  const response = await fetch(
+    `${apiBaseUrl}${analysisPath(caseId, analysisId)}/pairs/image?feature=${encodeURIComponent(featureId)}`,
+    { headers: authHeaders() },
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Could not load the image");
+  }
+  return URL.createObjectURL(await response.blob());
 }
 
 export async function getWorksheet(caseId: string, analysisId: number): Promise<Worksheet> {

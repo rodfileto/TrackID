@@ -97,6 +97,20 @@ func (s Stage) ActiveStep() Step {
 	return StepVerificator
 }
 
+// BlindWork reports whether an open analysis at stage is worked blind by its step's examiner:
+// the second examiner at VERIFICATION and the third at INCONSISTENCE decide from the two images
+// alone -- no earlier decision, no one's name, no matcher score or decision, nothing of the case --
+// so neither the first examiner's conclusion nor anyone's authority can lead them.
+func BlindWork(stage Stage, step Step) bool {
+	return step != StepVerificator && stage.ActiveStep() == step
+}
+
+// BlindTo reports whether userID works the analysis blind right now (BlindWork).
+func (t Target) BlindTo(userID int64) bool {
+	step, ok := t.StepOf(userID)
+	return ok && t.Status == StatusOpen && BlindWork(t.Stage, step)
+}
+
 // Errors returned to callers.
 var (
 	ErrInvalidType      = errors.New("invalid analysis type")

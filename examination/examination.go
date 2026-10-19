@@ -8,8 +8,10 @@
 // examined: pairs across cases are not distributed yet. At the INCONSISTENCE stage the pairs are
 // only those the first two examiners decided differently.
 //
-// Verification is blind: while the analysis is at VERIFICATION, its REVIEWER sees no decision of
-// the first examiner. Drafts are only shown to the examiner whose step they are.
+// Verification and inconsistence are blind (analyses.BlindWork): while the analysis is at their
+// stage, the REVIEWER and the INCONSISTENCE examiner see the two images of each pair and nothing
+// else -- no earlier decision or who made it, no matcher score or decision, no names or case
+// description. Drafts are only shown to the examiner whose step they are.
 package examination
 
 import (
@@ -90,6 +92,7 @@ type Worksheet struct {
 	Status     string         `json:"status"`
 	Stage      analyses.Stage `json:"stage"`
 	YourStep   analyses.Step  `json:"yourStep,omitempty"`
+	Blind      bool           `json:"blind"` // the viewer works it blind (analyses.BlindWork): images only
 	Pairs      []PairView     `json:"pairs"`
 	Drafted    int            `json:"drafted"`
 }
@@ -234,9 +237,10 @@ func GetWorksheet(ctx context.Context, sqlDB *sql.DB, user auth.UserProfile, ana
 			drafts[Pair{r.FeatureAID, r.FeatureBID}] = Decision{Step: step, Decision: r.Decision, Notes: r.Notes.String}
 		}
 	}
-	// Blind verification: the second examiner does not see the first one's decisions.
-	viewerStep, _ := t.StepOf(user.ID)
-	blind := t.Stage == analyses.StageVerification && viewerStep == analyses.StepReviewer
+	// Blind work (analyses.BlindWork): the second and third examiners see the two images and
+	// nothing else.
+	blind := t.BlindTo(user.ID)
+	ws.Blind = blind
 
 	ids := make([]string, 0, 2*len(pairs))
 	for _, c := range pairs {
@@ -252,21 +256,32 @@ func GetWorksheet(ctx context.Context, sqlDB *sql.DB, user auth.UserProfile, ana
 			questioned, counterpart = counterpart, questioned
 		}
 		v := PairView{Pair: c.pair, Questioned: described[questioned], Counterpart: described[counterpart],
-			SystemDecision: c.decision, Score: c.score, Decisions: []Decision{}, Disputed: disputed(decided[c.pair]) && !blind}
+			SystemDecision: c.decision, Score: c.score, Decisions: []Decision{}, Disputed: disputed(decided[c.pair])}
+		v.Questioned.FeatureID, v.Counterpart.FeatureID = questioned, counterpart // what PairImage takes
 		if d, ok := drafts[c.pair]; ok {
 			v.Draft = &d
 			ws.Drafted++
 		}
+		if blind {
+			v.Questioned, v.Counterpart = imageOnly(v.Questioned), imageOnly(v.Counterpart)
+			v.SystemDecision, v.Score, v.Disputed = "", nil, false
+			ws.Pairs = append(ws.Pairs, v)
+			continue
+		}
 		for _, step := range analyses.Steps {
-			d, ok := decided[c.pair][step]
-			if !ok || (blind && step == analyses.StepVerificator) {
-				continue
+			if d, ok := decided[c.pair][step]; ok {
+				v.Decisions = append(v.Decisions, d)
 			}
-			v.Decisions = append(v.Decisions, d)
 		}
 		ws.Pairs = append(ws.Pairs, v)
 	}
 	return ws, nil
+}
+
+// imageOnly keeps of a feature what a blind examiner needs to show it -- its kind, and the feature
+// id PairImage serves its image by -- and nothing that names the person or describes the case.
+func imageOnly(l cases.TraceLink) cases.TraceLink {
+	return cases.TraceLink{Kind: l.Kind, FeatureID: l.FeatureID}
 }
 
 // SaveDraft records or replaces user's draft decision on one pair of the step they are working.
