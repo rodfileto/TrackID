@@ -376,8 +376,19 @@ func HandleSyncFace(sqlDB *sql.DB, driver neo4j.DriverWithContext) func(context.
 // feature_embeddings rows not yet matched (marking them matched as it goes),
 // and cluster.Run's reconcile is a pure function of the current
 // confirmed-decision set, so back-to-back calls with nothing new to do just
-// redo the same (cheap, index-backed) reads and write nothing.
+// redo the same (cheap, index-backed) reads and write nothing. It repeats
+// until no decision or embedding arrived while it ran (cluster.Settle), since
+// those arrivals' own enqueues were rejected as duplicates of this run.
 func SyncFace(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) error {
+	unmatched := func(ctx context.Context) (int64, error) {
+		return db.New(sqlDB).CountUnmatchedFeatureEmbeddings(ctx, EmbeddingType)
+	}
+	return cluster.Settle(ctx, sqlDB, unmatched, func(ctx context.Context) error {
+		return syncFaceOnce(ctx, sqlDB, driver)
+	})
+}
+
+func syncFaceOnce(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) error {
 	version, err := biometricmatch.CurrentBand(ctx, sqlDB, EmbeddingType, DefaultFaceBand)
 	if err != nil {
 		return fmt.Errorf("embedding: sync face match: %w", err)
