@@ -4,7 +4,8 @@
     "denied": {
       "coordinator": "A distribuição de análises é para coordenadores.",
       "intelligence": "Esta página é para analistas de inteligência.",
-      "persons": "A busca de pessoas é para peritos e analistas de inteligência."
+      "persons": "A busca de pessoas é para peritos e analistas de inteligência.",
+      "admin": "O gerenciamento de contas é para administradores."
     }
   },
   "common": {
@@ -41,7 +42,8 @@
     "occurrenceMap": "Mapa de ocorrências",
     "newOccurrence": "Nova ocorrência",
     "myAnalyses": "Minhas análises",
-    "distribution": "Distribuição"
+    "distribution": "Distribuição",
+    "users": "Usuários"
   },
   "userMenu": {
     "editProfile": "Editar perfil",
@@ -719,6 +721,55 @@
       "modalities": "Examina",
       "openWork": "Em aberto",
       "step": "Etapa"
+    }
+  },
+  "users": {
+    "title": "Usuários",
+    "desc": "Contas, perfis e capacidades",
+    "accounts": "Contas",
+    "accountsDesc": "{{count}} contas, incluindo as desativadas. As alterações são salvas na hora.",
+    "filter": "Filtrar por nome, matrícula ou usuário",
+    "new": "Nova conta",
+    "newDesc": "O usuário, se vazio, é a matrícula. Entregue a senha ao titular.",
+    "none": "Nenhuma conta encontrada.",
+    "you": "você",
+    "loadError": "Não foi possível carregar as contas.",
+    "saveError": "Não foi possível salvar.",
+    "saved": "{{username}} atualizado.",
+    "created": "{{username}} criado.",
+    "passwordSet": "Senha de {{username}} substituída.",
+    "resetPassword": "Redefinir senha",
+    "resetDesc": "Uma nova senha para {{username}}; a anterior deixa de valer.",
+    "setPassword": "Definir senha",
+    "generate": "Gerar",
+    "cancel": "Cancelar",
+    "create": "Criar",
+    "passwordHelp": "Mínimo de 8 caracteres. Ela só aparece aqui: copie antes de salvar.",
+    "flagsHelp": "Peritos assinam decisões nas suas biometrias; inteligência lê todos os casos e páginas de pessoas; coordenadores distribuem análises. Um administrador só gerencia contas, e só um superadministrador gerencia administradores.",
+    "columns": {
+      "name": "Nome",
+      "matricula": "Matrícula",
+      "role": "Perfil",
+      "active": "Ativa"
+    },
+    "fields": {
+      "nome": "Nome",
+      "ultimo_nome": "Sobrenome",
+      "matricula": "Matrícula",
+      "cargo": "Cargo",
+      "username": "Usuário",
+      "password": "Senha"
+    },
+    "roles": {
+      "USER": "Usuário",
+      "ADMIN": "Administrador",
+      "SUPER_ADMIN": "Superadministrador"
+    },
+    "flags": {
+      "examines_facial": "Facial",
+      "examines_fingerprint": "Papiloscopia",
+      "intelligence_analyst": "Inteligência",
+      "coordinator": "Coordenador"
     }
   }
 }

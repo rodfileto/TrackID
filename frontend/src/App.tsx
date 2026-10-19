@@ -17,6 +17,7 @@ import Clusters from "./pages/Clusters";
 import AnalysisWorkspace from "./pages/AnalysisWorkspace";
 import MyAnalyses from "./pages/MyAnalyses";
 import Distribution from "./pages/Distribution";
+import Users from "./pages/Users";
 // A lazy page whose code fails to load -- the tab predates a new build or a dev-server
 // restart, so the chunk it asks for no longer exists -- reloads once to fetch the current
 // version, instead of leaving a blank screen. The flag stops a reload loop when the failure
@@ -64,6 +65,9 @@ export default function App() {
               <Route path="/analyses" element={<MyAnalyses />} />
               <Route element={<RequireCapability need="coordinator" />}>
                 <Route path="/admin/distribution" element={<Distribution />} />
+              </Route>
+              <Route element={<RequireCapability need="admin" />}>
+                <Route path="/admin/users" element={<Users />} />
               </Route>
               <Route element={<RequireCapability need="persons" />}>
                 <Route path="/persons" element={<PersonLookup />} />

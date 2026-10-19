@@ -112,6 +112,23 @@ func (r *Repository) UpdateAccess(ctx context.Context, id int64, access Access) 
 	return profileFrom(db.GetUserByIDRow(row)), nil
 }
 
+// SetPassword replaces a user's password (an admin resetting it). Callers check the change with
+// CheckAccountChange first; it returns sql.ErrNoRows for an unknown id.
+func (r *Repository) SetPassword(ctx context.Context, id int64, password string) error {
+	if len(password) < MinPasswordLength {
+		return ErrPasswordTooShort
+	}
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	n, err := r.queries.SetUserPassword(ctx, db.SetUserPasswordParams{ID: id, PasswordHash: string(passwordHash)})
+	if err == nil && n == 0 {
+		err = sql.ErrNoRows
+	}
+	return err
+}
+
 // NewUser is what creating an account takes, from an admin (POST /api/admin/users) or from
 // cmd/create-superuser.
 type NewUser struct {

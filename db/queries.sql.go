@@ -4513,6 +4513,23 @@ func (q *Queries) SetCaseCodificationFile(ctx context.Context, arg SetCaseCodifi
 	return err
 }
 
+const setUserPassword = `-- name: SetUserPassword :execrows
+UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1
+`
+
+type SetUserPasswordParams struct {
+	ID           int64  `db:"id" json:"id"`
+	PasswordHash string `db:"password_hash" json:"password_hash"`
+}
+
+func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setUserPassword, arg.ID, arg.PasswordHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateBiometricCaseDescription = `-- name: UpdateBiometricCaseDescription :exec
 UPDATE biometric_cases SET description = $2, updated_at = NOW()
 WHERE id = $1

@@ -26,6 +26,9 @@ SET account_role = $2, examines_fingerprint = $3, examines_facial = $4, intellig
 WHERE id = $1
 RETURNING id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active;
 
+-- name: SetUserPassword :execrows
+UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1;
+
 -- name: UpsertBiometricCase :one
 -- (xmax = 0) tells a real insert apart from a row that already existed: RowsAffected() is
 -- 1 either way, so callers that need to report insert-vs-update counts need this instead.
