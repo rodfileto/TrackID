@@ -33,3 +33,6 @@ papers/**/*.tex
 
 # scripts/start_dev.sh runtime state (pids/logs of the locally-run processes).
 .run/
+
+# Local data snapshots (scripts/backup_data.sh): database dumps and the object store mirror.
+backups/
