@@ -1189,3 +1189,14 @@ UPDATE case_analyses SET status = 'CLOSED', closed_at = NOW() WHERE id = $1 AND 
 -- name: LockReportNumbering :exec
 -- Serializes report numbering (transaction-scoped): MaxReportNumber + 1 is then safe.
 SELECT pg_advisory_xact_lock(7461002);
+
+-- name: LatestHumanDecisionID :one
+-- The newest human decision (VERIFICATOR, REVIEWER, INCONSISTENCE): a sync's mark of the
+-- examiners' decisions it has reconciled clusters with (cluster.Settle).
+SELECT COALESCE(MAX(id), 0)::bigint AS id FROM biometric_decisions WHERE role <> 'SYSTEM';
+
+-- name: CountUnmatchedFeatureEmbeddings :one
+SELECT COUNT(*) FROM feature_embeddings WHERE embedding_type = $1 AND matched_at IS NULL;
+
+-- name: CountUnmatchedBiometricTemplates :one
+SELECT COUNT(*) FROM biometric_templates WHERE template_type = $1 AND matched_at IS NULL;
