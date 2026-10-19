@@ -59,14 +59,14 @@ export interface CaseCodification {
   evidenceFilename: string;
 }
 
-/** One other biometric sample sharing a case cluster -- another case's
- * trace, or an enrolled person's KNOWN feature. decisionRole/automatic/
- * decidedBy describe the CONFIRMED decision chain directly linking one of
- * the cluster's local traces to this one, when there was a direct pair to
- * point to -- decisionRole is empty for a member reached only transitively
- * through other cluster members. automatic is true when decisionRole is
- * "SYSTEM" (an algorithmic match with no human confirmation yet), false for
- * a human-reviewed one (VERIFICATOR/REVIEWER/INCONSISTENCE).
+/** One other biometric sample sharing a case's REVIEWED cluster -- another
+ * case's trace, or an enrolled person's KNOWN feature -- see cases.TraceLink.
+ * Every link is confirmed by examiners. direct says how: true when a reviewed
+ * decision links it to one of the case's own traces (fromTraceId), described
+ * by decisionRole/decidedBy/confidence; false when it is reached through
+ * other samples (path, in order from fromTraceId), every link of the way
+ * reviewed. featureId/fromFeatureId are the graph feature ids to request a
+ * direct comparison of an indirect link with.
  *
  * thumbnailFileId/thumbnailBox (QUESTIONED) say how to render this link as a
  * thumbnail via CaseTraceThumbnail, scoped to *this* link's own caseId, not
@@ -87,13 +87,27 @@ export interface TraceLink {
   thumbnailFileId?: number;
   thumbnailBox?: ThumbnailBox;
 
+  featureId?: string;
+  direct: boolean;
+  fromTraceId?: number;
+  fromFeatureId?: string;
+  path?: PathStep[];
+
   decisionRole?: string;
-  automatic: boolean;
   decidedBy?: string;
   confidence?: number;
 }
 
-/** One biometric cluster (see cases.CaseCluster) that at least one of a
+/** One sample an indirect TraceLink is reached through -- see cases.PathStep. */
+export interface PathStep {
+  kind: "KNOWN" | "QUESTIONED";
+  caseId?: string;
+  traceId?: number;
+  personId?: string;
+  name?: string;
+}
+
+/** One REVIEWED biometric cluster (see cases.CaseCluster) that at least one of a
  * case's codified traces resolved into -- traces of the same case sharing a
  * cluster are merged into localTraceIds instead of repeating the cluster
  * once per trace. */
@@ -274,6 +288,38 @@ export async function listCaseClusters(caseId: string): Promise<CaseCluster[]> {
     headers: authHeaders(),
   });
   return clusters;
+}
+
+/** One enrolled identity a face of the case reached at or above the review threshold, with the
+ * case's decision on it -- see cases.IdentityDecision. status: PENDING (the matcher's candidate,
+ * not settled by examiners), CONFIRMED, EXCLUDED, INCONCLUSIVE or DISPUTED. */
+export interface IdentityDecision {
+  personId: string;
+  name: string;
+  identityFileId: number;
+  contentType?: string;
+  featureId: string;
+  score?: number;
+  status: "PENDING" | "CONFIRMED" | "EXCLUDED" | "INCONCLUSIVE" | "DISPUTED";
+  decisionRole?: string;
+  decidedBy?: string;
+}
+
+/** One codified face of the case and its identity decisions, best score first. */
+export interface CaseFaceIdentities {
+  traceId: number;
+  identities: IdentityDecision[];
+}
+
+/** The case's decisions on enrolled identities, per face. blind is true when the signed-in user
+ * is the case's blind verifier right now: no faces are sent. */
+export async function listCaseIdentityDecisions(
+  caseId: string,
+): Promise<{ blind: boolean; faces: CaseFaceIdentities[] }> {
+  return requestApi<{ blind: boolean; faces: CaseFaceIdentities[] }>(
+    `/cases/${encodeURIComponent(caseId)}/identity-decisions`,
+    { headers: authHeaders() },
+  );
 }
 
 export async function addEvidence(

@@ -9,6 +9,7 @@ import (
 	"image"
 	"strings"
 
+	"github.com/rodfileto/trackid/cluster"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/embedding"
 )
@@ -85,7 +86,8 @@ func caseCountsByPerson(ctx context.Context, q *db.Queries, personIDs []string) 
 	if len(personIDs) == 0 {
 		return nil, nil
 	}
-	rows, err := q.CountPersonCasesByModality(ctx, personIDs)
+	rows, err := q.CountPersonCasesByModality(ctx, db.CountPersonCasesByModalityParams{
+		Basis: string(cluster.BasisReviewed), PersonIds: personIDs})
 	if err != nil {
 		return nil, err
 	}

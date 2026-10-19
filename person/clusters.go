@@ -16,7 +16,7 @@ import (
 // populates the enrollment fields (PersonID..ContentType), "QUESTIONED"
 // populates the case-evidence fields (CaseID..ThumbnailBox). A cluster on a
 // person's own profile always has at least one KNOWN member (this person);
-// any QUESTIONED members are crime-scene evidence a CONFIRMED decision has
+// any QUESTIONED members are crime-scene evidence a reviewed decision has
 // matched to them.
 type ClusterMember struct {
 	Kind string `json:"kind"`
@@ -42,7 +42,7 @@ type ClusterMember struct {
 
 // Cluster is one biometric cluster a person's enrolled (KNOWN) features have
 // resolved into: a group of same-modality biometric samples -- enrollment
-// records and/or crime-scene evidence -- that a confirmed decision chain has
+// records and/or crime-scene evidence -- that reviewed decision chains have
 // linked together (see cluster.Run). See MODEL.md section 4.
 //
 // HasCaseEvidence is true when at least one member is QUESTIONED -- this
@@ -58,7 +58,7 @@ type Cluster struct {
 }
 
 // ListClusters returns every biometric cluster resolved to the given
-// person -- one entry per cluster a CONFIRMED decision has placed one of the
+// person -- one entry per REVIEWED cluster a reviewed decision has placed one of the
 // person's enrolled features into. A person with documents/registers of more
 // than one modality can resolve into several clusters; most resolve into at
 // most one per modality. Returns ErrNotFound if no person row matches.

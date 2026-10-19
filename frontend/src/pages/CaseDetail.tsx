@@ -69,6 +69,8 @@ export default function CaseDetailPage() {
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Bumped when an analysis is opened from the case's clusters, so the analyses card reloads.
+  const [analysesKey, setAnalysesKey] = useState(0);
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -223,13 +225,14 @@ export default function CaseDetailPage() {
 
           <CaseOccurrenceCard caseId={detail.caseId} />
 
-          <CaseAnalysesCard caseId={detail.caseId} />
+          <CaseAnalysesCard caseId={detail.caseId} refreshKey={analysesKey} />
 
           {detail.modality === "FACIAL" ? (
             <FacialCaseWorkspace
               caseId={caseId ?? ""}
               evidences={evidences}
               onEvidencesChanged={load}
+              onAnalysisOpened={() => setAnalysesKey((k) => k + 1)}
             />
           ) : (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">

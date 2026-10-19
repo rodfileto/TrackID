@@ -28,8 +28,10 @@ func main() {
 	if !*commit {
 		stats, err := cluster.Plan(ctx, db)
 		cmdutil.Fatal(err)
-		log.Printf("dry run: %d cluster(s) over %d evidence item(s); %d would be created, %d merged",
+		log.Printf("dry run: %d automatic cluster(s) over %d evidence item(s); %d would be created, %d merged",
 			stats.Clusters, stats.Evidence, stats.Created, stats.Merged)
+		log.Printf("dry run: %d reviewed cluster(s); %d would be created, %d merged",
+			stats.Reviewed.Clusters, stats.Reviewed.Created, stats.Reviewed.Merged)
 		return
 	}
 
@@ -38,6 +40,8 @@ func main() {
 
 	stats, err := cluster.Run(ctx, db, driver)
 	cmdutil.Fatal(err)
-	log.Printf("clustering complete: %d cluster(s) over %d evidence item(s); %d created, %d merged",
+	log.Printf("clustering complete: %d automatic cluster(s) over %d evidence item(s); %d created, %d merged",
 		stats.Clusters, stats.Evidence, stats.Created, stats.Merged)
+	log.Printf("clustering complete: %d reviewed cluster(s); %d created, %d merged",
+		stats.Reviewed.Clusters, stats.Reviewed.Created, stats.Reviewed.Merged)
 }

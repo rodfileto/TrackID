@@ -14,6 +14,8 @@ análises de impressão digital ainda não foram modeladas.
 - Trilha de auditoria: decisões, atribuições, documentos
 - Dados biométricos e a LGPD
 - Limites atuais do sistema
+- O que a página do caso esconde, e por quê: nenhuma correspondência automática, nem uma
+  contagem, chega ao perito do caso (informação de contexto, ver o capítulo sobre ACE-V)
 - Limites de qualquer sistema: o que o software não substitui
 
 ::: {.callout-tip appearance="simple"}

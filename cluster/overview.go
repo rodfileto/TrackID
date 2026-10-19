@@ -52,11 +52,13 @@ type ListOverviewResult struct {
 	TotalPages int
 }
 
-// ListOverview lists every persisted cluster (cluster.Run's output), ordered
+// ListOverview lists every AUTOMATIC cluster (cluster.Run's output, see
+// BasisAutomatic), ordered
 // by how many distinct biometric cases it touches (descending) -- the
 // clusters most relevant to active investigations surface first. Filtered
 // and paginated at the database level; safe to call on every request even
-// against a large cluster table.
+// against a large cluster table. It is an intelligence view, so it reads the
+// automatic layer, SYSTEM matches included; forensic views read REVIEWED.
 func ListOverview(ctx context.Context, sqlDB *sql.DB, params ListOverviewParams) (ListOverviewResult, error) {
 	if sqlDB == nil {
 		return ListOverviewResult{}, fmt.Errorf("database is not configured")
@@ -94,10 +96,11 @@ func ListOverview(ctx context.Context, sqlDB *sql.DB, params ListOverviewParams)
 				COUNT(*) FILTER (WHERE cm.feature_id NOT LIKE 'TRACE:%') AS known_count
 			FROM clusters c
 			JOIN cluster_members cm ON cm.cluster_id = c.id
+			WHERE c.basis = $1
 			GROUP BY c.id
 		)
 		SELECT COUNT(*) FROM agg ` + having
-	if err := sqlDB.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+	if err := sqlDB.QueryRowContext(ctx, countQuery, string(BasisAutomatic)).Scan(&total); err != nil {
 		return ListOverviewResult{}, fmt.Errorf("cluster: count overview: %w", err)
 	}
 
@@ -115,6 +118,7 @@ func ListOverview(ctx context.Context, sqlDB *sql.DB, params ListOverviewParams)
 			LEFT JOIN case_traces ct ON cm.feature_id = 'TRACE:' || ct.id || '#feature'
 			LEFT JOIN case_evidences ce ON ce.id = ct.evidence_id
 			LEFT JOIN biometric_cases bc ON bc.id = ce.biometric_case_id
+			WHERE c.basis = $3
 			GROUP BY c.id
 		)
 		SELECT cluster_id, modality, created_at, member_count, case_count, known_count
@@ -122,7 +126,7 @@ func ListOverview(ctx context.Context, sqlDB *sql.DB, params ListOverviewParams)
 		ORDER BY case_count DESC, cluster_id DESC
 		LIMIT $1 OFFSET $2`
 
-	rows, err := sqlDB.QueryContext(ctx, listQuery, pageSize, (page-1)*pageSize)
+	rows, err := sqlDB.QueryContext(ctx, listQuery, pageSize, (page-1)*pageSize, string(BasisAutomatic))
 	if err != nil {
 		return ListOverviewResult{}, fmt.Errorf("cluster: list overview: %w", err)
 	}

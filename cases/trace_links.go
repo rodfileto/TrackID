@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/rodfileto/trackid/cluster"
@@ -11,10 +12,12 @@ import (
 	"github.com/rodfileto/trackid/graph"
 )
 
-// CaseCluster is one biometric cluster (see person.Cluster) that at least one
-// of a case's codified traces resolved into. Traces of the same case that
-// share a cluster are merged into a single entry (LocalTraceIDs) rather than
-// repeating the same cluster once per trace.
+// CaseCluster is one REVIEWED biometric cluster (see cluster.BasisReviewed and
+// person.Cluster) that at least one of a case's codified traces resolved into:
+// its members are linked only by decisions people confirmed, never by a SYSTEM
+// match alone. Traces of the same case that share a cluster are merged into a
+// single entry (LocalTraceIDs) rather than repeating the same cluster once per
+// trace.
 type CaseCluster struct {
 	ClusterID     int64       `json:"clusterId"`
 	MemberCount   int         `json:"memberCount"`
@@ -34,13 +37,16 @@ type ThumbnailBox struct {
 }
 
 // TraceLink is one other biometric sample sharing a case cluster -- another
-// case's trace, or an enrolled person's KNOWN feature. DecisionRole/
-// Automatic/DecidedBy describe the CONFIRMED biometric_decisions chain
-// directly linking one of the cluster's local traces to this one, when there
-// is a direct pair to point to (the most human-reviewed one, if the cluster's
-// local traces disagree on which pair to show); a member reached only
-// transitively through other cluster members leaves those fields blank
-// rather than overclaiming a link that was never itself decided.
+// case's trace, or an enrolled person's KNOWN feature.
+//
+// In ListCaseClusters every link is reviewed (cluster.Reviewed). Direct says
+// how: true when a reviewed decision links the sample to one of the case's own
+// traces (FromTraceID), described by DecisionRole/DecidedBy/Confidence; false
+// when it is reached through other samples, every link of the way reviewed --
+// Path names them, in order from FromTraceID, without the sample itself.
+// FeatureID and FromFeatureID are the graph feature ids of the sample and of
+// the case's trace its link starts from, so a caller can ask for a direct
+// comparison of an indirect link (analyses.Open).
 //
 // ThumbnailFileID/ThumbnailBox (QUESTIONED) and IdentityFileID/ContentType
 // (KNOWN) tell a caller how to render this link as a thumbnail -- same
@@ -66,19 +72,37 @@ type TraceLink struct {
 	ThumbnailFileID int64         `json:"thumbnailFileId,omitempty"`
 	ThumbnailBox    *ThumbnailBox `json:"thumbnailBox,omitempty"`
 
-	DecisionRole string   `json:"decisionRole,omitempty"` // SYSTEM | VERIFICATOR | REVIEWER | INCONSISTENCE
-	Automatic    bool     `json:"automatic"`
+	FeatureID     string     `json:"featureId,omitempty"`
+	Direct        bool       `json:"direct"`
+	FromTraceID   int64      `json:"fromTraceId,omitempty"`
+	FromFeatureID string     `json:"fromFeatureId,omitempty"`
+	Path          []PathStep `json:"path,omitempty"`
+
+	DecisionRole string   `json:"decisionRole,omitempty"` // VERIFICATOR | REVIEWER | INCONSISTENCE
 	DecidedBy    string   `json:"decidedBy,omitempty"`
 	Confidence   *float64 `json:"confidence,omitempty"`
 }
 
-// ListCaseClusters resolves the distinct biometric clusters a case's codified
-// traces have resolved into, and the other cases/persons each cluster is
-// CONFIRMED-linked to -- pointing out whether that link is automatic (a
-// SYSTEM decision alone) or was human-reviewed (a VERIFICATOR/REVIEWER/
-// INCONSISTENCE decision in the chain). A trace with no biometricfeature or
-// no match yet contributes no entry -- only clusters actually reached are
-// returned, in the order their first trace appears in ListCaseCodifications.
+// PathStep is one sample an indirect TraceLink is reached through: another
+// case's trace (CaseID, TraceID) or an enrolled person (PersonID, Name).
+type PathStep struct {
+	Kind     string `json:"kind"` // "KNOWN" | "QUESTIONED"
+	CaseID   string `json:"caseId,omitempty"`
+	TraceID  int64  `json:"traceId,omitempty"`
+	PersonID string `json:"personId,omitempty"`
+	Name     string `json:"name,omitempty"`
+}
+
+// ListCaseClusters resolves the distinct REVIEWED clusters a case's codified
+// traces have resolved into, and the other cases/persons each one links to.
+// The case page is where forensic analysis happens, so it reads only the
+// REVIEWED layer: an automatic (SYSTEM-only) match never reaches it, not even
+// as a count. Each link is direct (a reviewed decision with one of the case's
+// traces) or indirect (a path of reviewed decisions), see TraceLink. Only
+// clusters holding at least one reviewed pair are returned: a face alone in its
+// reviewed cluster (an unknown subject no examiner has linked yet), or with no
+// biometricfeature, contributes no entry. They come in the order their first
+// trace appears in ListCaseCodifications, each with its direct links first.
 func ListCaseClusters(ctx context.Context, sqlDB *sql.DB, caseID string) ([]CaseCluster, error) {
 	if sqlDB == nil {
 		return nil, fmt.Errorf("cases: nil db")
@@ -112,7 +136,8 @@ func ListCaseClusters(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Case
 
 	q := db.New(sqlDB)
 
-	membershipRows, err := q.ListClusterMembershipsForFeatureIDs(ctx, featureIDs)
+	membershipRows, err := q.ListClusterMembershipsForFeatureIDs(ctx, db.ListClusterMembershipsForFeatureIDsParams{
+		Basis: string(cluster.BasisReviewed), FeatureIds: featureIDs})
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +176,7 @@ func ListCaseClusters(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Case
 	}
 
 	membersByCluster := map[int64][]string{}
+	clusterOfMember := map[string]int64{}
 	var memberIDs []string
 	memberRows, err := q.ListClusterMembersByClusterIDs(ctx, clusterIDs)
 	if err != nil {
@@ -158,6 +184,7 @@ func ListCaseClusters(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Case
 	}
 	for _, m := range memberRows {
 		membersByCluster[m.ClusterID] = append(membersByCluster[m.ClusterID], m.FeatureID)
+		clusterOfMember[m.FeatureID] = m.ClusterID
 		memberIDs = append(memberIDs, m.FeatureID)
 	}
 	described, err := DescribeFeatures(ctx, q, memberIDs)
@@ -165,49 +192,78 @@ func ListCaseClusters(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Case
 		return nil, err
 	}
 
-	decisionRows, err := q.ListBiometricDecisionsForFeatures(ctx, featureIDs)
+	// Every decision touching a member, seen from the member's side:
+	// chains[own][counterpart] is that pair's chain. A pair joins the reviewed
+	// graph when people confirmed it and both sides share the cluster.
+	decisionRows, err := q.ListBiometricDecisionsForFeatures(ctx, memberIDs)
 	if err != nil {
 		return nil, err
 	}
-	// chainsByOwn[ownFeature][counterpartFeature] is that pair's decision
-	// chain, from our own trace's point of view.
-	chainsByOwn := map[string]map[string][]db.ListBiometricDecisionsForFeaturesRow{}
+	chains := map[string]map[string][]db.ListBiometricDecisionsForFeaturesRow{}
 	for _, r := range decisionRows {
-		if chainsByOwn[r.FeatureID] == nil {
-			chainsByOwn[r.FeatureID] = map[string][]db.ListBiometricDecisionsForFeaturesRow{}
+		if chains[r.FeatureID] == nil {
+			chains[r.FeatureID] = map[string][]db.ListBiometricDecisionsForFeaturesRow{}
 		}
-		chainsByOwn[r.FeatureID][r.CounterpartID] = append(chainsByOwn[r.FeatureID][r.CounterpartID], r)
+		chains[r.FeatureID][r.CounterpartID] = append(chains[r.FeatureID][r.CounterpartID], r)
+	}
+	reviewedEdges := map[string][]string{}
+	for own, byCounterpart := range chains {
+		for counterpart, chain := range byCounterpart {
+			if clusterOfMember[counterpart] != clusterOfMember[own] || !cluster.Reviewed(chainEntries(chain)) {
+				continue
+			}
+			reviewedEdges[own] = append(reviewedEdges[own], counterpart)
+		}
+	}
+	for own := range reviewedEdges {
+		slices.Sort(reviewedEdges[own]) // a stable path when several are equally short
 	}
 
 	out := make([]CaseCluster, 0, len(clusterOrder))
 	for _, clusterID := range clusterOrder {
 		localTraceIDs := localTraces[clusterID]
-		localFeatures := make(map[string]bool, len(localTraceIDs))
-		for _, tid := range localTraceIDs {
-			localFeatures[graph.QuestionedFeatureID(tid)] = true
+		localFeatures := make([]string, len(localTraceIDs))
+		isLocal := make(map[string]bool, len(localTraceIDs))
+		for i, tid := range localTraceIDs {
+			localFeatures[i] = graph.QuestionedFeatureID(tid)
+			isLocal[localFeatures[i]] = true
 		}
 		members := membersByCluster[clusterID]
+		paths := shortestPaths(localFeatures, reviewedEdges)
 
 		var links []TraceLink
 		for _, m := range members {
-			if localFeatures[m] {
+			if isLocal[m] {
 				continue // one of this case's own faces, listed via LocalTraceIDs instead
 			}
-
 			link, ok := described[m]
 			if !ok {
 				continue // e.g. the trace's evidence was excluded/deleted since clustering
 			}
-
-			if role, decidedBy, automatic, confidence, ok := bestDecision(localTraceIDs, m, chainsByOwn); ok {
-				link.DecisionRole = role
-				link.Automatic = automatic
-				link.DecidedBy = decidedBy
-				link.Confidence = confidence
+			path, reached := paths[m]
+			if !reached {
+				// Clusters lag behind decisions until the next cluster.Run: a member no
+				// reviewed path reaches any more is left out rather than shown unbacked.
+				continue
 			}
-
+			link.FeatureID = m
+			link.FromTraceID = traceOfFeature[path[0]]
+			link.FromFeatureID = path[0]
+			if len(path) == 2 {
+				link.Direct = true
+				link.DecisionRole, link.DecidedBy, link.Confidence = reviewedDecision(chains[path[0]][m])
+			} else {
+				for _, step := range path[1 : len(path)-1] {
+					link.Path = append(link.Path, pathStep(described[step]))
+				}
+			}
 			links = append(links, link)
 		}
+		if len(links) == 0 && len(localTraceIDs) < 2 {
+			continue // a face no reviewed decision links to anything: nothing to show
+		}
+		// Direct links first, then indirect ones from the shortest path up.
+		slices.SortStableFunc(links, func(a, b TraceLink) int { return len(a.Path) - len(b.Path) })
 
 		out = append(out, CaseCluster{
 			ClusterID:     clusterID,
@@ -219,40 +275,65 @@ func ListCaseClusters(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Case
 	return out, nil
 }
 
-// bestDecision picks the most informative CONFIRMED decision linking member
-// to any of localTraceIDs -- a human-reviewed one (VERIFICATOR/REVIEWER/
-// INCONSISTENCE) over an automatic SYSTEM one, since several of this case's
-// own traces can each carry their own direct pair with member and disagree on
-// how thoroughly it was reviewed. ok is false when none of them has a direct
-// CONFIRMED chain with member (it's only reachable transitively).
-func bestDecision(localTraceIDs []int64, member string, chainsByOwn map[string]map[string][]db.ListBiometricDecisionsForFeaturesRow) (role, decidedBy string, automatic bool, confidence *float64, ok bool) {
-	for _, tid := range localTraceIDs {
-		own := graph.QuestionedFeatureID(tid)
-		chain := chainsByOwn[own][member]
-		if len(chain) == 0 {
+// shortestPaths runs a breadth-first search over edges from every one of sources at once and
+// returns, for each feature reached, a shortest path to it: its first element is the source it
+// starts from, its last the feature itself. Sources are tried in order and each node's neighbours
+// in edges order, so equally short paths resolve the same way every time. Sources map to
+// themselves (a path of one).
+func shortestPaths(sources []string, edges map[string][]string) map[string][]string {
+	paths := make(map[string][]string, len(sources))
+	queue := make([]string, 0, len(sources))
+	for _, s := range sources {
+		if _, seen := paths[s]; seen {
 			continue
 		}
-		entries := make([]cluster.ChainEntry, len(chain))
-		for i, r := range chain {
-			entries[i] = cluster.ChainEntry{Role: cluster.Role(r.Role), Decision: cluster.Decision(r.Decision), Analysis: r.CaseAnalysisID.Int64}
-		}
-		round, status, derived := cluster.DecidingRound(entries)
-		if !derived || status != cluster.EdgeStatusConfirmed {
-			continue
-		}
-		var current []db.ListBiometricDecisionsForFeaturesRow
-		for i, r := range chain {
-			if entries[i].Counts(round) {
-				current = append(current, r)
+		paths[s] = []string{s}
+		queue = append(queue, s)
+	}
+	for len(queue) > 0 {
+		node := queue[0]
+		queue = queue[1:]
+		for _, next := range edges[node] {
+			if _, seen := paths[next]; seen {
+				continue
 			}
-		}
-		candidateRole, candidateDecidedBy, candidateConfidence := decisiveEntry(current)
-		candidateAutomatic := candidateRole == string(cluster.RoleSystem)
-		if !ok || (!candidateAutomatic && automatic) {
-			role, decidedBy, automatic, confidence, ok = candidateRole, candidateDecidedBy, candidateAutomatic, candidateConfidence, true
+			paths[next] = append(append(make([]string, 0, len(paths[node])+1), paths[node]...), next)
+			queue = append(queue, next)
 		}
 	}
-	return
+	return paths
+}
+
+// chainEntries converts one pair's rows into the chain cluster.Reviewed and
+// cluster.DecidingRound read.
+func chainEntries(chain []db.ListBiometricDecisionsForFeaturesRow) []cluster.ChainEntry {
+	entries := make([]cluster.ChainEntry, len(chain))
+	for i, r := range chain {
+		entries[i] = cluster.ChainEntry{Role: cluster.Role(r.Role), Decision: cluster.Decision(r.Decision), Analysis: r.CaseAnalysisID.Int64}
+	}
+	return entries
+}
+
+// reviewedDecision describes the decision that settled a reviewed pair: the decisive row of its
+// deciding round (decisiveEntry).
+func reviewedDecision(chain []db.ListBiometricDecisionsForFeaturesRow) (role, decidedBy string, confidence *float64) {
+	entries := chainEntries(chain)
+	round, _, ok := cluster.DecidingRound(entries)
+	if !ok {
+		return "", "", nil
+	}
+	var current []db.ListBiometricDecisionsForFeaturesRow
+	for i, r := range chain {
+		if entries[i].Counts(round) {
+			current = append(current, r)
+		}
+	}
+	return decisiveEntry(current)
+}
+
+// pathStep names a described sample as a step of an indirect link's path.
+func pathStep(l TraceLink) PathStep {
+	return PathStep{Kind: l.Kind, CaseID: l.CaseID, TraceID: l.TraceID, PersonID: l.PersonID, Name: l.Name}
 }
 
 // decisiveEntry picks the row that settled a CONFIRMED chain, same priority

@@ -227,12 +227,14 @@ type Cluster struct {
 	Modality  string    `db:"modality" json:"modality"`
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
+	Basis     string    `db:"basis" json:"basis"`
 }
 
 type ClusterMember struct {
 	ClusterID int64     `db:"cluster_id" json:"cluster_id"`
 	FeatureID string    `db:"feature_id" json:"feature_id"`
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	Basis     string    `db:"basis" json:"basis"`
 }
 
 type ClusterMerge struct {
@@ -242,6 +244,7 @@ type ClusterMerge struct {
 	MergedAt      time.Time      `db:"merged_at" json:"merged_at"`
 	MergedBy      sql.NullString `db:"merged_by" json:"merged_by"`
 	Reason        sql.NullString `db:"reason" json:"reason"`
+	Basis         string         `db:"basis" json:"basis"`
 }
 
 type CurrentAnalysisAssignment struct {

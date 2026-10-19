@@ -231,6 +231,40 @@ any analysis yet.
   feature id keeps the id; the rest get new ids).
 - A singleton (one feature, no match) is still an unknown-subject cluster.
 
+### 4.1 Two layers: automatic and reviewed
+
+Clusters come in two layers (`clusters.basis`, migration 019), reconciled the same way by
+`cluster.Run`, each with its own stable ids and merge history:
+
+| Layer | Built from | Read by |
+|---|---|---|
+| `AUTOMATIC` | every CONFIRMED pair, a SYSTEM match alone included | intelligence views: the Clusters page and graph (`cluster.ListOverview`, `cluster.BuildGraph`) |
+| `REVIEWED` | pairs people confirmed (`cluster.Reviewed`): VERIFICATOR and REVIEWER agreeing, or INCONSISTENCE | forensic views: a case's clusters (`cases.ListCaseClusters`), a person's profile, cases and search badges (`person`) |
+
+- A SYSTEM confirmation stays automatic even while a human round on the pair is pending (that
+  round does not undo it, see `cluster.DecidingRound`), so it never reaches a forensic view.
+- Every REVIEWED cluster sits inside one AUTOMATIC cluster; a feature is in one cluster per
+  layer (`cluster_members` is unique per `(basis, feature_id)`, and a composite FK keeps a
+  member's basis equal to its cluster's).
+- The case page lists each reviewed cluster's other samples as **direct** (a reviewed decision
+  with one of the case's traces, naming who settled it) or **indirect** (a path of reviewed
+  decisions, shown with the samples it runs through). An admin can open a direct comparison of
+  an indirect link to an enrolled person; pairs across cases are not distributed yet.
+- The case page's clusters panel shows only reviewed clusters holding at least one reviewed
+  pair (no panel at all otherwise), and nothing of the automatic layer: other cases' faces
+  reached only by SYSTEM matches never show, not even as a count.
+- Separately, the case page lists the case's **identity decisions**
+  (`cases.ListCaseIdentityDecisions`): for each face, every enrolled identity the matcher reached
+  at or above the review threshold (it writes nothing below it) or that examiners decided in a
+  comparison, with its state -- awaiting review, confirmed, excluded, inconclusive or disputed.
+  It is the review's own record, so a SYSTEM POSITIVE shows as awaiting review, never as
+  confirmed. The case's blind verifier (REVIEWER step, analysis at VERIFICATION) gets none.
+- `cluster.Identify` writes `IDENTIFIED_AS` for both layers, each from the decisions that build it.
+
+This separates the two uses of a match instead of changing the decision rule: a SYSTEM POSITIVE
+is still CONFIRMED, so matching stays fast for intelligence, while forensic work rests only on
+reviewed links.
+
 ## 5. Neo4j mapping
 
 ```
@@ -246,7 +280,7 @@ any analysis yet.
   -[:HAS_FEATURE]->
 (:Object:BiometricFeature {featureId, featureType, provenance: "QUESTIONED"})
 
-(:Object:BiometricFeature) -[:IN_CLUSTER]-> (:Object:BiometricCluster {clusterId})
+(:Object:BiometricFeature) -[:IN_CLUSTER]-> (:Object:BiometricCluster {clusterId, basis})  // one per layer
 (:Object:BiometricCluster) -[:IDENTIFIED_AS {confidence, identifiedBy, identifiedAt}]-> (:Person)
 (:Person) -[:SAME_AS {method, status, confidence}]-> (:Person)   // person↔person merge (later)
 ```
@@ -301,8 +335,8 @@ Done (core), end to end:
   constraints).
 - **Decisions and clustering** (`cluster` package): `cluster.DeriveEdgeStatus`
   (`cluster/decision.go`, unit-tested) turns a pair's `biometric_decisions` chain into
-  PENDING_REVIEW/CONFIRMED/DISPUTED/REJECTED; `cluster.Run` derives clusters from CONFIRMED
-  pairs; `cluster.Identify` derives `IDENTIFIED_AS` from a CONFIRMED decision linking a
+  PENDING_REVIEW/CONFIRMED/DISPUTED/REJECTED; `cluster.Run` derives AUTOMATIC clusters from
+  CONFIRMED pairs and REVIEWED clusters from the pairs people confirmed (section 4.1); `cluster.Identify` derives `IDENTIFIED_AS` from a CONFIRMED decision linking a
   QUESTIONED feature to a KNOWN one.
 - **Commands**: `sync-graph`, `sync-identity`, `cluster-biometrics`, `identify` (all
   dry-run by default, `-commit` to write).

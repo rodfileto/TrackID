@@ -74,6 +74,7 @@
     "title": "Biometric Clusters",
     "metaDescription": "Every biometric cluster resolved so far, filterable and ordered by how many cases it touches",
     "subtitle": "Resolved biometric clusters (see MODEL.md section 4), ordered by how many distinct criminal cases each one touches.",
+    "automaticNote": "An intelligence view: it includes automatic matches no examiner has reviewed yet. A case's page shows only links confirmed by examiners.",
     "loadError": "Could not load clusters",
     "identifiedOnly": "Identified only",
     "count_one": "{{count}} cluster",
@@ -226,9 +227,15 @@
     "browse": "Browse files"
   },
   "caseClusters": {
-    "linkedViaCluster": "Linked via cluster",
-    "automaticMatch": "Automatic match",
     "confirmedBy": "Confirmed by {{name}}",
+    "indirect": "Indirect",
+    "via": "via {{path}}",
+    "indirectHint": "Reached through other samples; every link on the way was confirmed by examiners.",
+    "requestComparison": "Request direct comparison",
+    "comparisonOpened": "Comparison opened. It now waits for distribution.",
+    "comparisonError": "Could not open the comparison",
+    "crossCaseHint": "A direct comparison with another case's face cannot be requested yet.",
+    "reviewedOnly": "Only links confirmed by examiners are shown.",
     "anExaminer": "an examiner",
     "enrolledIdentity": "Enrolled identity",
     "samples_one": "{{count}} biometric sample",
@@ -239,10 +246,25 @@
     "identifiedPersons": "Identified persons",
     "notResolved": "Not yet resolved to an enrolled identity.",
     "title": "Biometric clusters",
-    "noMatches": "None of this case's faces have matched anything yet.",
     "reached_one": "{{count}} cluster reached by this case's faces.",
-    "reached_other": "{{count}} clusters reached by this case's faces.",
-    "emptyHint": "Codify a face above, then run matching to see its biometric cluster here."
+    "reached_other": "{{count}} clusters reached by this case's faces."
+  },
+  "caseIdentities": {
+    "title": "Identity decisions",
+    "desc": "Every enrolled identity a face of this case reached at or above the review threshold, and its decision in this case.",
+    "face": "Face {{label}}",
+    "faceTrace": "Trace {{id}}",
+    "noCandidates": "No identity reached the review threshold.",
+    "score": "Matcher score {{score}}%",
+    "decidedBy": "by {{name}}",
+    "loadError": "Could not load the identity decisions",
+    "status": {
+      "PENDING": "Awaiting review",
+      "CONFIRMED": "Confirmed",
+      "EXCLUDED": "Excluded",
+      "INCONCLUSIVE": "Inconclusive",
+      "DISPUTED": "Disputed"
+    }
   },
   "markTraces": {
     "loadError": "Could not load evidence",
