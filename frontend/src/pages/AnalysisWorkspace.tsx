@@ -35,16 +35,20 @@ function describe(face: TraceLink, t: (key: string, opts?: Record<string, unknow
 }
 
 /** One pair: the two faces side by side, what the matcher said, the decisions the viewer may see,
- * and -- when it is their step -- their own decision and notes. Blind (verification) shows only the
+ * and -- when it is their step -- their own decision and notes. Blind (verification, inconsistence) shows only the
  * two images and the decision: no score, no matcher decision, nothing naming who or which case is
  * on them. */
 function PairCard({
+  caseId,
+  analysisId,
   pair,
   index,
   editable,
   blind,
   onDecide,
 }: {
+  caseId: string;
+  analysisId: number;
   pair: PairView;
   index: number;
   editable: boolean;
@@ -96,8 +100,18 @@ function PairCard({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <FaceImage face={pair.questioned} label={blind ? t("analyses.blindQuestioned") : describe(pair.questioned, t)} />
-        <FaceImage face={pair.counterpart} label={blind ? t("analyses.blindReference") : describe(pair.counterpart, t)} />
+        <FaceImage
+          caseId={caseId}
+          analysisId={analysisId}
+          face={pair.questioned}
+          label={blind ? t("analyses.blindQuestioned") : describe(pair.questioned, t)}
+        />
+        <FaceImage
+          caseId={caseId}
+          analysisId={analysisId}
+          face={pair.counterpart}
+          label={blind ? t("analyses.blindReference") : describe(pair.counterpart, t)}
+        />
       </div>
 
       {!blind && pair.decisions.length > 0 && (
@@ -166,7 +180,10 @@ export default function AnalysisWorkspace() {
 
   const load = useCallback(async () => {
     try {
-      const [ws, list] = await Promise.all([getWorksheet(caseId, id), listCaseAnalyses(caseId)]);
+      // While the viewer works it blind the case's analyses are closed to them (403): they name the
+      // other examiners.
+      const ws = await getWorksheet(caseId, id);
+      const list = ws.blind ? [] : await listCaseAnalyses(caseId);
       setWorksheet(ws);
       setAnalysis(list.find((a) => a.id === id) ?? null);
       setError("");
@@ -224,7 +241,7 @@ export default function AnalysisWorkspace() {
 
   // Blind verification: the verifier sees only the images and makes the decision -- no case, no
   // links to it or its clusters, no scores (FISWG: verification without contextual information).
-  const blind = worksheet?.yourStep === "REVIEWER";
+  const blind = worksheet?.blind ?? false;
   const title = blind
     ? t("analyses.blindTitle")
     : analysis
@@ -306,7 +323,16 @@ export default function AnalysisWorkspace() {
             <p className="text-sm text-gray-500 dark:text-gray-400">{t("analyses.noPairs")}</p>
           ) : (
             worksheet.pairs.map((pair, index) => (
-              <PairCard key={pairKey(pair)} pair={pair} index={index} editable={editable} blind={blind} onDecide={onDecide} />
+              <PairCard
+                key={pairKey(pair)}
+                caseId={caseId}
+                analysisId={id}
+                pair={pair}
+                index={index}
+                editable={editable}
+                blind={blind}
+                onDecide={onDecide}
+              />
             ))
           )}
         </div>

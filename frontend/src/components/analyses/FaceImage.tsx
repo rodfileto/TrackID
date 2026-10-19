@@ -2,14 +2,24 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "../ui/modal";
 import { ImageViewer } from "../ui/image-viewer/ImageViewer";
-import { getEvidenceObjectUrl, type TraceLink } from "../../services/cases";
-import { getIdentityFileObjectUrl } from "../../services/persons";
-import { cropImage } from "../../utils/cropImage";
+import { getPairImageUrl } from "../../services/analyses";
+import type { TraceLink } from "../../services/cases";
 
-/** One side of a pair, large enough to compare faces: a face of a case (cropped from its evidence
- * when it has no crop of its own) or an enrolled person's photo. Clicking opens a zoomable viewer
- * with brightness and contrast controls. */
-export default function FaceImage({ face, label }: { face: TraceLink; label: string }) {
+/** One side of a pair, large enough to compare faces: a face of a case (cut to its box by the
+ * server) or an enrolled person's photo, loaded through the analysis by feature id, so a blind
+ * examiner's page needs nothing that says whose face it is. Clicking opens a zoomable viewer with
+ * brightness and contrast controls. */
+export default function FaceImage({
+  caseId,
+  analysisId,
+  face,
+  label,
+}: {
+  caseId: string;
+  analysisId: number;
+  face: TraceLink;
+  label: string;
+}) {
   const { t } = useTranslation();
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -20,20 +30,9 @@ export default function FaceImage({ face, label }: { face: TraceLink; label: str
     const owned: string[] = [];
     (async () => {
       try {
-        let src: string;
-        if (face.kind === "KNOWN") {
-          if (!face.personId || !face.identityFileId) throw new Error("no photo");
-          src = await getIdentityFileObjectUrl(face.personId, face.identityFileId);
-          owned.push(src);
-        } else {
-          if (!face.caseId || !face.thumbnailFileId) throw new Error("no image");
-          src = await getEvidenceObjectUrl(face.caseId, face.thumbnailFileId);
-          owned.push(src);
-          if (face.thumbnailBox) {
-            src = await cropImage(src, face.thumbnailBox);
-            owned.push(src);
-          }
-        }
+        if (!face.featureId) throw new Error("no image");
+        const src = await getPairImageUrl(caseId, analysisId, face.featureId);
+        owned.push(src);
         if (!cancelled) setUrl(src);
       } catch {
         if (!cancelled) setFailed(true);
@@ -43,7 +42,7 @@ export default function FaceImage({ face, label }: { face: TraceLink; label: str
       cancelled = true;
       for (const u of owned) URL.revokeObjectURL(u);
     };
-  }, [face]);
+  }, [caseId, analysisId, face]);
 
   return (
     <figure className="flex flex-col gap-2">

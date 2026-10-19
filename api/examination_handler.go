@@ -11,6 +11,7 @@ import (
 	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/embedding"
 	"github.com/rodfileto/trackid/examination"
+	"github.com/rodfileto/trackid/storage"
 )
 
 // AnalysisWorksheetHandler returns an analysis's pairs as the signed-in user sees them
@@ -95,4 +96,34 @@ func writeExaminationError(context *gin.Context, err error) bool {
 		context.JSON(http.StatusInternalServerError, gin.H{"error": "could not record the decision"})
 	}
 	return true
+}
+
+// PairImageHandler returns the image of one face of the analysis's pairs (examination.PairImage),
+// named by its feature id: how the workspace shows a pair, blind or not.
+func PairImageHandler(sqlDB *sql.DB, store *storage.Client) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if store == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "object storage is not configured"})
+			return
+		}
+		target, ok := caseAnalysis(context, sqlDB)
+		if !ok {
+			return
+		}
+		img, err := examination.PairImage(context.Request.Context(), sqlDB, store, currentUser(context), target.ID, context.Query("feature"))
+		switch {
+		case errors.Is(err, examination.ErrNotInScope), errors.Is(err, examination.ErrNoImage):
+			context.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		case err != nil:
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load the image"})
+			return
+		}
+		contentType := img.ContentType
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		context.Header("Cache-Control", "private, no-store")
+		context.Data(http.StatusOK, contentType, img.Data)
+	}
 }

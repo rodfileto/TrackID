@@ -176,10 +176,25 @@ func TestDecisionFlow(t *testing.T) {
 	}
 	check("ana drafting after submitting", draft(ana, id, p1, "NEGATIVE"), analyses.ErrCannotDecide)
 
-	// VERIFICATION: never ana; bia, blind to ana's decisions.
+	// VERIFICATION: never ana; bia, blind: the images and nothing else.
 	distribute("[F1:REVIEWER:bia]")
-	if ws := worksheet(bia, id); ws.YourStep != analyses.StepReviewer || len(ws.Pairs) != 3 || len(ws.Pairs[0].Decisions) != 0 {
-		t.Fatalf("bia's worksheet = %+v; want 3 pairs and no decision of ana's", ws)
+	if ws := worksheet(bia, id); ws.YourStep != analyses.StepReviewer || len(ws.Pairs) != 3 {
+		t.Fatalf("bia's worksheet = %+v; want 3 pairs", ws)
+	}
+	assertBlind(t, "bia", worksheet(bia, id))
+	blindIn := func(who string, u auth.UserProfile) bool {
+		t.Helper()
+		blind, err := distribution.BlindIn(ctx, sqlDB, u.ID, "F1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return blind
+	}
+	if !blindIn("bia", bia) || blindIn("ana", ana) {
+		t.Fatalf("BlindIn: bia %v, ana %v; want true, false", blindIn("bia", bia), blindIn("ana", ana))
+	}
+	if mine, err := distribution.AnalysesOf(ctx, sqlDB, bia.ID); err != nil || len(mine) != 1 || !mine[0].Blind || mine[0].Description != "" || mine[0].CaseType != "" {
+		t.Fatalf("bia's analyses = %+v, %v; want one blind row with no case type or description", mine, err)
 	}
 	if ws := worksheet(chief, id); len(ws.Pairs[0].Decisions) != 1 || ws.Pairs[0].Decisions[0].Username != "ana" {
 		t.Fatalf("the admin's view = %+v; want ana's decisions", ws.Pairs[0].Decisions)
@@ -191,11 +206,22 @@ func TestDecisionFlow(t *testing.T) {
 		t.Fatalf("bia's submit = %+v, %v; want INCONSISTENCE", res, err)
 	}
 
-	// INCONSISTENCE: neither ana nor bia; caio, on the disputed pair only, seeing both decisions.
+	// INCONSISTENCE: neither ana nor bia; caio, on the disputed pair only, blind as bia was: neither
+	// decision, nor who made them, can lead him.
 	distribute("[F1:INCONSISTENCE:caio]")
 	ws := worksheet(caio, id)
-	if ws.YourStep != analyses.StepInconsistence || len(ws.Pairs) != 1 || ws.Pairs[0].Pair != p3 || len(ws.Pairs[0].Decisions) != 2 || !ws.Pairs[0].Disputed {
-		t.Fatalf("caio's worksheet = %+v; want p3 with both decisions", ws)
+	if ws.YourStep != analyses.StepInconsistence || len(ws.Pairs) != 1 || ws.Pairs[0].Pair != p3 {
+		t.Fatalf("caio's worksheet = %+v; want p3 only", ws)
+	}
+	assertBlind(t, "caio", ws)
+	if _, err := examination.PairImage(ctx, sqlDB, nil, caio, id, "TRACE:999999#feature"); !errors.Is(err, examination.ErrNotInScope) {
+		t.Fatalf("an image outside the analysis: %v", err)
+	}
+	if !blindIn("caio", caio) || blindIn("bia", bia) {
+		t.Fatalf("BlindIn: caio %v, bia %v; want true, false", blindIn("caio", caio), blindIn("bia", bia))
+	}
+	if ws := worksheet(chief, id); !ws.Blind && (len(ws.Pairs[2].Decisions) != 2 || !ws.Pairs[2].Disputed) {
+		t.Fatalf("the admin's view of p3 = %+v; want both decisions, disputed", ws.Pairs[2])
 	}
 	check("caio p3", draft(caio, id, p3, "POSITIVE"), nil)
 	if res, err := examination.Submit(ctx, sqlDB, caio, id); err != nil || res.Decisions != 1 || res.Stage != analyses.StageReport {
@@ -205,6 +231,9 @@ func TestDecisionFlow(t *testing.T) {
 		t.Fatalf("decisions recorded = %d, %v; want 3 + 3 + 1", len(rows), err)
 	}
 	check("caio opens F1", distribution.CanOpen(ctx, sqlDB, caio, "F1"), nil)
+	if blindIn("caio", caio) {
+		t.Fatal("caio still blind after submitting")
+	}
 	check("duda does not", distribution.CanOpen(ctx, sqlDB, duda, "F1"), distribution.ErrNotAssigned)
 
 	// REPORT: only ana, the first examiner.
@@ -249,6 +278,26 @@ func TestDecisionFlow(t *testing.T) {
 	check("F2 to bia", distribution.Assign(ctx, sqlDB, empty, &bia.ID, chief.ID), nil)
 	if res, err := examination.Submit(ctx, sqlDB, bia, empty); err != nil || res.Decisions != 0 || res.Stage != analyses.StageReport {
 		t.Fatalf("submitting an empty review = %+v, %v; want REPORT", res, err)
+	}
+}
+
+// assertBlind checks that a blind examiner's worksheet holds the two images of each pair and
+// nothing else.
+func assertBlind(t *testing.T, who string, ws examination.Worksheet) {
+	t.Helper()
+	if !ws.Blind {
+		t.Fatalf("%s's worksheet is not blind", who)
+	}
+	for _, p := range ws.Pairs {
+		if len(p.Decisions) != 0 || p.Disputed || p.Score != nil || p.SystemDecision != "" {
+			t.Fatalf("%s sees decisions or the matcher: %+v", who, p)
+		}
+		for _, l := range []cases.TraceLink{p.Questioned, p.Counterpart} {
+			if l.FeatureID == "" || l.Description != "" || l.Name != "" || l.DecidedBy != "" || l.Modality != "" ||
+				l.PersonID != "" || l.IdentityFileID != 0 || l.CaseID != "" || l.TraceID != 0 || l.ThumbnailFileID != 0 || l.ThumbnailBox != nil {
+				t.Fatalf("%s gets more than the feature id: %+v", who, l)
+			}
+		}
 	}
 }
 

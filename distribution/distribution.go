@@ -346,6 +346,7 @@ type AssignedAnalysis struct {
 	Stage       analyses.Stage `json:"stage"`
 	Step        analyses.Step  `json:"step"`
 	YourTurn    bool           `json:"yourTurn"`
+	Blind       bool           `json:"blind"` // worked blind (analyses.BlindWork): no case type or description
 	Method      string         `json:"method"`
 	AssignedAt  time.Time      `json:"assignedAt"`
 }
@@ -358,11 +359,15 @@ func AnalysesOf(ctx context.Context, sqlDB *sql.DB, userID int64) ([]AssignedAna
 	}
 	out := make([]AssignedAnalysis, len(rows))
 	for i, r := range rows {
-		stage := analyses.Stage(r.Stage)
+		stage, step := analyses.Stage(r.Stage), analyses.Step(r.Step)
 		out[i] = AssignedAnalysis{CaseID: r.CaseID, CaseType: r.CaseType, Description: r.Description, AnalysisID: r.ID,
-			Sequence: r.Sequence, Type: analyses.Type(r.AnalysisType), Status: r.Status, Stage: stage, Step: analyses.Step(r.Step),
-			YourTurn: r.Status == analyses.StatusOpen && stage.ActiveStep() == analyses.Step(r.Step),
+			Sequence: r.Sequence, Type: analyses.Type(r.AnalysisType), Status: r.Status, Stage: stage, Step: step,
+			YourTurn: r.Status == analyses.StatusOpen && stage.ActiveStep() == step,
+			Blind:    r.Status == analyses.StatusOpen && analyses.BlindWork(stage, step),
 			Method:   r.Method, AssignedAt: r.AssignedAt}
+		if out[i].Blind {
+			out[i].CaseType, out[i].Description = "", ""
+		}
 	}
 	return out, nil
 }

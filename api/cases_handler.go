@@ -21,10 +21,18 @@ import (
 // position it appears in.
 var caseYearPattern = regexp.MustCompile(`^(19|20)\d{2}$`)
 
-// assignedToFilter, completed with a user id placeholder and ")", keeps the biometric_cases where
-// that user currently holds an analysis: what a non-admin may list (see distribution.CanOpen).
-const assignedToFilter = "id IN (SELECT ca.biometric_case_id FROM case_analyses ca" +
-	" JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id WHERE caa.user_id ="
+// assignedToFilter keeps the biometric_cases where the user (placeholder p, e.g. "$3") currently
+// holds an analysis, what a non-admin may list (see distribution.CanOpen), except while they work
+// one of its analyses blind (distribution.BlindIn; the step whose stage it is, other than the
+// first examiner's, as analyses.BlindWork).
+func assignedToFilter(p string) string {
+	return "id IN (SELECT ca.biometric_case_id FROM case_analyses ca" +
+		" JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id WHERE caa.user_id = " + p + ")" +
+		" AND id NOT IN (SELECT ca.biometric_case_id FROM case_analyses ca" +
+		" JOIN current_analysis_assignments caa ON caa.case_analysis_id = ca.id WHERE caa.user_id = " + p +
+		" AND ca.status = 'OPEN' AND caa.step = CASE ca.stage WHEN 'VERIFICATION' THEN 'REVIEWER'" +
+		" WHEN 'INCONSISTENCE' THEN 'INCONSISTENCE' END)"
+}
 
 type ListResponse struct {
 	Items      []cases.Case `json:"items"`
@@ -115,7 +123,7 @@ func ListCasesHandler(db *sql.DB) gin.HandlerFunc {
 		}
 		if user := currentUser(context); !user.AccountRole.IsAdmin() {
 			args = append(args, user.ID)
-			filters = append(filters, assignedToFilter+" $"+strconv.Itoa(len(args))+")")
+			filters = append(filters, assignedToFilter("$"+strconv.Itoa(len(args))))
 		}
 		where := ""
 		if len(filters) > 0 {
@@ -164,7 +172,7 @@ func ListCaseYearsHandler(db *sql.DB) gin.HandlerFunc {
 		}
 		where, args := "", []any{}
 		if user := currentUser(context); !user.AccountRole.IsAdmin() {
-			where, args = " WHERE "+assignedToFilter+" $1)", []any{user.ID}
+			where, args = " WHERE "+assignedToFilter("$1"), []any{user.ID}
 		}
 		rows, err := db.QueryContext(context.Request.Context(), `
 			SELECT DISTINCT seg

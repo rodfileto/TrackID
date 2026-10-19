@@ -48,8 +48,8 @@ export default function MyAnalyses() {
               </TableHeader>
               <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
                 {items.map((item) => {
-                  // A verification still to do is blind: no case, nothing to lead to it.
-                  const blind = item.yourTurn && item.step === "REVIEWER";
+                  // Blind work still to do (verification, inconsistence): no case, nothing to lead to it.
+                  const blind = item.blind;
                   return (
                     <TableRow key={`${item.analysisId}-${item.step}`}>
                       <TableCell className={cellClass}>
