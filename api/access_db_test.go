@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,5 +213,74 @@ func TestAccessProfiles(t *testing.T) {
 		if got := listed(c.u); got != c.want {
 			t.Errorf("%s lists %d cases, want %d", c.u.Username, got, c.want)
 		}
+	}
+}
+
+// TestSetUserPassword resets passwords through the router: the new one signs in, a short one is
+// refused, and an ADMIN may not reset an admin's.
+func TestSetUserPassword(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	repo := auth.NewRepository(sqlDB)
+	user := func(username string, role auth.AccountRole) auth.UserProfile {
+		t.Helper()
+		u, err := repo.Create(ctx, auth.NewUser{Nome: username, UltimoNome: "Test", Matricula: username, Cargo: "test",
+			Username: username, Password: "password1", Access: auth.Access{AccountRole: role, IsActive: true}}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	}
+	super := user("super", auth.AccountRoleSuperAdmin)
+	admin := user("admin", auth.AccountRoleAdmin)
+	student := user("student", auth.AccountRoleUser)
+
+	router := NewRouter(Dependencies{DB: sqlDB, JWTSecret: testJWTSecret})
+	call := func(u *auth.UserProfile, method, path, body string) int {
+		t.Helper()
+		request := httptest.NewRequest(method, path, strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		if u != nil {
+			token, err := IssueToken(*u, testJWTSecret)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Authorization", "Bearer "+token)
+		}
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		return recorder.Code
+	}
+	reset := func(u auth.UserProfile, target auth.UserProfile, password string) int {
+		return call(&u, http.MethodPut, fmt.Sprintf("/api/admin/users/%d/password", target.ID), `{"password":"`+password+`"}`)
+	}
+	login := func(matricula, password string) int {
+		return call(nil, http.MethodPost, "/api/auth/login", `{"matricula":"`+matricula+`","password":"`+password+`"}`)
+	}
+
+	for _, c := range []struct {
+		name          string
+		actor, target auth.UserProfile
+		password      string
+		want          int
+	}{
+		{"admin resets a student", admin, student, "newpassword", http.StatusOK},
+		{"too short", admin, student, "short", http.StatusBadRequest},
+		{"admin resets an admin", admin, super, "newpassword", http.StatusForbidden},
+		{"student resets a student", student, student, "newpassword", http.StatusForbidden},
+		{"super resets an admin", super, admin, "adminpassword", http.StatusOK},
+	} {
+		if got := reset(c.actor, c.target, c.password); got != c.want {
+			t.Errorf("%s: status %d, want %d", c.name, got, c.want)
+		}
+	}
+	if got := login("student", "newpassword"); got != http.StatusOK {
+		t.Errorf("login with the new password: %d", got)
+	}
+	if got := login("student", "password1"); got != http.StatusUnauthorized {
+		t.Errorf("login with the old password: %d", got)
+	}
+	if got := login("super", "password1"); got != http.StatusOK {
+		t.Errorf("super's password changed: %d", got)
 	}
 }

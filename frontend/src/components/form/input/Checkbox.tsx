@@ -51,24 +51,6 @@ const Checkbox: React.FC<CheckboxProps> = ({
             />
           </svg>
         )}
-        {disabled && (
-          <svg
-            className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-none top-1/2 left-1/2"
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 14 14"
-            fill="none"
-          >
-            <path
-              d="M11.6666 3.5L5.24992 9.91667L2.33325 7"
-              stroke="#E4E7EC"
-              strokeWidth="2.33333"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        )}
       </div>
       {label && (
         <span className="text-sm font-medium text-gray-800 dark:text-gray-200">

@@ -2,15 +2,17 @@ import { Outlet } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 
-/** A capability a page needs (docs/access-profiles-plan.md); "persons" is examiners and analysts. */
-export type Capability = "coordinator" | "intelligence" | "persons";
+/** A capability a page needs (docs/access-profiles-plan.md); "persons" is examiners and analysts,
+ * "admin" account management. */
+export type Capability = "admin" | "coordinator" | "intelligence" | "persons";
 
 /** Shows its routes only to users with the capability, and a short explanation to anyone else, so
  * a direct link does not open a page whose every request the server would refuse. */
 export default function RequireCapability({ need }: { need: Capability }) {
   const { t } = useTranslation();
-  const { isExaminer, isIntelligence, isCoordinator } = useCurrentUser();
+  const { isAdmin, isExaminer, isIntelligence, isCoordinator } = useCurrentUser();
   const allowed =
+    (need === "admin" && isAdmin) ||
     (need === "coordinator" && isCoordinator) ||
     (need === "intelligence" && isIntelligence) ||
     (need === "persons" && (isExaminer || isIntelligence));

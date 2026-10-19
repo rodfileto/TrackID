@@ -127,6 +127,7 @@ no analysis there (that is, intelligence reads). It answers "who looked at this 
 - Person search sends `caseCounts` to analysts only.
 - Reading a case's linked occurrence stays part of reading the case; finding, linking,
   unlinking and registering occurrences are intelligence.
-- There is no user-management screen in the frontend (accounts are managed through
-  `/api/admin/users` and `cmd/create-superuser`, now with `-intelligence` and `-coordinator`), so
-  the admin checkboxes wait for that screen.
+- User management is the Users page (`/admin/users`, admins only): every account with its role,
+  capability and active checkboxes saved in place, new accounts, and password resets
+  (`PUT /api/admin/users/:userId/password`, under the same `auth.CheckAccountChange` rules).
+  `cmd/create-superuser` keeps `-intelligence` and `-coordinator` for the first account.
