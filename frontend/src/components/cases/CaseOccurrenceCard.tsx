@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import ComponentCard from "../common/ComponentCard";
+import OccurrencePointMap from "../intelligence/OccurrencePointMap";
 import {
   getCaseOccurrence,
   linkCaseOccurrence,
@@ -15,7 +16,8 @@ function label(o: OccurrenceSummary): string {
   return [o.trackidNumber, police].filter(Boolean).join(" — ");
 }
 
-// The occurrence a case investigates: shown with a link to it on the map, or
+// The occurrence a case investigates: shown with its point on a small map and a link to it on
+// the occurrence map, or
 // searched by TrackID or police number and linked. The API refuses a link
 // between a criminal case and a civil occurrence, or the reverse.
 export default function CaseOccurrenceCard({ caseId }: { caseId: string }) {
@@ -51,7 +53,8 @@ export default function CaseOccurrenceCard({ caseId }: { caseId: string }) {
     setBusy(true);
     try {
       await linkCaseOccurrence(caseId, o?.id ?? null);
-      setLinked(o);
+      // A search result has no location point: read the linked occurrence back for the map.
+      setLinked(o ? ((await getCaseOccurrence(caseId)) ?? o) : null);
       setResults(null);
       setQuery("");
       toast.success(t(o ? "caseOccurrence.linkedToast" : "caseOccurrence.unlinkedToast"));
@@ -76,24 +79,32 @@ export default function CaseOccurrenceCard({ caseId }: { caseId: string }) {
       {loading ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">{t("common.loading")}</p>
       ) : linked ? (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-0.5">
-            <Link
-              to={`/intelligence/map?year=${new Date(linked.occurredFrom).getFullYear()}&occurrence=${linked.id}`}
-              className="font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400"
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-0.5">
+              <Link
+                to={`/intelligence/map?year=${new Date(linked.occurredFrom).getFullYear()}&occurrence=${linked.id}`}
+                className="font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400"
+              >
+                {label(linked)}
+              </Link>
+              <span className="text-sm text-gray-500 dark:text-gray-400">{describe(linked)}</span>
+              {linked.address && (
+                <span className="text-sm text-gray-500 dark:text-gray-400">{linked.address}</span>
+              )}
+            </div>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => link(null)}
+              className="h-10 shrink-0 rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.03]"
             >
-              {label(linked)}
-            </Link>
-            <span className="text-sm text-gray-500 dark:text-gray-400">{describe(linked)}</span>
+              {t("caseOccurrence.unlink")}
+            </button>
           </div>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => link(null)}
-            className="h-10 shrink-0 rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.03]"
-          >
-            {t("caseOccurrence.unlink")}
-          </button>
+          {linked.lon !== undefined && linked.lat !== undefined && (
+            <OccurrencePointMap lon={linked.lon} lat={linked.lat} precision={linked.precision} />
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-3">

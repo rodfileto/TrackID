@@ -586,7 +586,9 @@
     "unlinkedToast": "Caso desvinculado da ocorrência",
     "linkError": "Não foi possível alterar o vínculo",
     "searchError": "Não foi possível buscar ocorrências",
-    "registerNew": "Registrar nova ocorrência"
+    "registerNew": "Registrar nova ocorrência",
+    "mapLabel": "Onde a ocorrência aconteceu",
+    "approximate": "Ponto aproximado ({{precision}})."
   },
   "analyses": {
     "title": "Análises",

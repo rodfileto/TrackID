@@ -1301,7 +1301,9 @@ func (q *Queries) GetOccurrenceIDByNumber(ctx context.Context, arg GetOccurrence
 
 const getOccurrenceSummary = `-- name: GetOccurrenceSummary :one
 SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.occurred_from, o.status,
-    l.name AS place_name, l.neighbourhood,
+    l.name AS place_name, l.neighbourhood, l.address, l.precision,
+    ST_X(l.geom::geometry)::float8 AS lon,
+    ST_Y(l.geom::geometry)::float8 AS lat,
     COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
 FROM occurrences o
@@ -1319,10 +1321,14 @@ type GetOccurrenceSummaryRow struct {
 	Status           string          `db:"status" json:"status"`
 	PlaceName        sql.NullString  `db:"place_name" json:"place_name"`
 	Neighbourhood    sql.NullString  `db:"neighbourhood" json:"neighbourhood"`
+	Address          sql.NullString  `db:"address" json:"address"`
+	Precision        string          `db:"precision" json:"precision"`
+	Lon              float64         `db:"lon" json:"lon"`
+	Lat              float64         `db:"lat" json:"lat"`
 	Types            json.RawMessage `db:"types" json:"types"`
 }
 
-// One occurrence as a case page shows it.
+// One occurrence as a case page shows it, with its location's point for the card's map.
 func (q *Queries) GetOccurrenceSummary(ctx context.Context, id int64) (GetOccurrenceSummaryRow, error) {
 	row := q.db.QueryRowContext(ctx, getOccurrenceSummary, id)
 	var i GetOccurrenceSummaryRow
@@ -1336,6 +1342,10 @@ func (q *Queries) GetOccurrenceSummary(ctx context.Context, id int64) (GetOccurr
 		&i.Status,
 		&i.PlaceName,
 		&i.Neighbourhood,
+		&i.Address,
+		&i.Precision,
+		&i.Lon,
+		&i.Lat,
 		&i.Types,
 	)
 	return i, err
