@@ -190,6 +190,28 @@ func (q *Queries) CountPersonCasesByModality(ctx context.Context, arg CountPerso
 	return items, nil
 }
 
+const countUnmatchedBiometricTemplates = `-- name: CountUnmatchedBiometricTemplates :one
+SELECT COUNT(*) FROM biometric_templates WHERE template_type = $1 AND matched_at IS NULL
+`
+
+func (q *Queries) CountUnmatchedBiometricTemplates(ctx context.Context, templateType string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countUnmatchedBiometricTemplates, templateType)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countUnmatchedFeatureEmbeddings = `-- name: CountUnmatchedFeatureEmbeddings :one
+SELECT COUNT(*) FROM feature_embeddings WHERE embedding_type = $1 AND matched_at IS NULL
+`
+
+func (q *Queries) CountUnmatchedFeatureEmbeddings(ctx context.Context, embeddingType string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countUnmatchedFeatureEmbeddings, embeddingType)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createBiometricCase = `-- name: CreateBiometricCase :one
 INSERT INTO biometric_cases (case_id, case_type, modality, description, case_year, case_number)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -1750,6 +1772,19 @@ func (q *Queries) IssueAnalysisReport(ctx context.Context, arg IssueAnalysisRepo
 		&i.IssuedAt,
 	)
 	return i, err
+}
+
+const latestHumanDecisionID = `-- name: LatestHumanDecisionID :one
+SELECT COALESCE(MAX(id), 0)::bigint AS id FROM biometric_decisions WHERE role <> 'SYSTEM'
+`
+
+// The newest human decision (VERIFICATOR, REVIEWER, INCONSISTENCE): a sync's mark of the
+// examiners' decisions it has reconciled clusters with (cluster.Settle).
+func (q *Queries) LatestHumanDecisionID(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, latestHumanDecisionID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const listAllBiometricCases = `-- name: ListAllBiometricCases :many

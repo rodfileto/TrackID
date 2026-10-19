@@ -317,8 +317,18 @@ func HandleSync(sqlDB *sql.DB, client *Client, driver neo4j.DriverWithContext) f
 // new version applies without a restart; DefaultBand when none is set), then
 // reconciles clusters with cluster.Run when driver is non-nil. Unlike embedding.SyncFace, matching doesn't wait for Neo4j: the
 // decisions are written either way, and any later cluster.Run (a face sync,
-// cmd/cluster-biometrics) picks them up.
+// cmd/cluster-biometrics) picks them up. Like SyncFace, it repeats until no
+// decision or template arrived while it ran (cluster.Settle).
 func RunSync(ctx context.Context, sqlDB *sql.DB, client *Client, driver neo4j.DriverWithContext) error {
+	unmatched := func(ctx context.Context) (int64, error) {
+		return db.New(sqlDB).CountUnmatchedBiometricTemplates(ctx, TemplateType)
+	}
+	return cluster.Settle(ctx, sqlDB, unmatched, func(ctx context.Context) error {
+		return runSyncOnce(ctx, sqlDB, client, driver)
+	})
+}
+
+func runSyncOnce(ctx context.Context, sqlDB *sql.DB, client *Client, driver neo4j.DriverWithContext) error {
 	version, err := biometricmatch.CurrentBand(ctx, sqlDB, TemplateType, DefaultBand)
 	if err != nil {
 		return fmt.Errorf("fingerprint: sync match: %w", err)
