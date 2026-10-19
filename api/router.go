@@ -75,6 +75,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	oneCase.GET("", GetCaseHandler(deps.DB))
 	oneCase.GET("codifications", ListCaseCodificationsHandler(deps.DB))
 	oneCase.GET("clusters", ListCaseClustersHandler(deps.DB))
+	oneCase.GET("identity-decisions", ListCaseIdentityDecisionsHandler(deps.DB))
 	oneCase.GET("analyses", ListCaseAnalysesHandler(deps.DB))
 	oneCase.GET("analyses/:analysisId/assignments", AnalysisAssignmentsHandler(deps.DB))
 	oneCase.POST("analyses/:analysisId/report", IssueReportHandler(deps.DB))

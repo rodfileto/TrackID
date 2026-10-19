@@ -12,6 +12,9 @@ forense.
 ## Seções previstas
 
 - De pares confirmados a clusters
+- Duas camadas: clusters automáticos (todo par confirmado, inclusive só pelo sistema) para a
+  inteligência, e clusters revisados (só pares confirmados por peritos) para a análise forense
+- Vínculos diretos e indiretos na página do caso; o caminho de vínculos revisados
 - Identificação: o cluster que encontra um cadastro
 - Sujeitos desconhecidos e séries
 - O mapa de ocorrências
@@ -20,7 +23,8 @@ forense.
 ::: {.callout-tip appearance="simple"}
 ## No TrackID
 
-`cluster.Run`, `cluster.Identify`; telas Clusters e Mapa de ocorrências.
+`cluster.Run`, `cluster.Reviewed`, `cluster.Identify`; `MODEL.md` seção 4.1; telas Clusters,
+Mapa de ocorrências e o painel de clusters da página do caso.
 :::
 
 ::: {.callout-warning appearance="simple"}

@@ -19,10 +19,17 @@ type identificationRow struct {
 	identifiedBy string
 }
 
+// identificationKey is one distinct cluster->person edge.
+type identificationKey struct {
+	clusterID int64
+	personID  string
+}
+
 // Identify writes IDENTIFIED_AS edges from clusters to persons, derived from the
 // biometric_decisions log: a CONFIRMED decision linking a QUESTIONED feature to
 // a KNOWN feature resolves the QUESTIONED feature's cluster to the KNOWN
-// feature's person. It reads only from Postgres and rebuilds the edges each run,
+// feature's person. It does so for both layers: an AUTOMATIC cluster from any
+// CONFIRMED decision, a REVIEWED cluster only from one people confirmed. It reads only from Postgres and rebuilds the edges each run,
 // so it is idempotent and consistent with the persisted clusters. It returns
 // the number of distinct IDENTIFIED_AS edges written.
 func Identify(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) (int, error) {
@@ -70,8 +77,9 @@ func IdentifyPlan(ctx context.Context, sqlDB *sql.DB) (int, error) {
 }
 
 // loadIdentificationRows resolves confirmed QUESTIONED<->KNOWN decisions into
-// distinct cluster->person edges. It is a pure function of the three loads
-// (decisions, known-feature persons, cluster membership).
+// distinct cluster->person edges, for both layers (cluster ids are unique
+// across them). It is a pure function of the three loads (decisions,
+// known-feature persons, cluster membership).
 func loadIdentificationRows(ctx context.Context, sqlDB *sql.DB) ([]identificationRow, error) {
 	if sqlDB == nil {
 		return nil, fmt.Errorf("database is not configured")
@@ -91,22 +99,31 @@ func loadIdentificationRows(ctx context.Context, sqlDB *sql.DB) ([]identificatio
 		knownPerson[graph.KnownFeatureID(r.IdentityFileID)] = r.PersonID
 	}
 
-	members, err := db.New(sqlDB).ListClusterMembers(ctx)
-	if err != nil {
-		return nil, err
-	}
-	memberCluster := map[string]int64{}
-	for _, m := range members {
-		memberCluster[m.FeatureID] = m.ClusterID
-	}
-
-	type edgeKey struct {
-		clusterID int64
-		personID  string
-	}
-	seen := map[edgeKey]bool{}
+	seen := map[identificationKey]bool{}
 	var out []identificationRow
+	for _, basis := range Bases {
+		members, err := db.New(sqlDB).ListClusterMembers(ctx, string(basis))
+		if err != nil {
+			return nil, err
+		}
+		memberCluster := map[string]int64{}
+		for _, m := range members {
+			memberCluster[m.FeatureID] = m.ClusterID
+		}
+		out = appendIdentifications(out, seen, pairs, basis, knownPerson, memberCluster)
+	}
+	return out, nil
+}
+
+// appendIdentifications appends one layer's distinct cluster->person edges to out: those of the
+// pairs that build the layer (every pair for AUTOMATIC, the reviewed ones for REVIEWED) linking a
+// QUESTIONED feature to a KNOWN one.
+func appendIdentifications(out []identificationRow, seen map[identificationKey]bool, pairs []confirmedPair, basis Basis,
+	knownPerson map[string]string, memberCluster map[string]int64) []identificationRow {
 	for _, pair := range pairs {
+		if basis == BasisReviewed && !pair.reviewed {
+			continue
+		}
 		personA, aKnown := knownPerson[pair.featureA]
 		personB, bKnown := knownPerson[pair.featureB]
 		if aKnown == bKnown {
@@ -128,7 +145,7 @@ func loadIdentificationRows(ctx context.Context, sqlDB *sql.DB) ([]identificatio
 		}
 		// Several decisions can resolve the same cluster to the same person;
 		// keep the first, which is the one identifyQuery's MERGE would keep.
-		k := edgeKey{clusterID, person}
+		k := identificationKey{clusterID, person}
 		if seen[k] {
 			continue
 		}
@@ -140,7 +157,7 @@ func loadIdentificationRows(ctx context.Context, sqlDB *sql.DB) ([]identificatio
 			identifiedBy: pair.identifiedBy,
 		})
 	}
-	return out, nil
+	return out
 }
 
 const deleteIdentifiedAsQuery = `

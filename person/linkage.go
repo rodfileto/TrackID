@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/rodfileto/trackid/cluster"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/graph"
 )
@@ -39,7 +40,9 @@ func knownFeatureIDsFromChain(rows []db.ListIdentityChainByPersonRow) []string {
 }
 
 // loadPersonAndClusterIDs loads one person's row, their identity chain, and
-// the clusters (cluster.Run) their enrolled features have resolved into.
+// the REVIEWED clusters (cluster.Run, cluster.BasisReviewed) their enrolled
+// features have resolved into: a person view, like a case, shows only links
+// people confirmed, never a SYSTEM match alone.
 // clusterIDs is nil, with no error, when the person has no enrolled features
 // yet or none have been clustered. Returns ErrNotFound if no person row
 // matches personID. Shared by ListClusters, ListCases, and GetProfile so a
@@ -65,7 +68,8 @@ func loadPersonAndClusterIDs(ctx context.Context, sqlDB *sql.DB, personID string
 		return personRow, chainRows, nil, nil
 	}
 
-	clusterIDs, err := q.ListClusterIDsForFeatureIDs(ctx, featureIDs)
+	clusterIDs, err := q.ListClusterIDsForFeatureIDs(ctx, db.ListClusterIDsForFeatureIDsParams{
+		Basis: string(cluster.BasisReviewed), FeatureIds: featureIDs})
 	if err != nil {
 		return db.Person{}, nil, nil, err
 	}

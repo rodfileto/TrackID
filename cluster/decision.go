@@ -105,6 +105,36 @@ func DeriveEdgeStatus(chain []ChainEntry) (status EdgeStatus, ok bool) {
 	return status, ok
 }
 
+// Reviewed reports whether a pair's chain is CONFIRMED by people: its deciding round
+// (DecidingRound) is CONFIRMED and was settled by a VERIFICATOR/REVIEWER agreement or by an
+// INCONSISTENCE decision, not by a SYSTEM decision alone. A SYSTEM confirmation stays unreviewed
+// even while a later human round is still pending, since that round does not undo it. Reviewed
+// pairs build the REVIEWED cluster layer, the only one forensic views (a case, a person) read;
+// every CONFIRMED pair builds the AUTOMATIC layer, for intelligence.
+func Reviewed(chain []ChainEntry) bool {
+	_, status, settledBy, ok := DecidingRoundBy(chain)
+	return ok && status == EdgeStatusConfirmed && settledBy != RoleSystem
+}
+
+// DecidingRoundBy is DecidingRound that also names the role whose decision settled that round's
+// status: INCONSISTENCE, REVIEWER (a VERIFICATOR/REVIEWER pair, agreeing or not), VERIFICATOR
+// (alone, so still pending) or SYSTEM. A status settled by people is one whose settledBy is not
+// SYSTEM.
+func DecidingRoundBy(chain []ChainEntry) (round int64, status EdgeStatus, settledBy Role, ok bool) {
+	round, status, ok = DecidingRound(chain)
+	if !ok {
+		return 0, "", "", false
+	}
+	var roundChain []ChainEntry
+	for _, e := range chain {
+		if e.Counts(round) {
+			roundChain = append(roundChain, e)
+		}
+	}
+	_, settledBy, _ = deriveRoundBy(roundChain)
+	return round, status, settledBy, true
+}
+
 // deriveRound maps one round's chain -- the SYSTEM decision and the human decisions of one
 // analysis -- to its state. The rules, in order:
 //   - INCONSISTENCE, if present, is final: POSITIVE confirms, NEGATIVE rejects,
@@ -116,6 +146,14 @@ func DeriveEdgeStatus(chain []ChainEntry) (status EdgeStatus, ok bool) {
 //   - SYSTEM alone is CONFIRMED for a POSITIVE score, PENDING_REVIEW for
 //     INCONCLUSIVE, or REJECTED for an explicit NEGATIVE.
 func deriveRound(chain []ChainEntry) (status EdgeStatus, ok bool) {
+	status, _, ok = deriveRoundBy(chain)
+	return status, ok
+}
+
+// deriveRoundBy is deriveRound that also names the role whose decision settled the status:
+// INCONSISTENCE, REVIEWER (for a VERIFICATOR/REVIEWER pair), VERIFICATOR (alone, always pending)
+// or SYSTEM.
+func deriveRoundBy(chain []ChainEntry) (status EdgeStatus, settledBy Role, ok bool) {
 	var system, verificator, reviewer, inconsistence *Decision
 	for i := range chain {
 		switch chain[i].Role {
@@ -131,21 +169,21 @@ func deriveRound(chain []ChainEntry) (status EdgeStatus, ok bool) {
 	}
 
 	if inconsistence != nil {
-		return decisionOutcome(*inconsistence, EdgeStatusDisputed), true
+		return decisionOutcome(*inconsistence, EdgeStatusDisputed), RoleInconsistence, true
 	}
 	if verificator != nil && reviewer != nil {
 		if *verificator == *reviewer {
-			return decisionOutcome(*verificator, EdgeStatusPendingReview), true
+			return decisionOutcome(*verificator, EdgeStatusPendingReview), RoleReviewer, true
 		}
-		return EdgeStatusDisputed, true
+		return EdgeStatusDisputed, RoleReviewer, true
 	}
 	if verificator != nil {
-		return EdgeStatusPendingReview, true
+		return EdgeStatusPendingReview, RoleVerificator, true
 	}
 	if system != nil {
-		return decisionOutcome(*system, EdgeStatusPendingReview), true
+		return decisionOutcome(*system, EdgeStatusPendingReview), RoleSystem, true
 	}
-	return "", false
+	return "", "", false
 }
 
 func decisionOutcome(d Decision, inconclusive EdgeStatus) EdgeStatus {
@@ -175,12 +213,14 @@ type confirmedPair struct {
 	featureA     string
 	featureB     string
 	modality     string // "FACE" | "FINGERPRINT"
+	reviewed     bool   // settled by people (Reviewed), not by a SYSTEM decision alone
 	confidence   *float64
 	identifiedBy string
 }
 
 // loadConfirmedPairs reads every biometric_decisions row, groups them into
-// per-pair chains, and returns the pairs whose derived status is CONFIRMED.
+// per-pair chains, and returns the pairs whose derived status is CONFIRMED,
+// each marked with whether people confirmed it (Reviewed).
 func loadConfirmedPairs(ctx context.Context, sqlDB *sql.DB) ([]confirmedPair, error) {
 	rows, err := db.New(sqlDB).ListBiometricDecisions(ctx)
 	if err != nil {
@@ -219,6 +259,7 @@ func loadConfirmedPairs(ctx context.Context, sqlDB *sql.DB) ([]confirmedPair, er
 			featureA:     k.a,
 			featureB:     k.b,
 			modality:     rowsForPair[0].Modality,
+			reviewed:     Reviewed(chain),
 			confidence:   chainConfidence(current),
 			identifiedBy: chainIdentifiedBy(current),
 		})

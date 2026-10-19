@@ -12,7 +12,8 @@ import (
 // the biometric clusters they've resolved into, and the biometric cases
 // linked to them through those clusters. This is the shape a case-detail
 // "person profile" panel renders from -- everything in it still traces back
-// to a reviewed, CONFIRMED decision chain (see MODEL.md sections 3-4); it
+// to a decision chain people confirmed (the REVIEWED cluster layer, see
+// MODEL.md sections 3-4); it
 // asserts no link of its own.
 type Profile struct {
 	Identity Identity      `json:"identity"`

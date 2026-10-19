@@ -17,7 +17,7 @@ import (
 // person's clusters (e.g. both face and fingerprint evidence).
 //
 // A case here is never inferred from co-occurrence (e.g. many faces in one
-// photo) -- only from a CONFIRMED decision chain (cluster.DeriveEdgeStatus),
+// photo) -- only from a decision chain people confirmed (cluster.Reviewed),
 // the same one cluster.Run already used to place the trace's feature in the
 // cluster in the first place.
 type RelatedCase struct {

@@ -64,8 +64,11 @@ those need real images/benchmarks or authorized operational data.
   (`COLLATE "C"` check, `feature_b_id` index, `biometric_decision_sides` view).
 - ~~`cluster.Identify` count~~ — fixed: dedupes by `(clusterID, personID)`, returns
   distinct edges written.
-- SYSTEM-only POSITIVE auto-confirms with no human review (intentional, but worth
-  a discussion section in P2).
+- ~~SYSTEM-only POSITIVE auto-confirms with no human review~~ — addressed by design
+  (2026-10-19, migration 019): the rule stays, but clusters come in two layers. AUTOMATIC
+  (every CONFIRMED pair) serves intelligence views; REVIEWED (pairs people confirmed) is the
+  only layer the case and person pages read. Worth a discussion section in P2: review policy
+  vs false merges, and the sim can now score both layers (`trackid-sim eval`).
 
 ## Open questions
 

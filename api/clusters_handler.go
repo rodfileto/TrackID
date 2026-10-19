@@ -18,7 +18,8 @@ type ListClustersResponse struct {
 	TotalPages int               `json:"totalPages"`
 }
 
-// ListClustersHandler returns every persisted biometric cluster, ordered by
+// ListClustersHandler returns every AUTOMATIC biometric cluster (an
+// intelligence view: SYSTEM matches included), ordered by
 // how many distinct biometric cases it touches (descending). ?identified=true
 // keeps only clusters resolved to an enrolled identity (see
 // cluster.ListOverview).
