@@ -45,6 +45,15 @@ fi
 cd "$ROOT_DIR"
 echo "Starting TrackID infrastructure..."
 docker compose up -d postgres redis minio
+# The worker checks the fingerprint sidecar once, at startup, and runs without
+# fingerprint handlers when it is down, so start it before the worker.
+FINGERPRINT_SIDECAR_URL="${FINGERPRINT_SIDECAR_URL:-}"
+if [[ -n "$FINGERPRINT_SIDECAR_URL" ]]; then
+  echo "Fingerprint sidecar: enabled (FINGERPRINT_SIDECAR_URL=$FINGERPRINT_SIDECAR_URL)"
+  docker compose up -d sourceafis-sidecar
+else
+  echo "Fingerprint sidecar: disabled (set FINGERPRINT_SIDECAR_URL to enable)"
+fi
 if [[ "$START_NEO4J" == "true" ]]; then
   echo "Neo4j: enabled (NEO4J_URL=$NEO4J_URL)"
   docker compose --profile graph up -d neo4j
@@ -123,6 +132,16 @@ wait_for_url() {
   done
 }
 
+# The API also serves frontend/dist on :$PORT, which nothing else rebuilds; a
+# stale bundle there disagrees with the API. Rebuild it when any source is newer.
+if [[ ! -f "$FRONTEND_DIR/dist/index.html" ]] || [[ -n "$(find "$FRONTEND_DIR/src" "$FRONTEND_DIR/public" "$FRONTEND_DIR/index.html" "$FRONTEND_DIR/package.json" "$FRONTEND_DIR"/vite.config.* -newer "$FRONTEND_DIR/dist/index.html" -type f -print -quit 2>/dev/null)" ]]; then
+  echo "Building frontend bundle for :$PORT..."
+  (cd "$FRONTEND_DIR" && npm run build) >"$RUN_DIR/frontend-build.log" 2>&1 || {
+    echo "Frontend build failed; check $RUN_DIR/frontend-build.log" >&2
+    exit 1
+  }
+fi
+
 if [[ ! -f "$RUN_DIR/backend.pid" ]] || ! kill -0 "$(cat "$RUN_DIR/backend.pid")" 2>/dev/null; then
   echo "Starting Go API on :$PORT..."
   setsid bash -c "cd '$BACKEND_DIR' && exec env PORT='$PORT' DATABASE_URL='$DATABASE_URL' REDIS_URL='$REDIS_URL' JWT_SECRET='$JWT_SECRET' S3_ENDPOINT='$S3_ENDPOINT' S3_ACCESS_KEY='$S3_ACCESS_KEY' S3_SECRET_KEY='$S3_SECRET_KEY' S3_BUCKET='$S3_BUCKET' NEO4J_URL='$NEO4J_URL' go run ./cmd/trackid" >"$RUN_DIR/backend.log" 2>&1 &
@@ -131,6 +150,11 @@ else
   echo "Go API is already running (PID $(cat "$RUN_DIR/backend.pid"))"
 fi
 wait_for_url "Go API" "http://127.0.0.1:$PORT/health"
+
+if [[ -n "$FINGERPRINT_SIDECAR_URL" ]]; then
+  echo "Waiting for the fingerprint sidecar..."
+  wait_for_url "Fingerprint sidecar (docker compose logs sourceafis-sidecar)" "${FINGERPRINT_SIDECAR_URL%/}/healthz"
+fi
 
 if [[ ! -f "$RUN_DIR/worker.pid" ]] || ! kill -0 "$(cat "$RUN_DIR/worker.pid")" 2>/dev/null; then
   echo "Starting Asynq worker..."
@@ -162,5 +186,8 @@ if [[ "$START_NEO4J" == "true" ]]; then
   echo "Neo4j:    $NEO4J_URL (browser: http://127.0.0.1:57474)"
 else
   echo "Neo4j:    disabled (set START_NEO4J=true to enable)"
+fi
+if [[ -n "$FINGERPRINT_SIDECAR_URL" ]]; then
+  echo "Sidecar:  $FINGERPRINT_SIDECAR_URL"
 fi
 echo "Logs:     $RUN_DIR/backend.log, $RUN_DIR/worker.log, and $RUN_DIR/frontend.log"
