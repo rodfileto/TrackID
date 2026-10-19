@@ -14,7 +14,9 @@ import {
 import Badge from "../components/ui/badge/Badge";
 import IdentityFileThumbnail from "../components/persons/IdentityFileThumbnail";
 import CaseTraceThumbnail from "../components/cases/CaseTraceThumbnail";
+import { useCurrentUser } from "../context/CurrentUserContext";
 import {
+  getPersonIdentity,
   getPersonProfile,
   type PersonProfile,
   type PersonIdentityDocument,
@@ -148,6 +150,7 @@ function ClusterCard({ cluster }: { cluster: PersonCluster }) {
 export default function PersonProfilePage() {
   const { t } = useTranslation();
   const { personId } = useParams<{ personId: string }>();
+  const { isIntelligence } = useCurrentUser();
   const [profile, setProfile] = useState<PersonProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -160,7 +163,10 @@ export default function PersonProfilePage() {
       setLoading(true);
       setError("");
       try {
-        const result = await getPersonProfile(personId!);
+        // Anyone else may see who the person is, not where they have been.
+        const result = isIntelligence
+          ? await getPersonProfile(personId!)
+          : { identity: await getPersonIdentity(personId!), clusters: [], cases: [] };
         if (!cancelled) setProfile(result);
       } catch (err) {
         if (!cancelled) {
@@ -177,7 +183,7 @@ export default function PersonProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, [personId, t]);
+  }, [personId, t, isIntelligence]);
 
   const documents = profile?.identity.documents ?? [];
   const clusters = profile?.clusters ?? [];
@@ -313,104 +319,109 @@ export default function PersonProfilePage() {
             ))}
           </ComponentCard>
 
-          <ComponentCard
-            title={t("clusters.title")}
-            desc={t("personProfile.clustersResolved", { count: clusters.length })}
-          >
-            {clusters.length === 0 ? (
-              <div className="overflow-hidden rounded-xl border border-gray-200 bg-white px-5 py-8 text-center text-gray-500 dark:border-white/[0.05] dark:bg-white/[0.03] dark:text-gray-400">
-                {t("personProfile.noClusters")}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {clusters.map((cluster) => (
-                  <ClusterCard key={cluster.clusterId} cluster={cluster} />
-                ))}
-              </div>
-            )}
-          </ComponentCard>
-
-          <ComponentCard
-            title={t("personProfile.relatedCases")}
-            desc={t("personProfile.casesLinked", { count: cases.length })}
-          >
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
-              <div className="max-w-full overflow-x-auto">
-                <Table>
-                  <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
-                    <TableRow>
-                      <TableCell
-                        isHeader
-                        className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
-                      >
-                        {t("personProfile.columns.caseId")}
-                      </TableCell>
-                      <TableCell
-                        isHeader
-                        className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
-                      >
-                        {t("personProfile.columns.type")}
-                      </TableCell>
-                      <TableCell
-                        isHeader
-                        className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
-                      >
-                        {t("personProfile.columns.description")}
-                      </TableCell>
-                      <TableCell
-                        isHeader
-                        className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
-                      >
-                        {t("personProfile.columns.linkedVia")}
-                      </TableCell>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-                    {cases.map((relatedCase) => (
-                      <TableRow key={relatedCase.caseId}>
-                        <TableCell className="px-5 py-4 sm:px-6 text-start">
-                          <Link
-                            to={`/cases/${encodeURIComponent(relatedCase.caseId)}`}
-                            className="block font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300"
-                          >
-                            {relatedCase.caseId}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="px-4 py-3 text-start text-theme-sm">
-                          <Badge
-                            size="sm"
-                            color={modalityColor(relatedCase.modality)}
-                          >
-                            {t(modalityLabelKey(relatedCase.modality))}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
-                          {relatedCase.description || "—"}
-                        </TableCell>
-                        <TableCell className="px-4 py-3 text-start text-theme-sm">
-                          <div className="flex flex-wrap gap-1.5">
-                            {relatedCase.clusterIds.map((clusterId) => (
-                              <Badge key={clusterId} size="sm" color="light">
-                                #{clusterId}
-                              </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                      </TableRow>
+          {/* Clusters and cases are a person's history: analysts only. */}
+          {isIntelligence && (
+                <>
+              <ComponentCard
+                title={t("clusters.title")}
+                desc={t("personProfile.clustersResolved", { count: clusters.length })}
+              >
+                {clusters.length === 0 ? (
+                  <div className="overflow-hidden rounded-xl border border-gray-200 bg-white px-5 py-8 text-center text-gray-500 dark:border-white/[0.05] dark:bg-white/[0.03] dark:text-gray-400">
+                    {t("personProfile.noClusters")}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {clusters.map((cluster) => (
+                      <ClusterCard key={cluster.clusterId} cluster={cluster} />
                     ))}
+                  </div>
+                )}
+              </ComponentCard>
 
-                    {cases.length === 0 && (
-                      <TableRow>
-                        <TableCell className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">
-                          {t("personProfile.noCases")}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          </ComponentCard>
+              <ComponentCard
+                title={t("personProfile.relatedCases")}
+                desc={t("personProfile.casesLinked", { count: cases.length })}
+              >
+                <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
+                  <div className="max-w-full overflow-x-auto">
+                    <Table>
+                      <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
+                        <TableRow>
+                          <TableCell
+                            isHeader
+                            className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                          >
+                            {t("personProfile.columns.caseId")}
+                          </TableCell>
+                          <TableCell
+                            isHeader
+                            className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                          >
+                            {t("personProfile.columns.type")}
+                          </TableCell>
+                          <TableCell
+                            isHeader
+                            className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                          >
+                            {t("personProfile.columns.description")}
+                          </TableCell>
+                          <TableCell
+                            isHeader
+                            className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                          >
+                            {t("personProfile.columns.linkedVia")}
+                          </TableCell>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+                        {cases.map((relatedCase) => (
+                          <TableRow key={relatedCase.caseId}>
+                            <TableCell className="px-5 py-4 sm:px-6 text-start">
+                              <Link
+                                to={`/cases/${encodeURIComponent(relatedCase.caseId)}`}
+                                className="block font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300"
+                              >
+                                {relatedCase.caseId}
+                              </Link>
+                            </TableCell>
+                            <TableCell className="px-4 py-3 text-start text-theme-sm">
+                              <Badge
+                                size="sm"
+                                color={modalityColor(relatedCase.modality)}
+                              >
+                                {t(modalityLabelKey(relatedCase.modality))}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
+                              {relatedCase.description || "—"}
+                            </TableCell>
+                            <TableCell className="px-4 py-3 text-start text-theme-sm">
+                              <div className="flex flex-wrap gap-1.5">
+                                {relatedCase.clusterIds.map((clusterId) => (
+                                  <Badge key={clusterId} size="sm" color="light">
+                                    #{clusterId}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+
+                        {cases.length === 0 && (
+                          <TableRow>
+                            <TableCell className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">
+                              {t("personProfile.noCases")}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </ComponentCard>
+            </>
+          )}
         </div>
       )}
     </>

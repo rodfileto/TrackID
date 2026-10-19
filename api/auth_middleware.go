@@ -12,6 +12,7 @@ import (
 
 	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/auth"
+	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/distribution"
 )
 
@@ -84,7 +85,8 @@ func ActiveUser(repo *auth.Repository) gin.HandlerFunc {
 	}
 }
 
-// RequireAdmin lets through only an ADMIN or SUPER_ADMIN. It runs after ActiveUser.
+// RequireAdmin lets through only an ADMIN or SUPER_ADMIN: account management, nothing else. It
+// runs after ActiveUser.
 func RequireAdmin() gin.HandlerFunc {
 	return func(context *gin.Context) {
 		if !currentUser(context).AccountRole.IsAdmin() {
@@ -110,36 +112,129 @@ var blindRoutes = map[string]bool{
 	"/api/cases/:caseId/analyses/:analysisId/pairs/image": true,
 }
 
-// CaseAccess guards every route under cases/:caseId: it runs after ActiveUser and lets through
-// an admin, or a user who holds one of the case's analyses (distribution.CanOpen) -- only to
-// blindRoutes while they work one of them blind.
+// intelligenceCaseRoutes are the cases/:caseId routes that change the case but are intelligence
+// work, not examination: RequireIntelligence guards them, so CaseAccess does not ask the user to
+// hold an analysis there.
+var intelligenceCaseRoutes = map[string]bool{
+	"/api/cases/:caseId/occurrence": true,
+}
+
+// blindMessage is the refusal while a user works an analysis blind.
+const blindMessage = "blind work: only the analysis is open to you until you submit it"
+
+// CaseAccess guards every route under cases/:caseId (distribution.Rights): it runs after
+// ActiveUser and lets a user read a case where they hold an analysis, or any case as an analyst or
+// coordinator; change it only where they hold an analysis; and, while they work one of its
+// analyses blind, reach blindRoutes only -- whatever their account role or capabilities.
 func CaseAccess(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		if sqlDB == nil {
 			context.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
 			return
 		}
-		user, caseID := currentUser(context), context.Param("caseId")
-		switch err := distribution.CanOpen(context.Request.Context(), sqlDB, user, caseID); {
-		case err == nil:
-			if !user.AccountRole.IsAdmin() && !blindRoutes[context.FullPath()] {
-				blind, err := distribution.BlindIn(context.Request.Context(), sqlDB, user.ID, caseID)
-				if err != nil {
-					context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "could not check case access"})
-					return
-				}
-				if blind {
-					context.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "blind work: only the analysis is open to you until you submit it"})
-					return
-				}
-			}
-			context.Next()
+		rights, err := distribution.Rights(context.Request.Context(), sqlDB, currentUser(context), context.Param("caseId"))
+		path := context.FullPath()
+		reads := context.Request.Method == http.MethodGet || context.Request.Method == http.MethodHead
+		switch {
 		case errors.Is(err, analyses.ErrCaseNotFound):
 			context.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "case not found"})
-		case errors.Is(err, distribution.ErrNotAssigned):
-			context.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": err.Error()})
-		default:
+		case err != nil:
 			context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "could not check case access"})
+		case !rights.Read:
+			context.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": distribution.ErrNotAssigned.Error()})
+		case rights.Blind && !blindRoutes[path]:
+			context.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": blindMessage})
+		case !reads && !rights.Write && !intelligenceCaseRoutes[path]:
+			context.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "only an examiner holding one of its analyses can change this case"})
+		default:
+			// Reading a case one works on is the work itself; anyone else's read is logged.
+			if !rights.Holds && !recordAccess(context, sqlDB, accessCase, context.Param("caseId")) {
+				return
+			}
+			context.Next()
 		}
 	}
+}
+
+// Kinds of access_log rows.
+const (
+	accessPerson     = "PERSON"
+	accessFaceSearch = "FACE_SEARCH"
+	accessCase       = "CASE"
+)
+
+// recordAccess writes one access_log row for the signed-in user's request (subject "" for none).
+// A read that cannot be recorded is not served: it aborts with 500 and returns false.
+func recordAccess(context *gin.Context, sqlDB *sql.DB, kind, subject string) bool {
+	user := currentUser(context)
+	err := db.New(sqlDB).InsertAccessLog(context.Request.Context(), db.InsertAccessLogParams{
+		UserID: user.ID, Username: user.Username, Kind: kind,
+		Subject: sql.NullString{String: subject, Valid: subject != ""}, Route: context.FullPath(),
+	})
+	if err != nil {
+		context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "could not record the access"})
+		return false
+	}
+	return true
+}
+
+// LogAccess records each request of a route in access_log (recordAccess), its subject the route
+// parameter param ("" for none): the intelligence routes on a person's history and face search.
+// It runs after the route's guard.
+func LogAccess(sqlDB *sql.DB, kind, param string) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		subject := ""
+		if param != "" {
+			subject = context.Param(param)
+		}
+		if recordAccess(context, sqlDB, kind, subject) {
+			context.Next()
+		}
+	}
+}
+
+// requireCapability lets through a user who has the capability (has) and works nothing blind
+// (distribution.BlindAnywhere). It runs after ActiveUser.
+func requireCapability(sqlDB *sql.DB, has func(auth.UserProfile) bool, refusal string) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		user := currentUser(context)
+		if !has(user) {
+			context.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": refusal})
+			return
+		}
+		if sqlDB == nil {
+			context.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		blind, err := distribution.BlindAnywhere(context.Request.Context(), sqlDB, user.ID)
+		if err != nil {
+			context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "could not check access"})
+			return
+		}
+		if blind {
+			context.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": blindMessage})
+			return
+		}
+		context.Next()
+	}
+}
+
+// RequireIntelligence guards the intelligence routes: the full person page, face search,
+// clusters, occurrences.
+func RequireIntelligence(sqlDB *sql.DB) gin.HandlerFunc {
+	return requireCapability(sqlDB, auth.UserProfile.IntelligenceAccess, "intelligence access required")
+}
+
+// RequireCoordinator guards distribution, reassignment and opening comparisons.
+func RequireCoordinator(sqlDB *sql.DB) gin.HandlerFunc {
+	return requireCapability(sqlDB, auth.UserProfile.Coordinates, "coordinator access required")
+}
+
+// RequirePersonIdentity guards person search by name and a person's identity (documents,
+// registers, enrollment photos): examiners and analysts. Only analysts get the rest of the person
+// page (RequireIntelligence).
+func RequirePersonIdentity(sqlDB *sql.DB) gin.HandlerFunc {
+	return requireCapability(sqlDB, func(u auth.UserProfile) bool {
+		return u.IntelligenceAccess() || u.Examines(auth.ModalityFacial) || u.Examines(auth.ModalityFingerprint)
+	}, "person search is for examiners and analysts")
 }

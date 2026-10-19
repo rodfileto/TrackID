@@ -22,7 +22,7 @@ import (
 var caseYearPattern = regexp.MustCompile(`^(19|20)\d{2}$`)
 
 // assignedToFilter keeps the biometric_cases where the user (placeholder p, e.g. "$3") currently
-// holds an analysis, what a non-admin may list (see distribution.CanOpen), except while they work
+// holds an analysis, what anyone but an analyst or coordinator may list (distribution.SeesEveryCase), except while they work
 // one of its analyses blind (distribution.BlindIn; the step whose stage it is, other than the
 // first examiner's, as analyses.BlindWork).
 func assignedToFilter(p string) string {
@@ -121,7 +121,13 @@ func ListCasesHandler(db *sql.DB) gin.HandlerFunc {
 		if year := strings.TrimSpace(context.Query("year")); year != "" && caseYearPattern.MatchString(year) {
 			addFilter("case_id ~", `(^|\.)`+year+`(\.|$)`)
 		}
-		if user := currentUser(context); !user.AccountRole.IsAdmin() {
+		user := currentUser(context)
+		every, err := distribution.SeesEveryCase(context.Request.Context(), db, user)
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not check case access"})
+			return
+		}
+		if !every {
 			args = append(args, user.ID)
 			filters = append(filters, assignedToFilter("$"+strconv.Itoa(len(args))))
 		}
@@ -171,7 +177,13 @@ func ListCaseYearsHandler(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		where, args := "", []any{}
-		if user := currentUser(context); !user.AccountRole.IsAdmin() {
+		user := currentUser(context)
+		every, err := distribution.SeesEveryCase(context.Request.Context(), db, user)
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not check case access"})
+			return
+		}
+		if !every {
 			where, args = " WHERE "+assignedToFilter("$1"), []any{user.ID}
 		}
 		rows, err := db.QueryContext(context.Request.Context(), `

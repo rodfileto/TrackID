@@ -34,6 +34,8 @@ type createUserRequest struct {
 	AccountRole         auth.AccountRole `json:"account_role"`
 	ExaminesFingerprint bool             `json:"examines_fingerprint"`
 	ExaminesFacial      bool             `json:"examines_facial"`
+	IntelligenceAnalyst bool             `json:"intelligence_analyst"`
+	Coordinator         bool             `json:"coordinator"`
 }
 
 // CreateUserHandler creates an account; account_role defaults to USER. Who may create which
@@ -48,7 +50,8 @@ func CreateUserHandler(repo *auth.Repository, emailDomain string) gin.HandlerFun
 		if request.AccountRole == "" {
 			request.AccountRole = auth.AccountRoleUser
 		}
-		access := auth.Access{AccountRole: request.AccountRole, ExaminesFingerprint: request.ExaminesFingerprint, ExaminesFacial: request.ExaminesFacial, IsActive: true}
+		access := auth.Access{AccountRole: request.AccountRole, ExaminesFingerprint: request.ExaminesFingerprint, ExaminesFacial: request.ExaminesFacial,
+			IntelligenceAnalyst: request.IntelligenceAnalyst, Coordinator: request.Coordinator, IsActive: true}
 		if err := auth.CheckAccountChange(currentUser(context), nil, access); err != nil {
 			accountChangeError(context, err)
 			return
@@ -69,11 +72,13 @@ type updateUserAccessRequest struct {
 	AccountRole         *auth.AccountRole `json:"account_role"`
 	ExaminesFingerprint *bool             `json:"examines_fingerprint"`
 	ExaminesFacial      *bool             `json:"examines_facial"`
+	IntelligenceAnalyst *bool             `json:"intelligence_analyst"`
+	Coordinator         *bool             `json:"coordinator"`
 	IsActive            *bool             `json:"is_active"`
 }
 
-// UpdateUserAccessHandler changes an account's role, what it examines or its active flag; fields
-// left out keep their value.
+// UpdateUserAccessHandler changes an account's role, capabilities or active flag; fields left out
+// keep their value.
 func UpdateUserAccessHandler(repo *auth.Repository) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		id, err := strconv.ParseInt(context.Param("userId"), 10, 64)
@@ -95,7 +100,8 @@ func UpdateUserAccessHandler(repo *auth.Repository) gin.HandlerFunc {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load user"})
 			return
 		}
-		access := auth.Access{AccountRole: target.AccountRole, ExaminesFingerprint: target.ExaminesFingerprint, ExaminesFacial: target.ExaminesFacial, IsActive: target.IsActive}
+		access := auth.Access{AccountRole: target.AccountRole, ExaminesFingerprint: target.ExaminesFingerprint, ExaminesFacial: target.ExaminesFacial,
+			IntelligenceAnalyst: target.IntelligenceAnalyst, Coordinator: target.Coordinator, IsActive: target.IsActive}
 		if request.AccountRole != nil {
 			access.AccountRole = *request.AccountRole
 		}
@@ -104,6 +110,12 @@ func UpdateUserAccessHandler(repo *auth.Repository) gin.HandlerFunc {
 		}
 		if request.ExaminesFacial != nil {
 			access.ExaminesFacial = *request.ExaminesFacial
+		}
+		if request.IntelligenceAnalyst != nil {
+			access.IntelligenceAnalyst = *request.IntelligenceAnalyst
+		}
+		if request.Coordinator != nil {
+			access.Coordinator = *request.Coordinator
 		}
 		if request.IsActive != nil {
 			access.IsActive = *request.IsActive

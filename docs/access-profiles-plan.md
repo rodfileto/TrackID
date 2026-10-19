@@ -1,6 +1,6 @@
 # Access profiles: examiner, intelligence, admin
 
-Decided 2026-10-19, not yet built. Who may see a person's history, the biometric cases and the
+Decided and built 2026-10-19 (see "As built" at the end). Who may see a person's history, the biometric cases and the
 intelligence pages, separated from who runs the application.
 
 ## Why
@@ -114,3 +114,19 @@ no analysis there (that is, intelligence reads). It answers "who looked at this 
 3. Frontend: sidebar, person page, route guards.
 4. Coordinator flag: distribution and comparisons move from admin to it.
 5. Access log.
+
+## As built (2026-10-19)
+
+- Migration 020 (flags; current admins became coordinators) and 021 (`access_log`).
+  `distribution.Rights` decides case access; `RequireIntelligence`, `RequireCoordinator` and
+  `RequirePersonIdentity` guard the other routes; `api/access_db_test.go` walks the table above
+  through the router, the access log included.
+- Blindness suspends coordination as well as intelligence (a coordinator's routes list examiners
+  and open a case's analyses), and suspends person search and identity for examiners too.
+- The coordination routes keep their `/api/admin/...` paths; only the guard changed.
+- Person search sends `caseCounts` to analysts only.
+- Reading a case's linked occurrence stays part of reading the case; finding, linking,
+  unlinking and registering occurrences are intelligence.
+- There is no user-management screen in the frontend (accounts are managed through
+  `/api/admin/users` and `cmd/create-superuser`, now with `-intelligence` and `-coordinator`), so
+  the admin checkboxes wait for that screen.

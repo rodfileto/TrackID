@@ -1,4 +1,12 @@
 {
+  "access": {
+    "deniedTitle": "Not available to your profile",
+    "denied": {
+      "coordinator": "Distributing analyses is for coordinators.",
+      "intelligence": "This page is for intelligence analysts.",
+      "persons": "Person search is for examiners and intelligence analysts."
+    }
+  },
   "common": {
     "logo": "Logo",
     "user": "User",
