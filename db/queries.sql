@@ -951,9 +951,11 @@ ORDER BY o.occurred_from DESC, o.id DESC
 LIMIT 20;
 
 -- name: GetOccurrenceSummary :one
--- One occurrence as a case page shows it.
+-- One occurrence as a case page shows it, with its location's point for the card's map.
 SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.occurred_from, o.status,
-    l.name AS place_name, l.neighbourhood,
+    l.name AS place_name, l.neighbourhood, l.address, l.precision,
+    ST_X(l.geom::geometry)::float8 AS lon,
+    ST_Y(l.geom::geometry)::float8 AS lat,
     COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
 FROM occurrences o

@@ -99,6 +99,11 @@ export interface OccurrenceSummary {
   types: string[];
   placeName?: string;
   neighbourhood?: string;
+  /** Where it happened: sent for a case's occurrence (getCaseOccurrence), not by searches. */
+  address?: string;
+  precision?: string;
+  lon?: number;
+  lat?: number;
 }
 
 /** Where a new occurrence happened: an existing location, or a point. */
