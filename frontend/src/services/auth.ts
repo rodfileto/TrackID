@@ -12,6 +12,10 @@ export interface UserProfile {
   /** Which biometrics the user may sign decisions on: either, both, or neither. */
   examines_fingerprint: boolean;
   examines_facial: boolean;
+  /** Reads every case and person, and the intelligence pages (docs/access-profiles-plan.md). */
+  intelligence_analyst: boolean;
+  /** Distributes analyses, reassigns their steps, opens comparisons. */
+  coordinator: boolean;
   is_active: boolean;
 }
 

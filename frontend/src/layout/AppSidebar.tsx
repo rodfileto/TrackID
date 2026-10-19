@@ -21,8 +21,8 @@ type NavItem = {
   name: string;
   icon: React.ReactNode;
   path?: string;
-  /** Shown only to ADMIN and SUPER_ADMIN users. */
-  adminOnly?: boolean;
+  /** Shown only to users with this capability (useCurrentUser); "persons" is examiners and analysts. */
+  requires?: "coordinator" | "intelligence" | "persons";
   subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
 };
 
@@ -51,21 +51,24 @@ const allNavItems: NavItem[] = [
     icon: <TableIcon />,
     name: "nav.distribution",
     path: "/admin/distribution",
-    adminOnly: true,
+    requires: "coordinator",
   },
   {
     icon: <GroupIcon />,
     name: "nav.persons",
     path: "/persons",
+    requires: "persons",
   },
   {
     icon: <BoxCubeIcon />,
     name: "nav.clusters",
     path: "/clusters",
+    requires: "intelligence",
   },
   {
     icon: <PieChartIcon />,
     name: "nav.intelligence",
+    requires: "intelligence",
     subItems: [
       { name: "nav.occurrenceMap", path: "/intelligence/map" },
       { name: "nav.newOccurrence", path: "/intelligence/occurrences/new" },
@@ -76,8 +79,18 @@ const allNavItems: NavItem[] = [
 const AppSidebar: React.FC = () => {
   const { t } = useTranslation();
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
-  const { isAdmin } = useCurrentUser();
-  const navItems = useMemo(() => allNavItems.filter((item) => !item.adminOnly || isAdmin), [isAdmin]);
+  const { isExaminer, isIntelligence, isCoordinator } = useCurrentUser();
+  const navItems = useMemo(
+    () =>
+      allNavItems.filter(
+        (item) =>
+          !item.requires ||
+          (item.requires === "coordinator" && isCoordinator) ||
+          (item.requires === "intelligence" && isIntelligence) ||
+          (item.requires === "persons" && (isExaminer || isIntelligence)),
+      ),
+    [isExaminer, isIntelligence, isCoordinator],
+  );
   const location = useLocation();
 
   const [openSubmenu, setOpenSubmenu] = useState<{

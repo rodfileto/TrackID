@@ -25,6 +25,10 @@ type UserProfile struct {
 	// decisions on: either, both, or neither. See Examines.
 	ExaminesFingerprint bool `json:"examines_fingerprint"`
 	ExaminesFacial      bool `json:"examines_facial"`
+	// IntelligenceAnalyst and Coordinator are the other two capabilities (migration 020); see
+	// IntelligenceAccess and Coordinates.
+	IntelligenceAnalyst bool `json:"intelligence_analyst"`
+	Coordinator         bool `json:"coordinator"`
 	IsActive            bool `json:"is_active"`
 }
 
@@ -50,7 +54,8 @@ type authenticatedUser struct {
 // profile-shaped ones (CreateUserRow, ListUsersRow, ...) convert to GetUserByIDRow.
 func profileFrom(row db.GetUserByIDRow) UserProfile {
 	return UserProfile{ID: row.ID, Nome: row.Nome, UltimoNome: row.UltimoNome, Matricula: row.Matricula, Cargo: row.Cargo,
-		Username: row.Username, Email: row.Email, AccountRole: AccountRole(row.AccountRole), ExaminesFingerprint: row.ExaminesFingerprint, ExaminesFacial: row.ExaminesFacial, IsActive: row.IsActive}
+		Username: row.Username, Email: row.Email, AccountRole: AccountRole(row.AccountRole), ExaminesFingerprint: row.ExaminesFingerprint, ExaminesFacial: row.ExaminesFacial,
+		IntelligenceAnalyst: row.IntelligenceAnalyst, Coordinator: row.Coordinator, IsActive: row.IsActive}
 }
 
 func (r *Repository) CreateUser(ctx context.Context, params db.CreateUserParams) (UserProfile, error) {
@@ -68,7 +73,8 @@ func (r *Repository) FindByMatricula(ctx context.Context, matricula string) (aut
 	}
 	return authenticatedUser{
 		Profile: profileFrom(db.GetUserByIDRow{ID: row.ID, Nome: row.Nome, UltimoNome: row.UltimoNome, Matricula: row.Matricula, Cargo: row.Cargo,
-			Username: row.Username, Email: row.Email, AccountRole: row.AccountRole, ExaminesFingerprint: row.ExaminesFingerprint, ExaminesFacial: row.ExaminesFacial, IsActive: row.IsActive}),
+			Username: row.Username, Email: row.Email, AccountRole: row.AccountRole, ExaminesFingerprint: row.ExaminesFingerprint, ExaminesFacial: row.ExaminesFacial,
+			IntelligenceAnalyst: row.IntelligenceAnalyst, Coordinator: row.Coordinator, IsActive: row.IsActive}),
 		PasswordHash: row.PasswordHash,
 	}, nil
 }
@@ -93,11 +99,12 @@ func (r *Repository) ListUsers(ctx context.Context) ([]UserProfile, error) {
 	return users, nil
 }
 
-// UpdateAccess sets a user's account role, what they examine and active flag. Callers check the
-// change with CheckAccountChange first.
+// UpdateAccess sets a user's account role, capabilities and active flag. Callers check the change
+// with CheckAccountChange first.
 func (r *Repository) UpdateAccess(ctx context.Context, id int64, access Access) (UserProfile, error) {
 	row, err := r.queries.UpdateUserAccess(ctx, db.UpdateUserAccessParams{
-		ID: id, AccountRole: string(access.AccountRole), ExaminesFingerprint: access.ExaminesFingerprint, ExaminesFacial: access.ExaminesFacial, IsActive: access.IsActive,
+		ID: id, AccountRole: string(access.AccountRole), ExaminesFingerprint: access.ExaminesFingerprint, ExaminesFacial: access.ExaminesFacial,
+		IntelligenceAnalyst: access.IntelligenceAnalyst, Coordinator: access.Coordinator, IsActive: access.IsActive,
 	})
 	if err != nil {
 		return UserProfile{}, err
@@ -149,5 +156,7 @@ func (r *Repository) Create(ctx context.Context, user NewUser, emailDomain strin
 		AccountRole:         string(user.Access.AccountRole),
 		ExaminesFingerprint: user.Access.ExaminesFingerprint,
 		ExaminesFacial:      user.Access.ExaminesFacial,
+		IntelligenceAnalyst: user.Access.IntelligenceAnalyst,
+		Coordinator:         user.Access.Coordinator,
 	})
 }

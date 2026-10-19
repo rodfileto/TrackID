@@ -13,27 +13,36 @@ import {
   activeStep,
   analysisSteps,
   assignAnalysis,
+  getDistributionStatus,
   getWorksheet,
   listCaseAnalyses,
-  listUsers,
   openAnalysis,
   type Analysis,
+  type DistributionExaminer,
   type PairView,
 } from "../../services/analyses";
-import type { UserProfile } from "../../services/auth";
 
 const headerClass = "px-4 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400";
 const cellClass = "px-4 py-3 text-start text-theme-sm text-gray-700 dark:text-gray-300";
 const selectClass =
   "h-9 rounded-lg border border-gray-200 bg-transparent px-2 text-sm text-gray-800 dark:border-gray-800 dark:bg-gray-900 dark:text-white/90";
 
-/** Admin: give an open analysis's current step to an eligible examiner, or back to pending. */
-function AssignControl({ analysis, users, onDone }: { analysis: Analysis; users: UserProfile[]; onDone: () => void }) {
+/** Coordinator: give an open analysis's current step to an eligible examiner, or back to pending.
+ * users are the active examiners, as distribution lists them. */
+function AssignControl({
+  analysis,
+  users,
+  onDone,
+}: {
+  analysis: Analysis;
+  users: DistributionExaminer[];
+  onDone: () => void;
+}) {
   const { t } = useTranslation();
   const step = activeStep(analysis.stage);
   const current = analysis.examiners[step]?.userId;
   const others = analysisSteps.filter((s) => s !== step).map((s) => analysis.examiners[s]?.userId);
-  const eligible = users.filter((u) => u.is_active && u.examines_facial && !others.includes(u.id));
+  const eligible = users.filter((u) => u.examinesFacial && !others.includes(u.userId));
   const [choice, setChoice] = useState<string>(current ? String(current) : "");
 
   async function save() {
@@ -51,7 +60,7 @@ function AssignControl({ analysis, users, onDone }: { analysis: Analysis; users:
       <select value={choice} onChange={(e) => setChoice(e.target.value)} className={selectClass}>
         <option value="">{t("analyses.unassigned")}</option>
         {eligible.map((u) => (
-          <option key={u.id} value={u.id}>
+          <option key={u.userId} value={u.userId}>
             {u.username}
           </option>
         ))}
@@ -153,13 +162,13 @@ function OpenComparisonModal({
 }
 
 /** A case's analyses: each one's stage, examiners and report, a link to work on it, and, for
- * admins, assigning its current step and opening a comparison. refreshKey reloads the list when
+ * coordinators, assigning its current step and opening a comparison. refreshKey reloads the list when
  * an analysis is opened elsewhere on the page (e.g. from the case's clusters). */
 export default function CaseAnalysesCard({ caseId, refreshKey = 0 }: { caseId: string; refreshKey?: number }) {
   const { t } = useTranslation();
-  const { isAdmin } = useCurrentUser();
+  const { isCoordinator } = useCurrentUser();
   const [list, setList] = useState<Analysis[] | null>(null);
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [users, setUsers] = useState<DistributionExaminer[]>([]);
   const [comparing, setComparing] = useState(false);
   const [error, setError] = useState("");
 
@@ -171,8 +180,11 @@ export default function CaseAnalysesCard({ caseId, refreshKey = 0 }: { caseId: s
 
   useEffect(load, [load, refreshKey]);
   useEffect(() => {
-    if (isAdmin) listUsers().then(setUsers).catch(() => setUsers([]));
-  }, [isAdmin]);
+    if (isCoordinator)
+      getDistributionStatus()
+        .then((s) => setUsers(s.examiners))
+        .catch(() => setUsers([]));
+  }, [isCoordinator]);
 
   const review = list?.find((a) => a.type === "FACIAL_REVIEW");
 
@@ -220,7 +232,7 @@ export default function CaseAnalysesCard({ caseId, refreshKey = 0 }: { caseId: s
                       )}
                       {!a.examiners.VERIFICATOR && <li className="text-gray-400">{t("analyses.pending")}</li>}
                     </ul>
-                    {isAdmin && a.status === "OPEN" && (
+                    {isCoordinator && a.status === "OPEN" && (
                       <div className="mt-2">
                         <AssignControl analysis={a} users={users} onDone={load} />
                       </div>
@@ -250,7 +262,7 @@ export default function CaseAnalysesCard({ caseId, refreshKey = 0 }: { caseId: s
           </Table>
         </div>
       )}
-      {isAdmin && review && (
+      {isCoordinator && review && (
         <div className="mt-4">
           <Button size="sm" variant="outline" onClick={() => setComparing(true)}>
             {t("analyses.openComparison")}

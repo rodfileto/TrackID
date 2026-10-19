@@ -2,9 +2,11 @@ package auth
 
 import "errors"
 
-// AccountRole is what a user may do to the system's accounts (users.account_role). It is
-// independent of what they examine (UserProfile.Examines), which is whether they may sign human
-// decisions on a modality. See migration 016.
+// AccountRole is what a user may do to the system's accounts (users.account_role), and nothing
+// else: it gives no access to cases or persons. What a user does is their capabilities, each
+// independent of the role and of each other: what they examine (UserProfile.Examines), whether
+// they analyse intelligence (IntelligenceAccess) and whether they coordinate the work
+// (Coordinates). See migrations 016 and 020.
 type AccountRole string
 
 const (
@@ -50,11 +52,22 @@ func (p UserProfile) Examines(m Modality) bool {
 	return false
 }
 
+// IntelligenceAccess reports whether the user may read every biometric case and person -- full
+// person pages, clusters, face search, occurrences -- and link occurrences to cases: they are an
+// intelligence analyst and their account is active. Blind work suspends it (distribution.BlindAnywhere).
+func (p UserProfile) IntelligenceAccess() bool { return p.IsActive && p.IntelligenceAnalyst }
+
+// Coordinates reports whether the user may distribute analyses, reassign their steps and open
+// comparisons: they are a coordinator and their account is active.
+func (p UserProfile) Coordinates() bool { return p.IsActive && p.Coordinator }
+
 // Access is the part of a profile an admin can change.
 type Access struct {
 	AccountRole         AccountRole
 	ExaminesFingerprint bool
 	ExaminesFacial      bool
+	IntelligenceAnalyst bool
+	Coordinator         bool
 	IsActive            bool
 }
 

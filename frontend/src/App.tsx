@@ -8,6 +8,7 @@ import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
 import RequireAuth from "./components/auth/RequireAuth";
+import RequireCapability from "./components/auth/RequireCapability";
 import CriminalCases from "./pages/CriminalCases";
 import CaseDetailPage from "./pages/CaseDetail";
 import PersonLookup from "./pages/PersonLookup";
@@ -61,26 +62,32 @@ export default function App() {
               <Route path="/cases/:caseId" element={<CaseDetailPage />} />
               <Route path="/cases/:caseId/analyses/:analysisId" element={<AnalysisWorkspace />} />
               <Route path="/analyses" element={<MyAnalyses />} />
-              <Route path="/admin/distribution" element={<Distribution />} />
-              <Route path="/persons" element={<PersonLookup />} />
-              <Route path="/persons/:personId" element={<PersonProfilePage />} />
-              <Route path="/clusters" element={<Clusters />} />
-              <Route
-                path="/intelligence/map"
-                element={
-                  <Suspense fallback={null}>
-                    <OccurrenceMap />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/intelligence/occurrences/new"
-                element={
-                  <Suspense fallback={null}>
-                    <NewOccurrence />
-                  </Suspense>
-                }
-              />
+              <Route element={<RequireCapability need="coordinator" />}>
+                <Route path="/admin/distribution" element={<Distribution />} />
+              </Route>
+              <Route element={<RequireCapability need="persons" />}>
+                <Route path="/persons" element={<PersonLookup />} />
+                <Route path="/persons/:personId" element={<PersonProfilePage />} />
+              </Route>
+              <Route element={<RequireCapability need="intelligence" />}>
+                <Route path="/clusters" element={<Clusters />} />
+                <Route
+                  path="/intelligence/map"
+                  element={
+                    <Suspense fallback={null}>
+                      <OccurrenceMap />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/intelligence/occurrences/new"
+                  element={
+                    <Suspense fallback={null}>
+                      <NewOccurrence />
+                    </Suspense>
+                  }
+                />
+              </Route>
             </Route>
           </Route>
 

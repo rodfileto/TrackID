@@ -418,9 +418,9 @@ func (q *Queries) CreateOccurrence(ctx context.Context, arg CreateOccurrencePara
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (nome, ultimo_nome, matricula, cargo, username, email, password_hash, account_role, examines_fingerprint, examines_facial)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active
+INSERT INTO users (nome, ultimo_nome, matricula, cargo, username, email, password_hash, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
 `
 
 type CreateUserParams struct {
@@ -434,6 +434,8 @@ type CreateUserParams struct {
 	AccountRole         string `db:"account_role" json:"account_role"`
 	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
 	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool   `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool   `db:"coordinator" json:"coordinator"`
 }
 
 type CreateUserRow struct {
@@ -447,6 +449,8 @@ type CreateUserRow struct {
 	AccountRole         string `db:"account_role" json:"account_role"`
 	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
 	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool   `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool   `db:"coordinator" json:"coordinator"`
 	IsActive            bool   `db:"is_active" json:"is_active"`
 }
 
@@ -462,6 +466,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		arg.AccountRole,
 		arg.ExaminesFingerprint,
 		arg.ExaminesFacial,
+		arg.IntelligenceAnalyst,
+		arg.Coordinator,
 	)
 	var i CreateUserRow
 	err := row.Scan(
@@ -475,6 +481,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		&i.AccountRole,
 		&i.ExaminesFingerprint,
 		&i.ExaminesFacial,
+		&i.IntelligenceAnalyst,
+		&i.Coordinator,
 		&i.IsActive,
 	)
 	return i, err
@@ -1398,7 +1406,7 @@ func (q *Queries) GetPersonByPersonID(ctx context.Context, personID string) (Per
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active
+SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
 FROM users
 WHERE id = $1
 `
@@ -1414,6 +1422,8 @@ type GetUserByIDRow struct {
 	AccountRole         string `db:"account_role" json:"account_role"`
 	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
 	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool   `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool   `db:"coordinator" json:"coordinator"`
 	IsActive            bool   `db:"is_active" json:"is_active"`
 }
 
@@ -1431,13 +1441,15 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 		&i.AccountRole,
 		&i.ExaminesFingerprint,
 		&i.ExaminesFacial,
+		&i.IntelligenceAnalyst,
+		&i.Coordinator,
 		&i.IsActive,
 	)
 	return i, err
 }
 
 const getUserByMatricula = `-- name: GetUserByMatricula :one
-SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active, password_hash
+SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, password_hash
 FROM users
 WHERE matricula = $1
 `
@@ -1453,6 +1465,8 @@ type GetUserByMatriculaRow struct {
 	AccountRole         string `db:"account_role" json:"account_role"`
 	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
 	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool   `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool   `db:"coordinator" json:"coordinator"`
 	IsActive            bool   `db:"is_active" json:"is_active"`
 	PasswordHash        string `db:"password_hash" json:"password_hash"`
 }
@@ -1471,10 +1485,35 @@ func (q *Queries) GetUserByMatricula(ctx context.Context, matricula string) (Get
 		&i.AccountRole,
 		&i.ExaminesFingerprint,
 		&i.ExaminesFacial,
+		&i.IntelligenceAnalyst,
+		&i.Coordinator,
 		&i.IsActive,
 		&i.PasswordHash,
 	)
 	return i, err
+}
+
+const insertAccessLog = `-- name: InsertAccessLog :exec
+INSERT INTO access_log (user_id, username, kind, subject, route) VALUES ($1, $2, $3, $4, $5)
+`
+
+type InsertAccessLogParams struct {
+	UserID   int64          `db:"user_id" json:"user_id"`
+	Username string         `db:"username" json:"username"`
+	Kind     string         `db:"kind" json:"kind"`
+	Subject  sql.NullString `db:"subject" json:"subject"`
+	Route    string         `db:"route" json:"route"`
+}
+
+func (q *Queries) InsertAccessLog(ctx context.Context, arg InsertAccessLogParams) error {
+	_, err := q.db.ExecContext(ctx, insertAccessLog,
+		arg.UserID,
+		arg.Username,
+		arg.Kind,
+		arg.Subject,
+		arg.Route,
+	)
+	return err
 }
 
 const insertAnalysisAssignment = `-- name: InsertAnalysisAssignment :one
@@ -4121,7 +4160,7 @@ func (q *Queries) ListUnmatchedFeatureEmbeddings(ctx context.Context, embeddingT
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active
+SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
 FROM users
 ORDER BY ultimo_nome, nome, id
 `
@@ -4137,6 +4176,8 @@ type ListUsersRow struct {
 	AccountRole         string `db:"account_role" json:"account_role"`
 	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
 	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool   `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool   `db:"coordinator" json:"coordinator"`
 	IsActive            bool   `db:"is_active" json:"is_active"`
 }
 
@@ -4160,6 +4201,8 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 			&i.AccountRole,
 			&i.ExaminesFingerprint,
 			&i.ExaminesFacial,
+			&i.IntelligenceAnalyst,
+			&i.Coordinator,
 			&i.IsActive,
 		); err != nil {
 			return nil, err
@@ -4517,9 +4560,10 @@ func (q *Queries) UpdateCodificationPoint(ctx context.Context, arg UpdateCodific
 
 const updateUserAccess = `-- name: UpdateUserAccess :one
 UPDATE users
-SET account_role = $2, examines_fingerprint = $3, examines_facial = $4, is_active = $5, updated_at = NOW()
+SET account_role = $2, examines_fingerprint = $3, examines_facial = $4, intelligence_analyst = $5, coordinator = $6,
+    is_active = $7, updated_at = NOW()
 WHERE id = $1
-RETURNING id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, is_active
+RETURNING id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
 `
 
 type UpdateUserAccessParams struct {
@@ -4527,6 +4571,8 @@ type UpdateUserAccessParams struct {
 	AccountRole         string `db:"account_role" json:"account_role"`
 	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
 	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool   `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool   `db:"coordinator" json:"coordinator"`
 	IsActive            bool   `db:"is_active" json:"is_active"`
 }
 
@@ -4541,6 +4587,8 @@ type UpdateUserAccessRow struct {
 	AccountRole         string `db:"account_role" json:"account_role"`
 	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
 	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool   `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool   `db:"coordinator" json:"coordinator"`
 	IsActive            bool   `db:"is_active" json:"is_active"`
 }
 
@@ -4551,6 +4599,8 @@ func (q *Queries) UpdateUserAccess(ctx context.Context, arg UpdateUserAccessPara
 		arg.AccountRole,
 		arg.ExaminesFingerprint,
 		arg.ExaminesFacial,
+		arg.IntelligenceAnalyst,
+		arg.Coordinator,
 		arg.IsActive,
 	)
 	var i UpdateUserAccessRow
@@ -4565,6 +4615,8 @@ func (q *Queries) UpdateUserAccess(ctx context.Context, arg UpdateUserAccessPara
 		&i.AccountRole,
 		&i.ExaminesFingerprint,
 		&i.ExaminesFacial,
+		&i.IntelligenceAnalyst,
+		&i.Coordinator,
 		&i.IsActive,
 	)
 	return i, err

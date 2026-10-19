@@ -18,7 +18,8 @@ import (
 // SearchPersonsHandler finds enrolled persons by name (see
 // person.SearchByName), for a caller to disambiguate before opening a full
 // profile. The "name" query parameter is required; an empty/missing one
-// returns 400 rather than the whole table.
+// returns 400 rather than the whole table. How many cases each person is
+// linked to is history, sent to analysts only.
 func SearchPersonsHandler(db *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		if db == nil {
@@ -35,6 +36,11 @@ func SearchPersonsHandler(db *sql.DB) gin.HandlerFunc {
 		if err != nil {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not search persons"})
 			return
+		}
+		if !currentUser(context).IntelligenceAccess() {
+			for i := range results {
+				results[i].CaseCounts = nil
+			}
 		}
 		context.JSON(http.StatusOK, gin.H{"results": results})
 	}

@@ -55,15 +55,21 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.GET("me", MeHandler())
 	protected.GET("me/analyses", MyAnalysesHandler(deps.DB))
 
+	// Account management only (docs/access-profiles-plan.md): an admin sees no case or person
+	// content unless they also hold a capability.
 	admin := protected.Group("admin")
 	admin.Use(RequireAdmin())
 	admin.GET("users", ListUsersHandler(authRepository))
 	admin.POST("users", CreateUserHandler(authRepository, deps.EmailDomain))
 	admin.PATCH("users/:userId", UpdateUserAccessHandler(authRepository))
-	admin.GET("distribution", DistributionStatusHandler(deps.DB))
-	admin.POST("distribution", DistributeHandler(deps.DB))
-	admin.POST("cases/:caseId/analyses", OpenAnalysisHandler(deps.DB))
-	admin.PUT("analyses/:analysisId/assignment", AssignAnalysisHandler(deps.DB))
+	// Coordination: handing out the work and opening comparisons. The paths keep their old
+	// admin/ prefix; the guard is the coordinator capability.
+	coordination := protected.Group("admin")
+	coordination.Use(RequireCoordinator(deps.DB))
+	coordination.GET("distribution", DistributionStatusHandler(deps.DB))
+	coordination.POST("distribution", DistributeHandler(deps.DB))
+	coordination.POST("cases/:caseId/analyses", OpenAnalysisHandler(deps.DB))
+	coordination.PUT("analyses/:analysisId/assignment", AssignAnalysisHandler(deps.DB))
 	protected.GET("cases", ListCasesHandler(deps.DB))
 	protected.POST("cases", CreateCaseHandler(deps.DB))
 	protected.GET("cases/years", ListCaseYearsHandler(deps.DB))
@@ -97,27 +103,36 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	oneCase.DELETE("evidences/:evidenceId/traces/:traceId/points/:pointId", DeletePointHandler(deps.DB))
 	oneCase.POST("evidences/:evidenceId/traces/:traceId/codification-image", SaveCodificationImageHandler(deps.DB, deps.Storage, deps.Queue))
 
-	protected.GET("persons/search", SearchPersonsHandler(deps.DB))
-	protected.POST("persons/search-by-face", SearchPersonsByFaceHandler(deps.DB, deps.FaceVision))
-	protected.GET("persons/:personId", GetPersonProfileHandler(deps.DB))
-	protected.GET("persons/:personId/identity", GetPersonIdentityHandler(deps.DB))
-	protected.GET("persons/:personId/identity-files/:identityFileId/download", DownloadIdentityFileHandler(deps.DB, deps.Storage))
-	protected.GET("persons/:personId/clusters", ListPersonClustersHandler(deps.DB))
-	protected.GET("persons/:personId/cases", ListPersonCasesHandler(deps.DB))
+	// A person's identity is for examiners and analysts; the rest of the person page, and every
+	// intelligence view, for analysts only.
+	identity := protected.Group("persons")
+	identity.Use(RequirePersonIdentity(deps.DB))
+	identity.GET("search", SearchPersonsHandler(deps.DB))
+	identity.GET(":personId/identity", GetPersonIdentityHandler(deps.DB))
+	identity.GET(":personId/identity-files/:identityFileId/download", DownloadIdentityFileHandler(deps.DB, deps.Storage))
 
-	protected.GET("clusters", ListClustersHandler(deps.DB))
-	protected.GET("clusters/graph", ClustersGraphHandler(deps.DB))
+	intelligence := protected.Group("")
+	intelligence.Use(RequireIntelligence(deps.DB))
+	// Each read of a person's history is logged (access_log), as are case reads by someone who
+	// holds none of the case's analyses (CaseAccess).
+	intelligence.POST("persons/search-by-face", LogAccess(deps.DB, accessFaceSearch, ""), SearchPersonsByFaceHandler(deps.DB, deps.FaceVision))
+	intelligence.GET("persons/:personId", LogAccess(deps.DB, accessPerson, "personId"), GetPersonProfileHandler(deps.DB))
+	intelligence.GET("persons/:personId/clusters", LogAccess(deps.DB, accessPerson, "personId"), ListPersonClustersHandler(deps.DB))
+	intelligence.GET("persons/:personId/cases", LogAccess(deps.DB, accessPerson, "personId"), ListPersonCasesHandler(deps.DB))
 
-	protected.GET("occurrences/map", OccurrenceMapHandler(deps.DB))
-	protected.GET("occurrences/types", OccurrenceTypesHandler(deps.DB))
-	protected.GET("occurrences/years", OccurrenceYearsHandler(deps.DB))
-	protected.GET("occurrences/search", SearchOccurrencesHandler(deps.DB))
-	protected.POST("occurrences", CreateOccurrenceHandler(deps.DB))
+	intelligence.GET("clusters", ListClustersHandler(deps.DB))
+	intelligence.GET("clusters/graph", ClustersGraphHandler(deps.DB))
+
+	intelligence.GET("occurrences/map", OccurrenceMapHandler(deps.DB))
+	intelligence.GET("occurrences/types", OccurrenceTypesHandler(deps.DB))
+	intelligence.GET("occurrences/years", OccurrenceYearsHandler(deps.DB))
+	intelligence.GET("occurrences/search", SearchOccurrencesHandler(deps.DB))
+	intelligence.POST("occurrences", CreateOccurrenceHandler(deps.DB))
 	oneCase.GET("occurrence", CaseOccurrenceHandler(deps.DB))
-	oneCase.PUT("occurrence", LinkCaseOccurrenceHandler(deps.DB))
-	protected.GET("locations/nearby", NearbyLocationsHandler(deps.DB))
-	protected.GET("geocode/search", GeocodeSearchHandler(deps.Geocoder))
-	protected.GET("geocode/reverse", GeocodeReverseHandler(deps.Geocoder))
+	oneCase.PUT("occurrence", RequireIntelligence(deps.DB), LinkCaseOccurrenceHandler(deps.DB))
+	intelligence.GET("locations/nearby", NearbyLocationsHandler(deps.DB))
+	intelligence.GET("geocode/search", GeocodeSearchHandler(deps.Geocoder))
+	intelligence.GET("geocode/reverse", GeocodeReverseHandler(deps.Geocoder))
 
 	if deps.Register != nil {
 		deps.Register(router, protected)

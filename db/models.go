@@ -11,6 +11,16 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+type AccessLog struct {
+	ID         int64          `db:"id" json:"id"`
+	UserID     int64          `db:"user_id" json:"user_id"`
+	Username   string         `db:"username" json:"username"`
+	Kind       string         `db:"kind" json:"kind"`
+	Subject    sql.NullString `db:"subject" json:"subject"`
+	Route      string         `db:"route" json:"route"`
+	AccessedAt time.Time      `db:"accessed_at" json:"accessed_at"`
+}
+
 type AnalysisAssignment struct {
 	ID             int64         `db:"id" json:"id"`
 	CaseAnalysisID int64         `db:"case_analysis_id" json:"case_analysis_id"`
@@ -399,4 +409,6 @@ type User struct {
 	ExaminesFingerprint bool      `db:"examines_fingerprint" json:"examines_fingerprint"`
 	ExaminesFacial      bool      `db:"examines_facial" json:"examines_facial"`
 	IsActive            bool      `db:"is_active" json:"is_active"`
+	IntelligenceAnalyst bool      `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool      `db:"coordinator" json:"coordinator"`
 }

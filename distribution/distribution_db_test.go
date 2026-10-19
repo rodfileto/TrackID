@@ -342,8 +342,14 @@ func TestAutomaticReviewAndAccess(t *testing.T) {
 	if list, err := analyses.List(ctx, sqlDB, "P1"); err != nil || len(list) != 0 {
 		t.Fatalf("P1 analyses = %+v, %v; want none", list, err)
 	}
-	if err := distribution.CanOpen(ctx, sqlDB, chief, "P1"); err != nil {
-		t.Fatalf("the admin opening P1: %v", err)
+	// The account role gives no access to cases (docs/access-profiles-plan.md); coordination does.
+	if err := distribution.CanOpen(ctx, sqlDB, chief, "P1"); !errors.Is(err, distribution.ErrNotAssigned) {
+		t.Fatalf("the admin opening P1: %v; want refused", err)
+	}
+	coordinator := chief
+	coordinator.Coordinator = true
+	if err := distribution.CanOpen(ctx, sqlDB, coordinator, "P1"); err != nil {
+		t.Fatalf("a coordinator opening P1: %v", err)
 	}
 	if err := distribution.CanOpen(ctx, sqlDB, ana, "F1"); !errors.Is(err, distribution.ErrNotAssigned) {
 		t.Fatalf("ana opening F1 before holding anything: %v", err)

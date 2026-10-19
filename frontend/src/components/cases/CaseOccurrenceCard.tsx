@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import ComponentCard from "../common/ComponentCard";
+import { useCurrentUser } from "../../context/CurrentUserContext";
 import OccurrencePointMap from "../intelligence/OccurrencePointMap";
 import {
   getCaseOccurrence,
@@ -22,6 +23,9 @@ function label(o: OccurrenceSummary): string {
 // between a criminal case and a civil occurrence, or the reverse.
 export default function CaseOccurrenceCard({ caseId }: { caseId: string }) {
   const { t, i18n } = useTranslation();
+  // Anyone who reads the case sees its occurrence; finding, linking and registering occurrences
+  // is intelligence work.
+  const { isIntelligence } = useCurrentUser();
   const [linked, setLinked] = useState<OccurrenceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -82,79 +86,91 @@ export default function CaseOccurrenceCard({ caseId }: { caseId: string }) {
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-0.5">
-              <Link
-                to={`/intelligence/map?year=${new Date(linked.occurredFrom).getFullYear()}&occurrence=${linked.id}`}
-                className="font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400"
-              >
-                {label(linked)}
-              </Link>
+              {isIntelligence ? (
+                <Link
+                  to={`/intelligence/map?year=${new Date(linked.occurredFrom).getFullYear()}&occurrence=${linked.id}`}
+                  className="font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400"
+                >
+                  {label(linked)}
+                </Link>
+              ) : (
+                <span className="font-medium text-gray-800 dark:text-white/90">{label(linked)}</span>
+              )}
               <span className="text-sm text-gray-500 dark:text-gray-400">{describe(linked)}</span>
               {linked.address && (
                 <span className="text-sm text-gray-500 dark:text-gray-400">{linked.address}</span>
               )}
             </div>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => link(null)}
-              className="h-10 shrink-0 rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.03]"
-            >
-              {t("caseOccurrence.unlink")}
-            </button>
-          </div>
-          {linked.lon !== undefined && linked.lat !== undefined && (
-            <OccurrencePointMap lon={linked.lon} lat={linked.lat} precision={linked.precision} />
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-gray-500 dark:text-gray-400">{t("caseOccurrence.none")}</p>
-            <Link
-              to={`/intelligence/occurrences/new?case=${encodeURIComponent(caseId)}`}
-              className="inline-flex h-10 shrink-0 items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600"
-            >
-              {t("caseOccurrence.registerNew")}
-            </Link>
-          </div>
-          <form onSubmit={search} className="flex gap-2">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("caseOccurrence.searchPlaceholder")}
-              aria-label={t("caseOccurrence.searchPlaceholder")}
-              className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-            />
-            <button
-              type="submit"
-              disabled={query.trim().length < 2}
-              className="h-11 shrink-0 rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
-            >
-              {t("occurrenceForm.search")}
-            </button>
-          </form>
-          {results && (
-            <ul className="flex flex-col divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-gray-800 dark:border-gray-800">
-              {results.length === 0 && (
-                <li className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">{t("occurrenceForm.noResults")}</li>
-              )}
-              {results.map((o) => (
-                <li key={o.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-gray-800 dark:text-white/90">{label(o)}</span>
-                    <span className="text-theme-xs text-gray-500 dark:text-gray-400">{describe(o)}</span>
-                  </div>
+            {isIntelligence && (
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => link(o)}
-                    className="h-9 shrink-0 rounded-lg border border-brand-500 px-3 text-sm font-medium text-brand-500 hover:bg-brand-50 disabled:opacity-50 dark:hover:bg-brand-500/10"
+                    onClick={() => link(null)}
+                    className="h-10 shrink-0 rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.03]"
                   >
-                    {t("caseOccurrence.link")}
+                    {t("caseOccurrence.unlink")}
                   </button>
-                </li>
-              ))}
-            </ul>
+                )}
+              </div>
+              {linked.lon !== undefined && linked.lat !== undefined && (
+                <OccurrencePointMap lon={linked.lon} lat={linked.lat} precision={linked.precision} />
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t("caseOccurrence.none")}</p>
+                {isIntelligence && (
+                  <Link
+                    to={`/intelligence/occurrences/new?case=${encodeURIComponent(caseId)}`}
+                    className="inline-flex h-10 shrink-0 items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600"
+                  >
+                    {t("caseOccurrence.registerNew")}
+                  </Link>
+                )}
+              </div>
+              {isIntelligence && (
+                <>
+              <form onSubmit={search} className="flex gap-2">
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t("caseOccurrence.searchPlaceholder")}
+                  aria-label={t("caseOccurrence.searchPlaceholder")}
+                  className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                />
+                <button
+                  type="submit"
+                  disabled={query.trim().length < 2}
+                  className="h-11 shrink-0 rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+                >
+                  {t("occurrenceForm.search")}
+                </button>
+              </form>
+              {results && (
+                <ul className="flex flex-col divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-gray-800 dark:border-gray-800">
+                  {results.length === 0 && (
+                    <li className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">{t("occurrenceForm.noResults")}</li>
+                  )}
+                  {results.map((o) => (
+                    <li key={o.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-gray-800 dark:text-white/90">{label(o)}</span>
+                        <span className="text-theme-xs text-gray-500 dark:text-gray-400">{describe(o)}</span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => link(o)}
+                        className="h-9 shrink-0 rounded-lg border border-brand-500 px-3 text-sm font-medium text-brand-500 hover:bg-brand-50 disabled:opacity-50 dark:hover:bg-brand-500/10"
+                      >
+                        {t("caseOccurrence.link")}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </div>
       )}
