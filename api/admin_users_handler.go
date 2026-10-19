@@ -133,6 +133,50 @@ func UpdateUserAccessHandler(repo *auth.Repository) gin.HandlerFunc {
 	}
 }
 
+type setPasswordRequest struct {
+	Password string `json:"password" binding:"required"`
+}
+
+// SetUserPasswordHandler resets an account's password. The same rules as changing its access
+// apply: an ADMIN resets plain users only, a SUPER_ADMIN anyone.
+func SetUserPasswordHandler(repo *auth.Repository) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		id, err := strconv.ParseInt(context.Param("userId"), 10, 64)
+		if err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+			return
+		}
+		var request setPasswordRequest
+		if err := context.ShouldBindJSON(&request); err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid password"})
+			return
+		}
+		target, err := repo.FindByID(context.Request.Context(), id)
+		if errors.Is(err, sql.ErrNoRows) {
+			context.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load user"})
+			return
+		}
+		access := auth.Access{AccountRole: target.AccountRole, ExaminesFingerprint: target.ExaminesFingerprint, ExaminesFacial: target.ExaminesFacial,
+			IntelligenceAnalyst: target.IntelligenceAnalyst, Coordinator: target.Coordinator, IsActive: target.IsActive}
+		if err := auth.CheckAccountChange(currentUser(context), &target, access); err != nil {
+			accountChangeError(context, err)
+			return
+		}
+		switch err := repo.SetPassword(context.Request.Context(), id, request.Password); {
+		case errors.Is(err, auth.ErrPasswordTooShort):
+			context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case err != nil:
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not set password"})
+		default:
+			context.JSON(http.StatusOK, target)
+		}
+	}
+}
+
 func accountChangeError(context *gin.Context, err error) {
 	status := http.StatusForbidden
 	if errors.Is(err, auth.ErrInvalidRole) {

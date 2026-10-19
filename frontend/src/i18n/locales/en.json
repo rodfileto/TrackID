@@ -4,7 +4,8 @@
     "denied": {
       "coordinator": "Distributing analyses is for coordinators.",
       "intelligence": "This page is for intelligence analysts.",
-      "persons": "Person search is for examiners and intelligence analysts."
+      "persons": "Person search is for examiners and intelligence analysts.",
+      "admin": "Managing accounts is for admins."
     }
   },
   "common": {
@@ -41,7 +42,8 @@
     "occurrenceMap": "Occurrence map",
     "newOccurrence": "New occurrence",
     "myAnalyses": "My analyses",
-    "distribution": "Distribution"
+    "distribution": "Distribution",
+    "users": "Users"
   },
   "userMenu": {
     "editProfile": "Edit profile",
@@ -719,6 +721,55 @@
       "modalities": "Examines",
       "openWork": "Open work",
       "step": "Step"
+    }
+  },
+  "users": {
+    "title": "Users",
+    "desc": "Accounts, their roles and capabilities",
+    "accounts": "Accounts",
+    "accountsDesc": "{{count}} accounts, deactivated ones included. Changes save as you make them.",
+    "filter": "Filter by name, matrícula or username",
+    "new": "New account",
+    "newDesc": "The username defaults to the matrícula. Hand the password to its owner.",
+    "none": "No account matches.",
+    "you": "you",
+    "loadError": "Could not load the accounts.",
+    "saveError": "Could not save.",
+    "saved": "{{username}} updated.",
+    "created": "{{username}} created.",
+    "passwordSet": "Password of {{username}} replaced.",
+    "resetPassword": "Reset password",
+    "resetDesc": "A new password for {{username}}; the old one stops working.",
+    "setPassword": "Set password",
+    "generate": "Generate",
+    "cancel": "Cancel",
+    "create": "Create",
+    "passwordHelp": "At least 8 characters. It is shown only here: copy it before saving.",
+    "flagsHelp": "Examiners sign decisions on their biometrics; intelligence reads every case and person page; coordinators distribute analyses. An admin manages accounts only, and only a super admin manages admins.",
+    "columns": {
+      "name": "Name",
+      "matricula": "Matrícula",
+      "role": "Role",
+      "active": "Active"
+    },
+    "fields": {
+      "nome": "First name",
+      "ultimo_nome": "Last name",
+      "matricula": "Matrícula",
+      "cargo": "Position",
+      "username": "Username",
+      "password": "Password"
+    },
+    "roles": {
+      "USER": "User",
+      "ADMIN": "Admin",
+      "SUPER_ADMIN": "Super admin"
+    },
+    "flags": {
+      "examines_facial": "Facial",
+      "examines_fingerprint": "Fingerprint",
+      "intelligence_analyst": "Intelligence",
+      "coordinator": "Coordinator"
     }
   }
 }

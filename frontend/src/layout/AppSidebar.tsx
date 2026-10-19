@@ -9,6 +9,7 @@ import {
   GridIcon,
   GroupIcon,
   HorizontaLDots,
+  LockIcon,
   ListIcon,
   PieChartIcon,
   TableIcon,
@@ -22,7 +23,7 @@ type NavItem = {
   icon: React.ReactNode;
   path?: string;
   /** Shown only to users with this capability (useCurrentUser); "persons" is examiners and analysts. */
-  requires?: "coordinator" | "intelligence" | "persons";
+  requires?: "admin" | "coordinator" | "intelligence" | "persons";
   subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
 };
 
@@ -54,6 +55,12 @@ const allNavItems: NavItem[] = [
     requires: "coordinator",
   },
   {
+    icon: <LockIcon />,
+    name: "nav.users",
+    path: "/admin/users",
+    requires: "admin",
+  },
+  {
     icon: <GroupIcon />,
     name: "nav.persons",
     path: "/persons",
@@ -79,17 +86,18 @@ const allNavItems: NavItem[] = [
 const AppSidebar: React.FC = () => {
   const { t } = useTranslation();
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
-  const { isExaminer, isIntelligence, isCoordinator } = useCurrentUser();
+  const { isAdmin, isExaminer, isIntelligence, isCoordinator } = useCurrentUser();
   const navItems = useMemo(
     () =>
       allNavItems.filter(
         (item) =>
           !item.requires ||
+          (item.requires === "admin" && isAdmin) ||
           (item.requires === "coordinator" && isCoordinator) ||
           (item.requires === "intelligence" && isIntelligence) ||
           (item.requires === "persons" && (isExaminer || isIntelligence)),
       ),
-    [isExaminer, isIntelligence, isCoordinator],
+    [isAdmin, isExaminer, isIntelligence, isCoordinator],
   );
   const location = useLocation();
 

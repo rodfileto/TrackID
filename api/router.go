@@ -62,6 +62,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	admin.GET("users", ListUsersHandler(authRepository))
 	admin.POST("users", CreateUserHandler(authRepository, deps.EmailDomain))
 	admin.PATCH("users/:userId", UpdateUserAccessHandler(authRepository))
+	admin.PUT("users/:userId/password", SetUserPasswordHandler(authRepository))
 	// Coordination: handing out the work and opening comparisons. The paths keep their old
 	// admin/ prefix; the guard is the coordinator capability.
 	coordination := protected.Group("admin")
