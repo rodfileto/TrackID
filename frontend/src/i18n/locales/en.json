@@ -586,7 +586,9 @@
     "unlinkedToast": "Case unlinked from the occurrence",
     "linkError": "Could not change the link",
     "searchError": "Could not search occurrences",
-    "registerNew": "Register a new occurrence"
+    "registerNew": "Register a new occurrence",
+    "mapLabel": "Where the occurrence happened",
+    "approximate": "Approximate point ({{precision}})."
   },
   "analyses": {
     "title": "Analyses",
