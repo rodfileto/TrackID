@@ -10,7 +10,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/cases"
+	"github.com/rodfileto/trackid/distribution"
 	"github.com/rodfileto/trackid/storage"
 )
 
@@ -59,9 +61,9 @@ func ListCaseCodificationsHandler(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
-// ListCaseClustersHandler returns the distinct biometric clusters a case's
-// codified traces have resolved into, and the other cases/persons each one
-// is CONFIRMED-linked to (see cases.ListCaseClusters).
+// ListCaseClustersHandler returns the distinct REVIEWED biometric clusters a
+// case's codified traces have resolved into, and the other cases/persons each
+// one links to through decisions people confirmed (see cases.ListCaseClusters).
 func ListCaseClustersHandler(db *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		if db == nil {
@@ -86,6 +88,56 @@ func ListCaseClustersHandler(db *sql.DB) gin.HandlerFunc {
 		}
 		context.JSON(http.StatusOK, gin.H{"clusters": clusters})
 	}
+}
+
+// ListCaseIdentityDecisionsHandler returns, for each codified face of a case, every enrolled
+// identity decided for it at or above the review threshold, with its state (see
+// cases.ListCaseIdentityDecisions). A user who is the case's blind verifier right now -- holding
+// the REVIEWER step of one of its analyses while it is at VERIFICATION -- gets none ("blind":
+// true): the list carries the first examiner's outcomes.
+func ListCaseIdentityDecisionsHandler(sqlDB *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if sqlDB == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		caseID := context.Param("caseId")
+		blind, err := verifyingBlind(context, sqlDB, caseID)
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load identity decisions"})
+			return
+		}
+		if blind {
+			context.JSON(http.StatusOK, gin.H{"blind": true, "faces": []cases.CaseFaceIdentities{}})
+			return
+		}
+		faces, err := cases.ListCaseIdentityDecisions(context.Request.Context(), sqlDB, caseID)
+		if err != nil {
+			if errors.Is(err, cases.ErrNotFound) {
+				context.JSON(http.StatusNotFound, gin.H{"error": "case not found"})
+				return
+			}
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load identity decisions"})
+			return
+		}
+		context.JSON(http.StatusOK, gin.H{"blind": false, "faces": faces})
+	}
+}
+
+// verifyingBlind reports whether the signed-in user is the blind verifier of one of the case's
+// open analyses right now: they hold its REVIEWER step and it is at VERIFICATION.
+func verifyingBlind(context *gin.Context, sqlDB *sql.DB, caseID string) (bool, error) {
+	mine, err := distribution.AnalysesOf(context.Request.Context(), sqlDB, currentUser(context).ID)
+	if err != nil {
+		return false, err
+	}
+	for _, a := range mine {
+		if a.CaseID == caseID && a.Status == analyses.StatusOpen && a.Stage == analyses.StageVerification &&
+			a.Step == analyses.StepReviewer {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 type compareFacesRequest struct {

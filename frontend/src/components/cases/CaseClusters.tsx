@@ -1,14 +1,22 @@
+import { useState } from "react";
 import { Link } from "react-router";
+import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import ComponentCard from "../common/ComponentCard";
 import Badge from "../ui/badge/Badge";
+import Button from "../ui/button/Button";
 import CaseTraceThumbnail from "./CaseTraceThumbnail";
 import IdentityFileThumbnail from "../persons/IdentityFileThumbnail";
-import type { CaseCluster, TraceLink } from "../../services/cases";
+import { useCurrentUser } from "../../context/CurrentUserContext";
+import { openAnalysis } from "../../services/analyses";
+import type { CaseCluster, PathStep, TraceLink } from "../../services/cases";
 import type { CodificationThumbnail } from "../../hooks/useCodificationThumbnails";
 import { codificationLabel } from "../../hooks/useCodificationThumbnails";
 
 interface CaseClustersProps {
+  caseId: string;
+  /** A direct comparison was opened from one of the links. */
+  onAnalysisOpened?: () => void;
   clusters: CaseCluster[];
   faces: CodificationThumbnail[];
   loading: boolean;
@@ -23,25 +31,28 @@ function modalityColor(modality: string): "info" | "warning" {
   return modality === "FACIAL" ? "info" : "warning";
 }
 
-/** How a TraceLink's decision chain reads out: unset (reached only
- * transitively, through other cluster members) shows no decision badge at
- * all rather than guessing one. */
+function stepLabel(step: PathStep): string {
+  return step.kind === "KNOWN" ? step.name || step.personId || "" : step.caseId || "";
+}
+
+/** How a link was confirmed: a direct link names who settled its decision; an indirect one is
+ * marked as such, with the samples its path runs through. Every link here is reviewed -- the case
+ * page never shows an automatic (SYSTEM-only) match. */
 function DecisionBadge({ link }: { link: TraceLink }) {
   const { t } = useTranslation();
-  if (!link.decisionRole) {
+  if (!link.direct) {
+    const path = (link.path ?? []).map(stepLabel).join(" → ");
     return (
-      <span className="text-xs text-gray-400 dark:text-white/30">
-        {t("caseClusters.linkedViaCluster")}
-      </span>
-    );
-  }
-  if (link.automatic) {
-    return (
-      <Badge size="sm" color="warning">
-        {t("caseClusters.automaticMatch")}
-        {link.confidence !== undefined &&
-          ` · ${(link.confidence * 100).toFixed(1)}%`}
-      </Badge>
+      <div className="text-right" title={t("caseClusters.indirectHint")}>
+        <Badge size="sm" color="light">
+          {t("caseClusters.indirect")}
+        </Badge>
+        {path && (
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            {t("caseClusters.via", { path })}
+          </p>
+        )}
+      </div>
     );
   }
   return (
@@ -53,8 +64,62 @@ function DecisionBadge({ link }: { link: TraceLink }) {
   );
 }
 
-function LinkRow({ link }: { link: TraceLink }) {
+/** Admin, on an indirect link to an enrolled person: open a FACIAL_COMPARISON of the case's face
+ * the path starts from against that person, so the link can be confirmed directly. A comparison
+ * with another case's face cannot be opened yet (pairs across cases are not distributed). */
+function RequestComparison({
+  caseId,
+  link,
+  onOpened,
+}: {
+  caseId: string;
+  link: TraceLink;
+  onOpened?: () => void;
+}) {
   const { t } = useTranslation();
+  const [busy, setBusy] = useState(false);
+  if (link.kind !== "KNOWN") {
+    return (
+      <p className="mt-1 text-right text-xs text-gray-400 dark:text-white/30">
+        {t("caseClusters.crossCaseHint")}
+      </p>
+    );
+  }
+  if (!link.featureId || !link.fromFeatureId) return null;
+
+  async function request() {
+    setBusy(true);
+    try {
+      await openAnalysis(caseId, "FACIAL_COMPARISON", [
+        { featureA: link.fromFeatureId!, featureB: link.featureId! },
+      ]);
+      toast.success(t("caseClusters.comparisonOpened"));
+      onOpened?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("caseClusters.comparisonError"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button size="sm" variant="outline" className="mt-1.5" disabled={busy} onClick={request}>
+      {t("caseClusters.requestComparison")}
+    </Button>
+  );
+}
+
+function LinkRow({
+  link,
+  caseId,
+  onAnalysisOpened,
+}: {
+  link: TraceLink;
+  caseId: string;
+  onAnalysisOpened?: () => void;
+}) {
+  const { t } = useTranslation();
+  const { isAdmin } = useCurrentUser();
   return (
     <li className="flex items-center gap-3 px-3 py-2.5">
       <div className="shrink-0">
@@ -110,8 +175,11 @@ function LinkRow({ link }: { link: TraceLink }) {
         )}
       </div>
 
-      <div className="shrink-0">
+      <div className="flex shrink-0 flex-col items-end">
         <DecisionBadge link={link} />
+        {isAdmin && !link.direct && (
+          <RequestComparison caseId={caseId} link={link} onOpened={onAnalysisOpened} />
+        )}
       </div>
     </li>
   );
@@ -153,9 +221,13 @@ function LocalFaces({
 function ClusterCard({
   cluster,
   faces,
+  caseId,
+  onAnalysisOpened,
 }: {
   cluster: CaseCluster;
   faces: CodificationThumbnail[];
+  caseId: string;
+  onAnalysisOpened?: () => void;
 }) {
   const { t } = useTranslation();
   const cases = (cluster.links ?? []).filter((l) => l.kind === "QUESTIONED");
@@ -190,7 +262,12 @@ function ClusterCard({
         ) : (
           <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-white/[0.05] dark:border-white/[0.05]">
             {cases.map((link) => (
-              <LinkRow key={`${link.caseId}-${link.traceId}`} link={link} />
+              <LinkRow
+                key={`${link.caseId}-${link.traceId}`}
+                link={link}
+                caseId={caseId}
+                onAnalysisOpened={onAnalysisOpened}
+              />
             ))}
           </ul>
         )}
@@ -207,7 +284,12 @@ function ClusterCard({
         ) : (
           <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-white/[0.05] dark:border-white/[0.05]">
             {persons.map((link) => (
-              <LinkRow key={link.personId} link={link} />
+              <LinkRow
+                key={link.featureId ?? link.personId}
+                link={link}
+                caseId={caseId}
+                onAnalysisOpened={onAnalysisOpened}
+              />
             ))}
           </ul>
         )}
@@ -216,18 +298,24 @@ function ClusterCard({
   );
 }
 
-/** The distinct biometric clusters this case's faces have resolved into --
- * merged by cluster, not repeated per face (see cases.ListCaseClusters) --
- * plus the other criminal cases and enrolled persons each one is linked to,
- * pointing out whether that link is an automatic (SYSTEM) match or was
- * human-confirmed. */
+/** The distinct REVIEWED biometric clusters this case's faces have resolved
+ * into -- merged by cluster, not repeated per face (see
+ * cases.ListCaseClusters) -- plus the other criminal cases and enrolled
+ * persons each one is linked to, directly or through a path of reviewed
+ * links. Automatic matches never show here, not even as a count: they are for
+ * the intelligence views (the Clusters page). */
 export default function CaseClusters({
+  caseId,
+  onAnalysisOpened,
   clusters,
   faces,
   loading,
   error,
 }: CaseClustersProps) {
   const { t } = useTranslation();
+  // Nothing to show until a reviewed decision links one of the case's faces to another sample:
+  // no panel at all, rather than an empty one.
+  if (!error && clusters.length === 0) return null;
   return (
     <ComponentCard
       title={t("caseClusters.title")}
@@ -235,9 +323,7 @@ export default function CaseClusters({
       desc={
         loading
           ? t("common.loading")
-          : clusters.length === 0
-            ? t("caseClusters.noMatches")
-            : t("caseClusters.reached", { count: clusters.length })
+          : `${t("caseClusters.reached", { count: clusters.length })} ${t("caseClusters.reviewedOnly")}`
       }
     >
       {loading && (
@@ -250,16 +336,16 @@ export default function CaseClusters({
         <p className="py-8 text-center text-sm text-error-500">{error}</p>
       )}
 
-      {!loading && !error && clusters.length === 0 && (
-        <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-          {t("caseClusters.emptyHint")}
-        </p>
-      )}
-
       {!loading && !error && clusters.length > 0 && (
         <div className="space-y-4">
           {clusters.map((cluster) => (
-            <ClusterCard key={cluster.clusterId} cluster={cluster} faces={faces} />
+            <ClusterCard
+              key={cluster.clusterId}
+              cluster={cluster}
+              faces={faces}
+              caseId={caseId}
+              onAnalysisOpened={onAnalysisOpened}
+            />
           ))}
         </div>
       )}

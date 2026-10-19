@@ -138,15 +138,20 @@ FROM person p
 JOIN identity_document d ON d.person_id = p.id
 JOIN identity_register r ON r.document_id = d.id
 JOIN identity_file f ON f.register_id = r.id
-JOIN cluster_members known_cm ON known_cm.feature_id = f.id::text
+JOIN cluster_members known_cm ON known_cm.feature_id = f.id::text AND known_cm.basis = $1
 JOIN cluster_members quest_cm ON quest_cm.cluster_id = known_cm.cluster_id
 JOIN case_traces ct ON quest_cm.feature_id = 'TRACE:' || ct.id || '#feature'
 JOIN case_evidences ce ON ce.id = ct.evidence_id
 JOIN biometric_cases bc ON bc.id = ce.biometric_case_id
-WHERE p.person_id = ANY($1::text[])
+WHERE p.person_id = ANY($2::text[])
 GROUP BY p.person_id, bc.modality
 ORDER BY p.person_id, bc.modality
 `
+
+type CountPersonCasesByModalityParams struct {
+	Basis     string   `db:"basis" json:"basis"`
+	PersonIds []string `db:"person_ids" json:"person_ids"`
+}
 
 type CountPersonCasesByModalityRow struct {
 	PersonID  string `db:"person_id" json:"person_id"`
@@ -161,8 +166,9 @@ type CountPersonCasesByModalityRow struct {
 // person.ListCases/buildCases (feature_id text format from
 // graph.KnownFeatureID/QuestionedFeatureID), batched across every requested
 // person in one query instead of one loadPersonAndClusterIDs call per row.
-func (q *Queries) CountPersonCasesByModality(ctx context.Context, personIds []string) ([]CountPersonCasesByModalityRow, error) {
-	rows, err := q.db.QueryContext(ctx, countPersonCasesByModality, pq.Array(personIds))
+// Reads one layer (@basis): the person views read REVIEWED.
+func (q *Queries) CountPersonCasesByModality(ctx context.Context, arg CountPersonCasesByModalityParams) ([]CountPersonCasesByModalityRow, error) {
+	rows, err := q.db.QueryContext(ctx, countPersonCasesByModality, arg.Basis, pq.Array(arg.PersonIds))
 	if err != nil {
 		return nil, err
 	}
@@ -292,11 +298,16 @@ func (q *Queries) CreateCaseFile(ctx context.Context, arg CreateCaseFileParams) 
 }
 
 const createCluster = `-- name: CreateCluster :one
-INSERT INTO clusters (modality) VALUES ($1) RETURNING id
+INSERT INTO clusters (modality, basis) VALUES ($1, $2) RETURNING id
 `
 
-func (q *Queries) CreateCluster(ctx context.Context, modality string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, createCluster, modality)
+type CreateClusterParams struct {
+	Modality string `db:"modality" json:"modality"`
+	Basis    string `db:"basis" json:"basis"`
+}
+
+func (q *Queries) CreateCluster(ctx context.Context, arg CreateClusterParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, createCluster, arg.Modality, arg.Basis)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
@@ -501,11 +512,16 @@ func (q *Queries) DeleteCluster(ctx context.Context, id int64) error {
 }
 
 const deleteClusterMember = `-- name: DeleteClusterMember :exec
-DELETE FROM cluster_members WHERE feature_id = $1
+DELETE FROM cluster_members WHERE basis = $1 AND feature_id = $2
 `
 
-func (q *Queries) DeleteClusterMember(ctx context.Context, featureID string) error {
-	_, err := q.db.ExecContext(ctx, deleteClusterMember, featureID)
+type DeleteClusterMemberParams struct {
+	Basis     string `db:"basis" json:"basis"`
+	FeatureID string `db:"feature_id" json:"feature_id"`
+}
+
+func (q *Queries) DeleteClusterMember(ctx context.Context, arg DeleteClusterMemberParams) error {
+	_, err := q.db.ExecContext(ctx, deleteClusterMember, arg.Basis, arg.FeatureID)
 	return err
 }
 
@@ -1618,31 +1634,38 @@ func (q *Queries) InsertCaseDecision(ctx context.Context, arg InsertCaseDecision
 }
 
 const insertClusterMember = `-- name: InsertClusterMember :exec
-INSERT INTO cluster_members (cluster_id, feature_id) VALUES ($1, $2)
+INSERT INTO cluster_members (cluster_id, feature_id, basis) VALUES ($1, $2, $3)
 `
 
 type InsertClusterMemberParams struct {
 	ClusterID int64  `db:"cluster_id" json:"cluster_id"`
 	FeatureID string `db:"feature_id" json:"feature_id"`
+	Basis     string `db:"basis" json:"basis"`
 }
 
 func (q *Queries) InsertClusterMember(ctx context.Context, arg InsertClusterMemberParams) error {
-	_, err := q.db.ExecContext(ctx, insertClusterMember, arg.ClusterID, arg.FeatureID)
+	_, err := q.db.ExecContext(ctx, insertClusterMember, arg.ClusterID, arg.FeatureID, arg.Basis)
 	return err
 }
 
 const insertClusterMerge = `-- name: InsertClusterMerge :exec
-INSERT INTO cluster_merges (from_cluster_id, to_cluster_id, reason) VALUES ($1, $2, $3)
+INSERT INTO cluster_merges (from_cluster_id, to_cluster_id, reason, basis) VALUES ($1, $2, $3, $4)
 `
 
 type InsertClusterMergeParams struct {
 	FromClusterID int64          `db:"from_cluster_id" json:"from_cluster_id"`
 	ToClusterID   int64          `db:"to_cluster_id" json:"to_cluster_id"`
 	Reason        sql.NullString `db:"reason" json:"reason"`
+	Basis         string         `db:"basis" json:"basis"`
 }
 
 func (q *Queries) InsertClusterMerge(ctx context.Context, arg InsertClusterMergeParams) error {
-	_, err := q.db.ExecContext(ctx, insertClusterMerge, arg.FromClusterID, arg.ToClusterID, arg.Reason)
+	_, err := q.db.ExecContext(ctx, insertClusterMerge,
+		arg.FromClusterID,
+		arg.ToClusterID,
+		arg.Reason,
+		arg.Basis,
+	)
 	return err
 }
 
@@ -2654,16 +2677,21 @@ func (q *Queries) ListCasesByCaseTraceIDs(ctx context.Context, caseTraceIds []in
 const listClusterIDsForFeatureIDs = `-- name: ListClusterIDsForFeatureIDs :many
 SELECT DISTINCT cluster_id
 FROM cluster_members
-WHERE feature_id = ANY($1::text[])
+WHERE basis = $1 AND feature_id = ANY($2::text[])
 ORDER BY cluster_id
 `
 
+type ListClusterIDsForFeatureIDsParams struct {
+	Basis      string   `db:"basis" json:"basis"`
+	FeatureIds []string `db:"feature_ids" json:"feature_ids"`
+}
+
 // Resolves a set of graph feature ids (graph.KnownFeatureID /
-// graph.QuestionedFeatureID) to the clusters they belong to.
-// cluster_members.feature_id is UNIQUE, so each input feature id contributes
-// at most one row.
-func (q *Queries) ListClusterIDsForFeatureIDs(ctx context.Context, featureIds []string) ([]int64, error) {
-	rows, err := q.db.QueryContext(ctx, listClusterIDsForFeatureIDs, pq.Array(featureIds))
+// graph.QuestionedFeatureID) to the clusters they belong to in one layer.
+// cluster_members.feature_id is UNIQUE per basis, so each input feature id
+// contributes at most one row.
+func (q *Queries) ListClusterIDsForFeatureIDs(ctx context.Context, arg ListClusterIDsForFeatureIDsParams) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listClusterIDsForFeatureIDs, arg.Basis, pq.Array(arg.FeatureIds))
 	if err != nil {
 		return nil, err
 	}
@@ -2688,6 +2716,7 @@ func (q *Queries) ListClusterIDsForFeatureIDs(ctx context.Context, featureIds []
 const listClusterMembers = `-- name: ListClusterMembers :many
 SELECT cluster_id, feature_id
 FROM cluster_members
+WHERE basis = $1
 `
 
 type ListClusterMembersRow struct {
@@ -2695,8 +2724,8 @@ type ListClusterMembersRow struct {
 	FeatureID string `db:"feature_id" json:"feature_id"`
 }
 
-func (q *Queries) ListClusterMembers(ctx context.Context) ([]ListClusterMembersRow, error) {
-	rows, err := q.db.QueryContext(ctx, listClusterMembers)
+func (q *Queries) ListClusterMembers(ctx context.Context, basis string) ([]ListClusterMembersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listClusterMembers, basis)
 	if err != nil {
 		return nil, err
 	}
@@ -2754,7 +2783,7 @@ func (q *Queries) ListClusterMembersByClusterIDs(ctx context.Context, clusterIds
 }
 
 const listClusterMembersJoined = `-- name: ListClusterMembersJoined :many
-SELECT c.id AS cluster_id, c.modality, m.feature_id
+SELECT c.id AS cluster_id, c.modality, c.basis, m.feature_id
 FROM clusters c
 JOIN cluster_members m ON m.cluster_id = c.id
 ORDER BY c.id, m.feature_id
@@ -2763,6 +2792,7 @@ ORDER BY c.id, m.feature_id
 type ListClusterMembersJoinedRow struct {
 	ClusterID int64  `db:"cluster_id" json:"cluster_id"`
 	Modality  string `db:"modality" json:"modality"`
+	Basis     string `db:"basis" json:"basis"`
 	FeatureID string `db:"feature_id" json:"feature_id"`
 }
 
@@ -2775,7 +2805,12 @@ func (q *Queries) ListClusterMembersJoined(ctx context.Context) ([]ListClusterMe
 	var items []ListClusterMembersJoinedRow
 	for rows.Next() {
 		var i ListClusterMembersJoinedRow
-		if err := rows.Scan(&i.ClusterID, &i.Modality, &i.FeatureID); err != nil {
+		if err := rows.Scan(
+			&i.ClusterID,
+			&i.Modality,
+			&i.Basis,
+			&i.FeatureID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2792,8 +2827,13 @@ func (q *Queries) ListClusterMembersJoined(ctx context.Context) ([]ListClusterMe
 const listClusterMembershipsForFeatureIDs = `-- name: ListClusterMembershipsForFeatureIDs :many
 SELECT feature_id, cluster_id
 FROM cluster_members
-WHERE feature_id = ANY($1::text[])
+WHERE basis = $1 AND feature_id = ANY($2::text[])
 `
+
+type ListClusterMembershipsForFeatureIDsParams struct {
+	Basis      string   `db:"basis" json:"basis"`
+	FeatureIds []string `db:"feature_ids" json:"feature_ids"`
+}
 
 type ListClusterMembershipsForFeatureIDsRow struct {
 	FeatureID string `db:"feature_id" json:"feature_id"`
@@ -2803,8 +2843,8 @@ type ListClusterMembershipsForFeatureIDsRow struct {
 // Same lookup as ListClusterIDsForFeatureIDs but keeping feature_id on each
 // row, so a caller can map each of its own feature ids back to the cluster
 // it landed in (see cases.ListTraceClusters).
-func (q *Queries) ListClusterMembershipsForFeatureIDs(ctx context.Context, featureIds []string) ([]ListClusterMembershipsForFeatureIDsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listClusterMembershipsForFeatureIDs, pq.Array(featureIds))
+func (q *Queries) ListClusterMembershipsForFeatureIDs(ctx context.Context, arg ListClusterMembershipsForFeatureIDsParams) ([]ListClusterMembershipsForFeatureIDsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listClusterMembershipsForFeatureIDs, arg.Basis, pq.Array(arg.FeatureIds))
 	if err != nil {
 		return nil, err
 	}
@@ -2827,8 +2867,10 @@ func (q *Queries) ListClusterMembershipsForFeatureIDs(ctx context.Context, featu
 }
 
 const listClusters = `-- name: ListClusters :many
+
 SELECT id, modality
 FROM clusters
+WHERE basis = $1
 ORDER BY id
 `
 
@@ -2837,8 +2879,11 @@ type ListClustersRow struct {
 	Modality string `db:"modality" json:"modality"`
 }
 
-func (q *Queries) ListClusters(ctx context.Context) ([]ListClustersRow, error) {
-	rows, err := q.db.QueryContext(ctx, listClusters)
+// Clusters come in two layers (clusters.basis, migration 019): AUTOMATIC, from every CONFIRMED
+// pair, and REVIEWED, from the pairs people confirmed. Every query resolving features to clusters
+// names its layer; cluster ids are unique across both, so queries by cluster id need none.
+func (q *Queries) ListClusters(ctx context.Context, basis string) ([]ListClustersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listClusters, basis)
 	if err != nil {
 		return nil, err
 	}
@@ -2861,7 +2906,7 @@ func (q *Queries) ListClusters(ctx context.Context) ([]ListClustersRow, error) {
 }
 
 const listClustersByIDs = `-- name: ListClustersByIDs :many
-SELECT id, modality, created_at
+SELECT id, modality, basis, created_at
 FROM clusters
 WHERE id = ANY($1::bigint[])
 ORDER BY id
@@ -2870,6 +2915,7 @@ ORDER BY id
 type ListClustersByIDsRow struct {
 	ID        int64     `db:"id" json:"id"`
 	Modality  string    `db:"modality" json:"modality"`
+	Basis     string    `db:"basis" json:"basis"`
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 }
 
@@ -2882,7 +2928,12 @@ func (q *Queries) ListClustersByIDs(ctx context.Context, clusterIds []int64) ([]
 	var items []ListClustersByIDsRow
 	for rows.Next() {
 		var i ListClustersByIDsRow
-		if err := rows.Scan(&i.ID, &i.Modality, &i.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Modality,
+			&i.Basis,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

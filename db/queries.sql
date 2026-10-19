@@ -527,35 +527,41 @@ JOIN identity_document d ON d.id = r.document_id
 JOIN person p ON p.id = d.person_id
 WHERE bf.provenance = 'KNOWN';
 
+-- Clusters come in two layers (clusters.basis, migration 019): AUTOMATIC, from every CONFIRMED
+-- pair, and REVIEWED, from the pairs people confirmed. Every query resolving features to clusters
+-- names its layer; cluster ids are unique across both, so queries by cluster id need none.
+
 -- name: ListClusters :many
 SELECT id, modality
 FROM clusters
+WHERE basis = $1
 ORDER BY id;
 
 -- name: ListClusterMembers :many
 SELECT cluster_id, feature_id
-FROM cluster_members;
+FROM cluster_members
+WHERE basis = $1;
 
 -- name: ListClusterMembersJoined :many
-SELECT c.id AS cluster_id, c.modality, m.feature_id
+SELECT c.id AS cluster_id, c.modality, c.basis, m.feature_id
 FROM clusters c
 JOIN cluster_members m ON m.cluster_id = c.id
 ORDER BY c.id, m.feature_id;
 
 -- name: CreateCluster :one
-INSERT INTO clusters (modality) VALUES ($1) RETURNING id;
+INSERT INTO clusters (modality, basis) VALUES ($1, $2) RETURNING id;
 
 -- name: InsertClusterMember :exec
-INSERT INTO cluster_members (cluster_id, feature_id) VALUES ($1, $2);
+INSERT INTO cluster_members (cluster_id, feature_id, basis) VALUES ($1, $2, $3);
 
 -- name: DeleteClusterMember :exec
-DELETE FROM cluster_members WHERE feature_id = $1;
+DELETE FROM cluster_members WHERE basis = $1 AND feature_id = $2;
 
 -- name: DeleteCluster :exec
 DELETE FROM clusters WHERE id = $1;
 
 -- name: InsertClusterMerge :exec
-INSERT INTO cluster_merges (from_cluster_id, to_cluster_id, reason) VALUES ($1, $2, $3);
+INSERT INTO cluster_merges (from_cluster_id, to_cluster_id, reason, basis) VALUES ($1, $2, $3, $4);
 
 -- Person profile (see the person package): read-only views assembled from
 -- the enrollment chain, cluster_members, and the evidence hierarchy. Nothing
@@ -603,12 +609,12 @@ ORDER BY d.id, r.id, f.sequence;
 
 -- name: ListClusterIDsForFeatureIDs :many
 -- Resolves a set of graph feature ids (graph.KnownFeatureID /
--- graph.QuestionedFeatureID) to the clusters they belong to.
--- cluster_members.feature_id is UNIQUE, so each input feature id contributes
--- at most one row.
+-- graph.QuestionedFeatureID) to the clusters they belong to in one layer.
+-- cluster_members.feature_id is UNIQUE per basis, so each input feature id
+-- contributes at most one row.
 SELECT DISTINCT cluster_id
 FROM cluster_members
-WHERE feature_id = ANY(@feature_ids::text[])
+WHERE basis = @basis AND feature_id = ANY(@feature_ids::text[])
 ORDER BY cluster_id;
 
 -- name: ListClusterMembershipsForFeatureIDs :many
@@ -617,7 +623,7 @@ ORDER BY cluster_id;
 -- it landed in (see cases.ListTraceClusters).
 SELECT feature_id, cluster_id
 FROM cluster_members
-WHERE feature_id = ANY(@feature_ids::text[]);
+WHERE basis = @basis AND feature_id = ANY(@feature_ids::text[]);
 
 -- name: ListBiometricDecisionsForFeatures :many
 -- Every biometric_decisions row touching any of the given feature ids, seen
@@ -632,7 +638,7 @@ WHERE feature_id = ANY(@feature_ids::text[])
 ORDER BY feature_id, counterpart_id, decided_at;
 
 -- name: ListClustersByIDs :many
-SELECT id, modality, created_at
+SELECT id, modality, basis, created_at
 FROM clusters
 WHERE id = ANY(@cluster_ids::bigint[])
 ORDER BY id;
@@ -709,12 +715,13 @@ LIMIT $2;
 -- person.ListCases/buildCases (feature_id text format from
 -- graph.KnownFeatureID/QuestionedFeatureID), batched across every requested
 -- person in one query instead of one loadPersonAndClusterIDs call per row.
+-- Reads one layer (@basis): the person views read REVIEWED.
 SELECT p.person_id, bc.modality, COUNT(DISTINCT bc.id) AS case_count
 FROM person p
 JOIN identity_document d ON d.person_id = p.id
 JOIN identity_register r ON r.document_id = d.id
 JOIN identity_file f ON f.register_id = r.id
-JOIN cluster_members known_cm ON known_cm.feature_id = f.id::text
+JOIN cluster_members known_cm ON known_cm.feature_id = f.id::text AND known_cm.basis = @basis
 JOIN cluster_members quest_cm ON quest_cm.cluster_id = known_cm.cluster_id
 JOIN case_traces ct ON quest_cm.feature_id = 'TRACE:' || ct.id || '#feature'
 JOIN case_evidences ce ON ce.id = ct.evidence_id

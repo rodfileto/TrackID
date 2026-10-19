@@ -10,6 +10,7 @@ import {
 import EvidenceDropzone from "./EvidenceDropzone";
 import TraceEditor, { type TraceBox } from "./TraceEditor";
 import CaseClusters from "./CaseClusters";
+import CaseIdentityDecisions from "./CaseIdentityDecisions";
 import {
   addEvidence,
   compareFaces,
@@ -40,6 +41,8 @@ interface FacialCaseWorkspaceProps {
   evidences: Evidence[];
   /** Reload the case detail after evidence is added or excluded. */
   onEvidencesChanged: () => Promise<void>;
+  /** An analysis was opened from the case's clusters (a direct comparison). */
+  onAnalysisOpened?: () => void;
 }
 
 /** Slot index into the comparison region: 0 = left, 1 = right. */
@@ -351,6 +354,7 @@ export default function FacialCaseWorkspace({
   caseId,
   evidences,
   onEvidencesChanged,
+  onAnalysisOpened,
 }: FacialCaseWorkspaceProps) {
   const { t } = useTranslation();
   const imageEvidences = evidences.filter(isImageEvidence);
@@ -1049,7 +1053,11 @@ export default function FacialCaseWorkspace({
         </div>
       </ComponentCard>
 
+      <CaseIdentityDecisions caseId={caseId} faces={faces} refreshKey={refreshKey} />
+
       <CaseClusters
+        caseId={caseId}
+        onAnalysisOpened={onAnalysisOpened}
         clusters={clusters}
         faces={faces}
         loading={clustersLoading}

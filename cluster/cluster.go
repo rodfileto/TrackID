@@ -2,6 +2,11 @@
 // by biometric_decisions: a POSITIVE decision that settles to CONFIRMED links
 // two features. Clusters are persisted in Postgres with stable, sequential ids
 // and updated incrementally (extend/merge/split), then materialized to Neo4j.
+//
+// There are two layers of clusters (Basis). AUTOMATIC clusters follow every
+// CONFIRMED pair, a SYSTEM match included, for intelligence; REVIEWED clusters
+// follow only the pairs people confirmed (Reviewed), and are the only ones
+// forensic views read.
 package cluster
 
 import (
@@ -18,32 +23,80 @@ import (
 // this package materializes.
 const clusterSource = "TRACKID_CLUSTERING"
 
-// Stats reports what a run found and changed.
-type Stats struct {
+// Basis names a layer of clusters (clusters.basis).
+type Basis string
+
+const (
+	// BasisAutomatic clusters follow every CONFIRMED pair, a SYSTEM match
+	// included: fast and wide, for intelligence (the Clusters page, the graph).
+	BasisAutomatic Basis = "AUTOMATIC"
+	// BasisReviewed clusters follow only the pairs people confirmed (Reviewed):
+	// the only layer forensic views (a case, a person) read.
+	BasisReviewed Basis = "REVIEWED"
+)
+
+// Bases lists both layers, in the order Run reconciles them.
+var Bases = []Basis{BasisAutomatic, BasisReviewed}
+
+// LayerStats reports what a run found and changed in one layer.
+type LayerStats struct {
 	Evidence int
 	Clusters int
 	Created  int
 	Merged   int
 }
 
-// Run reconciles the confirmed decisions against the persisted clusters and
-// materializes the result to Neo4j. It reads only from Postgres.
+// Stats reports what a run found and changed: the AUTOMATIC layer's counts
+// (embedded, so Stats.Clusters is the automatic count) and the REVIEWED
+// layer's.
+type Stats struct {
+	LayerStats
+	Reviewed LayerStats
+}
+
+// Run reconciles the confirmed decisions against the persisted clusters of
+// both layers (Persist) and materializes the result to Neo4j. It reads only
+// from Postgres.
 func Run(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) (Stats, error) {
+	st, featureTypes, err := run(ctx, sqlDB, true)
+	if err != nil {
+		return Stats{}, err
+	}
+	if err := materialize(ctx, sqlDB, driver, featureTypes); err != nil {
+		return Stats{}, err
+	}
+	return st, nil
+}
+
+// Persist reconciles the confirmed decisions against the persisted clusters of
+// both layers and writes the result to Postgres only. Run is Persist plus the
+// Neo4j materialization; Persist alone serves callers with no graph, e.g.
+// database tests.
+func Persist(ctx context.Context, sqlDB *sql.DB) (Stats, error) {
+	st, _, err := run(ctx, sqlDB, true)
+	return st, err
+}
+
+// Plan returns the counts a Run would produce, without writing anything.
+func Plan(ctx context.Context, sqlDB *sql.DB) (Stats, error) {
+	st, _, err := run(ctx, sqlDB, false)
+	return st, err
+}
+
+// run reconciles both layers, writing them when commit is set, and returns the stats and every
+// feature's graph feature type (for materialize).
+func run(ctx context.Context, sqlDB *sql.DB, commit bool) (Stats, map[string]string, error) {
 	if sqlDB == nil {
-		return Stats{}, fmt.Errorf("database is not configured")
+		return Stats{}, nil, fmt.Errorf("database is not configured")
 	}
 
 	featureInfos, err := loadFeatures(ctx, sqlDB)
 	if err != nil {
-		return Stats{}, err
+		return Stats{}, nil, err
 	}
-	edges, err := loadConfirmedEdges(ctx, sqlDB)
+	pairs, err := loadConfirmedPairs(ctx, sqlDB)
 	if err != nil {
-		return Stats{}, err
-	}
-	existing, memberCluster, err := loadClusters(ctx, sqlDB)
-	if err != nil {
-		return Stats{}, err
+		return Stats{}, nil, err
 	}
 
 	modalities := make(map[string]string, len(featureInfos))
@@ -53,44 +106,28 @@ func Run(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) (St
 		featureTypes[id] = fi.featureType
 	}
 
-	p := reconcile(modalities, edges, existing)
-
-	if err := apply(ctx, sqlDB, p, memberCluster, existing); err != nil {
-		return Stats{}, err
+	var out Stats
+	for _, basis := range Bases {
+		existing, memberCluster, err := loadClusters(ctx, sqlDB, basis)
+		if err != nil {
+			return Stats{}, nil, err
+		}
+		p := reconcile(modalities, edgesFor(pairs, basis), existing)
+		if commit {
+			if err := apply(ctx, sqlDB, basis, p, memberCluster, existing); err != nil {
+				return Stats{}, nil, err
+			}
+		}
+		if basis == BasisReviewed {
+			out.Reviewed = stats(p)
+		} else {
+			out.LayerStats = stats(p)
+		}
 	}
-	if err := materialize(ctx, sqlDB, driver, featureTypes); err != nil {
-		return Stats{}, err
-	}
-	return stats(p), nil
+	return out, featureTypes, nil
 }
 
-// Plan returns the counts a Run would produce, without writing anything.
-func Plan(ctx context.Context, sqlDB *sql.DB) (Stats, error) {
-	if sqlDB == nil {
-		return Stats{}, fmt.Errorf("database is not configured")
-	}
-
-	featureInfos, err := loadFeatures(ctx, sqlDB)
-	if err != nil {
-		return Stats{}, err
-	}
-	edges, err := loadConfirmedEdges(ctx, sqlDB)
-	if err != nil {
-		return Stats{}, err
-	}
-	existing, _, err := loadClusters(ctx, sqlDB)
-	if err != nil {
-		return Stats{}, err
-	}
-
-	modalities := make(map[string]string, len(featureInfos))
-	for id, fi := range featureInfos {
-		modalities[id] = fi.modality
-	}
-	return stats(reconcile(modalities, edges, existing)), nil
-}
-
-func stats(p plan) Stats {
+func stats(p plan) LayerStats {
 	evidence := 0
 	for _, members := range p.kept {
 		evidence += len(members)
@@ -98,7 +135,7 @@ func stats(p plan) Stats {
 	for _, nc := range p.newClusters {
 		evidence += len(nc.evidence)
 	}
-	return Stats{
+	return LayerStats{
 		Evidence: evidence,
 		Clusters: len(p.kept) + len(p.newClusters),
 		Created:  len(p.newClusters),
@@ -138,29 +175,29 @@ func loadFeatures(ctx context.Context, sqlDB *sql.DB) (map[string]featureInfo, e
 	return out, nil
 }
 
-// loadConfirmedEdges reads biometric_decisions and returns the edges whose
-// derived status is CONFIRMED. The decision modality (FACE/FINGERPRINT) is
-// mapped onto the clusters table's modality vocabulary (FACIAL/FINGERPRINT).
-func loadConfirmedEdges(ctx context.Context, sqlDB *sql.DB) ([]edge, error) {
-	pairs, err := loadConfirmedPairs(ctx, sqlDB)
-	if err != nil {
-		return nil, err
-	}
+// edgesFor turns the CONFIRMED pairs into the edges of one layer: every pair
+// for AUTOMATIC, the reviewed ones for REVIEWED. The decision modality
+// (FACE/FINGERPRINT) is mapped onto the clusters table's modality vocabulary
+// (FACIAL/FINGERPRINT).
+func edgesFor(pairs []confirmedPair, basis Basis) []edge {
 	edges := make([]edge, 0, len(pairs))
 	for _, p := range pairs {
+		if basis == BasisReviewed && !p.reviewed {
+			continue
+		}
 		edges = append(edges, edge{
 			left:     p.featureA,
 			right:    p.featureB,
 			modality: clusterModalityFor(p.modality),
 		})
 	}
-	return edges, nil
+	return edges
 }
 
-func loadClusters(ctx context.Context, sqlDB *sql.DB) (map[int64]clusterState, map[string]int64, error) {
+func loadClusters(ctx context.Context, sqlDB *sql.DB, basis Basis) (map[int64]clusterState, map[string]int64, error) {
 	q := db.New(sqlDB)
 
-	clusters, err := q.ListClusters(ctx)
+	clusters, err := q.ListClusters(ctx, string(basis))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -169,7 +206,7 @@ func loadClusters(ctx context.Context, sqlDB *sql.DB) (map[int64]clusterState, m
 		existing[c.ID] = clusterState{modality: c.Modality}
 	}
 
-	members, err := q.ListClusterMembers(ctx)
+	members, err := q.ListClusterMembers(ctx, string(basis))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -183,8 +220,8 @@ func loadClusters(ctx context.Context, sqlDB *sql.DB) (map[int64]clusterState, m
 	return existing, memberCluster, nil
 }
 
-// apply writes the plan to Postgres in one transaction.
-func apply(ctx context.Context, sqlDB *sql.DB, p plan, memberCluster map[string]int64, existing map[int64]clusterState) error {
+// apply writes one layer's plan to Postgres in one transaction.
+func apply(ctx context.Context, sqlDB *sql.DB, basis Basis, p plan, memberCluster map[string]int64, existing map[int64]clusterState) error {
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -194,7 +231,7 @@ func apply(ctx context.Context, sqlDB *sql.DB, p plan, memberCluster map[string]
 
 	newIDs := make([]int64, len(p.newClusters))
 	for i, nc := range p.newClusters {
-		id, err := q.CreateCluster(ctx, nc.modality)
+		id, err := q.CreateCluster(ctx, db.CreateClusterParams{Modality: nc.modality, Basis: string(basis)})
 		if err != nil {
 			return err
 		}
@@ -219,11 +256,11 @@ func apply(ctx context.Context, sqlDB *sql.DB, p plan, memberCluster map[string]
 			continue
 		}
 		if ok {
-			if err := q.DeleteClusterMember(ctx, featureID); err != nil {
+			if err := q.DeleteClusterMember(ctx, db.DeleteClusterMemberParams{Basis: string(basis), FeatureID: featureID}); err != nil {
 				return err
 			}
 		}
-		if err := q.InsertClusterMember(ctx, db.InsertClusterMemberParams{ClusterID: finalID, FeatureID: featureID}); err != nil {
+		if err := q.InsertClusterMember(ctx, db.InsertClusterMemberParams{ClusterID: finalID, FeatureID: featureID, Basis: string(basis)}); err != nil {
 			return err
 		}
 	}
@@ -242,6 +279,7 @@ func apply(ctx context.Context, sqlDB *sql.DB, p plan, memberCluster map[string]
 			FromClusterID: m.from,
 			ToClusterID:   m.to,
 			Reason:        sql.NullString{String: "decision_merge", Valid: true},
+			Basis:         string(basis),
 		}); err != nil {
 			return err
 		}
@@ -250,8 +288,9 @@ func apply(ctx context.Context, sqlDB *sql.DB, p plan, memberCluster map[string]
 	return tx.Commit()
 }
 
-// materialize reads the persisted clusters and memberships and writes the
-// BiometricCluster nodes and IN_CLUSTER edges to Neo4j. It rebuilds IN_CLUSTER
+// materialize reads the persisted clusters and memberships of both layers and
+// writes the BiometricCluster nodes (with their basis) and IN_CLUSTER edges to
+// Neo4j, so a feature has one IN_CLUSTER edge per layer. It rebuilds IN_CLUSTER
 // edges from the DB each run but never touches IDENTIFIED_AS. Evidence and
 // feature nodes are created by Sync/SyncIdentity, not here.
 func materialize(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext, featureTypes map[string]string) error {
@@ -262,6 +301,7 @@ func materialize(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithCont
 
 	type clusterData struct {
 		modality string
+		basis    string
 		members  []string
 	}
 	var order []int64
@@ -269,7 +309,7 @@ func materialize(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithCont
 	for _, r := range rows {
 		c, ok := byID[r.ClusterID]
 		if !ok {
-			c = &clusterData{modality: r.Modality}
+			c = &clusterData{modality: r.Modality, basis: r.Basis}
 			byID[r.ClusterID] = c
 			order = append(order, r.ClusterID)
 		}
@@ -296,6 +336,7 @@ func materialize(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithCont
 		params = append(params, map[string]any{
 			"clusterId":    clusterID,
 			"clusterLabel": mapping.ClusterLabel,
+			"basis":        c.basis,
 			"members":      members,
 		})
 	}
@@ -336,6 +377,7 @@ const upsertClustersQuery = `
 UNWIND $clusters AS cluster
 MERGE (c:Object:BiometricCluster {clusterId: cluster.clusterId})
 ON CREATE SET c.createdAt = datetime(), c.source = $source
+SET c.basis = cluster.basis
 FOREACH (_ IN CASE WHEN cluster.clusterLabel = 'Fingerprint' THEN [1] ELSE [] END | SET c:Fingerprint)
 FOREACH (_ IN CASE WHEN cluster.clusterLabel = 'Face' THEN [1] ELSE [] END | SET c:Face)
 WITH c, cluster

@@ -56,10 +56,10 @@ function IdentifiedCell({ cluster }: { cluster: ClusterSummary }) {
   );
 }
 
-// Every persisted biometric cluster (cluster.Run's output) in one sortable,
-// filterable list -- ordered by how many distinct criminal cases each one
+// Every AUTOMATIC biometric cluster (cluster.Run's output, SYSTEM matches
+// included: an intelligence view) in one sortable, filterable list -- ordered by how many distinct criminal cases each one
 // touches, so the clusters most relevant to active investigations surface
-// first. See CaseClusters for the same data scoped to a single case.
+// first. CaseClusters shows a single case's REVIEWED clusters instead.
 export default function Clusters() {
   const { t, i18n } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -139,6 +139,9 @@ export default function Clusters() {
         title={t("clusters.title")}
         desc={t("clusters.subtitle")}
       >
+        <p className="mb-4 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-white/[0.03] dark:text-gray-400">
+          {t("clusters.automaticNote")}
+        </p>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"

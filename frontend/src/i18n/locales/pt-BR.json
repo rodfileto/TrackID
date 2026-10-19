@@ -74,6 +74,7 @@
     "title": "Clusters biométricos",
     "metaDescription": "Todos os clusters biométricos resolvidos até agora, filtráveis e ordenados pelo número de casos que envolvem",
     "subtitle": "Clusters biométricos resolvidos (ver MODEL.md seção 4), ordenados pelo número de casos criminais distintos que cada um envolve.",
+    "automaticNote": "Uma visão de inteligência: inclui correspondências automáticas que nenhum perito revisou ainda. A página de um caso mostra somente vínculos confirmados por peritos.",
     "loadError": "Não foi possível carregar os clusters",
     "identifiedOnly": "Somente identificados",
     "count_one": "{{count}} cluster",
@@ -226,9 +227,15 @@
     "browse": "Procurar arquivos"
   },
   "caseClusters": {
-    "linkedViaCluster": "Vinculado via cluster",
-    "automaticMatch": "Correspondência automática",
     "confirmedBy": "Confirmado por {{name}}",
+    "indirect": "Indireto",
+    "via": "via {{path}}",
+    "indirectHint": "Alcançado por meio de outras amostras; cada vínculo do caminho foi confirmado por peritos.",
+    "requestComparison": "Solicitar comparação direta",
+    "comparisonOpened": "Comparação aberta. Ela aguarda distribuição.",
+    "comparisonError": "Não foi possível abrir a comparação",
+    "crossCaseHint": "Ainda não é possível solicitar a comparação direta com a face de outro caso.",
+    "reviewedOnly": "Somente vínculos confirmados por peritos são exibidos.",
     "anExaminer": "um perito",
     "enrolledIdentity": "Identidade cadastrada",
     "samples_one": "{{count}} amostra biométrica",
@@ -239,10 +246,25 @@
     "identifiedPersons": "Pessoas identificadas",
     "notResolved": "Ainda não resolvido para uma identidade cadastrada.",
     "title": "Clusters biométricos",
-    "noMatches": "Nenhuma face deste caso correspondeu a algo ainda.",
     "reached_one": "{{count}} cluster alcançado pelas faces deste caso.",
-    "reached_other": "{{count}} clusters alcançados pelas faces deste caso.",
-    "emptyHint": "Codifique uma face acima e execute a correspondência para ver seu cluster biométrico aqui."
+    "reached_other": "{{count}} clusters alcançados pelas faces deste caso."
+  },
+  "caseIdentities": {
+    "title": "Decisões sobre identidades",
+    "desc": "Cada identidade cadastrada que uma face deste caso alcançou no limiar de revisão ou acima dele, e sua decisão neste caso.",
+    "face": "Face {{label}}",
+    "faceTrace": "Vestígio {{id}}",
+    "noCandidates": "Nenhuma identidade alcançou o limiar de revisão.",
+    "score": "Escore do sistema {{score}}%",
+    "decidedBy": "por {{name}}",
+    "loadError": "Não foi possível carregar as decisões sobre identidades",
+    "status": {
+      "PENDING": "Aguardando revisão",
+      "CONFIRMED": "Confirmada",
+      "EXCLUDED": "Excluída",
+      "INCONCLUSIVE": "Inconclusiva",
+      "DISPUTED": "Divergente"
+    }
   },
   "markTraces": {
     "loadError": "Não foi possível carregar a evidência",

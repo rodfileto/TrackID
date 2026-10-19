@@ -153,8 +153,9 @@ function OpenComparisonModal({
 }
 
 /** A case's analyses: each one's stage, examiners and report, a link to work on it, and, for
- * admins, assigning its current step and opening a comparison. */
-export default function CaseAnalysesCard({ caseId }: { caseId: string }) {
+ * admins, assigning its current step and opening a comparison. refreshKey reloads the list when
+ * an analysis is opened elsewhere on the page (e.g. from the case's clusters). */
+export default function CaseAnalysesCard({ caseId, refreshKey = 0 }: { caseId: string; refreshKey?: number }) {
   const { t } = useTranslation();
   const { isAdmin } = useCurrentUser();
   const [list, setList] = useState<Analysis[] | null>(null);
@@ -168,7 +169,7 @@ export default function CaseAnalysesCard({ caseId }: { caseId: string }) {
       .catch((err) => setError(err instanceof Error ? err.message : t("analyses.loadError")));
   }, [caseId, t]);
 
-  useEffect(load, [load]);
+  useEffect(load, [load, refreshKey]);
   useEffect(() => {
     if (isAdmin) listUsers().then(setUsers).catch(() => setUsers([]));
   }, [isAdmin]);

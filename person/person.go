@@ -6,10 +6,11 @@
 // Every view here is a Postgres-only projection over person / identity_* /
 // biometricfeature / cluster_* / case_* (see MODEL.md) -- there is no Neo4j
 // dependency. A person is never linked to a cluster or a case by raw
-// co-occurrence: the link always runs through cluster_members, which in turn
-// only grows from a CONFIRMED biometric_decisions chain (see
-// cluster.DeriveEdgeStatus and cluster.Identify). This package writes
-// nothing; it reads what cluster.Run/cluster.Identify have already derived.
+// co-occurrence: the link always runs through the REVIEWED layer of
+// cluster_members (cluster.BasisReviewed), which only grows from a
+// biometric_decisions chain people confirmed (cluster.Reviewed) -- never from
+// a SYSTEM match alone. This package writes nothing; it reads what
+// cluster.Run/cluster.Identify have already derived.
 package person
 
 import "errors"

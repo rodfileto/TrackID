@@ -183,3 +183,48 @@ func TestDeriveEdgeStatusRounds(t *testing.T) {
 		}
 	}
 }
+
+// TestReviewed: only a CONFIRMED pair settled by people builds the REVIEWED layer; a SYSTEM
+// confirmation stays automatic, even while a human round on the pair is still pending.
+func TestReviewed(t *testing.T) {
+	sysPositive := ChainEntry{Role: RoleSystem, Decision: DecisionPositive}
+	sysInconclusive := ChainEntry{Role: RoleSystem, Decision: DecisionInconclusive}
+	review := func(role Role, d Decision) ChainEntry { return ChainEntry{Role: role, Decision: d, Analysis: 7} }
+	comparison := func(role Role, d Decision) ChainEntry { return ChainEntry{Role: role, Decision: d, Analysis: 9} }
+
+	tests := []struct {
+		name  string
+		chain []ChainEntry
+		want  bool
+	}{
+		{"empty chain", nil, false},
+		{"SYSTEM POSITIVE alone is automatic", []ChainEntry{sysPositive}, false},
+		{"SYSTEM POSITIVE with a pending human round stays automatic",
+			[]ChainEntry{sysPositive, review(RoleVerificator, DecisionPositive)}, false},
+		{"SYSTEM POSITIVE with a disputed human round stays automatic",
+			[]ChainEntry{sysPositive, review(RoleVerificator, DecisionPositive), review(RoleReviewer, DecisionNegative)}, false},
+		{"a REVIEWER without a VERIFICATOR does not settle it",
+			[]ChainEntry{sysPositive, review(RoleReviewer, DecisionPositive)}, false},
+		{"VERIFICATOR and REVIEWER agreeing positive",
+			[]ChainEntry{sysInconclusive, review(RoleVerificator, DecisionPositive), review(RoleReviewer, DecisionPositive)}, true},
+		{"agreeing on a SYSTEM POSITIVE",
+			[]ChainEntry{sysPositive, review(RoleVerificator, DecisionPositive), review(RoleReviewer, DecisionPositive)}, true},
+		{"an INCONSISTENCE settling positive",
+			[]ChainEntry{sysInconclusive, review(RoleVerificator, DecisionPositive), review(RoleReviewer, DecisionNegative),
+				review(RoleInconsistence, DecisionPositive)}, true},
+		{"human rows from before analyses (round 0) agreeing",
+			[]ChainEntry{sysInconclusive, {Role: RoleVerificator, Decision: DecisionPositive}, {Role: RoleReviewer, Decision: DecisionPositive}}, true},
+		{"a reviewed pair later rejected is not reviewed-confirmed",
+			[]ChainEntry{sysInconclusive, review(RoleVerificator, DecisionPositive), review(RoleReviewer, DecisionPositive),
+				comparison(RoleVerificator, DecisionNegative), comparison(RoleReviewer, DecisionNegative)}, false},
+		{"a pending comparison keeps the reviewed confirmation",
+			[]ChainEntry{sysInconclusive, review(RoleVerificator, DecisionPositive), review(RoleReviewer, DecisionPositive),
+				comparison(RoleVerificator, DecisionNegative)}, true},
+		{"agreeing negative", []ChainEntry{sysPositive, review(RoleVerificator, DecisionNegative), review(RoleReviewer, DecisionNegative)}, false},
+	}
+	for _, tt := range tests {
+		if got := Reviewed(tt.chain); got != tt.want {
+			t.Errorf("%s: Reviewed = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
