@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "TrackID: an extensible open core for forensic biometric case management"
+type: software
+authors:
+  - given-names: "Rodrigo Fileto Cuerci"
+    family-names: "Maciel"
+license: Apache-2.0
+repository-code: "https://github.com/rodfileto/trackid"
+keywords:
+  - forensic science
+  - biometrics
+  - forensic intelligence
+  - ACE-V
+  - face recognition
+  - fingerprints

@@ -133,6 +133,12 @@ need PostGIS, so a database for `TRACKID_TEST_DATABASE_URL` must run it too. Swi
 existing stack over: `docker compose build postgres && docker compose up -d postgres` (the
 data volume is kept).
 
+## Licence
+
+Apache-2.0 (see [LICENSE](LICENSE)); cite it with [CITATION.cff](CITATION.cff). The frontend
+is based on TailAdmin React, MIT, whose notice is kept in [frontend/LICENSE](frontend/LICENSE).
+The model weights below are not covered by this licence and are not bundled.
+
 ## Models and licences
 
 Face detection and embedding run through [trackid-vision](https://github.com/rodfileto/trackid-vision)
