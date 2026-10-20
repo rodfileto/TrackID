@@ -3885,6 +3885,55 @@ func (q *Queries) ListOccurrencesWithinRadius(ctx context.Context, arg ListOccur
 	return items, nil
 }
 
+const listPairDeciders = `-- name: ListPairDeciders :many
+SELECT u.id
+FROM users u
+WHERE EXISTS (
+        SELECT 1
+        FROM biometric_decisions d
+        WHERE d.role <> 'SYSTEM' AND d.username = u.username
+          AND (d.feature_a_id, d.feature_b_id) IN (SELECT unnest($1::text[]), unnest($2::text[])))
+   OR EXISTS (
+        SELECT 1
+        FROM analysis_decision_drafts dr
+        WHERE dr.user_id = u.id AND dr.case_analysis_id <> $3::bigint
+          AND (dr.feature_a_id, dr.feature_b_id) IN (SELECT unnest($1::text[]), unnest($2::text[])))
+ORDER BY u.id
+`
+
+type ListPairDecidersParams struct {
+	FeatureAIds []string `db:"feature_a_ids" json:"feature_a_ids"`
+	FeatureBIds []string `db:"feature_b_ids" json:"feature_b_ids"`
+	AnalysisID  int64    `db:"analysis_id" json:"analysis_id"`
+}
+
+// The users who have already worked on any of the given pairs: a human decision on one of them
+// (submitted in an analysis, or imported), or a draft of one in an analysis other than
+// analysis_id. distribution.Distribute gives them a step on these pairs only when nobody else is
+// eligible.
+func (q *Queries) ListPairDeciders(ctx context.Context, arg ListPairDecidersParams) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listPairDeciders, pq.Array(arg.FeatureAIds), pq.Array(arg.FeatureBIds), arg.AnalysisID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPendingWork = `-- name: ListPendingWork :many
 SELECT ca.id, ca.sequence, ca.analysis_type, ca.stage, bc.case_id,
        v.user_id AS verificator_id, r.user_id AS reviewer_id

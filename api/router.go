@@ -71,12 +71,13 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	coordination.POST("distribution", DistributeHandler(deps.DB))
 	coordination.POST("cases/:caseId/analyses", OpenAnalysisHandler(deps.DB))
 	coordination.PUT("analyses/:analysisId/assignment", AssignAnalysisHandler(deps.DB))
+	coordination.GET("analyses/:analysisId/prior-deciders", PriorDecidersHandler(deps.DB))
 	protected.GET("cases", ListCasesHandler(deps.DB))
 	protected.POST("cases", CreateCaseHandler(deps.DB))
 	protected.GET("cases/years", ListCaseYearsHandler(deps.DB))
 
-	// Everything about one case: admins see every case, anyone else only the cases where they hold
-	// an analysis.
+	// Everything about one case: analysts and coordinators read every case, anyone else only the cases
+	// where they hold an analysis (distribution.Rights).
 	oneCase := protected.Group("cases/:caseId")
 	oneCase.Use(CaseAccess(deps.DB))
 	oneCase.GET("", GetCaseHandler(deps.DB))

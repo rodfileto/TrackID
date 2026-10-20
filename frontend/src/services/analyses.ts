@@ -219,7 +219,16 @@ export async function distribute(
   });
 }
 
-/** Admin: give the analysis's current step to userId, or unassign it (null). */
+/** Coordinator: the users who already decided (or drafted) the pairs of the analysis's current
+ * step in another analysis or an import. Distribution avoids them; the assignment screen warns. */
+export async function getPriorDeciders(analysisId: number): Promise<number[]> {
+  const res = await requestApi<{ userIds: number[] }>(`/admin/analyses/${analysisId}/prior-deciders`, {
+    headers: authHeaders(),
+  });
+  return res.userIds;
+}
+
+/** Coordinator: give the analysis's current step to userId, or unassign it (null). */
 export async function assignAnalysis(analysisId: number, userId: number | null): Promise<void> {
   await requestApi(`/admin/analyses/${analysisId}/assignment`, {
     method: "PUT",

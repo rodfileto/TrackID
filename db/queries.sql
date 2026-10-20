@@ -1100,6 +1100,25 @@ WHERE ca.status = 'OPEN' AND ca.stage <> 'REPORT' AND cur.user_id IS NULL
   AND (sqlc.narg('analysis_type')::text IS NULL OR ca.analysis_type = sqlc.narg('analysis_type'))
 ORDER BY ca.created_at, ca.id;
 
+-- name: ListPairDeciders :many
+-- The users who have already worked on any of the given pairs: a human decision on one of them
+-- (submitted in an analysis, or imported), or a draft of one in an analysis other than
+-- analysis_id. distribution.Distribute gives them a step on these pairs only when nobody else is
+-- eligible.
+SELECT u.id
+FROM users u
+WHERE EXISTS (
+        SELECT 1
+        FROM biometric_decisions d
+        WHERE d.role <> 'SYSTEM' AND d.username = u.username
+          AND (d.feature_a_id, d.feature_b_id) IN (SELECT unnest(@feature_a_ids::text[]), unnest(@feature_b_ids::text[])))
+   OR EXISTS (
+        SELECT 1
+        FROM analysis_decision_drafts dr
+        WHERE dr.user_id = u.id AND dr.case_analysis_id <> @analysis_id::bigint
+          AND (dr.feature_a_id, dr.feature_b_id) IN (SELECT unnest(@feature_a_ids::text[]), unnest(@feature_b_ids::text[])))
+ORDER BY u.id;
+
 -- name: ListExaminerLoads :many
 -- Every active examiner with the number of open analyses whose current stage is theirs to work
 -- (the report counting for the first examiner).

@@ -58,6 +58,18 @@ func TestPlan(t *testing.T) {
 	if got, none := plan(verification, []Examiner{bia}, 1); len(got) != 0 || len(none) != 1 {
 		t.Errorf("only its first examiner available: assigned %+v, want it left pending", got)
 	}
+	// C6's comparison is on pairs bia and caio decided in its review: ana takes it, though she has
+	// the most open work; with only bia and caio, the less loaded of the two does.
+	compared := []PendingWork{{ID: 7, CaseID: "C6", Type: comparison, Avoid: []int64{2, 3}}}
+	if got, _ := plan(compared, []Examiner{ana, bia, caio}, 1); len(got) != 1 || got[0].Username != "ana" {
+		t.Errorf("comparison went to %+v, want ana, who never decided its pairs", got)
+	}
+	if got, _ := plan(compared, []Examiner{bia, {UserID: 3, Username: "caio", ExaminesFacial: true, OpenWork: 0}, {UserID: 5, Username: "eva", ExaminesFacial: true, OpenWork: 1}}, 1); len(got) != 1 || got[0].Username != "eva" {
+		t.Errorf("comparison went to %+v, want eva, the one eligible examiner who never decided its pairs", got)
+	}
+	if got, _ := plan(compared, []Examiner{{UserID: 2, Username: "bia", ExaminesFacial: true, OpenWork: 3}, caio}, 1); len(got) != 1 || got[0].Username != "caio" {
+		t.Errorf("only examiners who decided its pairs: went to %+v, want caio, the less loaded", got)
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assigned, noExaminer := plan(pending, tt.examiners, tt.count)
