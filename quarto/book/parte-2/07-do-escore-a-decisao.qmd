@@ -8,15 +8,119 @@ SYSTEM; versões de limiar definem o que é confirmado automaticamente e o que c
 O capítulo mostra esse caminho e por que os limiares são dados versionados, não código.
 :::
 
-## Seções previstas
+O capítulo sobre humanos e máquinas (@sec-humanos-maquinas) discutiu o lugar do algoritmo na
+identificação: o que um escore é, o que ele não é, e quem responde por uma decisão automática. Este
+capítulo mostra o caminho concreto no TrackID, da imagem que entra até a decisão que o sistema
+grava -- e o ponto exato em que ele para e entrega o par às pessoas.
 
-- Decisões SYSTEM: positivo, inconclusivo, nada
-- Versões de limiar e a faixa de revisão
-- O que vai para a revisão humana
-- Por que os limiares pertencem a cada laboratório
+## Da imagem ao escore
+
+Quando uma fotografia de cadastro ou um vestígio com imagem entra no TrackID, uma fila de trabalho
+processa a imagem em segundo plano:
+
+- para **faces**, um detector localiza a face e um reconhecedor a transforma num vetor numérico
+  (uma *representação*), de modo que faces parecidas têm vetores próximos;
+- para **impressões digitais**, um extrator produz um *template* com as minúcias, que só o
+  confrontador sabe comparar.
+
+Em seguida, cada amostra nova é comparada com as que já estão no banco. Para faces, a busca
+procura os vizinhos mais próximos de cada representação nova -- até vinte -- entre todas as
+outras; para impressões digitais, o confrontador pontua o template novo contra os demais. O
+resultado de cada comparação é um **escore**: para faces, uma similaridade entre 0 e 1; para
+impressões digitais, a pontuação do confrontador, sem limite superior.
+
+A busca não distingue procedência. Compara face questionada com fotografia de cadastro, mas também
+duas faces de casos diferentes e duas fotografias de cadastro -- o que pode revelar uma pessoa
+cadastrada duas vezes. Cada par é decidido pelo sistema uma única vez: se o par já tem decisão do
+sistema, não ganha outra.
+
+## Decisões do sistema: positivo, inconclusivo, nada
+
+O escore, sozinho, não é decisão. O TrackID o classifica contra dois limiares, o de **revisão** e o
+de **confirmação**:
+
+| Escore | O sistema grava | Situação do par |
+|---|---|---|
+| igual ou acima da confirmação | decisão positiva (`SYSTEM POSITIVE`) | confirmado pelo sistema |
+| entre a revisão e a confirmação | decisão inconclusiva (`SYSTEM INCONCLUSIVE`) | aguardando revisão |
+| abaixo da revisão | nada | o par não existe para o sistema |
+
+O intervalo entre os dois limiares é a **faixa de revisão**: pares parecidos o bastante para
+merecer um olhar humano, mas não o bastante para o sistema afirmá-los. Cada decisão do sistema
+grava o escore, o limiar contra o qual foi classificada e a versão de limiar em vigor, de modo que,
+anos depois, ainda se sabe por que aquele par foi confirmado ou enviado à revisão.
+
+O sistema não grava decisões negativas: um par abaixo da revisão simplesmente não é registrado.
+Uma importação pode registrar uma negativa explícita do sistema de origem, e o modelo a respeita
+como rejeição.
+
+## Versões de limiar e a faixa de revisão
+
+Os limiares não estão no código. São **dados**: cada mudança é uma nova **versão**, com os dois
+valores, a modalidade, quem a definiu, quando e de onde vêm os números -- "curva ROC sobre o
+conjunto de validação X", por exemplo. A versão mais recente de cada modalidade é a que vale, e
+passa a valer na próxima comparação, sem reiniciar nada. As versões anteriores ficam, como as
+decisões que elas produziram: mudar o limiar não reescreve o passado.
+
+Enquanto nenhuma versão é definida, o sistema usa um padrão sem faixa de revisão: similaridade 0,60
+para faces e 40 para impressões digitais, o limiar documentado do confrontador SourceAFIS
+[@sourceafis]. Nenhum desses números foi calibrado para dados operacionais.
+
+::: {.callout-tip appearance="simple"}
+## Na prática
+
+No mundo sintético do exercício (@sec-mundo-sintetico), as versões em uso são revisão 0,60 e
+confirmação 0,70 para faces, e revisão 40 e confirmação 60 para impressões digitais, medidas sobre
+as próprias imagens sintéticas. Valem para aquele mundo e para nada mais.
+:::
+
+## O que vai para a revisão humana
+
+Uma decisão positiva do sistema confirma o par sozinha, sem nenhum passo humano. Isso é deliberado:
+a inteligência precisa de vínculos rápidos, e um par com escore muito alto raramente engana. Mas
+não é o fim do caminho:
+
+- a **revisão facial** de cada caso (@sec-ace-v-trackid) leva aos peritos **todos** os candidatos
+  do sistema para as faces do caso, positivos e inconclusivos, em ordem de escore;
+- as páginas do caso e da pessoa só mostram vínculos **confirmados por peritos**; um par confirmado
+  apenas pelo sistema aparece só nas telas de inteligência (@sec-decisao-inteligencia);
+- na página do caso, cada face lista as identidades que o sistema alcançou na faixa de revisão ou
+  acima dela, com a sua situação -- e um positivo do sistema aparece ali como aguardando revisão,
+  nunca como confirmado.
+
+O que o sistema não alcança, abaixo do limiar de revisão, não chega a ninguém. A faixa de revisão
+é, portanto, também uma escolha sobre o que os peritos **não** vão ver.
+
+## Por que os limiares pertencem a cada laboratório
+
+Um limiar só tem sentido para um algoritmo, um tipo de imagem e uma população. O mesmo
+reconhecedor que separa bem duas fotografias de cadastro pode confundir duas imagens de câmera de
+baixa resolução, e as taxas de erro podem variar entre grupos demográficos
+[@grother2019demographic]. Por isso o TrackID não traz limiares "certos": traz o mecanismo para
+que cada laboratório registre os seus, a partir da sua própria validação, com a origem dos números
+gravada junto.
+
+::: {.callout-important appearance="simple"}
+## Limite
+
+Um escore não é uma razão de verossimilhança, e o TrackID não converte um no outro: isso exigiria
+uma calibração com dados de referência que ele não tem. Os padrões de fábrica não foram validados
+para uso em casos reais. E um vínculo confirmado automaticamente traz o risco do viés de
+automação -- a tendência de aceitar a conclusão da máquina sem examiná-la [@parasuraman2010] --,
+que é uma das razões pelas quais as telas forenses só mostram vínculos revisados por peritos.
+:::
 
 ::: {.callout-tip appearance="simple"}
 ## No TrackID
 
-`biometricmatch`, `match_thresholds`, `cmd/match-threshold`.
+Pacote `biometricmatch` (a busca e a classificação na faixa: `RunBand`, `RunTemplatesBand`);
+tabela `match_thresholds` (as versões); comando `match-threshold` (consultar e definir uma
+versão); pacotes `embedding` e `fingerprint` (a fila de extração e os padrões).
+:::
+
+::: {.callout-warning appearance="simple"}
+## Fontes candidatas
+
+A conferir com o original antes de citar: [@sourceafis; @grother2019demographic;
+@parasuraman2010].
 :::
