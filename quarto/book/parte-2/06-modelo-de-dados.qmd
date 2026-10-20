@@ -1,4 +1,4 @@
-# O modelo de dados: traços, características e decisões {#sec-modelo}
+# O modelo de dados: vestígios, características e decisões {#sec-modelo}
 
 ::: {.callout-note appearance="simple"}
 ## Resumo
@@ -9,16 +9,167 @@ características; o registro das decisões é a fonte da verdade, e os clusters 
 com números estáveis e citáveis. Ocorrências e lugares situam os casos no tempo e no espaço.
 :::
 
-## Seções previstas
+O capítulo sobre identificação e silos (@sec-silos) mostrou o problema: cadastros de um lado,
+vestígios de casos do outro, em sistemas que não se falam. O modelo de dados do TrackID é a
+resposta: os dois lados são descritos por estruturas paralelas que terminam no mesmo ponto, e é
+nesse ponto que as decisões são tomadas. Este capítulo descreve essas estruturas sem exigir que o
+leitor leia o banco de dados; os nomes das tabelas aparecem para quem quiser segui-los.
 
-- A característica biométrica como unidade
-- Hierarquia do cadastro e hierarquia do vestígio
-- A decisão entre dois traços e o registro só-de-acréscimo
-- Clusters: derivados, estáveis, citáveis
-- Ocorrências e lugares
+## A característica biométrica como unidade
+
+Tudo no TrackID se reduz a uma coisa que se compara: a **característica biométrica**. Uma
+característica é *uma* amostra biométrica: a fotografia de um cadastro, uma impressão digital
+coletada, uma face detectada numa imagem de câmera, um fragmento levantado num local de crime.
+
+Cada característica tem um tipo e uma procedência:
+
+| Tipo | O que é | Procedência |
+|---|---|---|
+| `FACE_RECORD` | a fotografia de um cadastro | padrão (`KNOWN`) |
+| `FINGERPRINT_TEMPLATE` | a impressão digital de um cadastro | padrão (`KNOWN`) |
+| `FACE_CAPTURE` | uma face detectada numa evidência | questionada (`QUESTIONED`) |
+| `FINGERPRINT_LIFT` | um fragmento papiloscópico de um caso | questionada (`QUESTIONED`) |
+
+A procedência é a distinção forense clássica entre o **padrão**, de origem conhecida, e o
+**questionado**, cuja origem se quer determinar. No TrackID ela vem da estrutura de onde a
+característica nasceu: do cadastro ou do caso.
+
+## Hierarquia do cadastro e hierarquia do vestígio
+
+### O cadastro (padrão)
+
+```{mermaid}
+%%| label: fig-hierarquias
+%%| fig-cap: "As duas hierarquias e o ponto onde se encontram. À esquerda, o cadastro; à direita, o caso."
+flowchart TB
+  subgraph Cadastro
+    P[Pessoa] --> D[Documento]
+    D --> R[Registro de identificação]
+    R --> F[Arquivo: fotografia, impressão digital]
+  end
+  subgraph Caso
+    C[Caso biométrico] --> E[Evidência]
+    E --> T[Vestígio]
+  end
+  F --> BF((Característica<br/>biométrica))
+  T --> BF
+```
+
+Uma **pessoa** tem um ou mais **documentos** (uma carteira de identidade, uma carteira de
+motorista); cada documento tem um ou mais **registros de identificação**, cada um com os dados
+biográficos daquela coleta -- nome, filiação, data de nascimento; cada registro produz
+**arquivos** (uma fotografia, uma impressão digital); e de cada arquivo sai uma característica. Uma
+pessoa renovou o documento? Novo registro sob o mesmo documento ou um novo documento. Foi
+cadastrada de novo sob outro número? Então são duas pessoas no cadastro -- e só a biometria pode
+mostrar que são uma só.
+
+### O caso (questionado)
+
+Um **caso biométrico** é qualquer caso com material biométrico a identificar. Tem uma natureza --
+**criminal** (imagens de um roubo, fragmentos de um local de crime) ou **civil** (um cadáver não
+identificado, uma vítima de desastre) -- e uma modalidade, facial ou papiloscópica; as duas são
+independentes, e o resto da estrutura é igual para ambas. O caso tem **evidências** (uma imagem, um
+cartão de levantamento); cada evidência tem **vestígios** (uma face na imagem, um fragmento no
+cartão); e cada vestígio é uma característica questionada. Um vestígio pode ter ainda
+**codificações** -- o recorte da face, as minúcias marcadas --, que são produtos do processamento,
+não decisões.
+
+O modelo não sabe de onde os dados vieram. Cada organização escreve os seus próprios comandos de
+importação, que traduzem os seus formatos para essas estruturas; tudo o que vem depois -- a
+comparação, as decisões, os clusters, as telas -- lê apenas o banco do TrackID.
+
+## A decisão entre duas características e o registro só-de-acréscimo
+
+Uma **decisão** é sempre tomada sobre um **par** de características: estas duas amostras são, ou
+não, da mesma pessoa? Pode ser entre uma face questionada e uma fotografia de cadastro, entre duas
+faces de um mesmo caso, entre duas fotografias de cadastro. Cada decisão tem:
+
+- o **par** de características;
+- quem decidiu, num **papel**: o sistema (`SYSTEM`), o primeiro perito (`VERIFICATOR`), o segundo
+  (`REVIEWER`) ou o terceiro, na inconsistência (`INCONSISTENCE`);
+- a **conclusão**: positiva, negativa ou inconclusiva;
+- para o sistema, o **escore** e o limiar contra o qual foi classificado (@sec-escore); para o
+  perito, o nome de usuário, as observações e a análise em que decidiu (@sec-ace-v-trackid);
+- quando.
+
+As decisões formam um **registro só-de-acréscimo**: uma decisão nunca é alterada nem apagada.
+Rever um par é acrescentar decisões novas, numa nova rodada; a regra que deriva a situação do par
+a partir de todas as suas decisões está no @sec-ace-v-trackid. Esse
+registro é a **fonte da verdade**: tudo o mais -- se um par está confirmado, que clusters existem, a
+quem um vestígio foi identificado -- é derivado dele e pode ser recalculado a qualquer momento. É
+também o que torna o sistema auditável: para qualquer vínculo, pode-se mostrar quem o afirmou,
+quando, com que escore ou com que observações (@sec-limites).
+
+::: {.callout-tip appearance="simple"}
+## Na prática
+
+Um perito que pergunta "por que este vestígio está ligado a esta pessoa?" não precisa confiar no
+sistema: a resposta é a lista de decisões do par, com nomes, datas e etapas.
+:::
+
+## Clusters: derivados, estáveis, citáveis
+
+Um **cluster** é um grupo de características da mesma modalidade que se acredita pertencerem à
+mesma pessoa: as que pares confirmados ligam, direta ou indiretamente. Um cluster pode conter
+vestígios de vários casos e fotografias de vários cadastros; um cluster só com vestígios é um
+**sujeito desconhecido**; um com uma característica só também é um cluster.
+
+Os clusters são derivados das decisões, mas não são recalculados do zero a cada vez, e sim
+**reconciliados** com o estado anterior, para que seus números sejam **estáveis**:
+
+- um número de cluster é criado uma vez e nunca é reutilizado nem renumerado;
+- quando uma decisão nova liga dois clusters, eles se **fundem**, e o mais antigo mantém o número,
+  com a fusão registrada;
+- quando uma decisão desfaz um vínculo, o cluster se **divide**: a parte que contém a
+  característica de referência mantém o número, e as outras recebem números novos.
+
+A estabilidade é o que torna um cluster **citável**: um relatório de inteligência pode dizer
+"cluster 412" sabendo que o número continuará apontando para o mesmo grupo, ou para aquele em que
+ele se fundiu. Há duas camadas de clusters, uma com todos os pares confirmados e outra só com os
+confirmados por peritos, descritas no @sec-decisao-inteligencia.
+
+## Ocorrências e lugares
+
+Os casos acontecem em algum lugar e em algum momento. O TrackID registra a **ocorrência** -- o
+boletim que deu origem ao caso -- e o **lugar**:
+
+- uma **ocorrência** tem a delegacia e o número do registro, o intervalo em que o fato ocorreu e a
+  data do registro, os seus tipos (um registro pode ter vários; a lista segue a classificação do
+  ISP-RJ [@isprj], mais alguns tipos civis de identificação), se foi tentativa, e a situação;
+- um **lugar** é um ponto no mapa, com a sua precisão (exato, por endereço, pela rua, pelo
+  bairro, pelo município), o município e o tipo de lugar -- via pública, residência, comércio,
+  banco, órgão público, transporte, área rural.
+
+Uma ocorrência pode originar vários casos -- um facial, pelas câmeras, e um papiloscópico, pelos
+fragmentos --, por isso o vínculo fica no caso, e pode ser feito depois. Uma ocorrência não é
+necessariamente um crime: o registro de um desaparecimento ou de um cadáver encontrado também é
+uma ocorrência, e origina um caso civil. Vários registros no mesmo lugar apontam para o mesmo
+lugar, o que permite ver os lugares que se repetem.
+
+É aqui que começa a análise por tempo e espaço (@sec-inteligencia-forense): quando um cluster une
+vestígios de casos diferentes, as ocorrências desses casos formam uma **série**, que pode ser
+posta num mapa e numa linha do tempo.
+
+::: {.callout-important appearance="simple"}
+## Limite
+
+O TrackID não deduplica endereços nem decide que dois registros aconteceram no mesmo lugar: isso
+cabe a quem importa os dados. Pessoas cadastradas duas vezes também não são unidas
+automaticamente: o sistema mostra que a biometria as liga, mas a fusão de duas identidades civis é
+um passo posterior, ainda não implementado.
+:::
 
 ::: {.callout-tip appearance="simple"}
 ## No TrackID
 
-`MODEL.md` §1-5; tabelas `biometric_decisions`, `clusters`, `occurrences`.
+`MODEL.md` seções 1 a 5; tabelas `person`, `identity_document`, `identity_register`,
+`identity_file`, `biometric_cases`, `case_evidences`, `case_traces`, `biometricfeature`,
+`biometric_decisions`, `clusters`, `locations`, `occurrences`; pacotes `identity` e `cases` (a
+importação), `cluster` (a reconciliação) e `occurrences`.
+:::
+
+::: {.callout-warning appearance="simple"}
+## Fontes candidatas
+
+A conferir com o original antes de citar: [@isprj].
 :::

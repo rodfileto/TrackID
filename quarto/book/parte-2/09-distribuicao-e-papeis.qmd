@@ -10,22 +10,211 @@ etapas que se tem nele. O capítulo explica essas escolhas pela independência, 
 pela carga de trabalho.
 :::
 
-## Seções previstas
+O capítulo anterior (@sec-ace-v-trackid) descreveu as etapas de uma análise sem dizer quem as
+trabalha. Este capítulo responde a essa pergunta, e a uma segunda, que decorre dela: o que cada
+pessoa pode ver. As duas respostas vêm do mesmo princípio. A verificação só é independente se
+quem verifica não sabe o que o primeiro perito concluiu nem tem motivo para adivinhar
+[@dror2006; @dror2015]; e a inteligência coletiva (@sec-inteligencia-coletiva) só soma juízos que
+foram formados separadamente. Distribuir o trabalho e restringir o que se vê são, portanto, parte
+do método, não apenas da administração do sistema.
 
-- Perfis: administrador, super administrador, examinador; modalidades
-- Distribuição automática: quantos, quais, para quem
-- Independência: nunca duas etapas da mesma análise
-- Acesso pelo que se tem atribuído
-- Verificação cega na interface
+## Perfis: quem administra, quem examina, quem analisa, quem coordena
+
+O TrackID separa quatro trabalhos que costumam se misturar num mesmo usuário com "poderes de
+administrador":
+
+- **administrar as contas**: criar usuários, redefinir senhas, conceder ou retirar capacidades;
+- **examinar**: decidir os pares das análises que se recebe;
+- **analisar a inteligência**: ligar pessoas, casos e ocorrências, o que exige ver tudo;
+- **coordenar**: distribuir as análises, redistribuir etapas e abrir comparações.
+
+O primeiro é um **papel de conta**; os outros três são **capacidades**, independentes entre si e
+do papel. Uma mesma pessoa pode ter várias, e então tem a soma do que cada uma permite.
+
+| Perfil | O que permite | O que não dá |
+|---|---|---|
+| **Superadministrador** | gerir todas as contas, inclusive as de administradores | nenhum acesso a casos ou pessoas |
+| **Administrador** | gerir as contas de usuários comuns | nenhum acesso a casos ou pessoas |
+| **Perito** (por modalidade: facial, papiloscópica) | decidir pares na sua modalidade, nas etapas que recebe; ver os casos em que tem uma etapa | as páginas completas de pessoas, os clusters, o mapa de ocorrências |
+| **Inteligência** | ler todos os casos e pessoas, os clusters, a busca por face, as ocorrências; ligar ocorrências a casos | decidir pares, se não for também perito; alterar vestígios de casos em que não tem etapa |
+| **Coordenação** | distribuir análises, redistribuir etapas, abrir comparações; ler todos os casos | as páginas de pessoas, os clusters, o mapa |
+
+O papel de conta não dá acesso a nada além das contas. Um administrador sem outra capacidade não
+vê nenhum caso nem nenhuma pessoa; se precisa vê-los, recebe a capacidade correspondente, como
+qualquer outro usuário. Isso evita a figura do administrador que vê tudo por padrão, que é
+justamente a conta cujos acessos menos se questionam. Duas regras protegem as próprias contas: só
+um superadministrador cria ou altera um administrador, e ninguém muda o próprio papel nem desativa
+a própria conta -- de modo que o último superadministrador não pode trancar todos do lado de fora.
+
+A coordenação é separada da inteligência por uma razão de método. Escolher quais pares vão a uma
+comparação é gestão do caso; quem a faz vê as faces do caso e os candidatos do sistema, como o
+primeiro perito, mas não precisa da história das pessoas. Manter essa história longe de quem
+monta o trabalho dos peritos é manter longe do exame uma fonte de informação contextual.
+
+## A distribuição automática
+
+Uma análise aberta cuja etapa atual ainda não tem perito está **pendente**. A distribuição pega os
+itens pendentes e os atribui, um a um, segundo uma regra simples e pública:
+
+1. os itens são tomados do **mais antigo** para o mais recente;
+2. para cada item, são **elegíveis** os peritos ativos que examinam a modalidade da análise e que
+   **não têm outra etapa da mesma análise**;
+3. entre os elegíveis, têm preferência os que **nunca trabalharam nos pares** daquela etapa: quem
+   já decidiu algum desses pares noutra análise, ou tem um rascunho sobre ele, só recebe o item se
+   todos os elegíveis estiverem na mesma situação;
+4. dentro do grupo preferido, recebe o item quem tem **menos trabalho em aberto**; no empate, o de
+   menor número de usuário;
+5. cada atribuição conta imediatamente na carga de quem a recebeu, de modo que, numa mesma
+   distribuição, a carga se equilibra entre os peritos;
+6. um item sem nenhum perito elegível é pulado e continua pendente, sem contar no total pedido.
+
+```{mermaid}
+%%| label: fig-distribuicao
+%%| fig-cap: "Como a distribuição escolhe o perito de um item pendente. Cada item é a etapa atual de uma análise."
+flowchart TB
+  P["Item pendente<br/>(mais antigo primeiro)"] --> M{"Peritos ativos<br/>da modalidade"}
+  M --> X{"Sem outra etapa<br/>desta análise?"}
+  X -->|nenhum| S["Continua pendente"]
+  X -->|um ou mais| N{"Algum nunca decidiu<br/>estes pares?"}
+  N -->|sim| C["Entre esses: menos trabalho em aberto<br/>(empate: menor número de usuário)"]
+  N -->|não| C2["Entre todos: menos trabalho em aberto"]
+  C2 --> A
+  C --> A["Atribuído; a carga do perito sobe"]
+  A --> P
+```
+
+O coordenador decide **quantos** itens distribuir e, se quiser, de **que tipo** de análise -- só
+revisões, só comparações --; os demais ficam para depois. Pode também **simular**: a tela mostra a
+quem cada item iria, sem gravar nada. Duas distribuições nunca entregam o mesmo item, porque cada
+uma trava a distribuição enquanto grava.
+
+Como as etapas são distribuídas quando a análise chega a elas, a distribuição é feita várias vezes
+ao longo da vida de uma análise: primeiro o exame; depois do envio, a verificação; e, se houver
+divergência, a inconsistência. A cada vez, quem já tem uma etapa daquela análise fica de fora. Por
+isso uma inconsistência pode ficar pendente numa equipe que só tem dois peritos daquela
+modalidade: não há um terceiro.
+
+Há um atalho: quem cria um caso facial e é perito facial recebe na hora o exame da revisão desse
+caso. É o caso de quem cadastra as imagens e já vai examiná-las; a verificação continua sendo de
+outra pessoa.
+
+::: {.callout-tip appearance="simple"}
+## Na prática
+
+Na tela **Distribuição**, o coordenador vê quantos itens aguardam perito, por tipo de análise e
+etapa, e a lista de peritos ativos com as modalidades que examinam e o trabalho em aberto de cada
+um. Escolhe quantos itens e o tipo, clica em **Simular** para ver o resultado e em **Distribuir**
+para gravá-lo. O perito encontra o que recebeu em **Minhas análises**.
+:::
+
+## Redistribuir e devolver
+
+A regra automática não resolve tudo: um perito sai de férias, adoece, declara um impedimento. O
+coordenador pode então **redistribuir** a etapa atual de uma análise para outro perito -- que
+também precisa examinar a modalidade e não ter outra etapa da mesma análise -- ou **devolvê-la**
+à fila de pendentes. Em ambos os casos, os rascunhos do perito anterior são descartados: o novo
+perito começa do zero, sem ver o que o outro havia começado a decidir.
+
+Na redistribuição, a escolha é do coordenador, e o sistema não aplica sozinho a preferência por
+quem nunca trabalhou nos pares. Mas avisa: na lista de peritos, quem já decidiu algum dos pares
+daquela etapa noutra análise, ou tem um rascunho sobre ele, aparece marcado, e escolhê-lo mostra
+um aviso de que a decisão dele não será independente. O coordenador pode seguir assim mesmo -- se
+não houver outro perito, por exemplo --, e a atribuição fica registrada como manual, com o nome
+de quem a fez.
+
+As atribuições também são um registro só-de-acréscimo, como as decisões (@sec-modelo). Cada
+atribuição grava a etapa, o perito, o método -- automático ou manual -- e, quando manual, quem a
+fez. O perito atual de uma etapa é a última linha; as anteriores ficam. É possível, assim,
+responder anos depois por que um laudo foi verificado por uma pessoa e não por outra.
+
+## O acesso segue o trabalho
+
+Um perito vê os casos em que tem uma etapa de alguma análise, aberta ou já encerrada: o caso, as
+evidências, as análises. Nesses casos ele também pode acrescentar ou corrigir evidências e
+vestígios. Fora deles, não vê nada do caso. Das pessoas, pode buscar pelo nome e ver a
+identificação -- o que precisa para conferir um cadastro --, mas não a página completa, com os
+clusters e os casos ligados a ela.
+
+**Decidir** é mais estreito do que ver, e a regra é a mesma para todos, administradores
+incluídos: só decide os pares de uma análise o perito que tem a etapa atual, enquanto a análise
+está aberta e enquanto ele examina a modalidade. Ninguém decide pelo outro, nem o coordenador,
+nem o administrador. Ter visto um caso não dá o direito de decidir sobre ele, e ter a capacidade
+de inteligência não dá o direito de alterar o que os peritos registraram.
+
+A inteligência e a coordenação leem todos os casos. Essa leitura, quando quem lê não tem etapa no
+caso, é gravada num **registro de acessos**, assim como toda consulta à página completa de uma
+pessoa: quem viu, quando, o quê. É a resposta à pergunta "quem olhou esta pessoa?", que a
+proteção de dados pessoais torna obrigatória (@sec-limites).
+
+## A cegueira vale mais do que o perfil
+
+Enquanto alguém trabalha uma etapa cega -- a verificação ou a inconsistência --, o sistema
+restringe o que ele vê, seja qual for o seu perfil:
+
+- no caso que verifica, vê apenas a tela de trabalho daquela análise, com as duas imagens de cada
+  par; não vê o resto do caso, as outras análises, quem as trabalhou, os clusters ou as decisões;
+- em **qualquer** outro lugar do sistema, perde enquanto durar a etapa os direitos de inteligência
+  e de coordenação, e também a busca de pessoas: um analista que verifica às cegas poderia, de
+  outra forma, abrir a pessoa de referência noutra aba e descobrir quem ela é.
+
+As restrições valem no servidor, não só na tela: o que o perito cego não pode ver não chega ao seu
+navegador. E terminam com o envio da etapa. Um perito que também é analista volta a ter o acesso
+de analista quando entrega a verificação; até lá, o sistema o trata como qualquer verificador.
+
+::: {.callout-tip appearance="simple"}
+## Na prática
+
+No exercício (@sec-mundo-sintetico), a conta do instrutor é administrador, inteligência e
+coordenação ao mesmo tempo. Os estudantes são peritos comuns, identificados por códigos (E01,
+E02...), e por isso não veem a história das pessoas nem quem preparou o mundo. A conta que
+prepara o mundo também é de perito comum.
+:::
+
+## Por que estas escolhas
+
+Cada regra do capítulo responde a uma de três exigências:
+
+- **Independência.** Nenhuma pessoa tem duas etapas da mesma análise, e, havendo alternativa,
+  ninguém volta a decidir um par que já decidiu; a verificação e a
+  inconsistência são cegas para o que veio antes; quem distribui e quem examina não precisam da
+  história das pessoas. Sem isso, a segunda e a terceira decisões repetem a primeira em vez de
+  conferi-la, e somar decisões deixa de valer como inteligência coletiva.
+- **Responsabilidade.** Cada etapa tem um único perito, cada decisão um autor, cada atribuição
+  quem a fez; cada leitura sensível fica registrada. Quem responde por um vínculo é sempre
+  identificável.
+- **Carga de trabalho.** A regra do menor trabalho em aberto distribui de modo equilibrado e
+  previsível, sem que o perito escolha o que examina e sem que o coordenador precise escolher
+  peritos um a um.
+
+A regra é deliberadamente determinística: dados os mesmos pendentes e as mesmas cargas, produz a
+mesma distribuição, que a simulação mostra antes de gravar. Isso a torna auditável, ao preço de
+ser previsível para quem conhece as cargas.
+
+::: {.callout-important appearance="simple"}
+## Limite
+
+Dentro de uma análise, nunca há duas etapas com a mesma pessoa. Entre análises, a distribuição
+evita dar a alguém um par que ele já decidiu -- o perito que examinou um par na revisão não recebe
+a verificação do mesmo par numa comparação posterior --, mas isso é uma preferência, não uma
+proibição: numa equipe pequena, se todos os peritos elegíveis já decidiram aqueles pares, um deles
+recebe o item, e a independência daquela verificação é menor. Na redistribuição manual, o sistema
+apenas avisa, e a decisão fica com o coordenador. A distribuição também não considera a
+experiência nem a proficiência dos peritos, nem impedimentos declarados: só a modalidade, os pares
+já decididos e a carga. Não há sorteio. E o perito que cria um caso fica com o seu exame, o que é
+prático mas significa que ele examina imagens que ele mesmo escolheu cadastrar.
+:::
 
 ::: {.callout-tip appearance="simple"}
 ## No TrackID
 
-pacotes `auth`, `distribution`; telas Distribuição e Minhas análises.
+Pacote `auth` (papéis de conta e capacidades; `CheckAccountChange`); pacote `distribution`
+(`Distribute`, `Assign`, `Rights`, `BlindAnywhere`, `BlindIn`); `analyses.CanWork` e
+`analyses.BlindWork`; tabelas `users`, `analysis_assignments` e `access_log`; telas Distribuição,
+Minhas análises e Usuários; `MODEL.md` seção 3.1 e `docs/access-profiles-plan.md`.
 :::
 
 ::: {.callout-warning appearance="simple"}
 ## Fontes candidatas
 
-A conferir com o original antes de citar: [@dror2015].
+A conferir com o original antes de citar: [@dror2006; @dror2015].
 :::

@@ -4,7 +4,7 @@
 ## Resumo
 
 Este livro nasceu de um sistema e de uma aula. O sistema é o TrackID, um software aberto para gerir
-traços biométricos -- impressões digitais e faces -- de modo que cada vínculo entre eles seja uma
+vestígios e cadastros biométricos -- impressões digitais e faces -- de modo que cada vínculo entre eles seja uma
 decisão registrada, com autor e método. A aula é um exercício em que estudantes examinam, verificam
 e decidem pares de imagens de um mundo sintético cuja verdade é conhecida, e depois veem o efeito
 coletivo das suas decisões.

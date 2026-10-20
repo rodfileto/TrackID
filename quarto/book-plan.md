@@ -63,7 +63,7 @@ user meets it. Chapters reference `MODEL.md` sections rather than repeating them
 
 | # | Chapter | Covers | In TrackID |
 |---|---|---|---|
-| 6 | **O modelo de dados: traços, características e decisões** | Two hierarchies (enrollment KNOWN, evidence QUESTIONED) meeting in the biometric feature; a decision is always between two features; the decision log as source of truth; clusters as a derived, citable view; occurrences and places. | `MODEL.md` §1-5; `biometric_decisions`, `clusters`, `occurrences` |
+| 6 | **O modelo de dados: vestígios, características e decisões** | Two hierarchies (enrollment KNOWN, evidence QUESTIONED) meeting in the biometric feature; a decision is always between two features; the decision log as source of truth; clusters as a derived, citable view; occurrences and places. | `MODEL.md` §1-5; `biometric_decisions`, `clusters`, `occurrences` |
 | 7 | **Do escore à decisão** | The matcher's SYSTEM decisions; threshold versions with review band; what is confirmed automatically and what goes to people. | `match_thresholds`, `biometricmatch`, `cmd/match-threshold` |
 | 8 | **ACE-V no TrackID: análises, etapas e laudos** | Analyses as rounds (FACIAL_REVIEW automatic, FACIAL_COMPARISON on demand); stages EXAMINATION -> VERIFICATION (blind) -> INCONSISTENCE -> REPORT; drafts until submitted; the report and its number; why a pair keeps its latest settled outcome across rounds. Maps each stage to ACE-V and FISWG. | `analyses`, `examination`, `cluster.DecidingRound`; migrations 017-018; the analysis workspace |
 | 9 | **Distribuição e papéis** | User profiles (admin vs examiner, modalities); distribution of each step, never two steps of one analysis to one person; least-loaded rule; access by assignment; blind verification in the interface. The design choices and their reasons (independence, accountability, workload). | `auth`, `distribution`; Distribution and My analyses screens |
@@ -82,7 +82,7 @@ user meets it. Chapters reference `MODEL.md` sections rather than repeating them
 ### Pós-textuais
 
 - **Glossário** (pt-BR / English / role in TrackID): análise, comparação, avaliação, verificação,
-  verificação cega, inconsistência, traço, característica, par, cluster, sujeito desconhecido,
+  verificação cega, inconsistência, vestígio, característica, par, cluster, sujeito desconhecido,
   laudo, relatório, revisão facial, comparação facial...
 - **Referências** (one `references.bib`).
 - **Apêndice A** -- Instalação do ambiente (trackid + trackid-sim).
@@ -123,7 +123,7 @@ user meets it. Chapters reference `MODEL.md` sections rather than repeating them
 | M1 | **Skeleton** | `quarto render` builds HTML and PDF with all chapter files (titles + 3-5 line abstracts), glossary stub, `references.bib` with the candidate sources. |
 | M2 | **Part I** | Chapters 1-5 drafted; every citation checked against its source. |
 | M3 | **Part II** | Chapters 6-11 drafted against the current `main`; Mermaid figures for stages and distribution. |
-| M4 | **Part III** | Chapters 12-14 after a full class run on a sim world; screenshots; chapter 14 needs the per-decision scoring (roadmap block D). |
+| M4 | **Part III** | Chapters 12-14 after a full class run on a sim world; screenshots; chapter 14 needs the per-decision scoring (roadmap block D). Chapter 12 does not need the class and was drafted first (2026-10-20), its sources still to check. |
 | M5 | **Review** | Read by a practitioner and a student; chapter 15 and the preface written last. |
 
 Order: M1 -> M3 (the system is fresh) -> M2 -> M4 -> M5. Part II first because it is the part only
