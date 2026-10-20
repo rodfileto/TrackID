@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    env:
+      # The database-backed tests create and drop a throwaway database per test on this server,
+      # and skip when it is unset; the fingerprint tests need the real sidecar.
+      TRACKID_TEST_DATABASE_URL: postgres://trackid:trackid_dev@localhost:55432/trackid?sslmode=disable
+      FINGERPRINT_SIDECAR_URL: http://localhost:58090
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # Postgres from db/postgres (pgvector + PostGIS) and sourceafis-sidecar, as in development.
+      - name: Start Postgres and the fingerprint sidecar
+        run: |
+          docker compose up -d --build --wait postgres
+          docker compose up -d --build sourceafis-sidecar
+          for i in $(seq 60); do
+            curl -fsS "$FINGERPRINT_SIDECAR_URL/healthz" && exit 0
+            sleep 2
+          done
+          docker compose logs sourceafis-sidecar
+          exit 1
+      - run: go vet ./...
+      - name: Test (no skipped database or sidecar tests)
+        run: |
+          go test -v ./... 2>&1 | tee test.log
+          status=${PIPESTATUS[0]}
+          if grep -q -- '--- SKIP' test.log; then
+            grep -- '--- SKIP' test.log
+            echo "tests were skipped; CI must run them all"
+            exit 1
+          fi
+          exit $status
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # tsc -b, then vite build.
+      - run: npm run build
