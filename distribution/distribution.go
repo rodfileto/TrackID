@@ -1,12 +1,13 @@
 // Package distribution hands the work of a case's analyses (see the analyses package) out to
 // examiners: one examiner per step -- the first examination (VERIFICATOR), the blind verification
 // (REVIEWER), and the inconsistence when they disagree -- each distributed when the analysis
-// reaches its stage, never to someone holding another step of the same analysis. Assignments are
+// reaches its stage, never to someone holding another step of the same analysis, and to someone
+// who has already decided one of its pairs elsewhere only when nobody else can take it. Assignments are
 // an append-only history (analysis_assignments, migrations 017-018): a step's current examiner is
 // its latest row, and an open analysis whose current stage has none is pending.
 //
 // Distribute assigns up to a given number of pending items automatically, leaving the rest
-// pending; Assign is an admin's manual override (reassign, or unassign back to pending).
+// pending; Assign is a coordinator's manual override (reassign, or unassign back to pending).
 package distribution
 
 import (
@@ -20,6 +21,7 @@ import (
 	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/db"
+	"github.com/rodfileto/trackid/examination"
 )
 
 // Assignment methods (analysis_assignments.method).
@@ -65,6 +67,7 @@ type PendingWork struct {
 	Type     analyses.Type
 	Step     analyses.Step
 	Exclude  []int64 // holders of the analysis's other steps
+	Avoid    []int64 // users who already worked on its pairs elsewhere (ListPairDeciders): a last resort
 }
 
 // Assignment is one step of one analysis handed to one examiner.
@@ -81,7 +84,8 @@ type Assignment struct {
 // plan is Distribute's pure core. It walks pending in order (oldest first) and gives each item to
 // the eligible examiner -- one who examines its modality and holds no other step of the analysis
 // -- with the fewest open items, the lowest user id breaking ties, counting each assignment as it
-// goes so the load evens out. It stops after count assignments. An item no examiner can take is
+// goes so the load evens out. An examiner the item avoids (one who already decided its pairs in
+// another analysis) gets it only when every eligible examiner is avoided, whatever the loads. It stops after count assignments. An item no examiner can take is
 // skipped (reported in noExaminer) and stays pending without using up the count.
 func plan(pending []PendingWork, examiners []Examiner, count int) (assigned []Assignment, noExaminer []int64) {
 	load := make([]int, len(examiners))
@@ -92,13 +96,15 @@ func plan(pending []PendingWork, examiners []Examiner, count int) (assigned []As
 		if len(assigned) == count {
 			break
 		}
-		best := -1
+		best, bestAvoided := -1, false
 		for i, e := range examiners {
 			if !e.examines(a.Type.Modality()) || slices.Contains(a.Exclude, e.UserID) {
 				continue
 			}
-			if best < 0 || load[i] < load[best] || (load[i] == load[best] && e.UserID < examiners[best].UserID) {
-				best = i
+			avoided := slices.Contains(a.Avoid, e.UserID)
+			if best < 0 || bestAvoided && !avoided ||
+				avoided == bestAvoided && (load[i] < load[best] || (load[i] == load[best] && e.UserID < examiners[best].UserID)) {
+				best, bestAvoided = i, avoided
 			}
 		}
 		if best < 0 {
@@ -165,6 +171,9 @@ func Distribute(ctx context.Context, sqlDB *sql.DB, req Request) (Result, error)
 				pending[i].Exclude = append(pending[i].Exclude, holder.Int64)
 			}
 		}
+		if pending[i].Avoid, err = pairDeciders(ctx, q, r.ID); err != nil {
+			return Result{}, err
+		}
 	}
 	examiners, err := listExaminers(ctx, q)
 	if err != nil {
@@ -196,6 +205,37 @@ func Distribute(ctx context.Context, sqlDB *sql.DB, req Request) (Result, error)
 	return Result{Assigned: assigned, NoExaminer: noExaminer, StillPending: len(pending) - len(assigned), DryRun: req.DryRun}, nil
 }
 
+// PriorDeciders returns the users who have already worked on the pairs that an analysis's current
+// stage decides (see pairDeciders): Distribute gives them the step only as a last resort, and the
+// manual assignment screen warns before giving it to one of them.
+func PriorDeciders(ctx context.Context, sqlDB *sql.DB, analysisID int64) ([]int64, error) {
+	ids, err := pairDeciders(ctx, db.New(sqlDB), analysisID)
+	if ids == nil {
+		ids = []int64{}
+	}
+	return ids, err
+}
+
+// pairDeciders returns the users who have already worked on the pairs that an analysis's current
+// stage decides (examination.StepPairs), in this analysis or another: a decision or a draft.
+// Within the analysis only the holders of its other steps can have, and they are excluded anyway.
+func pairDeciders(ctx context.Context, q *db.Queries, analysisID int64) ([]int64, error) {
+	target, err := analyses.GetTarget(ctx, q, analysisID)
+	if err != nil {
+		return nil, err
+	}
+	pairs, err := examination.StepPairs(ctx, q, target)
+	if err != nil || len(pairs) == 0 {
+		return nil, err
+	}
+	params := db.ListPairDecidersParams{AnalysisID: analysisID}
+	for _, p := range pairs {
+		params.FeatureAIds = append(params.FeatureAIds, p.FeatureA)
+		params.FeatureBIds = append(params.FeatureBIds, p.FeatureB)
+	}
+	return q.ListPairDeciders(ctx, params)
+}
+
 func listExaminers(ctx context.Context, q *db.Queries) ([]Examiner, error) {
 	rows, err := q.ListExaminerLoads(ctx)
 	if err != nil {
@@ -212,7 +252,9 @@ func listExaminers(ctx context.Context, q *db.Queries) ([]Examiner, error) {
 // Assign makes userID the examiner of an open analysis's current step (analyses.Stage.ActiveStep),
 // or, with userID nil, unassigns that step back to pending; either way the step's draft decisions
 // are discarded. The examiner must be active, examine the analysis's modality and hold no other
-// step of it. by is who did it, recorded as assigned_by: an admin, or a user taking the review of a
+// step of it, but may have decided its pairs before: the preference Distribute gives to examiners
+// who have not (PriorDeciders) is the coordinator's to weigh here. by is who did it, recorded as
+// assigned_by: a coordinator, or a user taking the review of a
 // case they just created. Checking that by may do so is the caller's job.
 func Assign(ctx context.Context, sqlDB *sql.DB, analysisID int64, userID *int64, by int64) error {
 	tx, err := sqlDB.BeginTx(ctx, nil)

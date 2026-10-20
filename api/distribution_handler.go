@@ -162,7 +162,7 @@ type assignAnalysisRequest struct {
 	UserID *int64 `json:"userId"`
 }
 
-// AssignAnalysisHandler is an admin's manual assignment of the current step of one analysis
+// AssignAnalysisHandler is a coordinator's manual assignment of the current step of one analysis
 // (distribution.Assign).
 func AssignAnalysisHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
@@ -193,6 +193,28 @@ func AssignAnalysisHandler(sqlDB *sql.DB) gin.HandlerFunc {
 				return
 			}
 			context.JSON(http.StatusOK, history)
+		}
+	}
+}
+
+// PriorDecidersHandler lists the user ids of those who have already worked on the pairs the
+// analysis's current step decides (distribution.PriorDeciders), so the assignment screen can warn a
+// coordinator before giving the step to one of them.
+func PriorDecidersHandler(sqlDB *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		id, err := strconv.ParseInt(context.Param("analysisId"), 10, 64)
+		if err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid analysis id"})
+			return
+		}
+		ids, err := distribution.PriorDeciders(context.Request.Context(), sqlDB, id)
+		switch {
+		case errors.Is(err, analyses.ErrAnalysisNotFound):
+			context.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case err != nil:
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not list prior deciders"})
+		default:
+			context.JSON(http.StatusOK, gin.H{"userIds": ids})
 		}
 	}
 }

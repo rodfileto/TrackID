@@ -65,8 +65,8 @@ func testDB(t *testing.T) *sql.DB {
 // TestDecisionFlow walks a FACIAL_REVIEW through every stage with real users: distribution hands
 // out each step to a different examiner; the first examiner's drafts can change until submitted;
 // verification is blind; a disagreement goes to a third examiner for that pair only; the first
-// examiner issues the report. Then a comparison checks the reassignment rules, and a case with no
-// faces goes straight to its report.
+// examiner issues the report. Then a comparison checks the reassignment rules, a case with no
+// faces goes straight to its report, and a second comparison avoids those who decided its pair.
 func TestDecisionFlow(t *testing.T) {
 	ctx := context.Background()
 	sqlDB := testDB(t)
@@ -279,6 +279,17 @@ func TestDecisionFlow(t *testing.T) {
 	if res, err := examination.Submit(ctx, sqlDB, bia, empty); err != nil || res.Decisions != 0 || res.Stage != analyses.StageReport {
 		t.Fatalf("submitting an empty review = %+v, %v; want REPORT", res, err)
 	}
+
+	// A second comparison, on p2: ana and bia decided it in the review, so caio takes it although
+	// ana has less open work (0, against caio's verification of the first comparison).
+	cmp2, err := analyses.Open(ctx, sqlDB, "F1", analyses.FacialComparison, []analyses.Pair{{FeatureA: trace1, FeatureB: "102"}}, chief.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ids, err := distribution.PriorDeciders(ctx, sqlDB, cmp2); err != nil || fmt.Sprint(ids) != fmt.Sprint([]int64{ana.ID, bia.ID}) {
+		t.Fatalf("prior deciders of p2 = %v, %v; want ana and bia", ids, err)
+	}
+	distribute("[F1:VERIFICATOR:caio]")
 }
 
 // assertBlind checks that a blind examiner's worksheet holds the two images of each pair and
