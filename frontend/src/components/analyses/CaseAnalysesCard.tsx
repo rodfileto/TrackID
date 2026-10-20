@@ -14,6 +14,7 @@ import {
   analysisSteps,
   assignAnalysis,
   getDistributionStatus,
+  getPriorDeciders,
   getWorksheet,
   listCaseAnalyses,
   openAnalysis,
@@ -28,7 +29,9 @@ const selectClass =
   "h-9 rounded-lg border border-gray-200 bg-transparent px-2 text-sm text-gray-800 dark:border-gray-800 dark:bg-gray-900 dark:text-white/90";
 
 /** Coordinator: give an open analysis's current step to an eligible examiner, or back to pending.
- * users are the active examiners, as distribution lists them. */
+ * users are the active examiners, as distribution lists them. Those who already decided the step's
+ * pairs elsewhere are marked, with a warning when one is chosen: distribution avoids them, and a
+ * manual assignment should too unless nobody else can take it. */
 function AssignControl({
   analysis,
   users,
@@ -44,6 +47,14 @@ function AssignControl({
   const others = analysisSteps.filter((s) => s !== step).map((s) => analysis.examiners[s]?.userId);
   const eligible = users.filter((u) => u.examinesFacial && !others.includes(u.userId));
   const [choice, setChoice] = useState<string>(current ? String(current) : "");
+  const [prior, setPrior] = useState<number[]>([]);
+
+  useEffect(() => {
+    getPriorDeciders(analysis.id)
+      .then(setPrior)
+      .catch(() => setPrior([]));
+  }, [analysis.id, analysis.stage]);
+  const warn = choice !== "" && choice !== (current ? String(current) : "") && prior.includes(Number(choice));
 
   async function save() {
     try {
@@ -56,18 +67,21 @@ function AssignControl({
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <select value={choice} onChange={(e) => setChoice(e.target.value)} className={selectClass}>
-        <option value="">{t("analyses.unassigned")}</option>
-        {eligible.map((u) => (
-          <option key={u.userId} value={u.userId}>
-            {u.username}
-          </option>
-        ))}
-      </select>
-      <Button size="sm" variant="outline" onClick={() => void save()} disabled={choice === (current ? String(current) : "")}>
-        {t("analyses.assign", { step: t(`analyses.step.${step}`) })}
-      </Button>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <select value={choice} onChange={(e) => setChoice(e.target.value)} className={selectClass}>
+          <option value="">{t("analyses.unassigned")}</option>
+          {eligible.map((u) => (
+            <option key={u.userId} value={u.userId}>
+              {prior.includes(u.userId) ? t("analyses.priorDeciderOption", { name: u.username }) : u.username}
+            </option>
+          ))}
+        </select>
+        <Button size="sm" variant="outline" onClick={() => void save()} disabled={choice === (current ? String(current) : "")}>
+          {t("analyses.assign", { step: t(`analyses.step.${step}`) })}
+        </Button>
+      </div>
+      {warn && <p className="max-w-xs text-theme-xs text-warning-600 dark:text-warning-400">{t("analyses.priorDeciderWarning")}</p>}
     </div>
   );
 }

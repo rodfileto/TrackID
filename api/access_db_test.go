@@ -160,6 +160,7 @@ func TestAccessProfiles(t *testing.T) {
 	allowed("/api/cases/HELD/evidences", post, examiner)
 	allowed("/api/cases/HELD/occurrence", put, analyst)
 	allowed("/api/admin/distribution", get, coordinator)
+	allowed(fmt.Sprintf("/api/admin/analyses/%d/prior-deciders", held), get, coordinator)
 	allowed("/api/admin/users", get, admin)
 	// Blind work: only the workspace of the analysis, and no intelligence anywhere until they submit.
 	// (The examiner examined it first, so they read it too.)

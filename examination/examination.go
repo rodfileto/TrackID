@@ -207,6 +207,25 @@ func stepScope(all []candidate, step analyses.Step, decided map[Pair]map[analyse
 	return out
 }
 
+// StepPairs returns the pairs the current stage of an open analysis decides: every pair, or at
+// INCONSISTENCE the disputed ones. Distribution uses it to prefer examiners who have not decided
+// them before (distribution.Distribute).
+func StepPairs(ctx context.Context, q *db.Queries, t analyses.Target) ([]Pair, error) {
+	all, _, err := scope(ctx, q, t)
+	if err != nil {
+		return nil, err
+	}
+	decided, err := decisionsByPair(ctx, q, t.ID)
+	if err != nil {
+		return nil, err
+	}
+	var out []Pair
+	for _, c := range stepScope(all, t.Stage.ActiveStep(), decided) {
+		out = append(out, c.pair)
+	}
+	return out, nil
+}
+
 // GetWorksheet returns an analysis's pairs as user sees them. Checking that user may open the
 // case (distribution.CanOpen) is the caller's job.
 func GetWorksheet(ctx context.Context, sqlDB *sql.DB, user auth.UserProfile, analysisID int64) (Worksheet, error) {
