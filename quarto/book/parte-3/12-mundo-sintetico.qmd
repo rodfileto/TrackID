@@ -9,16 +9,249 @@ no Rio de Janeiro, faces e impressões digitais geradas por nós -- e o que dado
 podem mostrar.
 :::
 
-## Seções previstas
+## Por que sintético: privacidade e verdade conhecida
 
-- Por que sintético: privacidade e verdade conhecida
-- População, nomes e cadastros
-- Ocorrências e lugares
-- Faces e impressões digitais geradas
-- O que o sintético não mostra: taxas de erro de campo e viés demográfico
+Um exercício de identificação precisa de duas coisas que dados reais não oferecem ao mesmo tempo.
+A primeira é poder ser mostrado: cadastros civis e criminais, fotografias e impressões digitais
+são dados pessoais sensíveis, e nenhum deles pode ser levado a uma sala de aula, a um livro ou a um
+repositório público [@lgpd2018]. A segunda é uma **verdade conhecida**. Num acervo real, ninguém
+sabe com certeza quais vestígios pertencem à mesma pessoa -- se soubesse, não haveria o que
+examinar. Sem essa verdade, não há como dizer se uma decisão de um aluno, ou do sistema, está
+certa.
+
+Um mundo sintético resolve as duas. Nenhuma pessoa nele existe, e o gerador sabe, para cada
+vestígio, quem o deixou. Essa verdade fica fora do sistema avaliado: o TrackID recebe cadastros,
+casos e imagens como receberia de qualquer organização, e só o arquivo do mundo
+(`world.json`) diz quem é quem. Depois do exercício, as decisões gravadas no TrackID são
+comparadas com esse arquivo (@sec-avaliacao).
+
+O mundo é **determinístico**: a mesma configuração e a mesma semente produzem exatamente o mesmo
+mundo, de modo que uma turma, uma figura deste livro ou um artigo podem ser reproduzidos. Os
+números citados neste capítulo são os do mundo padrão, semente 1, com os nomes do Censo 2022.
+
+::: {.callout-important appearance="simple"}
+## Limite
+
+O mundo não procura reproduzir a realidade com precisão. Onde há dados públicos adequados, ele os
+segue: nomes do Censo, idades, ocorrências e lugares do Rio de Janeiro. O comportamento dos
+autores -- quantos fatos cada um comete, com que frequência agem em dupla, quantos têm dois
+cadastros -- é definido por parâmetros que o instrutor escolhe, como as taxas de erro dos
+cadastros. Esses parâmetros não foram calibrados contra estatísticas criminais, e nenhuma
+conclusão sobre a criminalidade real deve ser tirada deles.
+:::
+
+## População, nomes e cadastros
+
+### Pessoas e famílias
+
+O mundo padrão tem 300 pessoas, todas adultas durante todo o período simulado (2015 a 2025). O
+tamanho não é arbitrário: cada pessoa que precisa de uma face recebe uma do acervo de faces
+geradas (ver adiante), e 300 pessoas cabem nele. As idades seguem a distribuição etária adulta do
+Censo Demográfico 2022 [@ibge2022censo], aplicada a 2015 -- uma aproximação declarada.
+
+As pessoas nascem em famílias. Irmãos têm os mesmos pais e idades próximas; os filhos recebem o
+último sobrenome da mãe seguido do último do pai, e prenomes compostos e partículas (*da*, *dos*)
+aparecem como nos registros brasileiros. Uma parte das pessoas não tem pai declarado: cerca de 6%,
+próximo da proporção de registros de nascimento sem o nome do pai nos últimos anos
+[@arpen2023pais].
+
+### Nomes do Censo 2022
+
+Prenomes e sobrenomes são sorteados com as frequências do Censo Demográfico 2022, publicadas pelo
+IBGE: um ranking de prenomes por sexo e um de sobrenomes [@ibge2022nomes]. Como o IBGE conta como
+sobrenome toda palavra depois do primeiro prenome, palavras que são sobretudo prenomes (como
+*Maria*) e sufixos (*Júnior*, *Filho*, *Neto*) são retiradas da lista de sobrenomes. Os nomes do
+Censo vêm sem acentos.
+
+Com nomes reais vêm os **homônimos**: no mundo padrão, duas pessoas têm exatamente o mesmo nome
+completo. Para a identificação por nome, são pessoas indistinguíveis; para a biometria, não.
+
+### Cadastros: o que o registro diz e o que a pessoa é
+
+Uma pessoa pode estar cadastrada (identificação civil), e quem comete crimes tem mais chance de
+estar: 45% da população e 70% dos autores. Um cadastro tem um número de pessoa, um documento, os
+nomes da pessoa e dos pais, a data de nascimento, uma fotografia e uma impressão digital -- às
+vezes faltando uma das duas.
+
+Os cadastros não são cópias fiéis da pessoa. Cada sistema de origem registra os nomes à sua
+maneira: o registro civil erra pouco (2% de erros de digitação, abreviações e palavras omitidas,
+cada um); um sistema policial erra mais (8 a 10%) e grava tudo em maiúsculas, sem acentos. Quatro
+tipos de cadastro aparecem no mundo padrão, que tem 196 cadastros:
+
+- **primário** (151): o primeiro cadastro da pessoa;
+- **renovação** (22): um segundo documento sob o mesmo número de pessoa;
+- **duplicidade** (8): a mesma pessoa cadastrada de novo sob **outro** número de pessoa, gravada pelo
+  sistema policial, às vezes sem CPF ou com a data de nascimento errada;
+- **dupla identidade** (15): uma pessoa A tem, além do seu, um cadastro no número de pessoa de
+  outra pessoa B, com o nome, os pais e a data de nascimento de B, mas com a face e as impressões
+  digitais de A.
+
+A dupla identidade é o caso que só a biometria resolve. No papel, um crime de A leva a B. Na
+biometria, o cluster de A reúne dois nomes, e o número de pessoa de B guarda biometria de duas
+pessoas diferentes. São os dois sinais que os alunos podem encontrar.
+
+Todo identificador é visivelmente sintético (`SIM-P-…`, `SIM-RG-…`); o CPF sintético (`SIM-CPF-…`)
+nunca é válido, de modo que não pode coincidir com o de uma pessoa real.
+
+## Ocorrências e lugares
+
+### O que acontece, onde e com que frequência
+
+As ocorrências criminais do mundo são as que produzem um caso biométrico: imagens de câmera ou
+fragmentos de impressão digital. Seus tipos seguem a classificação do Instituto de Segurança
+Pública do Rio de Janeiro (ISP-RJ), e suas frequências seguem as contagens que o ISP publica por
+circunscrição de delegacia (CISP), para a cidade do Rio, nos últimos doze meses disponíveis
+[@isprj]. Como só entram fatos que deixaram vestígios, o peso de cada tipo é a contagem do ISP
+multiplicada pela chance de aquele tipo produzir um caso facial ou papiloscópico -- alta num
+roubo a estabelecimento comercial, com câmeras, baixa num furto de celular na rua. Essas chances
+por tipo são suposições do modelo, não dados.
+
+O resultado acompanha o ISP: a mistura de tipos e a distribuição das ocorrências pelas 41 CISPs da
+cidade seguem as contagens publicadas. A exceção é o homicídio, com cerca de metade da participação
+esperada, porque nenhum autor comete mais de três crimes letais no mundo.
+
+No mundo padrão há 299 ocorrências criminais, espalhadas por 38 CISPs. Os tipos mais frequentes
+são roubo a transeunte, roubo de celular e roubo de veículo.
+
+### Autores
+
+Cerca de 15% das pessoas são autores de crimes. Cada autor comete um único tipo de crime, um número
+de vezes que varia muito de um para outro: a maioria comete poucos, e alguns cometem dezenas -- a
+concentração da atividade criminal num pequeno grupo, conhecida desde os estudos de coorte
+[@wolfgang1972]. Alguns autores têm um parceiro habitual, do mesmo tipo de crime, com quem agem
+em parte dos fatos; às vezes entra um cúmplice ocasional. É o que liga, pelos vestígios, casos que
+nada mais liga.
+
+### Lugares e horários
+
+Cada autor tem uma CISP de referência, e seus fatos acontecem perto dela: a chance de um fato cair
+numa CISP diminui com a distância, como na literatura sobre a distância percorrida até o crime
+[@rossmo2000]. Dentro da CISP, o fato acontece num ponto da rua, num estabelecimento ou numa
+residência; os tipos ligados a bancos (estelionato na agência, saidinha de banco, sequestro
+relâmpago) acontecem em agências reais, do cadastro público do Banco Central, localizadas no mapa
+[@bcbagencias].
+
+Os lugares se repetem de duas maneiras. Um autor volta, às vezes, a um dos seus primeiros lugares
+(o hábito de uma série); e cada área tem alguns pontos atrativos, atingidos por autores diferentes
+-- a vitimização repetida [@farrell1993]. Os horários seguem perfis por tipo (roubos de rua à
+noite, comércio e bancos de dia), também suposições do modelo.
+
+### Ocorrências civis
+
+Além dos crimes, o mundo tem ocorrências civis, de identificação de pessoas: cadáveres encontrados
+e pessoas vivas não identificadas, cada uma com um caso civil, e, para cerca de metade delas, um
+registro de desaparecimento feito antes. No mundo padrão são 15: 8 encontros de cadáver, 4 pessoas
+vivas não identificadas e 3 registros de desaparecimento. A pessoa desconhecida tem no máximo um
+cadastro e nunca aparece num caso criminal; identificá-la é ligar o caso civil ao seu cadastro, e o
+desaparecimento à pessoa encontrada.
+
+## Dos fatos aos casos
+
+Cada ocorrência produz um ou dois casos biométricos: facial, papiloscópico ou ambos. Num caso,
+cada pessoa presente pode deixar um vestígio (ser captada pela câmera, deixar um fragmento
+utilizável), às vezes dois; e às vezes aparece o vestígio de alguém que não participou do fato --
+uma vítima, um funcionário. Os vestígios se distribuem por um a três itens de evidência; numa
+evidência facial, cada pessoa aparece uma vez só. No mundo padrão são 253 casos (189 faciais e 64
+papiloscópicos, 20 deles civis) e 411 vestígios, 48 deles de terceiros.
+
+## Faces e impressões digitais geradas
+
+### Faces
+
+Nenhuma face do mundo é de uma pessoa real, nem foi tirada de um banco de faces reais. Foram
+geradas por nós com modelos de licença aberta:
+
+- **200 faces de base**, uma por identidade, geradas pelo FLUX.1 \[schnell\] [@flux1schnell] a
+  partir de descrições cujo sexo, idade e cor ou raça seguem as proporções do Censo 2022
+  [@ibge2022censo]. São as fotografias dos cadastros.
+- **Variantes** da mesma pessoa, geradas pelo Qwen-Image-Edit [@qwenimageedit]: uma nova fotografia,
+  de corpo e com outra roupa, com uma única mudança principal (expressão ou ângulo da cabeça). São
+  as pessoas que aparecem nas câmeras.
+
+Uma variante só é aceita se o reconhecedor facial (AuraFace [@auraface], com o detector YuNet
+[@wu2023yunet]) ainda a reconhece como a mesma pessoa e se ela é de fato uma nova fotografia, não
+uma cópia da original. Das 200 variantes, 146 passaram; as faces sem variante vão para pessoas
+cadastradas que nunca são filmadas. O acervo está fechado: o mundo se ajusta a ele, e não o
+contrário.
+
+Uma evidência facial é um quadro de câmera: as pessoas do fato, de pé atrás de um balcão contra uma
+parede, reduzidas ao tamanho da captura e degradadas (desfoque, ruído, compressão JPEG, a data e a
+hora do gravador). Há dois níveis: **boa** (face de cerca de 200 pixels, 30% das evidências) e
+**média** (cerca de 100 pixels, 70%). Cada vestígio tem a caixa onde a face foi posta, como se um
+operador a tivesse marcado.
+
+### Impressões digitais
+
+As impressões digitais também são geradas por nós, por um programa próprio no estilo do SFinGe
+[@cappelli2000sfinge]: um padrão de cristas com núcleo e delta, minúcias, e então as marcas de cada
+coleta. Cada pessoa tem **um dedo**. Cada cadastro traz uma nova impressão rolada desse dedo; uma
+evidência papiloscópica é um cartão de levantamento com um fragmento latente por vestígio, parcial,
+borrado, numa superfície com textura.
+
+Um único dedo por pessoa é uma simplificação deliberada: o confronto automático compara cada
+impressão com todas as outras, e dez dedos por pessoa multiplicariam o tempo de carga. As
+impressões servem ao exercício, não ao realismo: impressões roladas da mesma pessoa se confrontam
+com folga no SourceAFIS [@sourceafis], e cerca de 40% dos fragmentos latentes alcançam o limiar de
+confronto contra o dedo certo.
+
+## Do mundo ao TrackID
+
+O simulador carrega o mundo pelos mesmos pontos de entrada que uma organização usaria para seus
+próprios dados (@sec-modelo): os cadastros pela ingestão de identidades, os casos e as
+ocorrências pela ingestão de casos, com as imagens enviadas ao armazenamento do TrackID. A partir
+daí, o TrackID trabalha sozinho, como trabalharia com dados reais: extrai as características de
+cada face e de cada impressão, compara-as, grava as decisões do sistema conforme a versão do
+limiar em vigor -- confirmadas acima do limiar de confirmação, encaminhadas à revisão na faixa
+abaixo dele (@sec-escore) -- e forma os clusters.
+
+O simulador **não grava decisão nenhuma**. As decisões automáticas são as do próprio TrackID; as
+humanas são as dos alunos, no exercício (@sec-roteiro). A carga recusa um banco que contenha
+qualquer cadastro ou caso sem o prefixo `SIM-`, para que um mundo sintético nunca se misture a
+dados reais.
+
+## O que o sintético não mostra
+
+Um mundo sintético mostra como o **sistema** se comporta: se os clusters se formam e se revisam
+sem perder seus números, se o registro de decisões permite auditar cada vínculo, se a verificação
+cega funciona, quantos erros plantados os alunos encontram. Não mostra:
+
+- **taxas de erro reais.** As faces e as impressões são geradas, e as capturas, degradadas por
+  nós; os escores que o reconhecedor e o confrontador produzem sobre elas não dizem nada sobre o
+  desempenho desses programas com imagens reais. A acurácia dos alunos, por sua vez, não é a de
+  peritos treinados.
+- **viés demográfico.** Os geradores de imagens têm suas próprias tendências: as faces jovens
+  saem convencionalmente bonitas, simétricas e bem iluminadas, muito mais uniformes que
+  fotografias de cadastro, e a cor ou raça pedida na descrição não é uma descrição confiável da
+  face gerada. Nenhuma afirmação sobre diferenças entre grupos pode ser apoiada neste mundo
+  [@grother2019demographic].
+- **a criminalidade real.** Ver o aviso no início do capítulo: os parâmetros dos autores são
+  escolhas, não medidas.
+
+Também são simplificações declaradas: um único dedo por pessoa, um único tipo de crime por autor,
+só adultos, idades de 2022 aplicadas a 2015, e pontos sorteados de modo uniforme dentro de cada
+CISP -- que podem cair numa praça ou numa área de mata.
+
+::: {.callout-tip appearance="simple"}
+## Na prática
+
+O instrutor escolhe o mundo da turma pela semente e pelos parâmetros (número de pessoas, taxas de
+cadastro, de duplicidade, de dupla identidade). Um mundo maior não precisa de faces novas para ter
+mais ocorrências, mas, acima de cerca de 300 pessoas, parte delas fica sem face e os vestígios
+faciais dessas pessoas são retirados; o gerador informa quantos.
+:::
 
 ::: {.callout-tip appearance="simple"}
 ## No TrackID
 
-`trackid-sim`: `generate`, `load`; `docs/PLAN.md`, `docs/OCCURRENCE.md`, `docs/LICENSES.md`.
+`trackid-sim`: `generate` (o mundo e sua verdade, em `world.json`), `load` (a carga pelo TrackID),
+`frame` (uma evidência renderizada, para conferência); `docs/PLAN.md`, `docs/OCCURRENCE.md`,
+`docs/LICENSES.md`.
+:::
+
+::: {.callout-warning appearance="simple"}
+## Fontes candidatas
+
+A conferir com o original antes de citar: [@ibge2022nomes; @ibge2022censo; @arpen2023pais;
+@isprj; @bcbagencias; @wolfgang1972; @rossmo2000; @farrell1993; @flux1schnell; @qwenimageedit;
+@auraface; @wu2023yunet; @cappelli2000sfinge; @sourceafis].
 :::

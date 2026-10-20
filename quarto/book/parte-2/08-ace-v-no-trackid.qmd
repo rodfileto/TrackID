@@ -10,23 +10,175 @@ documento recebe número e encerra a análise. O capítulo mostra também como u
 rodadas mantém o último resultado concluído.
 :::
 
-## Seções previstas
+O capítulo sobre o ACE-V (@sec-ace-v) descreveu o método: analisar o vestígio questionado,
+compará-lo com o padrão, avaliar o que a comparação mostra e submeter a conclusão a uma
+verificação independente. Este capítulo mostra como o TrackID organiza esse método em trabalho:
+quem decide o quê, em que ordem, vendo o quê, e o que fica registrado.
 
-- Análises como rodadas: revisão facial e comparação facial
-- Etapas: exame, verificação (cega), inconsistência, documento
-- Rascunhos, envio e o registro das decisões
-- Documentos: relatório de revisão e laudo de comparação
-- Várias rodadas sobre o mesmo par: o último resultado concluído prevalece
-- Correspondência com o ACE-V e com as diretrizes da FISWG
+## Análises como rodadas: revisão facial e comparação facial
+
+No TrackID, um caso não é examinado de uma vez só. Ele passa por **análises**: rodadas de exame,
+cada uma com seus peritos, suas decisões e seu documento. O tipo da análise fixa a modalidade, a
+metodologia e o documento a que ela leva. Para faces há dois tipos, que seguem a distinção da
+FISWG entre a revisão de candidatos de um sistema um-para-muitos e a comparação pericial
+um-para-um [@fiswg2026review; @fiswgoverview]:
+
+| Análise | O que examina | Quando é aberta | Documento |
+|---|---|---|---|
+| **Revisão facial** | os candidatos que o sistema de reconhecimento propôs para as faces do caso, ordenados pelo escore | automaticamente, uma por caso facial | relatório de revisão facial |
+| **Comparação facial** | pares escolhidos, um a um, cada um com uma face do caso | sob demanda, pelo coordenador | laudo de comparação facial |
+
+A **revisão** responde à pergunta da investigação: entre os candidatos do sistema, algum é a pessoa
+das imagens? O resultado é uma pista investigativa ou um resultado negativo, não um exame pericial.
+A **comparação** é o exame pericial propriamente dito, sobre os pares que precisam dele -- em geral
+escolhidos entre os candidatos da revisão. Um caso pode ter várias comparações ao longo do tempo,
+cada uma uma rodada nova.
+
+Só entram numa análise pares em que um dos lados é uma face do próprio caso e o outro é uma pessoa
+cadastrada ou outra face do mesmo caso. Pares entre vestígios de casos diferentes ainda não são
+distribuídos para exame. As análises de impressões digitais ainda não estão modeladas: um caso
+papiloscópico não tem análises.
+
+## Etapas: exame, verificação, inconsistência e documento
+
+Cada análise aberta está numa **etapa**, e cada etapa é trabalhada por um único perito. Quem é esse
+perito é decisão da distribuição (@sec-distribuicao): nunca a mesma pessoa em duas etapas da mesma
+análise.
+
+```{mermaid}
+%%| label: fig-etapas
+%%| fig-cap: "As etapas de uma análise. A inconsistência só existe quando o exame e a verificação discordaram em algum par."
+flowchart LR
+  E["Exame<br/>(primeiro perito)"] -->|envio| V["Verificação cega<br/>(segundo perito)"]
+  E -->|sem pares| D
+  V -->|todos concordam| D["Documento<br/>(primeiro perito emite)"]
+  V -->|algum par diverge| I["Inconsistência cega<br/>(terceiro perito, só os pares divergentes)"]
+  I -->|envio| D
+  D -->|emissão| F(["Análise encerrada"])
+```
+
+- **Exame.** O primeiro perito decide todos os pares da análise: positivo, negativo ou
+  inconclusivo, com observações se quiser. Na revisão, vê os candidatos na ordem do escore, com o
+  escore e a decisão do sistema; na comparação, vê os pares escolhidos e, quando o sistema os
+  propôs, também o escore.
+- **Verificação.** Um segundo perito decide de novo todos os pares, **às cegas**: vê apenas as duas
+  imagens de cada par. Não vê o caso, os nomes, o escore, a decisão do sistema, a conclusão do
+  primeiro perito nem quem a tomou.
+- **Inconsistência.** Se o exame e a verificação divergiram em algum par -- inclusive um positivo
+  contra um inconclusivo -- um terceiro perito decide apenas esses pares. Também às cegas: nem as
+  duas conclusões anteriores, nem quem as tomou, podem conduzi-lo. Sua decisão resolve o par.
+- **Documento.** Com todos os pares resolvidos, o primeiro perito emite o documento da análise,
+  que a encerra.
+
+A cegueira não é uma preferência da tela: o servidor não envia ao perito cego nada além do que
+ele precisa para ver as duas imagens, e, enquanto ele trabalha às cegas, as consultas a pessoas,
+clusters e ocorrências ficam suspensas para ele. É a resposta do sistema ao problema da informação
+contextual discutido no @sec-ace-v [@dror2006].
+
+::: {.callout-tip appearance="simple"}
+## Na prática
+
+O perito abre **Minhas análises**, onde suas etapas aparecem primeiro as que aguardam por ele, e
+entra na tela de trabalho da análise. Cada par mostra as duas imagens, as opções Positivo,
+Negativo e Inconclusivo e um campo de observações. No exame cego, um aviso lembra que a decisão
+deve ser tomada apenas pelas imagens.
+:::
+
+## Rascunhos, envio e o registro das decisões
+
+Enquanto trabalha, o perito grava **rascunhos**: pode mudar de ideia quantas vezes quiser, e só ele
+vê seus rascunhos -- nem o coordenador nem o administrador os veem. O trabalho só conta quando ele
+**envia** a etapa, e o envio só é aceito com todos os pares decididos; a tela mostra quantos faltam.
+
+O envio faz três coisas ao mesmo tempo. Grava cada decisão no registro de decisões
+(@sec-modelo), com o papel da etapa, o perito, as observações e a análise a que pertence. Apaga
+os rascunhos. E move a análise para a etapa seguinte. Depois disso, as decisões não mudam mais: o
+registro só recebe novas linhas, nunca altera as existentes. Se um par precisa ser revisto, isso
+é feito numa nova rodada, não apagando a anterior.
+
+Se uma etapa é redistribuída antes do envio -- o perito saiu de férias, por exemplo --, os rascunhos
+dele são descartados, e o novo perito começa do zero. Uma revisão sem nenhum candidato vai direto
+do exame ao documento: não há o que verificar.
+
+Os nomes das etapas no banco de dados são os papéis das decisões: `VERIFICATOR` para o exame,
+`REVIEWER` para a verificação e `INCONSISTENCE` para a inconsistência. A correspondência com os
+termos da FISWG está na seção final do capítulo e nas Convenções.
+
+## Documentos: relatório de revisão e laudo de comparação
+
+Cada análise tem um documento desde que é aberta, como **rascunho**. Quando a análise chega à
+etapa de documento, o primeiro perito o emite: o documento recebe um número no formato
+*ano.sequência* (por exemplo, `2026.0001`), contado separadamente para relatórios de revisão e
+para laudos de comparação, e a análise é encerrada. Só o primeiro perito pode emitir, e só depois
+que todos os pares estiverem resolvidos.
+
+O TrackID ainda não gera o texto do documento: registra o número, quem o emitiu e quando, e
+reserva o lugar do arquivo que o conterá.
+
+## Várias rodadas sobre o mesmo par
+
+Um mesmo par pode ser decidido em várias rodadas: pelo sistema, numa revisão e depois numa
+comparação. Cada rodada é julgada por si só, com as mesmas regras:
+
+| Na rodada | Situação do par |
+|---|---|
+| só a decisão do sistema | positivo: confirmado; inconclusivo: aguardando revisão; negativo: rejeitado |
+| só o exame | aguardando revisão |
+| exame e verificação iguais | positivo: confirmado; negativo: rejeitado; ambos inconclusivos: aguardando revisão |
+| exame e verificação diferentes | em disputa |
+| inconsistência | positivo: confirmado; negativo: rejeitado; inconclusivo: em disputa |
+
+O par fica com o resultado da sua **última rodada concluída** -- confirmada ou rejeitada. Uma rodada
+posterior que ainda está em andamento, em disputa ou que terminou inconclusiva não desfaz esse
+resultado. Assim, um par que a revisão confirmou continua confirmado enquanto a comparação está em
+curso, e continua confirmado se a comparação concluir que as imagens não têm qualidade para uma
+conclusão pericial. Se a comparação concluir de outra forma -- uma rejeição acordada pelos dois
+peritos, por exemplo -- a rodada mais recente passa a valer.
+
+Há ainda uma distinção que importa para a análise forense: um par confirmado **pelo sistema** não é
+o mesmo que um par confirmado **por peritos**. A página do caso e a da pessoa só mostram vínculos
+confirmados por peritos; os confirmados apenas pelo sistema servem às telas de inteligência
+(@sec-decisao-inteligencia).
+
+## Correspondência com o ACE-V e com as diretrizes da FISWG
+
+| ACE-V e FISWG | No TrackID |
+|---|---|
+| Análise, comparação e avaliação | a etapa de exame: o perito examina as duas imagens, compara, conclui e registra observações |
+| Profissional que examina (*practitioner*) | o primeiro perito (papel `VERIFICATOR`) |
+| Verificação independente | a etapa de verificação, cega, por outro perito (papel `REVIEWER`) |
+| Resolução de conflito | a etapa de inconsistência, cega, por um terceiro perito, só nos pares divergentes |
+| Revisão de candidatos um-para-muitos | a revisão facial |
+| Comparação pericial um-para-um | a comparação facial |
+| Relatório ou laudo | o documento da análise, numerado ao ser emitido |
+
+A coincidência entre os nomes não é perfeita: o papel `VERIFICATOR` do banco de dados é o
+*practitioner* da FISWG, não a sua verificação, que no TrackID é o `REVIEWER`. As telas usam os
+termos da FISWG (exame, verificação, inconsistência); os nomes do banco aparecem só quando o livro
+fala do registro de decisões.
+
+::: {.callout-important appearance="simple"}
+## Limite
+
+O fluxo implementa a verificação cega, mas não o desmascaramento sequencial linear (*linear
+sequential unmasking*) [@dror2015]: o primeiro perito vê as duas imagens ao mesmo tempo e, na
+revisão, também o escore e a decisão do sistema, sem documentar antes o que viu na imagem
+questionada. A escala de conclusões tem três valores; não há razão de verossimilhança. Análises de
+impressões digitais, pares entre casos diferentes e a geração do texto do documento ainda não
+existem.
+:::
 
 ::: {.callout-tip appearance="simple"}
 ## No TrackID
 
-pacotes `analyses`, `examination`; `cluster.DecidingRound`; migrações 017-018; a tela de trabalho da análise.
+Pacotes `analyses` (tipos, etapas, documentos) e `examination` (pares, rascunhos, envio);
+`cluster.DecidingRound` (a rodada que decide o par) e `cluster.Reviewed` (confirmado por
+peritos); migrações 017-018; telas Minhas análises e de trabalho da análise; `MODEL.md` seção 3.1.
 :::
 
 ::: {.callout-warning appearance="simple"}
 ## Fontes candidatas
 
-A conferir com o original antes de citar: [@fiswg2026review].
+A conferir com o original antes de citar: [@fiswg2026review; @fiswgoverview; @ashbaugh1999;
+@dror2006; @dror2015].
 :::
