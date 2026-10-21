@@ -144,9 +144,8 @@ The model weights below are not covered by this licence and are not bundled.
 TrackID is written by Rodrigo Fileto Cuerci Maciel, with the help of AI coding assistants:
 [Claude Code](https://claude.com/claude-code) (Anthropic) and DeepSeek. The assistants write
 code, tests and documentation under the author's supervision; the author directs the work,
-reviews it and is responsible for the result. Commits made with Claude Code carry a
-`Co-Authored-By` line naming the Claude model and, from October 2026 on, the line "Written
-with Claude Code under the supervision of Rodrigo Fileto Cuerci Maciel."
+reviews it and is responsible for the result. Commits made with Claude Code end with a
+statement of what in them was done with it.
 
 ## Models and licences
 
