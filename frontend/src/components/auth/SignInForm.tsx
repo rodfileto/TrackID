@@ -12,7 +12,7 @@ export default function SignInForm() {
   const { t } = useTranslation();
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
-  const [matricula, setMatricula] = useState("");
+  const [staffNumber, setStaffNumber] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,7 +25,7 @@ export default function SignInForm() {
     setIsSubmitting(true);
 
     try {
-      await login(matricula, password, isChecked);
+      await login(staffNumber, password, isChecked);
       const destination = location.state?.from?.pathname ?? "/";
       navigate(destination, { replace: true });
     } catch (submitError) {
@@ -65,14 +65,14 @@ export default function SignInForm() {
               <div className="space-y-6">
                 <div>
                   <Label>
-                    {t("auth.matricula")} <span className="text-error-500">*</span>{" "}
+                    {t("auth.staffNumber")} <span className="text-error-500">*</span>{" "}
                   </Label>
                   <Input
-                    id="matricula"
-                    name="matricula"
-                    placeholder={t("auth.matriculaPlaceholder")}
-                    value={matricula}
-                    onChange={(event) => setMatricula(event.target.value)}
+                    id="staff_number"
+                    name="staff_number"
+                    placeholder={t("auth.staffNumberPlaceholder")}
+                    value={staffNumber}
+                    onChange={(event) => setStaffNumber(event.target.value)}
                   />
                 </div>
                 <div>

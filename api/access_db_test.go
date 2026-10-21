@@ -75,7 +75,7 @@ func TestAccessProfiles(t *testing.T) {
 		if access.AccountRole == "" {
 			access.AccountRole = auth.AccountRoleUser
 		}
-		u, err := repo.Create(ctx, auth.NewUser{Nome: username, UltimoNome: "Test", Matricula: username, Cargo: "test",
+		u, err := repo.Create(ctx, auth.NewUser{FirstName: username, LastName: "Test", StaffNumber: username, JobTitle: "test",
 			Username: username, Password: "password1", Access: access}, "")
 		if err != nil {
 			t.Fatal(err)
@@ -225,7 +225,7 @@ func TestSetUserPassword(t *testing.T) {
 	repo := auth.NewRepository(sqlDB)
 	user := func(username string, role auth.AccountRole) auth.UserProfile {
 		t.Helper()
-		u, err := repo.Create(ctx, auth.NewUser{Nome: username, UltimoNome: "Test", Matricula: username, Cargo: "test",
+		u, err := repo.Create(ctx, auth.NewUser{FirstName: username, LastName: "Test", StaffNumber: username, JobTitle: "test",
 			Username: username, Password: "password1", Access: auth.Access{AccountRole: role, IsActive: true}}, "")
 		if err != nil {
 			t.Fatal(err)
@@ -255,8 +255,8 @@ func TestSetUserPassword(t *testing.T) {
 	reset := func(u auth.UserProfile, target auth.UserProfile, password string) int {
 		return call(&u, http.MethodPut, fmt.Sprintf("/api/admin/users/%d/password", target.ID), `{"password":"`+password+`"}`)
 	}
-	login := func(matricula, password string) int {
-		return call(nil, http.MethodPost, "/api/auth/login", `{"matricula":"`+matricula+`","password":"`+password+`"}`)
+	login := func(staffNumber, password string) int {
+		return call(nil, http.MethodPost, "/api/auth/login", `{"staff_number":"`+staffNumber+`","password":"`+password+`"}`)
 	}
 
 	for _, c := range []struct {

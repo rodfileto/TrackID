@@ -87,7 +87,7 @@ func TestIngestEvidenceFileAndTraceBox(t *testing.T) {
 			},
 			Traces: []cases.TraceInput{{
 				Sequence:  1,
-				TraceType: "FACE_RECORD",
+				TraceType: "FACE_CAPTURE",
 				Box:       &cases.Box{X1: 10, Y1: 20, X2: 110, Y2: 140, DetectionScore: 0.93},
 				Codifications: []cases.CodificationInput{{
 					Sequence:         1,
@@ -172,12 +172,12 @@ func TestIngestWithEnqueuer(t *testing.T) {
 		CaseID: "TEST-ENQ-1", CaseType: cases.CaseTypeCriminal, Modality: "FACIAL",
 		Evidences: []cases.EvidenceInput{
 			{Sequence: 1, File: file("frame"), Traces: []cases.TraceInput{
-				{Sequence: 1, TraceType: "FACE_RECORD", Box: box, Codifications: face}, // enqueued
-				{Sequence: 2, TraceType: "FACE_RECORD", Codifications: face},           // no box
+				{Sequence: 1, TraceType: "FACE_CAPTURE", Box: box, Codifications: face}, // enqueued
+				{Sequence: 2, TraceType: "FACE_CAPTURE", Codifications: face},           // no box
 			}},
 			{Sequence: 2, Traces: []cases.TraceInput{
-				{Sequence: 1, TraceType: "FACE_RECORD", Box: box, Codifications: face},           // box, no evidence file
-				{Sequence: 2, TraceType: "FACE_RECORD", Crop: file("crop"), Codifications: face}, // enqueued
+				{Sequence: 1, TraceType: "FACE_CAPTURE", Box: box, Codifications: face},           // box, no evidence file
+				{Sequence: 2, TraceType: "FACE_CAPTURE", Crop: file("crop"), Codifications: face}, // enqueued
 			}},
 		},
 	}

@@ -76,7 +76,7 @@ func TestRunOrdersPairByBytes(t *testing.T) {
 	in := cases.CaseInput{CaseID: "TEST-1", CaseType: cases.CaseTypeCriminal, Modality: "FACIAL"}
 	ev := cases.EvidenceInput{Sequence: 1}
 	for s := int16(1); s <= 10; s++ {
-		ev.Traces = append(ev.Traces, cases.TraceInput{Sequence: s, TraceType: "FACE_RECORD"})
+		ev.Traces = append(ev.Traces, cases.TraceInput{Sequence: s, TraceType: "FACE_CAPTURE"})
 	}
 	in.Evidences = []cases.EvidenceInput{ev}
 	res, err := cases.Ingest(ctx, sqlDB, in)

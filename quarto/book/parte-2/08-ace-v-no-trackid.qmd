@@ -173,7 +173,7 @@ existem.
 
 Pacotes `analyses` (tipos, etapas, documentos) e `examination` (pares, rascunhos, envio);
 `cluster.DecidingRound` (a rodada que decide o par) e `cluster.Reviewed` (confirmado por
-peritos); migrações 017-018; telas Minhas análises e de trabalho da análise; `MODEL.md` seção 3.1.
+peritos); `db/migrations/006_analyses.sql`; telas Minhas análises e de trabalho da análise; `MODEL.md` seção 3.1.
 :::
 
 ::: {.callout-warning appearance="simple"}

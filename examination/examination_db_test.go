@@ -74,7 +74,7 @@ func TestAgreementAndComparison(t *testing.T) {
 	q := db.New(sqlDB)
 	user := func(username string, role auth.AccountRole, facial bool) auth.UserProfile {
 		t.Helper()
-		u, err := repo.Create(ctx, auth.NewUser{Nome: username, UltimoNome: "Test", Matricula: username, Cargo: "Perito",
+		u, err := repo.Create(ctx, auth.NewUser{FirstName: username, LastName: "Test", StaffNumber: username, JobTitle: "Perito",
 			Username: username, Password: "password-1",
 			Access: auth.Access{AccountRole: role, ExaminesFacial: facial, IsActive: true}}, "")
 		if err != nil {
@@ -87,7 +87,7 @@ func TestAgreementAndComparison(t *testing.T) {
 	bia := user("bia", auth.AccountRoleUser, true)
 	caio := user("caio", auth.AccountRoleUser, true)
 
-	ev := cases.EvidenceInput{Sequence: 1, Traces: []cases.TraceInput{{Sequence: 1, TraceType: "FACE_RECORD"}, {Sequence: 2, TraceType: "FACE_RECORD"}}}
+	ev := cases.EvidenceInput{Sequence: 1, Traces: []cases.TraceInput{{Sequence: 1, TraceType: "FACE_CAPTURE"}, {Sequence: 2, TraceType: "FACE_CAPTURE"}}}
 	c1, err := cases.Ingest(ctx, sqlDB, cases.CaseInput{CaseID: "C1", CaseType: cases.CaseTypeCriminal, Modality: "FACIAL", Description: "test",
 		Evidences: []cases.EvidenceInput{ev}})
 	if err != nil {
@@ -108,7 +108,7 @@ func TestAgreementAndComparison(t *testing.T) {
 		score    float64
 	}{{pA, examination.Positive, 0.91}, {pB, examination.Inconclusive, 0.65}} {
 		if _, err := q.InsertBiometricDecision(ctx, db.InsertBiometricDecisionParams{FeatureAID: s.p.FeatureA, FeatureBID: s.p.FeatureB,
-			Modality: "FACE", Role: "SYSTEM", Decision: s.decision, SystemSource: sql.NullString{String: "test", Valid: true},
+			Modality: "FACIAL", Role: "SYSTEM", Decision: s.decision, SystemSource: sql.NullString{String: "test", Valid: true},
 			Confidence: sql.NullFloat64{Float64: s.score, Valid: true}}); err != nil {
 			t.Fatal(err)
 		}

@@ -74,7 +74,7 @@ func TestDecisionFlow(t *testing.T) {
 	q := db.New(sqlDB)
 	user := func(username string, fp, facial bool, role auth.AccountRole) auth.UserProfile {
 		t.Helper()
-		u, err := repo.Create(ctx, auth.NewUser{Nome: username, UltimoNome: "Test", Matricula: username, Cargo: "Perito",
+		u, err := repo.Create(ctx, auth.NewUser{FirstName: username, LastName: "Test", StaffNumber: username, JobTitle: "Perito",
 			Username: username, Password: "password-1",
 			Access: auth.Access{AccountRole: role, ExaminesFingerprint: fp, ExaminesFacial: facial, IsActive: true}}, "")
 		if err != nil {
@@ -88,7 +88,7 @@ func TestDecisionFlow(t *testing.T) {
 	caio := user("caio", false, true, auth.AccountRoleUser)
 	duda := user("duda", true, false, auth.AccountRoleUser)
 
-	ev := cases.EvidenceInput{Sequence: 1, Traces: []cases.TraceInput{{Sequence: 1, TraceType: "FACE_RECORD"}, {Sequence: 2, TraceType: "FACE_RECORD"}}}
+	ev := cases.EvidenceInput{Sequence: 1, Traces: []cases.TraceInput{{Sequence: 1, TraceType: "FACE_CAPTURE"}, {Sequence: 2, TraceType: "FACE_CAPTURE"}}}
 	f1, err := cases.Ingest(ctx, sqlDB, cases.CaseInput{CaseID: "F1", CaseType: cases.CaseTypeCriminal, Modality: "FACIAL", Description: "test",
 		Evidences: []cases.EvidenceInput{ev}})
 	if err != nil {
@@ -105,7 +105,7 @@ func TestDecisionFlow(t *testing.T) {
 	system := func(p examination.Pair, decision string, score float64) {
 		t.Helper()
 		if _, err := q.InsertBiometricDecision(ctx, db.InsertBiometricDecisionParams{FeatureAID: p.FeatureA, FeatureBID: p.FeatureB,
-			Modality: "FACE", Role: "SYSTEM", Decision: decision, SystemSource: sql.NullString{String: "test", Valid: true},
+			Modality: "FACIAL", Role: "SYSTEM", Decision: decision, SystemSource: sql.NullString{String: "test", Valid: true},
 			Confidence: sql.NullFloat64{Float64: score, Valid: true}}); err != nil {
 			t.Fatal(err)
 		}
@@ -328,12 +328,12 @@ func TestAutomaticReviewAndAccess(t *testing.T) {
 	ctx := context.Background()
 	sqlDB := testDB(t)
 	repo := auth.NewRepository(sqlDB)
-	chief, err := repo.Create(ctx, auth.NewUser{Nome: "c", UltimoNome: "c", Matricula: "c", Cargo: "c", Username: "chief", Password: "password-1",
+	chief, err := repo.Create(ctx, auth.NewUser{FirstName: "c", LastName: "c", StaffNumber: "c", JobTitle: "c", Username: "chief", Password: "password-1",
 		Access: auth.Access{AccountRole: auth.AccountRoleAdmin, IsActive: true}}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	ana, err := repo.Create(ctx, auth.NewUser{Nome: "a", UltimoNome: "a", Matricula: "a", Cargo: "a", Username: "ana", Password: "password-1",
+	ana, err := repo.Create(ctx, auth.NewUser{FirstName: "a", LastName: "a", StaffNumber: "a", JobTitle: "a", Username: "ana", Password: "password-1",
 		Access: auth.Access{AccountRole: auth.AccountRoleUser, ExaminesFacial: true, IsActive: true}}, "")
 	if err != nil {
 		t.Fatal(err)

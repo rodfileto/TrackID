@@ -30,7 +30,7 @@ func TestCaseClustersShowOnlyReviewedLinks(t *testing.T) {
 		res, err := cases.Ingest(ctx, sqlDB, cases.CaseInput{CaseID: caseID, CaseType: cases.CaseTypeCriminal, Modality: "FACIAL",
 			Description: "case " + caseID, Evidences: []cases.EvidenceInput{{Sequence: 1,
 				File: &cases.FileInput{StorageRef: "bucket/" + caseID, ContentType: "image/jpeg", HashID: "hash-" + caseID},
-				Traces: []cases.TraceInput{{Sequence: 1, TraceType: "FACE_RECORD", Box: &cases.Box{X1: 1, Y1: 2, X2: 30, Y2: 40},
+				Traces: []cases.TraceInput{{Sequence: 1, TraceType: "FACE_CAPTURE", Box: &cases.Box{X1: 1, Y1: 2, X2: 30, Y2: 40},
 					Codifications: []cases.CodificationInput{{Sequence: 1, CodificationType: "FACE_EMBEDDING"}}}}}}})
 		if err != nil {
 			t.Fatal(err)
@@ -51,7 +51,7 @@ func TestCaseClustersShowOnlyReviewedLinks(t *testing.T) {
 		if a > b {
 			a, b = b, a
 		}
-		p := db.InsertBiometricDecisionParams{FeatureAID: a, FeatureBID: b, Modality: "FACE", Role: role, Decision: decision,
+		p := db.InsertBiometricDecisionParams{FeatureAID: a, FeatureBID: b, Modality: "FACIAL", Role: role, Decision: decision,
 			CaseAnalysisID: sql.NullInt64{Int64: analysisID, Valid: analysisID != 0}}
 		if role == "SYSTEM" {
 			p.SystemSource = sql.NullString{String: "test", Valid: true}

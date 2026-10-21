@@ -101,7 +101,7 @@ func caseCountsByPerson(ctx context.Context, q *db.Queries, personIDs []string) 
 // SearchByName finds every enrolled person with at least one identity
 // register whose name contains query (case-insensitive substring match,
 // backed by the trigram index in
-// db/migrations/021_add_person_name_search.sql). Results are capped at
+// db/migrations/002_identity.sql). Results are capped at
 // searchResultLimit; an empty (after trimming) query returns no results
 // rather than the whole table.
 func SearchByName(ctx context.Context, sqlDB *sql.DB, query string) ([]SearchResult, error) {

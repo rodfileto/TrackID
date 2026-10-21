@@ -2,10 +2,10 @@ import { requestApi } from "./api";
 
 export interface UserProfile {
   id: number;
-  nome: string;
-  ultimo_nome: string;
-  matricula: string;
-  cargo: string;
+  first_name: string;
+  last_name: string;
+  staff_number: string;
+  job_title: string;
   username: string;
   email: string;
   account_role: "SUPER_ADMIN" | "ADMIN" | "USER";
@@ -30,13 +30,13 @@ const sessionUserKey = "trackid.session.user";
 const localUserKey = "trackid.local.user";
 
 export async function login(
-  matricula: string,
+  staff_number: string,
   password: string,
   keepLoggedIn: boolean,
 ): Promise<UserProfile> {
   const response = await requestApi<LoginResponse>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ matricula, password }),
+    body: JSON.stringify({ staff_number, password }),
   });
 
   const tokenStorage = keepLoggedIn ? localStorage : sessionStorage;

@@ -14,10 +14,10 @@ import (
 // UserProfile is the public representation of a registered user.
 type UserProfile struct {
 	ID          int64       `json:"id"`
-	Nome        string      `json:"nome"`
-	UltimoNome  string      `json:"ultimo_nome"`
-	Matricula   string      `json:"matricula"`
-	Cargo       string      `json:"cargo"`
+	FirstName   string      `json:"first_name"`
+	LastName    string      `json:"last_name"`
+	StaffNumber string      `json:"staff_number"`
+	JobTitle    string      `json:"job_title"`
 	Username    string      `json:"username"`
 	Email       string      `json:"email"`
 	AccountRole AccountRole `json:"account_role"`
@@ -25,7 +25,7 @@ type UserProfile struct {
 	// decisions on: either, both, or neither. See Examines.
 	ExaminesFingerprint bool `json:"examines_fingerprint"`
 	ExaminesFacial      bool `json:"examines_facial"`
-	// IntelligenceAnalyst and Coordinator are the other two capabilities (migration 020); see
+	// IntelligenceAnalyst and Coordinator are the other two capabilities (db/migrations/001_users.sql); see
 	// IntelligenceAccess and Coordinates.
 	IntelligenceAnalyst bool `json:"intelligence_analyst"`
 	Coordinator         bool `json:"coordinator"`
@@ -53,7 +53,7 @@ type authenticatedUser struct {
 // profileFrom maps a users row onto a UserProfile. sqlc emits one row type per query; the
 // profile-shaped ones (CreateUserRow, ListUsersRow, ...) convert to GetUserByIDRow.
 func profileFrom(row db.GetUserByIDRow) UserProfile {
-	return UserProfile{ID: row.ID, Nome: row.Nome, UltimoNome: row.UltimoNome, Matricula: row.Matricula, Cargo: row.Cargo,
+	return UserProfile{ID: row.ID, FirstName: row.FirstName, LastName: row.LastName, StaffNumber: row.StaffNumber, JobTitle: row.JobTitle,
 		Username: row.Username, Email: row.Email, AccountRole: AccountRole(row.AccountRole), ExaminesFingerprint: row.ExaminesFingerprint, ExaminesFacial: row.ExaminesFacial,
 		IntelligenceAnalyst: row.IntelligenceAnalyst, Coordinator: row.Coordinator, IsActive: row.IsActive}
 }
@@ -66,13 +66,13 @@ func (r *Repository) CreateUser(ctx context.Context, params db.CreateUserParams)
 	return profileFrom(db.GetUserByIDRow(row)), nil
 }
 
-func (r *Repository) FindByMatricula(ctx context.Context, matricula string) (authenticatedUser, error) {
-	row, err := r.queries.GetUserByMatricula(ctx, matricula)
+func (r *Repository) FindByStaffNumber(ctx context.Context, staffNumber string) (authenticatedUser, error) {
+	row, err := r.queries.GetUserByStaffNumber(ctx, staffNumber)
 	if err != nil {
 		return authenticatedUser{}, err
 	}
 	return authenticatedUser{
-		Profile: profileFrom(db.GetUserByIDRow{ID: row.ID, Nome: row.Nome, UltimoNome: row.UltimoNome, Matricula: row.Matricula, Cargo: row.Cargo,
+		Profile: profileFrom(db.GetUserByIDRow{ID: row.ID, FirstName: row.FirstName, LastName: row.LastName, StaffNumber: row.StaffNumber, JobTitle: row.JobTitle,
 			Username: row.Username, Email: row.Email, AccountRole: row.AccountRole, ExaminesFingerprint: row.ExaminesFingerprint, ExaminesFacial: row.ExaminesFacial,
 			IntelligenceAnalyst: row.IntelligenceAnalyst, Coordinator: row.Coordinator, IsActive: row.IsActive}),
 		PasswordHash: row.PasswordHash,
@@ -132,13 +132,13 @@ func (r *Repository) SetPassword(ctx context.Context, id int64, password string)
 // NewUser is what creating an account takes, from an admin (POST /api/admin/users) or from
 // cmd/create-superuser.
 type NewUser struct {
-	Nome       string
-	UltimoNome string
-	Matricula  string
-	Cargo      string
-	Username   string
-	Password   string
-	Access     Access
+	FirstName   string
+	LastName    string
+	StaffNumber string
+	JobTitle    string
+	Username    string
+	Password    string
+	Access      Access
 }
 
 // MinPasswordLength is the shortest password an account may have.
@@ -163,10 +163,10 @@ func (r *Repository) Create(ctx context.Context, user NewUser, emailDomain strin
 		email = username + "@" + emailDomain
 	}
 	return r.CreateUser(ctx, db.CreateUserParams{
-		Nome:                user.Nome,
-		UltimoNome:          user.UltimoNome,
-		Matricula:           user.Matricula,
-		Cargo:               user.Cargo,
+		FirstName:           user.FirstName,
+		LastName:            user.LastName,
+		StaffNumber:         user.StaffNumber,
+		JobTitle:            user.JobTitle,
 		Username:            username,
 		Email:               email,
 		PasswordHash:        string(passwordHash),

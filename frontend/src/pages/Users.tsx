@@ -37,10 +37,10 @@ const flags = ["examines_facial", "examines_fingerprint", "intelligence_analyst"
 const isAdminRole = (role: AccountRole) => role === "ADMIN" || role === "SUPER_ADMIN";
 
 const emptyUser = (): NewUser => ({
-  nome: "",
-  ultimo_nome: "",
-  matricula: "",
-  cargo: "",
+  first_name: "",
+  last_name: "",
+  staff_number: "",
+  job_title: "",
   username: "",
   password: generatePassword(),
   account_role: "USER",
@@ -79,7 +79,7 @@ export default function Users() {
     const q = filter.trim().toLowerCase();
     if (!users || !q) return users ?? [];
     return users.filter((u) =>
-      [u.nome, u.ultimo_nome, u.matricula, u.username, u.cargo].some((v) => v.toLowerCase().includes(q)),
+      [u.first_name, u.last_name, u.staff_number, u.username, u.job_title].some((v) => v.toLowerCase().includes(q)),
     );
   }, [users, filter]);
 
@@ -103,7 +103,7 @@ export default function Users() {
     if (!creating) return;
     setSaving(true);
     try {
-      const created = await createUser({ ...creating, username: creating.username || creating.matricula });
+      const created = await createUser({ ...creating, username: creating.username || creating.staff_number });
       toast.success(t("users.created", { username: created.username }));
       setCreating(null);
       load();
@@ -158,7 +158,7 @@ export default function Users() {
               <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
                 <TableRow>
                   <TableCell isHeader className={headerClass}>{t("users.columns.name")}</TableCell>
-                  <TableCell isHeader className={headerClass}>{t("users.columns.matricula")}</TableCell>
+                  <TableCell isHeader className={headerClass}>{t("users.columns.staffNumber")}</TableCell>
                   <TableCell isHeader className={headerClass}>{t("users.columns.role")}</TableCell>
                   {flags.map((f) => (
                     <TableCell key={f} isHeader className={headerClass}>{t(`users.flags.${f}`)}</TableCell>
@@ -175,7 +175,7 @@ export default function Users() {
                     <TableRow key={u.id} className={u.is_active ? "" : "opacity-60"}>
                       <TableCell className={cellClass}>
                         <div className="font-medium text-gray-800 dark:text-white/90">
-                          {u.nome} {u.ultimo_nome}
+                          {u.first_name} {u.last_name}
                           {self && (
                             <span className="ml-2">
                               <Badge size="sm" color="info">{t("users.you")}</Badge>
@@ -183,10 +183,10 @@ export default function Users() {
                           )}
                         </div>
                         <div className="text-theme-xs text-gray-500 dark:text-gray-400">
-                          {u.username} · {u.cargo}
+                          {u.username} · {u.job_title}
                         </div>
                       </TableCell>
-                      <TableCell className={cellClass}>{u.matricula}</TableCell>
+                      <TableCell className={cellClass}>{u.staff_number}</TableCell>
                       <TableCell className={cellClass}>
                         {isSuper && !self ? (
                           <select
@@ -245,7 +245,7 @@ export default function Users() {
             <h4 className="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">{t("users.new")}</h4>
             <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">{t("users.newDesc")}</p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {(["nome", "ultimo_nome", "matricula", "cargo"] as const).map((field) => (
+              {(["first_name", "last_name", "staff_number", "job_title"] as const).map((field) => (
                 <label key={field} className={labelClass}>
                   {t(`users.fields.${field}`)}
                   <input
@@ -260,7 +260,7 @@ export default function Users() {
                 {t("users.fields.username")}
                 <input
                   value={creating.username}
-                  placeholder={creating.matricula.toLowerCase()}
+                  placeholder={creating.staff_number.toLowerCase()}
                   onChange={(event) => setCreating({ ...creating, username: event.target.value })}
                   className={inputClass}
                 />

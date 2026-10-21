@@ -19,7 +19,9 @@ import (
 func main() {
 	env.Load()
 
-	embeddingType := flag.String("embedding-type", "FACE_ARCFACE_512", "feature_embeddings.embedding_type to match")
+	// The default is what the face pipeline writes (embedding.EmbeddingType), spelled out so this
+	// command does not link the embedding package and its ONNX runtime.
+	embeddingType := flag.String("embedding-type", "FACE_AURAFACE_512", "feature_embeddings.embedding_type to match")
 	threshold := flag.Float64("threshold", 0.4, "maximum cosine distance to consider a match (lower is stricter)")
 	source := flag.String("source", "", "biometric_decisions.system_source to record (defaults to -embedding-type)")
 	commit := cmdutil.CommitFlag()

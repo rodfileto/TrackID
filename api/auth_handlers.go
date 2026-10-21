@@ -12,8 +12,8 @@ import (
 )
 
 type loginRequest struct {
-	Matricula string `json:"matricula" binding:"required"`
-	Password  string `json:"password" binding:"required"`
+	StaffNumber string `json:"staff_number" binding:"required"`
+	Password    string `json:"password" binding:"required"`
 }
 
 type loginResponse struct {
@@ -36,7 +36,7 @@ func LoginHandler(repo *auth.Repository, jwtSecret string) gin.HandlerFunc {
 			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid login data"})
 			return
 		}
-		authenticated, err := repo.FindByMatricula(context.Request.Context(), request.Matricula)
+		authenticated, err := repo.FindByStaffNumber(context.Request.Context(), request.StaffNumber)
 		if errors.Is(err, sql.ErrNoRows) || bcrypt.CompareHashAndPassword([]byte(authenticated.PasswordHash), []byte(request.Password)) != nil {
 			context.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 			return

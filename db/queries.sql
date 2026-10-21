@@ -1,30 +1,30 @@
 -- name: CreateUser :one
-INSERT INTO users (nome, ultimo_nome, matricula, cargo, username, email, password_hash, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator)
+INSERT INTO users (first_name, last_name, staff_number, job_title, username, email, password_hash, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active;
+RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active;
 
--- name: GetUserByMatricula :one
-SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, password_hash
+-- name: GetUserByStaffNumber :one
+SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, password_hash
 FROM users
-WHERE matricula = $1;
+WHERE staff_number = $1;
 
 -- name: GetUserByID :one
-SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
+SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
 FROM users
 WHERE id = $1;
 
 -- name: ListUsers :many
-SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
+SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
 FROM users
-ORDER BY ultimo_nome, nome, id;
+ORDER BY last_name, first_name, id;
 
 -- name: UpdateUserAccess :one
--- Username, matricula and email are not updatable: decisions name their decider by username.
+-- Username, staff_number and email are not updatable: decisions name their decider by username.
 UPDATE users
 SET account_role = $2, examines_fingerprint = $3, examines_facial = $4, intelligence_analyst = $5, coordinator = $6,
     is_active = $7, updated_at = NOW()
 WHERE id = $1
-RETURNING id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active;
+RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active;
 
 -- name: SetUserPassword :execrows
 UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1;
@@ -138,10 +138,10 @@ RETURNING id;
 -- name: InsertBiometricDecision :one
 INSERT INTO biometric_decisions
     (feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
-     comparison_type, related_reference, related_reference_kind, responsible_user, case_analysis_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+     related_reference, related_reference_kind, case_analysis_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING id, feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
-    comparison_type, related_reference, related_reference_kind, responsible_user, decided_at, created_at, case_analysis_id;
+    related_reference, related_reference_kind, decided_at, created_at, case_analysis_id;
 
 -- name: ListBiometricDecisions :many
 SELECT feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, case_analysis_id
@@ -531,7 +531,7 @@ JOIN identity_document d ON d.id = r.document_id
 JOIN person p ON p.id = d.person_id
 WHERE bf.provenance = 'KNOWN';
 
--- Clusters come in two layers (clusters.basis, migration 019): AUTOMATIC, from every CONFIRMED
+-- Clusters come in two layers (clusters.basis, migrations/008_clusters.sql): AUTOMATIC, from every CONFIRMED
 -- pair, and REVIEWED, from the pairs people confirmed. Every query resolving features to clusters
 -- names its layer; cluster ids are unique across both, so queries by cluster id need none.
 
@@ -698,7 +698,7 @@ WHERE ct.id = ANY(@case_trace_ids::bigint[]);
 -- name: SearchPersonsByName :many
 -- Finds every identity_register whose name contains the search term
 -- (case-insensitive substring match -- see
--- migrations/021_add_person_name_search.sql for the trigram index this
+-- migrations/002_identity.sql for the trigram index this
 -- relies on), joined up to its person and document. A person with several
 -- documents/registers can surface more than once, once per matching
 -- register -- useful signal on its own (an alias, or the same name spelled

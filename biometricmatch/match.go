@@ -105,23 +105,11 @@ func recordDecisions(ctx context.Context, sqlDB *sql.DB, candidates []candidate,
 	return tx.Commit()
 }
 
-// featureInfo is a biometricfeature's graph feature id and biometric_decisions
-// modality (FACE/FINGERPRINT, not to be confused with biometric_cases.modality
-// which spells the face modality "FACIAL").
+// featureInfo is a biometricfeature's graph feature id and modality
+// (FACIAL/FINGERPRINT).
 type featureInfo struct {
 	graphID  string
 	modality string
-}
-
-func modalityForFeatureType(featureType string) (string, bool) {
-	switch featureType {
-	case graph.FeatureTypeFaceRecord, graph.FeatureTypeFaceCapture:
-		return "FACE", true
-	case graph.FeatureTypeFingerprintTemplate, graph.FeatureTypeFingerprintLift:
-		return "FINGERPRINT", true
-	default:
-		return "", false
-	}
 }
 
 func loadFeatureInfos(ctx context.Context, sqlDB *sql.DB) (map[int64]featureInfo, error) {
@@ -132,7 +120,7 @@ func loadFeatureInfos(ctx context.Context, sqlDB *sql.DB) (map[int64]featureInfo
 	}
 	out := make(map[int64]featureInfo, len(rows))
 	for _, r := range rows {
-		modality, ok := modalityForFeatureType(r.FeatureType)
+		modality, ok := graph.ModalityForFeatureType(r.FeatureType)
 		if !ok {
 			continue
 		}
