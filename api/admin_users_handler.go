@@ -25,10 +25,10 @@ func ListUsersHandler(repo *auth.Repository) gin.HandlerFunc {
 }
 
 type createUserRequest struct {
-	Nome                string           `json:"nome" binding:"required"`
-	UltimoNome          string           `json:"ultimo_nome" binding:"required"`
-	Matricula           string           `json:"matricula" binding:"required"`
-	Cargo               string           `json:"cargo" binding:"required"`
+	FirstName           string           `json:"first_name" binding:"required"`
+	LastName            string           `json:"last_name" binding:"required"`
+	StaffNumber         string           `json:"staff_number" binding:"required"`
+	JobTitle            string           `json:"job_title" binding:"required"`
 	Username            string           `json:"username" binding:"required"`
 	Password            string           `json:"password" binding:"required"`
 	AccountRole         auth.AccountRole `json:"account_role"`
@@ -57,7 +57,7 @@ func CreateUserHandler(repo *auth.Repository, emailDomain string) gin.HandlerFun
 			return
 		}
 		user, err := repo.Create(context.Request.Context(), auth.NewUser{
-			Nome: request.Nome, UltimoNome: request.UltimoNome, Matricula: request.Matricula, Cargo: request.Cargo,
+			FirstName: request.FirstName, LastName: request.LastName, StaffNumber: request.StaffNumber, JobTitle: request.JobTitle,
 			Username: request.Username, Password: request.Password, Access: access,
 		}, emailDomain)
 		if err != nil {
@@ -189,8 +189,8 @@ func createUserError(context *gin.Context, err error) {
 	switch {
 	case errors.Is(err, auth.ErrPasswordTooShort):
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-	case strings.Contains(err.Error(), "users_matricula_key"):
-		context.JSON(http.StatusConflict, gin.H{"error": "matricula already exists"})
+	case strings.Contains(err.Error(), "users_staff_number_key"):
+		context.JSON(http.StatusConflict, gin.H{"error": "staff number already exists"})
 	case strings.Contains(err.Error(), "users_username_key") || strings.Contains(err.Error(), "users_email_key"):
 		context.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
 	default:

@@ -197,22 +197,13 @@ func decisionOutcome(d Decision, inconclusive EdgeStatus) EdgeStatus {
 	}
 }
 
-// clusterModalityFor maps a biometric_decisions.modality (FACE/FINGERPRINT) onto
-// the clusters table's modality vocabulary (FACIAL/FINGERPRINT).
-func clusterModalityFor(modality string) string {
-	if modality == "FACE" {
-		return "FACIAL"
-	}
-	return "FINGERPRINT"
-}
-
 // confirmedPair is a pair of features whose decision chain has settled to
 // CONFIRMED. confidence/identifiedBy describe who/what settled it, for the
 // IDENTIFIED_AS edge Identify writes.
 type confirmedPair struct {
 	featureA     string
 	featureB     string
-	modality     string // "FACE" | "FINGERPRINT"
+	modality     string // "FACIAL" | "FINGERPRINT"
 	reviewed     bool   // settled by people (Reviewed), not by a SYSTEM decision alone
 	confidence   *float64
 	identifiedBy string

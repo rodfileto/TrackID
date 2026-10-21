@@ -176,9 +176,7 @@ func loadFeatures(ctx context.Context, sqlDB *sql.DB) (map[string]featureInfo, e
 }
 
 // edgesFor turns the CONFIRMED pairs into the edges of one layer: every pair
-// for AUTOMATIC, the reviewed ones for REVIEWED. The decision modality
-// (FACE/FINGERPRINT) is mapped onto the clusters table's modality vocabulary
-// (FACIAL/FINGERPRINT).
+// for AUTOMATIC, the reviewed ones for REVIEWED.
 func edgesFor(pairs []confirmedPair, basis Basis) []edge {
 	edges := make([]edge, 0, len(pairs))
 	for _, p := range pairs {
@@ -188,7 +186,7 @@ func edgesFor(pairs []confirmedPair, basis Basis) []edge {
 		edges = append(edges, edge{
 			left:     p.featureA,
 			right:    p.featureB,
-			modality: clusterModalityFor(p.modality),
+			modality: p.modality,
 		})
 	}
 	return edges

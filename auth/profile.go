@@ -6,7 +6,7 @@ import "errors"
 // else: it gives no access to cases or persons. What a user does is their capabilities, each
 // independent of the role and of each other: what they examine (UserProfile.Examines), whether
 // they analyse intelligence (IntelligenceAccess) and whether they coordinate the work
-// (Coordinates). See migrations 016 and 020.
+// (Coordinates). See db/migrations/001_users.sql.
 type AccountRole string
 
 const (

@@ -1,7 +1,8 @@
 -- +goose Up
 -- The evidence (QUESTIONED) hierarchy: biometric_cases -< case_evidences -< case_traces -<
 -- case_codifications -< case_codification_points, plus case_files (raw files attached to a
--- case) and case_decisions (the case's own workflow log). See MODEL.md section 2.2.
+-- case) and case_decisions (the case's own workflow log). See MODEL.md section 2.2. A case is
+-- linked to the occurrence it investigates by occurrence_id.
 --
 -- A biometric case is any case in which questioned biometric material has to be compared
 -- against the known (enrollment) side. Two independent axes classify it:
@@ -29,6 +30,8 @@ CREATE TABLE biometric_cases (
     -- keep their own case_id and leave both NULL.
     case_year INTEGER,
     case_number INTEGER,
+    -- NULL until the case is linked to its occurrence (and for a case with no report at all).
+    occurrence_id BIGINT REFERENCES occurrences(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -36,10 +39,11 @@ CREATE TABLE biometric_cases (
 CREATE UNIQUE INDEX biometric_cases_year_number_key ON biometric_cases (case_year, case_number);
 CREATE INDEX biometric_cases_case_type_idx ON biometric_cases (case_type);
 CREATE INDEX biometric_cases_description_idx ON biometric_cases USING GIN (to_tsvector('simple', description));
+CREATE INDEX biometric_cases_occurrence_id_idx ON biometric_cases (occurrence_id);
 
 -- Raw files attached to a biometric case:
 --   evidence           -- an evidence photo/scan (one case_evidences row points at it)
---   documento          -- a supporting document
+--   document           -- a supporting document
 --   forensic_report    -- a forensic report
 --   face_crop          -- the region a detector cropped from an evidence item for one trace
 --                         (case_traces.case_file_id points at it)
@@ -49,7 +53,7 @@ CREATE INDEX biometric_cases_description_idx ON biometric_cases USING GIN (to_ts
 CREATE TABLE case_files (
     id BIGSERIAL PRIMARY KEY,
     biometric_case_id BIGINT NOT NULL REFERENCES biometric_cases(id) ON DELETE CASCADE,
-    category TEXT NOT NULL CHECK (category IN ('evidence', 'documento', 'forensic_report', 'face_crop', 'codification_image')),
+    category TEXT NOT NULL CHECK (category IN ('evidence', 'document', 'forensic_report', 'face_crop', 'codification_image')),
     media_type TEXT,
     hash_id TEXT,
     filename TEXT,
@@ -78,11 +82,13 @@ CREATE TABLE case_evidences (
 );
 CREATE INDEX case_evidences_biometric_case_id_idx ON case_evidences (biometric_case_id);
 
+-- trace_type is the feature type of the QUESTIONED biometricfeature the trace yields:
+-- FACE_CAPTURE (one face detected or marked in an image) or FINGERPRINT_LIFT (one lift on a card).
 CREATE TABLE case_traces (
     id BIGSERIAL PRIMARY KEY,
     evidence_id BIGINT NOT NULL REFERENCES case_evidences(id) ON DELETE CASCADE,
     sequence SMALLINT NOT NULL,
-    trace_type TEXT NOT NULL CHECK (trace_type IN ('FACE_RECORD', 'FINGERPRINT_LIFT')),
+    trace_type TEXT NOT NULL CHECK (trace_type IN ('FACE_CAPTURE', 'FINGERPRINT_LIFT')),
     box_x1 DOUBLE PRECISION,
     box_y1 DOUBLE PRECISION,
     box_x2 DOUBLE PRECISION,
@@ -127,22 +133,6 @@ CREATE TABLE case_codification_points (
 );
 CREATE INDEX case_codification_points_codification_id_idx ON case_codification_points (codification_id);
 
--- Reconstructs the "case_id-NNN-NN-NN" fragment id for a codification row.
-CREATE VIEW case_fragment_codes AS
-SELECT
-    cod.id AS codification_id,
-    tr.id AS trace_id,
-    ev.id AS evidence_id,
-    bc.id AS biometric_case_id,
-    bc.case_id
-        || '-' || lpad(ev.sequence::text, 3, '0')
-        || '-' || lpad(tr.sequence::text, 2, '0')
-        || '-' || lpad(cod.sequence::text, 2, '0') AS fragment_id
-FROM case_codifications cod
-JOIN case_traces tr ON tr.id = cod.trace_id
-JOIN case_evidences ev ON ev.id = tr.evidence_id
-JOIN biometric_cases bc ON bc.id = ev.biometric_case_id;
-
 -- case_decisions is an append-only log of decisions/status events about a case itself (e.g. a
 -- case being approved, rejected, or otherwise progressed through an organization's own
 -- workflow) -- distinct from biometric_decisions, which is about a pair of biometric features.
@@ -170,7 +160,6 @@ CREATE INDEX case_decisions_biometric_case_id_idx ON case_decisions (biometric_c
 
 -- +goose Down
 DROP TABLE case_decisions;
-DROP VIEW case_fragment_codes;
 DROP TABLE case_codification_points;
 DROP TABLE case_codifications;
 DROP TABLE case_traces;

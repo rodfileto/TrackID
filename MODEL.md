@@ -55,9 +55,9 @@ case_traces ── biometricfeature
 | Table | Role |
 | --- | --- |
 | `biometric_cases` | the base case (`case_id`; `case_type` = `CRIMINAL` \| `CIVIL`; `modality` = `FACIAL` \| `FINGERPRINT`) |
-| `case_files` | raw files attached to a case (`evidence`, `documento`, `forensic_report`, `face_crop`, `codification_image`) |
+| `case_files` | raw files attached to a case (`evidence`, `document`, `forensic_report`, `face_crop`, `codification_image`) |
 | `case_evidences` | one evidence item within a case (e.g. a lift card, an image) |
-| `case_traces` | one biometric trace within an evidence (one face in an image, one lift on a card) |
+| `case_traces` | one biometric trace within an evidence (one face in an image, one lift on a card); its `trace_type` is the feature type it yields, `FACE_CAPTURE` or `FINGERPRINT_LIFT` |
 | `case_codifications` | one processed encoding of a trace (e.g. a minutiae set, an embedding) |
 | `biometricfeature` | the typed QUESTIONED feature for a trace |
 
@@ -81,8 +81,8 @@ locations ──< occurrences ──< biometric_cases
 | Table | Role |
 | --- | --- |
 | `locations` | a place, keyed by the importer's `location_id`: a PostGIS point (`geography`, WGS 84), how exact it is (`precision`: `EXACT` \| `GEOCODED` \| `STREET` \| `NEIGHBOURHOOD` \| `MUNICIPALITY`), IBGE municipality code, UF, address, `place_type` (`PUBLIC_ROAD`, `RESIDENCE`, `COMMERCE`, `BANK`, `GOVERNMENT_OFFICE` -- *órgão público* --, `TRANSPORT`, `RURAL`, `OTHER`) |
-| `occurrences` | a registered occurrence (a police report, *boletim de ocorrência*), unique per `(agency, occurrence_number)`: when (`occurred_from`/`occurred_to` window, reported, registered), where (`location_id`), crime-only facts (`attempted`, counts), `status`, `description` (modus operandi tags were dropped in migration 015) |
-| `occurrence_types` | the fixed list of occurrence types, codes only (the frontend translates), following ISP-RJ's crime classification (migration 012) in groups `LETHAL`, `PERSON`, `ROBBERY`, `THEFT`, `FRAUD`, `DRUGS`, `CIVIL`; plus `IDENTITY_FRAUD`, `UNIDENTIFIED_LIVING_PERSON` and `DISASTER_VICTIM`, which ISP does not count but which open biometric cases; each with the `case_type` it opens. Attempts are `occurrences.attempted`, not types |
+| `occurrences` | a registered occurrence (a police report, *boletim de ocorrência*), identified by the agency's report number, unique per `(agency, occurrence_number)`, or by a TrackID number (`occurrence_year`/`occurrence_seq`), or both: when (`occurred_from`/`occurred_to` window, reported, registered), where (`location_id`), crime-only facts (`attempted`, counts), `status`, `description` |
+| `occurrence_types` | the fixed list of occurrence types, codes only (the frontend translates), following ISP-RJ's crime classification in groups `LETHAL`, `PERSON`, `ROBBERY`, `THEFT`, `FRAUD`, `DRUGS`, `CIVIL`; plus `IDENTITY_FRAUD`, `UNIDENTIFIED_LIVING_PERSON` and `DISASTER_VICTIM`, which ISP does not count but which open biometric cases; each with the `case_type` it opens. Attempts are `occurrences.attempted`, not types |
 | `occurrence_classifications` | an occurrence's types (a report can carry several) |
 
 One occurrence can open many biometric cases (a FACIAL case for its CCTV, a FINGERPRINT case
@@ -95,8 +95,8 @@ trackid neither geocodes nor deduplicates addresses.
 `/api/occurrences`): it validates the input (types all criminal or all civil; crime-only fields
 empty on a civil one; not in the future; the police agency and its report number both or
 neither, unique together), numbers it `"<year>.<sequence>"` (`occurrence_year`/`occurrence_seq`,
-migration 013, as cases are numbered), and places it at an existing location or a new point. A
-new point's `municipality_code` comes from the `municipalities` table (migration 014): IBGE
+as cases are numbered), and places it at an existing location or a new point. A
+new point's `municipality_code` comes from the `municipalities` table: IBGE
 boundaries loaded by `cmd/load-municipalities` from the GeoJSON `tools/municipalities` writes
 with geobr. Occurrences an importer ingests keep their own (agency, number) and no TrackID number.
 A case is linked from its page through `occurrences.LinkCase` (PUT
@@ -121,7 +121,7 @@ a *derived view*, never written authoritatively to the graph.
 | Column | Meaning |
 | --- | --- |
 | `feature_a_id`, `feature_b_id` | the two feature ids (always stored `a < b`) |
-| `modality` | `FINGERPRINT` \| `FACE` |
+| `modality` | `FACIAL` \| `FINGERPRINT`, as in `biometric_cases` |
 | `role` | `SYSTEM` (automatic), `VERIFICATOR`, `REVIEWER`, `INCONSISTENCE` |
 | `decision` | `POSITIVE` \| `NEGATIVE` \| `INCONCLUSIVE` |
 | `system_source` / `username` | who/what decided (exactly one set, per role) |
@@ -149,7 +149,7 @@ version (`related_reference_kind = 'match_threshold'`). With no version set, fac
 similarity 0.6 with no band. Versions are set with `cmd/match-threshold`, from each
 organization's own validation.
 
-**Who may decide** is a user profile (`users`, migration 016), the same for fingerprints and
+**Who may decide** is a user profile (`users`), the same for fingerprints and
 faces. `account_role` (`SUPER_ADMIN` | `ADMIN` | `USER`) is account management only: a SUPER_ADMIN
 manages admins and users, an ADMIN manages plain users, and nobody changes their own role or
 deactivates themselves (`auth.CheckAccountChange`). What a user examines is separate:
@@ -163,7 +163,7 @@ no public sign-up.
 
 ### 3.1 Analyses, distribution and reports
 
-A biometric case is worked through **analyses** (`case_analyses`, migration 017; `analyses`
+A biometric case is worked through **analyses** (`case_analyses`; `analyses`
 package): rounds of examination, each of a type that fixes its modality, its methodology and the
 report it leads to. For faces, following FISWG:
 
@@ -178,7 +178,7 @@ case has none. An analysis is `OPEN` until its report is issued. Each has one re
 it `"<year>.<sequence>"` per report type and closes the analysis; the document itself is not
 generated yet (`case_file_id` will point at it).
 
-**Stages and decisions** (`examination` package, migration 018). An open analysis goes through
+**Stages and decisions** (`examination` package). An open analysis goes through
 stages, each worked by one examiner in one step -- the `biometric_decisions` role their decisions
 take:
 
@@ -214,11 +214,11 @@ two distributions cannot hand out the same item.
 
 **Who sees and decides** (`docs/access-profiles-plan.md`). The account role (`SUPER_ADMIN`,
 `ADMIN`, `USER`) manages accounts only and gives no access to cases or persons; access comes from
-capabilities, each independent (migrations 016, 020): examining a modality, intelligence and
+capabilities, each independent: examining a modality, intelligence and
 coordination. An examiner lists and opens only the cases where they hold a step of an analysis,
 open or closed, and adds or changes evidence there; an intelligence analyst or a coordinator reads
 every case (`distribution.Rights`, enforced on every `cases/:caseId` route), and such a read by
-someone holding no step there goes to `access_log` (migration 021), as do full person pages.
+someone holding no step there goes to `access_log`, as do full person pages.
 Persons, clusters, face search and the occurrence map are intelligence only; an examiner sees a
 person's identity. Distribution, reassignment and opening comparisons are coordination. Working on
 an analysis -- deciding on its pairs, submitting, issuing its report -- is narrower and the same
@@ -244,7 +244,7 @@ case -- trace vs trace across cases, enrollment vs enrollment -- are not in any 
 
 ### 4.1 Two layers: automatic and reviewed
 
-Clusters come in two layers (`clusters.basis`, migration 019), reconciled the same way by
+Clusters come in two layers (`clusters.basis`), reconciled the same way by
 `cluster.Run`, each with its own stable ids and merge history:
 
 | Layer | Built from | Read by |
@@ -324,19 +324,20 @@ raw bytes uploads them with `identity.UploadFile` / `cases.UploadEvidenceFile`, 
 
 Done (core), end to end:
 
-- **Schema** (`db/migrations/001`–`008`): `users` (profiles added in 016); `person`, `identity_document`,
-  `identity_register`, `identity_file` (the enrollment hierarchy); `biometric_cases`,
-  `case_files`, `case_evidences`, `case_traces`, `case_codifications` (+
-  `case_fragment_codes` view) (the evidence hierarchy); `biometricfeature` (unified
-  KNOWN+QUESTIONED, exactly-one-source constraint against `identity_file`/`case_traces`);
-  `biometric_decisions` (append-only decision log); `clusters`/`cluster_members`/
-  `cluster_merges`. This is the model's target shape written directly — since nothing had
-  shipped yet, there was no reason to carry the intermediate tables (`comparisons`,
-  `codifications`, `identifications`, a `case_codifications.comparison_*` set of columns)
-  that an incremental build-up would otherwise leave behind.
-- **Occurrences** (`db/migrations/011`, types and precision revised in `012`, TrackID
-  numbering in `013`, municipalities in `014`): `locations` (PostGIS), `occurrences`,
-  `occurrence_types` (seeded), `occurrence_classifications`, and
+- **Schema** (`db/migrations/001`–`008`, one file per subject): `users` and `access_log`
+  (`001_users`); `person`, `identity_document`, `identity_register`, `identity_file` (the
+  enrollment hierarchy, `002_identity`); the occurrence layer (`003_occurrences`);
+  `biometric_cases`, `case_files`, `case_evidences`, `case_traces`, `case_codifications`,
+  `case_codification_points`, `case_decisions` (the evidence hierarchy, `004_biometric_cases`);
+  `biometricfeature` (unified KNOWN+QUESTIONED, exactly-one-source constraint against
+  `identity_file`/`case_traces`), `feature_embeddings`, `biometric_templates`,
+  `match_thresholds` (`005_features`); the analyses (`006_analyses`); `biometric_decisions`
+  (append-only decision log, `007_biometric_decisions`); `clusters`/`cluster_members`/
+  `cluster_merges` (`008_clusters`). This is the model's current shape written directly: the
+  21 migrations that built it up were merged on 2026-10-20, before any deployment, so no
+  intermediate step is carried.
+- **Occurrences** (`db/migrations/003_occurrences.sql`): `locations` (PostGIS), `occurrences`,
+  `occurrence_types` (seeded), `occurrence_classifications`, `municipalities`, and
   `biometric_cases.occurrence_id` (section 2.3). Postgres only: not yet synced to Neo4j, and
   no ingest helper beyond the `db` queries.
 - **Sync** (`graph` package): `graph.Sync` materializes Evidence + QUESTIONED
@@ -352,7 +353,7 @@ Done (core), end to end:
 - **Commands**: `sync-graph`, `sync-identity`, `cluster-biometrics`, `identify` (all
   dry-run by default, `-commit` to write).
 
-Verified against a live Postgres: the full migration chain applies cleanly (goose version 6
+Verified against a live Postgres: the full migration chain applies cleanly (goose version 8
 reached), and a smoke insert through
 `identity_register → identity_file → biometricfeature (KNOWN)` and
 `case_evidences → case_traces → biometricfeature (QUESTIONED)`, joined by one

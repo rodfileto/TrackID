@@ -10,7 +10,7 @@ export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
   const user = getStoredUser();
-  const fullName = user ? `${user.nome} ${user.ultimo_nome}`.trim() : t("common.user");
+  const fullName = user ? `${user.first_name} ${user.last_name}`.trim() : t("common.user");
 
   function toggleDropdown() {
     setIsOpen(!isOpen);
@@ -36,7 +36,7 @@ export default function UserDropdown() {
         </span>
 
         <span className="block mr-1 font-medium text-theme-sm">
-          {user?.nome ?? t("common.user")}
+          {user?.first_name ?? t("common.user")}
         </span>
         <svg
           className={`stroke-gray-500 dark:stroke-gray-400 transition-transform duration-200 ${

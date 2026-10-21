@@ -3,7 +3,7 @@
 // (REVIEWER), and the inconsistence when they disagree -- each distributed when the analysis
 // reaches its stage, never to someone holding another step of the same analysis, and to someone
 // who has already decided one of its pairs elsewhere only when nobody else can take it. Assignments are
-// an append-only history (analysis_assignments, migrations 017-018): a step's current examiner is
+// an append-only history (analysis_assignments, db/migrations/006_analyses.sql): a step's current examiner is
 // its latest row, and an open analysis whose current stage has none is pending.
 //
 // Distribute assigns up to a given number of pending items automatically, leaving the rest

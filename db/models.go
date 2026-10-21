@@ -24,11 +24,11 @@ type AccessLog struct {
 type AnalysisAssignment struct {
 	ID             int64         `db:"id" json:"id"`
 	CaseAnalysisID int64         `db:"case_analysis_id" json:"case_analysis_id"`
+	Step           string        `db:"step" json:"step"`
 	UserID         sql.NullInt64 `db:"user_id" json:"user_id"`
 	Method         string        `db:"method" json:"method"`
 	AssignedBy     sql.NullInt64 `db:"assigned_by" json:"assigned_by"`
 	AssignedAt     time.Time     `db:"assigned_at" json:"assigned_at"`
-	Step           string        `db:"step" json:"step"`
 }
 
 type AnalysisDecisionDraft struct {
@@ -63,9 +63,9 @@ type BiometricCase struct {
 	Description  string        `db:"description" json:"description"`
 	CaseYear     sql.NullInt32 `db:"case_year" json:"case_year"`
 	CaseNumber   sql.NullInt32 `db:"case_number" json:"case_number"`
+	OccurrenceID sql.NullInt64 `db:"occurrence_id" json:"occurrence_id"`
 	CreatedAt    time.Time     `db:"created_at" json:"created_at"`
 	UpdatedAt    time.Time     `db:"updated_at" json:"updated_at"`
-	OccurrenceID sql.NullInt64 `db:"occurrence_id" json:"occurrence_id"`
 }
 
 type BiometricDecision struct {
@@ -74,19 +74,17 @@ type BiometricDecision struct {
 	FeatureBID           string          `db:"feature_b_id" json:"feature_b_id"`
 	Modality             string          `db:"modality" json:"modality"`
 	Role                 string          `db:"role" json:"role"`
+	CaseAnalysisID       sql.NullInt64   `db:"case_analysis_id" json:"case_analysis_id"`
 	Decision             string          `db:"decision" json:"decision"`
 	SystemSource         sql.NullString  `db:"system_source" json:"system_source"`
 	Username             sql.NullString  `db:"username" json:"username"`
 	Confidence           sql.NullFloat64 `db:"confidence" json:"confidence"`
 	Threshold            sql.NullFloat64 `db:"threshold" json:"threshold"`
 	Notes                sql.NullString  `db:"notes" json:"notes"`
-	ComparisonType       sql.NullString  `db:"comparison_type" json:"comparison_type"`
 	RelatedReference     sql.NullString  `db:"related_reference" json:"related_reference"`
 	RelatedReferenceKind sql.NullString  `db:"related_reference_kind" json:"related_reference_kind"`
-	ResponsibleUser      sql.NullString  `db:"responsible_user" json:"responsible_user"`
 	DecidedAt            time.Time       `db:"decided_at" json:"decided_at"`
 	CreatedAt            time.Time       `db:"created_at" json:"created_at"`
-	CaseAnalysisID       sql.NullInt64   `db:"case_analysis_id" json:"case_analysis_id"`
 }
 
 type BiometricDecisionSide struct {
@@ -95,19 +93,17 @@ type BiometricDecisionSide struct {
 	CounterpartID        string          `db:"counterpart_id" json:"counterpart_id"`
 	Modality             string          `db:"modality" json:"modality"`
 	Role                 string          `db:"role" json:"role"`
+	CaseAnalysisID       sql.NullInt64   `db:"case_analysis_id" json:"case_analysis_id"`
 	Decision             string          `db:"decision" json:"decision"`
 	SystemSource         sql.NullString  `db:"system_source" json:"system_source"`
 	Username             sql.NullString  `db:"username" json:"username"`
 	Confidence           sql.NullFloat64 `db:"confidence" json:"confidence"`
 	Threshold            sql.NullFloat64 `db:"threshold" json:"threshold"`
 	Notes                sql.NullString  `db:"notes" json:"notes"`
-	ComparisonType       sql.NullString  `db:"comparison_type" json:"comparison_type"`
 	RelatedReference     sql.NullString  `db:"related_reference" json:"related_reference"`
 	RelatedReferenceKind sql.NullString  `db:"related_reference_kind" json:"related_reference_kind"`
-	ResponsibleUser      sql.NullString  `db:"responsible_user" json:"responsible_user"`
 	DecidedAt            time.Time       `db:"decided_at" json:"decided_at"`
 	CreatedAt            time.Time       `db:"created_at" json:"created_at"`
-	CaseAnalysisID       sql.NullInt64   `db:"case_analysis_id" json:"case_analysis_id"`
 }
 
 type BiometricTemplate struct {
@@ -137,10 +133,10 @@ type CaseAnalysis struct {
 	Sequence        int16         `db:"sequence" json:"sequence"`
 	AnalysisType    string        `db:"analysis_type" json:"analysis_type"`
 	Status          string        `db:"status" json:"status"`
+	Stage           string        `db:"stage" json:"stage"`
 	RequestedBy     sql.NullInt64 `db:"requested_by" json:"requested_by"`
 	CreatedAt       time.Time     `db:"created_at" json:"created_at"`
 	ClosedAt        sql.NullTime  `db:"closed_at" json:"closed_at"`
-	Stage           string        `db:"stage" json:"stage"`
 }
 
 type CaseAnalysisPair struct {
@@ -209,14 +205,6 @@ type CaseFile struct {
 	UpdatedAt       time.Time      `db:"updated_at" json:"updated_at"`
 }
 
-type CaseFragmentCode struct {
-	CodificationID  int64       `db:"codification_id" json:"codification_id"`
-	TraceID         int64       `db:"trace_id" json:"trace_id"`
-	EvidenceID      int64       `db:"evidence_id" json:"evidence_id"`
-	BiometricCaseID int64       `db:"biometric_case_id" json:"biometric_case_id"`
-	FragmentID      interface{} `db:"fragment_id" json:"fragment_id"`
-}
-
 type CaseTrace struct {
 	ID             int64           `db:"id" json:"id"`
 	EvidenceID     int64           `db:"evidence_id" json:"evidence_id"`
@@ -235,26 +223,26 @@ type CaseTrace struct {
 type Cluster struct {
 	ID        int64     `db:"id" json:"id"`
 	Modality  string    `db:"modality" json:"modality"`
+	Basis     string    `db:"basis" json:"basis"`
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
-	Basis     string    `db:"basis" json:"basis"`
 }
 
 type ClusterMember struct {
 	ClusterID int64     `db:"cluster_id" json:"cluster_id"`
+	Basis     string    `db:"basis" json:"basis"`
 	FeatureID string    `db:"feature_id" json:"feature_id"`
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
-	Basis     string    `db:"basis" json:"basis"`
 }
 
 type ClusterMerge struct {
 	ID            int64          `db:"id" json:"id"`
+	Basis         string         `db:"basis" json:"basis"`
 	FromClusterID int64          `db:"from_cluster_id" json:"from_cluster_id"`
 	ToClusterID   int64          `db:"to_cluster_id" json:"to_cluster_id"`
 	MergedAt      time.Time      `db:"merged_at" json:"merged_at"`
 	MergedBy      sql.NullString `db:"merged_by" json:"merged_by"`
 	Reason        sql.NullString `db:"reason" json:"reason"`
-	Basis         string         `db:"basis" json:"basis"`
 }
 
 type CurrentAnalysisAssignment struct {
@@ -359,6 +347,8 @@ type Occurrence struct {
 	ID               int64          `db:"id" json:"id"`
 	Agency           sql.NullString `db:"agency" json:"agency"`
 	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
+	OccurrenceYear   sql.NullInt32  `db:"occurrence_year" json:"occurrence_year"`
+	OccurrenceSeq    sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
 	LocationID       int64          `db:"location_id" json:"location_id"`
 	OccurredFrom     time.Time      `db:"occurred_from" json:"occurred_from"`
 	OccurredTo       sql.NullTime   `db:"occurred_to" json:"occurred_to"`
@@ -371,8 +361,6 @@ type Occurrence struct {
 	Description      string         `db:"description" json:"description"`
 	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
 	UpdatedAt        time.Time      `db:"updated_at" json:"updated_at"`
-	OccurrenceYear   sql.NullInt32  `db:"occurrence_year" json:"occurrence_year"`
-	OccurrenceSeq    sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
 }
 
 type OccurrenceClassification struct {
@@ -396,19 +384,19 @@ type Person struct {
 
 type User struct {
 	ID                  int64     `db:"id" json:"id"`
-	Nome                string    `db:"nome" json:"nome"`
-	UltimoNome          string    `db:"ultimo_nome" json:"ultimo_nome"`
-	Matricula           string    `db:"matricula" json:"matricula"`
-	Cargo               string    `db:"cargo" json:"cargo"`
+	FirstName           string    `db:"first_name" json:"first_name"`
+	LastName            string    `db:"last_name" json:"last_name"`
+	StaffNumber         string    `db:"staff_number" json:"staff_number"`
+	JobTitle            string    `db:"job_title" json:"job_title"`
 	Username            string    `db:"username" json:"username"`
 	Email               string    `db:"email" json:"email"`
 	PasswordHash        string    `db:"password_hash" json:"password_hash"`
-	CreatedAt           time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt           time.Time `db:"updated_at" json:"updated_at"`
 	AccountRole         string    `db:"account_role" json:"account_role"`
 	ExaminesFingerprint bool      `db:"examines_fingerprint" json:"examines_fingerprint"`
 	ExaminesFacial      bool      `db:"examines_facial" json:"examines_facial"`
-	IsActive            bool      `db:"is_active" json:"is_active"`
 	IntelligenceAnalyst bool      `db:"intelligence_analyst" json:"intelligence_analyst"`
 	Coordinator         bool      `db:"coordinator" json:"coordinator"`
+	IsActive            bool      `db:"is_active" json:"is_active"`
+	CreatedAt           time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt           time.Time `db:"updated_at" json:"updated_at"`
 }

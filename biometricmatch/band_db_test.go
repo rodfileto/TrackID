@@ -58,7 +58,7 @@ func TestRunBand(t *testing.T) {
 	in := cases.CaseInput{CaseID: "TEST-BAND", CaseType: cases.CaseTypeCriminal, Modality: "FACIAL",
 		Evidences: []cases.EvidenceInput{{Sequence: 1}}}
 	for s := int16(1); s <= 4; s++ {
-		in.Evidences[0].Traces = append(in.Evidences[0].Traces, cases.TraceInput{Sequence: s, TraceType: "FACE_RECORD"})
+		in.Evidences[0].Traces = append(in.Evidences[0].Traces, cases.TraceInput{Sequence: s, TraceType: "FACE_CAPTURE"})
 	}
 	res, err := cases.Ingest(ctx, sqlDB, in)
 	if err != nil {

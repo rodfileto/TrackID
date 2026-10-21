@@ -65,7 +65,7 @@ func TestExamines(t *testing.T) {
 		{"facial only, facial", facial, ModalityFacial, true},
 		{"facial only, fingerprint", facial, ModalityFingerprint, false},
 		{"inactive", inactive, ModalityFacial, false},
-		{"decisions' FACE spelling", both, "FACE", false},
+		{"unknown modality", both, "FACE", false},
 		{"neither", UserProfile{IsActive: true}, ModalityFacial, false},
 	}
 	for _, tt := range tests {

@@ -10,10 +10,10 @@ export type UserAccess = Pick<
 >;
 
 export interface NewUser extends Omit<UserAccess, "is_active"> {
-  nome: string;
-  ultimo_nome: string;
-  matricula: string;
-  cargo: string;
+  first_name: string;
+  last_name: string;
+  staff_number: string;
+  job_title: string;
   username: string;
   password: string;
 }

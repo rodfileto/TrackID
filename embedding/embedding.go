@@ -1,6 +1,6 @@
 // Package embedding computes a codification's biometric embedding vector via
 // trackid-vision and stores it in feature_embeddings, the same table
-// cmd/backfill-face-embeddings and cmd/match-embeddings already read/write.
+// cmd/backfill-identity-face-embeddings and cmd/match-embeddings read/write.
 // It also defines the Asynq task that runs this asynchronously from
 // cmd/worker, enqueued whenever a codification gets an image to embed --
 // either a trace freshly marked and Codify'd (cases.CreateTraces) or an
@@ -39,11 +39,9 @@ import (
 	"github.com/rodfileto/trackid/storage"
 )
 
-// EmbeddingType/ModelVersion identify the vectors this package produces --
-// same embedding_type cmd/backfill-face-embeddings writes for the legacy
-// AuraFace-v1 vectors (see migration 017), so both live in one comparable
-// space and cmd/match-embeddings -embedding-type=FACE_AURAFACE_512 matches
-// across them.
+// EmbeddingType/ModelVersion identify the vectors this package produces:
+// AuraFace-v1 vectors, matched by cmd/match-embeddings
+// -embedding-type=FACE_AURAFACE_512.
 const (
 	EmbeddingType = "FACE_AURAFACE_512"
 	ModelVersion  = "auraface:v1"

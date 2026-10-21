@@ -3,9 +3,9 @@
 // (POST /api/admin/users). The password is read from TRACKID_SUPERUSER_PASSWORD or, when that
 // is unset, from the first line of standard input, so it never appears in the shell history:
 //
-//	read -rs PW && echo "$PW" | create-superuser -nome Ana -ultimo-nome Souza -matricula 0001 -cargo Perita -username ana.souza
+//	read -rs PW && echo "$PW" | create-superuser -first-name Ana -last-name Souza -staff-number 0001 -job-title Perita -username ana.souza
 //
-// With -matricula naming an account that already exists, it promotes that account to
+// With -staff-number naming an account that already exists, it promotes that account to
 // SUPER_ADMIN (and reactivates it) instead, leaving its password as it is.
 package main
 
@@ -27,10 +27,10 @@ import (
 func main() {
 	env.Load()
 
-	nome := flag.String("nome", "", "first name")
-	ultimoNome := flag.String("ultimo-nome", "", "last name")
-	matricula := flag.String("matricula", "", "registration number, used to sign in (required)")
-	cargo := flag.String("cargo", "", "job title")
+	firstName := flag.String("first-name", "", "first name")
+	lastName := flag.String("last-name", "", "last name")
+	staffNumber := flag.String("staff-number", "", "the user's number in their organization, used to sign in (required)")
+	jobTitle := flag.String("job-title", "", "job title")
 	username := flag.String("username", "", "username, which names the user on every decision they sign and never changes")
 	examinesFingerprint := flag.Bool("examines-fingerprint", false, "also let the account sign fingerprint decisions")
 	examinesFacial := flag.Bool("examines-facial", false, "also let the account sign facial decisions")
@@ -38,8 +38,8 @@ func main() {
 	coordinator := flag.Bool("coordinator", false, "also let the account distribute analyses and open comparisons")
 	flag.Parse()
 
-	if *matricula == "" {
-		log.Fatal("-matricula is required")
+	if *staffNumber == "" {
+		log.Fatal("-staff-number is required")
 	}
 
 	sqlDB := cmdutil.OpenDB()
@@ -47,7 +47,7 @@ func main() {
 	ctx := context.Background()
 	repo := auth.NewRepository(sqlDB)
 
-	existing, err := repo.FindByMatricula(ctx, *matricula)
+	existing, err := repo.FindByStaffNumber(ctx, *staffNumber)
 	switch {
 	case err == nil:
 		user, err := repo.UpdateAccess(ctx, existing.Profile.ID, auth.Access{
@@ -59,24 +59,24 @@ func main() {
 			IsActive:            true,
 		})
 		cmdutil.Fatal(err)
-		log.Printf("promoted %s (matricula %s) to %s", user.Username, user.Matricula, user.AccountRole)
+		log.Printf("promoted %s (staff number %s) to %s", user.Username, user.StaffNumber, user.AccountRole)
 		return
 	case !errors.Is(err, sql.ErrNoRows):
 		cmdutil.Fatal(err)
 	}
 
-	if *nome == "" || *ultimoNome == "" || *cargo == "" || *username == "" {
-		log.Fatal("a new account needs -nome, -ultimo-nome, -cargo and -username")
+	if *firstName == "" || *lastName == "" || *jobTitle == "" || *username == "" {
+		log.Fatal("a new account needs -first-name, -last-name, -job-title and -username")
 	}
 	password, err := readPassword()
 	cmdutil.Fatal(err)
 	user, err := repo.Create(ctx, auth.NewUser{
-		Nome: *nome, UltimoNome: *ultimoNome, Matricula: *matricula, Cargo: *cargo, Username: *username, Password: password,
+		FirstName: *firstName, LastName: *lastName, StaffNumber: *staffNumber, JobTitle: *jobTitle, Username: *username, Password: password,
 		Access: auth.Access{AccountRole: auth.AccountRoleSuperAdmin, ExaminesFingerprint: *examinesFingerprint, ExaminesFacial: *examinesFacial,
 			IntelligenceAnalyst: *intelligence, Coordinator: *coordinator, IsActive: true},
 	}, os.Getenv("EMAIL_DOMAIN"))
 	cmdutil.Fatal(err)
-	log.Printf("created %s %s (matricula %s, username %s)", user.AccountRole, user.Nome, user.Matricula, user.Username)
+	log.Printf("created %s %s (staff number %s, username %s)", user.AccountRole, user.FirstName, user.StaffNumber, user.Username)
 }
 
 func readPassword() (string, error) {

@@ -66,7 +66,7 @@ func TestSettle(t *testing.T) {
 		t.Helper()
 		if _, err := sqlDB.ExecContext(ctx, `INSERT INTO biometric_decisions
 			(feature_a_id, feature_b_id, modality, role, decision, username)
-			VALUES ($1, $2, 'FACE', 'VERIFICATOR', 'POSITIVE', 'examiner')`, a, b); err != nil {
+			VALUES ($1, $2, 'FACIAL', 'VERIFICATOR', 'POSITIVE', 'examiner')`, a, b); err != nil {
 			t.Fatal(err)
 		}
 	}

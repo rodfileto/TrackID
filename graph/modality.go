@@ -63,13 +63,12 @@ func FeatureTypeForFileType(fileType string) (string, bool) {
 }
 
 // FeatureTypeForTraceType maps a case_traces.trace_type to the QUESTIONED
-// feature type it yields.
+// feature type it yields. A trace type is that feature type, so this only
+// checks that it is one.
 func FeatureTypeForTraceType(traceType string) (string, bool) {
 	switch traceType {
-	case "FACE_RECORD":
-		return FeatureTypeFaceCapture, true
-	case "FINGERPRINT_LIFT":
-		return FeatureTypeFingerprintLift, true
+	case FeatureTypeFaceCapture, FeatureTypeFingerprintLift:
+		return traceType, true
 	default:
 		return "", false
 	}
@@ -88,9 +87,9 @@ const (
 // case_codifications.codification_type its processing artifact gets.
 func CodificationTypeForTraceType(traceType string) (string, bool) {
 	switch traceType {
-	case "FACE_RECORD":
+	case FeatureTypeFaceCapture:
 		return CodificationTypeFaceEmbedding, true
-	case "FINGERPRINT_LIFT":
+	case FeatureTypeFingerprintLift:
 		return CodificationTypeMinutiae, true
 	default:
 		return "", false
@@ -106,9 +105,9 @@ func CodificationTypeForTraceType(traceType string) (string, bool) {
 func TraceTypeForModality(modality string) (string, bool) {
 	switch modality {
 	case "FACIAL":
-		return "FACE_RECORD", true
+		return FeatureTypeFaceCapture, true
 	case "FINGERPRINT":
-		return "FINGERPRINT_LIFT", true
+		return FeatureTypeFingerprintLift, true
 	default:
 		return "", false
 	}

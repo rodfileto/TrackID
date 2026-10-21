@@ -418,16 +418,16 @@ func (q *Queries) CreateOccurrence(ctx context.Context, arg CreateOccurrencePara
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (nome, ultimo_nome, matricula, cargo, username, email, password_hash, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator)
+INSERT INTO users (first_name, last_name, staff_number, job_title, username, email, password_hash, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
+RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
 `
 
 type CreateUserParams struct {
-	Nome                string `db:"nome" json:"nome"`
-	UltimoNome          string `db:"ultimo_nome" json:"ultimo_nome"`
-	Matricula           string `db:"matricula" json:"matricula"`
-	Cargo               string `db:"cargo" json:"cargo"`
+	FirstName           string `db:"first_name" json:"first_name"`
+	LastName            string `db:"last_name" json:"last_name"`
+	StaffNumber         string `db:"staff_number" json:"staff_number"`
+	JobTitle            string `db:"job_title" json:"job_title"`
 	Username            string `db:"username" json:"username"`
 	Email               string `db:"email" json:"email"`
 	PasswordHash        string `db:"password_hash" json:"password_hash"`
@@ -440,10 +440,10 @@ type CreateUserParams struct {
 
 type CreateUserRow struct {
 	ID                  int64  `db:"id" json:"id"`
-	Nome                string `db:"nome" json:"nome"`
-	UltimoNome          string `db:"ultimo_nome" json:"ultimo_nome"`
-	Matricula           string `db:"matricula" json:"matricula"`
-	Cargo               string `db:"cargo" json:"cargo"`
+	FirstName           string `db:"first_name" json:"first_name"`
+	LastName            string `db:"last_name" json:"last_name"`
+	StaffNumber         string `db:"staff_number" json:"staff_number"`
+	JobTitle            string `db:"job_title" json:"job_title"`
 	Username            string `db:"username" json:"username"`
 	Email               string `db:"email" json:"email"`
 	AccountRole         string `db:"account_role" json:"account_role"`
@@ -456,10 +456,10 @@ type CreateUserRow struct {
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
 	row := q.db.QueryRowContext(ctx, createUser,
-		arg.Nome,
-		arg.UltimoNome,
-		arg.Matricula,
-		arg.Cargo,
+		arg.FirstName,
+		arg.LastName,
+		arg.StaffNumber,
+		arg.JobTitle,
 		arg.Username,
 		arg.Email,
 		arg.PasswordHash,
@@ -472,10 +472,10 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	var i CreateUserRow
 	err := row.Scan(
 		&i.ID,
-		&i.Nome,
-		&i.UltimoNome,
-		&i.Matricula,
-		&i.Cargo,
+		&i.FirstName,
+		&i.LastName,
+		&i.StaffNumber,
+		&i.JobTitle,
 		&i.Username,
 		&i.Email,
 		&i.AccountRole,
@@ -1406,17 +1406,17 @@ func (q *Queries) GetPersonByPersonID(ctx context.Context, personID string) (Per
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
+SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
 FROM users
 WHERE id = $1
 `
 
 type GetUserByIDRow struct {
 	ID                  int64  `db:"id" json:"id"`
-	Nome                string `db:"nome" json:"nome"`
-	UltimoNome          string `db:"ultimo_nome" json:"ultimo_nome"`
-	Matricula           string `db:"matricula" json:"matricula"`
-	Cargo               string `db:"cargo" json:"cargo"`
+	FirstName           string `db:"first_name" json:"first_name"`
+	LastName            string `db:"last_name" json:"last_name"`
+	StaffNumber         string `db:"staff_number" json:"staff_number"`
+	JobTitle            string `db:"job_title" json:"job_title"`
 	Username            string `db:"username" json:"username"`
 	Email               string `db:"email" json:"email"`
 	AccountRole         string `db:"account_role" json:"account_role"`
@@ -1432,10 +1432,10 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 	var i GetUserByIDRow
 	err := row.Scan(
 		&i.ID,
-		&i.Nome,
-		&i.UltimoNome,
-		&i.Matricula,
-		&i.Cargo,
+		&i.FirstName,
+		&i.LastName,
+		&i.StaffNumber,
+		&i.JobTitle,
 		&i.Username,
 		&i.Email,
 		&i.AccountRole,
@@ -1448,18 +1448,18 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 	return i, err
 }
 
-const getUserByMatricula = `-- name: GetUserByMatricula :one
-SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, password_hash
+const getUserByStaffNumber = `-- name: GetUserByStaffNumber :one
+SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, password_hash
 FROM users
-WHERE matricula = $1
+WHERE staff_number = $1
 `
 
-type GetUserByMatriculaRow struct {
+type GetUserByStaffNumberRow struct {
 	ID                  int64  `db:"id" json:"id"`
-	Nome                string `db:"nome" json:"nome"`
-	UltimoNome          string `db:"ultimo_nome" json:"ultimo_nome"`
-	Matricula           string `db:"matricula" json:"matricula"`
-	Cargo               string `db:"cargo" json:"cargo"`
+	FirstName           string `db:"first_name" json:"first_name"`
+	LastName            string `db:"last_name" json:"last_name"`
+	StaffNumber         string `db:"staff_number" json:"staff_number"`
+	JobTitle            string `db:"job_title" json:"job_title"`
 	Username            string `db:"username" json:"username"`
 	Email               string `db:"email" json:"email"`
 	AccountRole         string `db:"account_role" json:"account_role"`
@@ -1471,15 +1471,15 @@ type GetUserByMatriculaRow struct {
 	PasswordHash        string `db:"password_hash" json:"password_hash"`
 }
 
-func (q *Queries) GetUserByMatricula(ctx context.Context, matricula string) (GetUserByMatriculaRow, error) {
-	row := q.db.QueryRowContext(ctx, getUserByMatricula, matricula)
-	var i GetUserByMatriculaRow
+func (q *Queries) GetUserByStaffNumber(ctx context.Context, staffNumber string) (GetUserByStaffNumberRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserByStaffNumber, staffNumber)
+	var i GetUserByStaffNumberRow
 	err := row.Scan(
 		&i.ID,
-		&i.Nome,
-		&i.UltimoNome,
-		&i.Matricula,
-		&i.Cargo,
+		&i.FirstName,
+		&i.LastName,
+		&i.StaffNumber,
+		&i.JobTitle,
 		&i.Username,
 		&i.Email,
 		&i.AccountRole,
@@ -1560,10 +1560,10 @@ func (q *Queries) InsertAnalysisReport(ctx context.Context, arg InsertAnalysisRe
 const insertBiometricDecision = `-- name: InsertBiometricDecision :one
 INSERT INTO biometric_decisions
     (feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
-     comparison_type, related_reference, related_reference_kind, responsible_user, case_analysis_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+     related_reference, related_reference_kind, case_analysis_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING id, feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
-    comparison_type, related_reference, related_reference_kind, responsible_user, decided_at, created_at, case_analysis_id
+    related_reference, related_reference_kind, decided_at, created_at, case_analysis_id
 `
 
 type InsertBiometricDecisionParams struct {
@@ -1577,14 +1577,31 @@ type InsertBiometricDecisionParams struct {
 	Confidence           sql.NullFloat64 `db:"confidence" json:"confidence"`
 	Threshold            sql.NullFloat64 `db:"threshold" json:"threshold"`
 	Notes                sql.NullString  `db:"notes" json:"notes"`
-	ComparisonType       sql.NullString  `db:"comparison_type" json:"comparison_type"`
 	RelatedReference     sql.NullString  `db:"related_reference" json:"related_reference"`
 	RelatedReferenceKind sql.NullString  `db:"related_reference_kind" json:"related_reference_kind"`
-	ResponsibleUser      sql.NullString  `db:"responsible_user" json:"responsible_user"`
 	CaseAnalysisID       sql.NullInt64   `db:"case_analysis_id" json:"case_analysis_id"`
 }
 
-func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometricDecisionParams) (BiometricDecision, error) {
+type InsertBiometricDecisionRow struct {
+	ID                   int64           `db:"id" json:"id"`
+	FeatureAID           string          `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID           string          `db:"feature_b_id" json:"feature_b_id"`
+	Modality             string          `db:"modality" json:"modality"`
+	Role                 string          `db:"role" json:"role"`
+	Decision             string          `db:"decision" json:"decision"`
+	SystemSource         sql.NullString  `db:"system_source" json:"system_source"`
+	Username             sql.NullString  `db:"username" json:"username"`
+	Confidence           sql.NullFloat64 `db:"confidence" json:"confidence"`
+	Threshold            sql.NullFloat64 `db:"threshold" json:"threshold"`
+	Notes                sql.NullString  `db:"notes" json:"notes"`
+	RelatedReference     sql.NullString  `db:"related_reference" json:"related_reference"`
+	RelatedReferenceKind sql.NullString  `db:"related_reference_kind" json:"related_reference_kind"`
+	DecidedAt            time.Time       `db:"decided_at" json:"decided_at"`
+	CreatedAt            time.Time       `db:"created_at" json:"created_at"`
+	CaseAnalysisID       sql.NullInt64   `db:"case_analysis_id" json:"case_analysis_id"`
+}
+
+func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometricDecisionParams) (InsertBiometricDecisionRow, error) {
 	row := q.db.QueryRowContext(ctx, insertBiometricDecision,
 		arg.FeatureAID,
 		arg.FeatureBID,
@@ -1596,13 +1613,11 @@ func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometr
 		arg.Confidence,
 		arg.Threshold,
 		arg.Notes,
-		arg.ComparisonType,
 		arg.RelatedReference,
 		arg.RelatedReferenceKind,
-		arg.ResponsibleUser,
 		arg.CaseAnalysisID,
 	)
-	var i BiometricDecision
+	var i InsertBiometricDecisionRow
 	err := row.Scan(
 		&i.ID,
 		&i.FeatureAID,
@@ -1615,10 +1630,8 @@ func (q *Queries) InsertBiometricDecision(ctx context.Context, arg InsertBiometr
 		&i.Confidence,
 		&i.Threshold,
 		&i.Notes,
-		&i.ComparisonType,
 		&i.RelatedReference,
 		&i.RelatedReferenceKind,
-		&i.ResponsibleUser,
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.CaseAnalysisID,
@@ -2963,7 +2976,7 @@ type ListClustersRow struct {
 	Modality string `db:"modality" json:"modality"`
 }
 
-// Clusters come in two layers (clusters.basis, migration 019): AUTOMATIC, from every CONFIRMED
+// Clusters come in two layers (clusters.basis, migrations/008_clusters.sql): AUTOMATIC, from every CONFIRMED
 // pair, and REVIEWED, from the pairs people confirmed. Every query resolving features to clusters
 // names its layer; cluster ids are unique across both, so queries by cluster id need none.
 func (q *Queries) ListClusters(ctx context.Context, basis string) ([]ListClustersRow, error) {
@@ -4209,17 +4222,17 @@ func (q *Queries) ListUnmatchedFeatureEmbeddings(ctx context.Context, embeddingT
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
+SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
 FROM users
-ORDER BY ultimo_nome, nome, id
+ORDER BY last_name, first_name, id
 `
 
 type ListUsersRow struct {
 	ID                  int64  `db:"id" json:"id"`
-	Nome                string `db:"nome" json:"nome"`
-	UltimoNome          string `db:"ultimo_nome" json:"ultimo_nome"`
-	Matricula           string `db:"matricula" json:"matricula"`
-	Cargo               string `db:"cargo" json:"cargo"`
+	FirstName           string `db:"first_name" json:"first_name"`
+	LastName            string `db:"last_name" json:"last_name"`
+	StaffNumber         string `db:"staff_number" json:"staff_number"`
+	JobTitle            string `db:"job_title" json:"job_title"`
 	Username            string `db:"username" json:"username"`
 	Email               string `db:"email" json:"email"`
 	AccountRole         string `db:"account_role" json:"account_role"`
@@ -4241,10 +4254,10 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 		var i ListUsersRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.Nome,
-			&i.UltimoNome,
-			&i.Matricula,
-			&i.Cargo,
+			&i.FirstName,
+			&i.LastName,
+			&i.StaffNumber,
+			&i.JobTitle,
 			&i.Username,
 			&i.Email,
 			&i.AccountRole,
@@ -4480,7 +4493,7 @@ type SearchPersonsByNameRow struct {
 
 // Finds every identity_register whose name contains the search term
 // (case-insensitive substring match -- see
-// migrations/021_add_person_name_search.sql for the trigram index this
+// migrations/002_identity.sql for the trigram index this
 // relies on), joined up to its person and document. A person with several
 // documents/registers can surface more than once, once per matching
 // register -- useful signal on its own (an alias, or the same name spelled
@@ -4629,7 +4642,7 @@ UPDATE users
 SET account_role = $2, examines_fingerprint = $3, examines_facial = $4, intelligence_analyst = $5, coordinator = $6,
     is_active = $7, updated_at = NOW()
 WHERE id = $1
-RETURNING id, nome, ultimo_nome, matricula, cargo, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
+RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
 `
 
 type UpdateUserAccessParams struct {
@@ -4644,10 +4657,10 @@ type UpdateUserAccessParams struct {
 
 type UpdateUserAccessRow struct {
 	ID                  int64  `db:"id" json:"id"`
-	Nome                string `db:"nome" json:"nome"`
-	UltimoNome          string `db:"ultimo_nome" json:"ultimo_nome"`
-	Matricula           string `db:"matricula" json:"matricula"`
-	Cargo               string `db:"cargo" json:"cargo"`
+	FirstName           string `db:"first_name" json:"first_name"`
+	LastName            string `db:"last_name" json:"last_name"`
+	StaffNumber         string `db:"staff_number" json:"staff_number"`
+	JobTitle            string `db:"job_title" json:"job_title"`
 	Username            string `db:"username" json:"username"`
 	Email               string `db:"email" json:"email"`
 	AccountRole         string `db:"account_role" json:"account_role"`
@@ -4658,7 +4671,7 @@ type UpdateUserAccessRow struct {
 	IsActive            bool   `db:"is_active" json:"is_active"`
 }
 
-// Username, matricula and email are not updatable: decisions name their decider by username.
+// Username, staff_number and email are not updatable: decisions name their decider by username.
 func (q *Queries) UpdateUserAccess(ctx context.Context, arg UpdateUserAccessParams) (UpdateUserAccessRow, error) {
 	row := q.db.QueryRowContext(ctx, updateUserAccess,
 		arg.ID,
@@ -4672,10 +4685,10 @@ func (q *Queries) UpdateUserAccess(ctx context.Context, arg UpdateUserAccessPara
 	var i UpdateUserAccessRow
 	err := row.Scan(
 		&i.ID,
-		&i.Nome,
-		&i.UltimoNome,
-		&i.Matricula,
-		&i.Cargo,
+		&i.FirstName,
+		&i.LastName,
+		&i.StaffNumber,
+		&i.JobTitle,
 		&i.Username,
 		&i.Email,
 		&i.AccountRole,

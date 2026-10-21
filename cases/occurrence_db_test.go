@@ -9,7 +9,7 @@ import (
 	"github.com/rodfileto/trackid/db"
 )
 
-// TestOccurrenceLayer covers migration 011 through the db queries: a location upserts by its
+// TestOccurrenceLayer covers the occurrence layer (db/migrations/003_occurrences.sql) through the db queries: a location upserts by its
 // business key with its point round-tripping as lon/lat, an occurrence upserts by (agency,
 // number) and carries several types, two cases link to one occurrence, and the radius query
 // finds it by distance while leaving municipality centroids out unless asked.

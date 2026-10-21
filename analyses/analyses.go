@@ -1,5 +1,5 @@
 // Package analyses holds the rounds of examination a biometric case goes through (case_analyses,
-// migration 017). Each analysis has a type, which fixes its modality, its methodology and the
+// db/migrations/006_analyses.sql). Each analysis has a type, which fixes its modality, its methodology and the
 // report it leads to; an examiner (see the distribution package); the human decisions made in it
 // (biometric_decisions.case_analysis_id); and one report, a DRAFT until its examiner issues it.
 //
@@ -40,9 +40,10 @@ func (t Type) Modality() auth.Modality {
 	return auth.ModalityFacial
 }
 
-// DecisionModality is how biometric_decisions.modality names the modality of type t.
+// DecisionModality is how biometric_decisions.modality names the modality of type t: as
+// biometric_cases.modality does.
 func (t Type) DecisionModality() string {
-	return "FACE"
+	return string(t.Modality())
 }
 
 // ReportType is the report an analysis of type t leads to (analysis_reports.report_type): for a
@@ -60,7 +61,7 @@ const (
 	ReportIssued = "ISSUED"
 )
 
-// Stage is where an open analysis is (case_analyses.stage, migration 018): each stage but the
+// Stage is where an open analysis is (case_analyses.stage): each stage but the
 // last is worked by one examiner, in one Step.
 type Stage string
 
