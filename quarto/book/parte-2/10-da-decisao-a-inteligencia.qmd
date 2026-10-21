@@ -9,22 +9,196 @@ fundem ou se dividem sem perder seus números -- e fecha o ciclo aberto no capí
 forense.
 :::
 
-## Seções previstas
+Os capítulos anteriores trataram de pares: um escore entre duas características (@sec-escore), um
+exame que decide se são da mesma pessoa (@sec-ace-v-trackid), uma distribuição que garante que
+essa decisão seja conferida por outros (@sec-distribuicao). A inteligência forense, porém, não
+pergunta sobre pares. Pergunta quem esteve onde, quantas vezes, com quem; que casos são, na
+verdade, um só autor; que vestígios sem nome pertencem à mesma pessoa
+[@ribaux2006]. Este capítulo mostra como o TrackID passa de uma pergunta à outra: dos pares
+confirmados aos grupos, dos grupos às identidades e aos casos, e dos casos ao mapa.
 
-- De pares confirmados a clusters
-- Duas camadas: clusters automáticos (todo par confirmado, inclusive só pelo sistema) para a
-  inteligência, e clusters revisados (só pares confirmados por peritos) para a análise forense
-- Vínculos diretos e indiretos na página do caso; o caminho de vínculos revisados
-- Identificação: o cluster que encontra um cadastro
-- Sujeitos desconhecidos e séries
-- O mapa de ocorrências
-- Revisões: fusões, divisões e números estáveis
+## De pares confirmados a clusters
+
+Se o vestígio A é da mesma pessoa que o vestígio B, e B é da mesma pessoa que a fotografia de
+cadastro C, então A, B e C formam um grupo, mesmo que ninguém tenha comparado A com C. É essa a
+regra do **cluster** (@sec-modelo): um conjunto de características da mesma modalidade ligadas,
+direta ou indiretamente, por pares confirmados.
+
+Os clusters não são decisões; são uma consequência delas. Uma tarefa em segundo plano os
+recalcula sempre que o registro de decisões muda: depois das comparações do sistema e depois de
+cada envio de uma etapa por um perito. O cálculo lê apenas o registro de decisões e o estado
+anterior dos clusters, e por isso pode ser repetido a qualquer momento com o mesmo resultado.
+
+::: {.callout-tip appearance="simple"}
+## Na prática
+
+Um caso de roubo tem uma face de câmera, que a revisão facial confirma como de uma pessoa
+cadastrada. Meses depois, noutro caso, uma face é confirmada como da mesma pessoa que a face do
+primeiro caso. Ninguém confirmou a face do segundo caso contra o cadastro, mas as duas faces e o
+cadastro passam a estar no mesmo cluster, e os dois casos se ligam por meio dele.
+:::
+
+## Duas camadas: automática e revisada
+
+O capítulo sobre o escore mostrou que o sistema confirma sozinho os pares de escore alto
+(@sec-escore). Esses pares são úteis para a inteligência, que precisa de vínculos rápidos, mas
+não devem sustentar uma conclusão pericial, que precisa de exame humano. O TrackID resolve isso
+mantendo **duas camadas** de clusters, calculadas da mesma forma a partir de conjuntos diferentes
+de pares:
+
+| Camada | Feita de | Quem a lê |
+|---|---|---|
+| **Automática** | todos os pares confirmados, inclusive os confirmados só pelo sistema | as telas de inteligência: a lista de clusters e o grafo |
+| **Revisada** | só os pares confirmados por peritos: exame e verificação concordantes, ou a inconsistência | as telas forenses: a página do caso e a da pessoa |
+
+Cada cluster revisado está contido num cluster automático, porque os pares revisados são parte
+dos confirmados. Cada característica está em um cluster de cada camada, e cada camada tem os seus
+próprios números e o seu próprio histórico de fusões.
+
+A separação está nas telas, não na regra de decisão: um positivo do sistema continua sendo um par
+confirmado, e entra na camada automática assim que é gravado. Enquanto um par confirmado só pelo
+sistema aguarda revisão, ele continua fora da camada revisada; quando os peritos o confirmam,
+entra nela; quando o rejeitam, sai das duas.
+
+::: {.callout-important appearance="simple"}
+## Limite
+
+A camada automática é uma hipótese de trabalho, não um resultado. Um cluster automático pode unir
+duas pessoas por um único par de escore alto que ninguém examinou, e todos os vínculos que
+dependem desse par herdam o erro. A tela de clusters avisa que inclui correspondências não
+revisadas. É por isso que nenhuma tela forense lê essa camada.
+:::
+
+## A página do caso: vínculos diretos e indiretos
+
+Na página de um caso, o painel de clusters mostra apenas a camada revisada, e só os clusters em
+que há ao menos um par revisado. Para cada face do caso, lista as outras amostras do seu cluster
+-- fotografias de cadastro, faces de outros casos -- de duas formas:
+
+- **diretas**: há uma decisão revisada entre a face do caso e aquela amostra, e a tela diz quem a
+  confirmou;
+- **indiretas**: a amostra foi alcançada por um caminho de decisões revisadas, cada uma
+  confirmada por peritos, e a tela mostra por quais amostras o caminho passa.
+
+A diferença importa. Um vínculo indireto é tão sólido quanto o seu elo mais fraco, e ninguém
+comparou diretamente as duas pontas. Quando a ponta é uma pessoa cadastrada, o coordenador pode
+pedir, dali mesmo, uma **comparação direta** entre a face do caso e o cadastro, que abre uma
+análise nova e segue o fluxo do @sec-ace-v-trackid. Pares entre faces de casos diferentes ainda
+não podem ser distribuídos assim.
+
+Nada da camada automática aparece nessa página: as faces de outros casos alcançadas só por
+correspondências do sistema não aparecem, nem mesmo como contagem. Quem examina o caso não vê o
+que a máquina sugeriu sobre outros casos.
+
+## Identificação: o cluster que encontra um cadastro
+
+Um cluster com uma fotografia ou uma impressão digital de cadastro **identifica** os vestígios que
+contém: todos eles passam a apontar para a pessoa daquele cadastro. Um cluster sem nenhum cadastro
+é um **sujeito desconhecido** -- alguém que deixou vestígios em um ou mais casos e cujo nome ainda
+não se sabe.
+
+A identificação segue a camada: na lista de clusters, de inteligência, um cluster automático
+aparece identificado assim que contém um cadastro, ainda que pelo sistema; na página da pessoa,
+forense, só contam os clusters revisados -- os casos de uma pessoa são os casos cujos vestígios
+peritos ligaram a ela. Um cluster com dois cadastros diferentes é possível, e é um sinal: ou a
+mesma pessoa foi cadastrada duas vezes, ou um dos vínculos está errado.
+
+::: {.callout-tip appearance="simple"}
+## Na prática
+
+A tela **Clusters**, para analistas de inteligência, lista os clusters automáticos ordenados pelo
+número de casos distintos que tocam -- os que ligam mais casos aparecem primeiro -- com o número de
+membros e, quando há, a pessoa identificada. Um filtro mostra só os identificados. O painel
+inicial desenha os maiores clusters como um grafo: pessoas, clusters e vestígios.
+:::
+
+## Sujeitos desconhecidos e séries
+
+O que a inteligência forense procura, mais do que identificações, são **séries**: casos ligados
+entre si porque os seus vestígios estão no mesmo cluster. Uma série pode ter um nome, se o
+cluster encontrou um cadastro, ou não ter nenhum: um sujeito desconhecido que aparece em cinco
+roubos é uma informação valiosa mesmo sem identidade, porque diz que os cinco casos devem ser
+investigados juntos.
+
+A série é a soma de duas ligações já descritas: os vestígios ligam-se ao cluster (este capítulo),
+e cada caso liga-se à sua ocorrência, com lugar e data (@sec-modelo). Seguindo as duas, um
+cluster leva às ocorrências dos seus casos, e estas a pontos no mapa e a datas numa linha do
+tempo -- o padrão espacial e temporal que a análise criminal estuda.
+
+## O mapa de ocorrências
+
+O **Mapa de ocorrências**, também para analistas de inteligência, mostra as ocorrências
+registradas como pontos ou como mapa de calor, coloridas por grupo de tipo e filtráveis por ano.
+Clicar num ponto mostra o registro -- quando, onde, com que precisão, a situação -- e os casos
+biométricos ligados a ele. É a camada de lugar e tempo sobre a qual as séries se desenham.
+
+::: {.callout-important appearance="simple"}
+## Limite
+
+O TrackID ainda não desenha uma série. O mapa mostra ocorrências, não clusters: para ver as
+ocorrências de um sujeito desconhecido, o analista parte do cluster, abre os seus casos e, em cada
+um, a ocorrência ligada. Uma visão que leve de um cluster diretamente às suas ocorrências no mapa
+e numa linha do tempo é o passo natural seguinte, e ainda não existe.
+:::
+
+## Revisões: fusões, divisões e números estáveis
+
+Uma decisão nova pode mudar os clusters de três formas:
+
+- **estender**: a característica nova entra num cluster que já existe;
+- **fundir**: o par liga dois clusters, e eles se tornam um só, que fica com o número mais antigo;
+  a fusão é registrada, de modo que o número que deixou de existir continua apontando para onde
+  foi parar;
+- **dividir**: uma decisão posterior rejeita um par do qual o cluster dependia, e ele se parte. A
+  parte que contém a sua característica de referência -- a de menor identificador entre os
+  membros -- mantém o número, e as outras recebem números novos.
+
+```{mermaid}
+%%| label: fig-fusao-divisao
+%%| fig-cap: "Fusão e divisão, da esquerda para a direita. Um par confirmado entre B e C liga os clusters 7 e 12, que se fundem no 7. A rejeição posterior desse par divide o 7: a parte com a característica de referência fica com o 7, e a outra recebe um número novo."
+flowchart LR
+  subgraph Antes
+    A7["Cluster 7<br/>A, B"]
+    A12["Cluster 12<br/>C, D"]
+  end
+  subgraph Fusão
+    F7["Cluster 7<br/>A, B, C, D<br/>(12 fundido no 7)"]
+  end
+  subgraph Divisão
+    D7["Cluster 7<br/>A, B"]
+    D31["Cluster 31<br/>C, D"]
+  end
+  A7 -->|"par B-C confirmado"| F7
+  A12 --> F7
+  F7 -->|"par B-C rejeitado"| D7
+  F7 --> D31
+```
+
+Um número de cluster nunca é reutilizado nem renumerado. É isso que permite a um relatório de
+inteligência citar "cluster 7" e a um leitor, meses depois, encontrar o que o número designa hoje
+-- e, pelo histórico de fusões, o que designava antes. Revisar uma decisão, como mostrou o
+@sec-ace-v-trackid, é acrescentar uma rodada, não apagar a anterior; os clusters acompanham a
+rodada que vale para cada par.
+
+## O ciclo fechado
+
+O capítulo sobre inteligência forense (@sec-inteligencia-forense) descreveu o ciclo: vestígios
+coletados caso a caso, ligados entre casos, analisados como séries e devolvidos à investigação.
+No TrackID, cada etapa do ciclo tem o seu lugar: o caso e o vestígio (@sec-modelo), o escore que
+propõe ligações (@sec-escore), o exame e a verificação que as confirmam (@sec-ace-v-trackid,
+@sec-distribuicao), e os clusters, identificações e ocorrências que transformam as ligações em
+informação. E cada ligação que chega a uma tela forense pode ser rastreada até as decisões que a
+sustentam, com os seus autores -- o assunto do próximo capítulo (@sec-limites).
 
 ::: {.callout-tip appearance="simple"}
 ## No TrackID
 
-`cluster.Run`, `cluster.Reviewed`, `cluster.Identify`; `MODEL.md` seção 4.1; telas Clusters,
-Mapa de ocorrências e o painel de clusters da página do caso.
+Pacote `cluster`: `Run` e `Persist` (a reconciliação das duas camadas), `Reviewed` (o que conta
+como confirmado por peritos), `DecidingRound`, `ListOverview` e `BuildGraph` (as telas de
+inteligência), `Identify` (as identificações no grafo); `cases.ListCaseClusters` (o painel do
+caso); pacote `person` (a página da pessoa); tabelas `clusters`, `cluster_members` e
+`cluster_merges`; tarefa `embedding:sync_face`; telas Clusters, Mapa de ocorrências, o painel
+inicial e o painel de clusters da página do caso; `MODEL.md` seções 4 e 4.1.
 :::
 
 ::: {.callout-warning appearance="simple"}

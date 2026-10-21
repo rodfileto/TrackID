@@ -259,7 +259,7 @@ Clusters come in two layers (`clusters.basis`, migration 019), reconciled the sa
   member's basis equal to its cluster's).
 - The case page lists each reviewed cluster's other samples as **direct** (a reviewed decision
   with one of the case's traces, naming who settled it) or **indirect** (a path of reviewed
-  decisions, shown with the samples it runs through). An admin can open a direct comparison of
+  decisions, shown with the samples it runs through). A coordinator can open a direct comparison of
   an indirect link to an enrolled person; pairs across cases are not distributed yet.
 - The case page's clusters panel shows only reviewed clusters holding at least one reviewed
   pair (no panel at all otherwise), and nothing of the automatic layer: other cases' faces
