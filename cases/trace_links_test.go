@@ -48,7 +48,9 @@ func TestShortestPaths(t *testing.T) {
 }
 
 func TestIdentityStatus(t *testing.T) {
-	sys := func(d cluster.Decision) cluster.ChainEntry { return cluster.ChainEntry{Role: cluster.RoleSystem, Decision: d} }
+	sys := func(d cluster.Decision) cluster.ChainEntry {
+		return cluster.ChainEntry{Role: cluster.RoleSystem, Decision: d}
+	}
 	in := func(role cluster.Role, d cluster.Decision) cluster.ChainEntry {
 		return cluster.ChainEntry{Role: role, Decision: d, Analysis: 4}
 	}
