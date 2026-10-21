@@ -139,6 +139,15 @@ Apache-2.0 (see [LICENSE](LICENSE)); cite it with [CITATION.cff](CITATION.cff). 
 is based on TailAdmin React, MIT, whose notice is kept in [frontend/LICENSE](frontend/LICENSE).
 The model weights below are not covered by this licence and are not bundled.
 
+## Authorship
+
+TrackID is written by Rodrigo Fileto Cuerci Maciel, with the help of AI coding assistants:
+[Claude Code](https://claude.com/claude-code) (Anthropic) and DeepSeek. The assistants write
+code, tests and documentation under the author's supervision; the author directs the work,
+reviews it and is responsible for the result. Commits made with Claude Code carry a
+`Co-Authored-By` line naming the Claude model and, from October 2026 on, the line "Written
+with Claude Code under the supervision of Rodrigo Fileto Cuerci Maciel."
+
 ## Models and licences
 
 Face detection and embedding run through [trackid-vision](https://github.com/rodfileto/trackid-vision)
