@@ -5,19 +5,43 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request supersedes a run still in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   go:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     env:
       # The database-backed tests create and drop a throwaway database per test on this server,
       # and skip when it is unset; the fingerprint tests need the real sidecar.
       TRACKID_TEST_DATABASE_URL: postgres://trackid:trackid_dev@localhost:55432/trackid?sslmode=disable
       FINGERPRINT_SIDECAR_URL: http://localhost:58090
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l $(git ls-files '*.go'))
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            echo "run gofmt -w on the files above"
+            exit 1
+          fi
+      # db/queries.sql.go must be what sqlc generates from db/queries.sql and the migrations; the
+      # version matches the header of the generated files.
+      - uses: sqlc-dev/setup-sqlc@v5
+        with:
+          sqlc-version: '1.31.1'
+      - name: sqlc diff
+        run: sqlc diff
       # Postgres from db/postgres (pgvector + PostGIS) and sourceafis-sidecar, as in development.
       - name: Start Postgres and the fingerprint sidecar
         run: |
@@ -42,17 +66,20 @@ jobs:
           exit $status
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      # Errors fail the job; warnings are reported only.
+      - run: npm run lint
       # tsc -b, then vite build.
       - run: npm run build
