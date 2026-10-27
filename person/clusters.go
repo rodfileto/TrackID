@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/rodfileto/trackid/cluster"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/graph"
 )
@@ -38,6 +39,10 @@ type ClusterMember struct {
 	TraceID         int64         `json:"traceId,omitempty"`
 	ThumbnailFileID int64         `json:"thumbnailFileId,omitempty"`
 	ThumbnailBox    *ThumbnailBox `json:"thumbnailBox,omitempty"`
+	// Link is how a QUESTIONED member is identified as an enrolled member of its cluster: the
+	// strongest direct reviewed link between them -- a laudo at or above the identification level,
+	// a lead, or a laudo below it (cluster.ReviewedLink). Nil when only an indirect path links it.
+	Link *cluster.Link `json:"link,omitempty"`
 }
 
 // Cluster is one biometric cluster a person's enrolled (KNOWN) features have
@@ -189,6 +194,10 @@ func buildClusters(ctx context.Context, q *db.Queries, clusterRows []db.ListClus
 		})
 	}
 
+	if err := linkMembers(ctx, q, memberRows, membersByCluster); err != nil {
+		return nil, err
+	}
+
 	out := make([]Cluster, 0, len(clusterRows))
 	for _, c := range clusterRows {
 		members := membersByCluster[c.ID]
@@ -209,4 +218,66 @@ func buildClusters(ctx context.Context, q *db.Queries, clusterRows []db.ListClus
 		})
 	}
 	return out, nil
+}
+
+// linkMembers sets each QUESTIONED member's Link: its strongest direct reviewed link to a KNOWN
+// member of the same cluster.
+func linkMembers(ctx context.Context, q *db.Queries, memberRows []db.ListClusterMembersByClusterIDsRow, membersByCluster map[int64][]ClusterMember) error {
+	clusterOf := map[string]int64{}
+	var questioned []string
+	for _, m := range memberRows {
+		clusterOf[m.FeatureID] = m.ClusterID
+		if _, ok := graph.ParseQuestionedFeatureID(m.FeatureID); ok {
+			questioned = append(questioned, m.FeatureID)
+		}
+	}
+	if len(questioned) == 0 {
+		return nil
+	}
+	level, err := cluster.IdentificationLevel(ctx, q)
+	if err != nil {
+		return err
+	}
+	rows, err := q.ListBiometricDecisionsForFeatures(ctx, questioned)
+	if err != nil {
+		return err
+	}
+	chains := map[[2]string][]cluster.ChainEntry{}
+	for _, r := range rows {
+		if _, isTrace := graph.ParseQuestionedFeatureID(r.CounterpartID); isTrace || clusterOf[r.CounterpartID] != clusterOf[r.FeatureID] {
+			continue
+		}
+		k := [2]string{r.FeatureID, r.CounterpartID}
+		chains[k] = append(chains[k], cluster.ChainEntry{Role: cluster.Role(r.Role), Decision: cluster.Decision(r.Decision),
+			Analysis: r.CaseAnalysisID.Int64, AnalysisType: r.AnalysisType.String, Conclusion: cluster.Conclusion(r.Conclusion.String)})
+	}
+	strength := func(l cluster.Link) int {
+		switch {
+		case l.Basis == cluster.LinkLaudo && l.Identified:
+			return 3
+		case l.Basis == cluster.LinkLead:
+			return 2
+		}
+		return 1
+	}
+	best := map[int64]*cluster.Link{} // by trace id
+	for k, chain := range chains {
+		l, ok := cluster.ReviewedLink(chain, level)
+		if !ok {
+			continue
+		}
+		traceID, _ := graph.ParseQuestionedFeatureID(k[0])
+		if b := best[traceID]; b == nil || strength(l) > strength(*b) {
+			best[traceID] = &l
+		}
+	}
+	for id, members := range membersByCluster {
+		for i := range members {
+			if members[i].Kind == "QUESTIONED" {
+				members[i].Link = best[members[i].TraceID]
+			}
+		}
+		membersByCluster[id] = members
+	}
+	return nil
 }

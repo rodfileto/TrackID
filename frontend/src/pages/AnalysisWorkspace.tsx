@@ -8,19 +8,26 @@ import ComponentCard from "../components/common/ComponentCard";
 import Badge from "../components/ui/badge/Badge";
 import Button from "../components/ui/button/Button";
 import FaceImage from "../components/analyses/FaceImage";
+import ReportPanel from "../components/analyses/ReportPanel";
 import { decisionColor, decisionValues, stageColor, typeKey } from "../components/analyses/labels";
 import { useCurrentUser } from "../context/CurrentUserContext";
 import {
+  assessTrace,
+  conclusionDecision,
+  conclusions,
   getWorksheet,
-  issueReport,
   listCaseAnalyses,
   saveDraft,
   submitStep,
+  suitabilities,
   type Analysis,
+  type Conclusion,
   type DecisionValue,
   type PairView,
+  type Suitability,
   type Worksheet,
 } from "../services/analyses";
+import { listCaseMaterial, type MaterialTrace } from "../services/requests";
 import type { TraceLink } from "../services/cases";
 
 function pairKey(p: { featureA: string; featureB: string }): string {
@@ -45,7 +52,11 @@ function PairCard({
   index,
   editable,
   blind,
+  comparison,
+  material,
+  canAssess,
   onDecide,
+  onAssess,
 }: {
   caseId: string;
   analysisId: number;
@@ -53,20 +64,36 @@ function PairCard({
   index: number;
   editable: boolean;
   blind: boolean;
-  onDecide: (pair: PairView, decision: DecisionValue, notes: string) => Promise<void>;
+  /** A comparison decides on the conclusion scale; a review on POSITIVE/NEGATIVE/INCONCLUSIVE. */
+  comparison: boolean;
+  /** The questioned face's role and suitability, when the viewer may see them. */
+  material?: MaterialTrace;
+  canAssess: boolean;
+  onDecide: (pair: PairView, decision: DecisionValue, notes: string, conclusion?: Conclusion) => Promise<void>;
+  onAssess: (traceId: number, suitability: Suitability) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const [notes, setNotes] = useState(pair.draft?.notes ?? "");
   const [saving, setSaving] = useState(false);
 
-  async function decide(decision: DecisionValue) {
+  async function decide(decision: DecisionValue, conclusion?: Conclusion) {
     setSaving(true);
     try {
-      await onDecide(pair, decision, notes);
+      await onDecide(pair, decision, notes, conclusion);
     } finally {
       setSaving(false);
     }
   }
+  const buttonClass = (selected: boolean, decision: DecisionValue) =>
+    `rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+      selected
+        ? decision === "POSITIVE"
+          ? "border-success-500 bg-success-500 text-white"
+          : decision === "NEGATIVE"
+            ? "border-error-500 bg-error-500 text-white"
+            : "border-warning-500 bg-warning-500 text-white"
+        : "border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.03]"
+    }`;
 
   return (
     <div
@@ -120,13 +147,39 @@ function PairCard({
             <li key={d.step} className="flex flex-wrap items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
               <span>{t(`analyses.step.${d.step}`)}</span>
               <Badge size="sm" color={decisionColor(d.decision)}>
-                {t(`analyses.decision.${d.decision}`)}
+                {d.conclusion ? t(`analyses.conclusion.${d.conclusion}`) : t(`analyses.decision.${d.decision}`)}
               </Badge>
               <span>{d.username}</span>
               {d.notes && <span className="italic">“{d.notes}”</span>}
             </li>
           ))}
         </ul>
+      )}
+
+      {!blind && material?.role === "QUESTIONED" && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-gray-500 dark:text-gray-400">{t("analyses.suitabilityLabel")}:</span>
+          {canAssess ? (
+            <select
+              value={material.suitability ?? ""}
+              onChange={(event) => void onAssess(material.traceId, event.target.value as Suitability)}
+              className="h-9 rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+            >
+              <option value="" disabled>
+                {t("analyses.suitability.none")}
+              </option>
+              {suitabilities.map((s) => (
+                <option key={s} value={s}>
+                  {t(`analyses.suitability.${s}`)}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <Badge size="sm" color={material.suitability === "SUITABLE" ? "success" : material.suitability ? "warning" : "light"}>
+              {t(`analyses.suitability.${material.suitability ?? "none"}`)}
+            </Badge>
+          )}
+        </div>
       )}
 
       {editable && (
@@ -136,32 +189,37 @@ function PairCard({
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
             onBlur={() => {
-              if (pair.draft && notes !== (pair.draft.notes ?? "")) void decide(pair.draft.decision);
+              if (pair.draft && notes !== (pair.draft.notes ?? "")) void decide(pair.draft.decision, pair.draft.conclusion);
             }}
             placeholder={t("analyses.notesPlaceholder")}
             className="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
           />
           <div className="flex flex-wrap gap-2">
-            {decisionValues.map((value) => (
-              <button
-                key={value}
-                type="button"
-                disabled={saving}
-                onClick={() => void decide(value)}
-                className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-                  pair.draft?.decision === value
-                    ? value === "POSITIVE"
-                      ? "border-success-500 bg-success-500 text-white"
-                      : value === "NEGATIVE"
-                        ? "border-error-500 bg-error-500 text-white"
-                        : "border-warning-500 bg-warning-500 text-white"
-                    : "border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.03]"
-                }`}
-              >
-                {t(`analyses.decision.${value}`)}
-              </button>
-            ))}
+            {comparison
+              ? conclusions.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void decide(conclusionDecision(value), value)}
+                    className={buttonClass(pair.draft?.conclusion === value, conclusionDecision(value))}
+                  >
+                    {t(`analyses.conclusion.${value}`)}
+                  </button>
+                ))
+              : decisionValues.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void decide(value)}
+                    className={buttonClass(pair.draft?.decision === value, value)}
+                  >
+                    {t(`analyses.decision.${value}`)}
+                  </button>
+                ))}
           </div>
+          {comparison && <p className="text-xs text-gray-500 dark:text-gray-400">{t("analyses.conclusionHint")}</p>}
         </div>
       )}
     </div>
@@ -175,6 +233,7 @@ export default function AnalysisWorkspace() {
   const { user } = useCurrentUser();
   const [worksheet, setWorksheet] = useState<Worksheet | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [material, setMaterial] = useState<MaterialTrace[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -184,6 +243,7 @@ export default function AnalysisWorkspace() {
       // other examiners.
       const ws = await getWorksheet(caseId, id);
       const list = ws.blind ? [] : await listCaseAnalyses(caseId);
+      setMaterial(ws.blind ? [] : await listCaseMaterial(caseId));
       setWorksheet(ws);
       setAnalysis(list.find((a) => a.id === id) ?? null);
       setError("");
@@ -196,13 +256,13 @@ export default function AnalysisWorkspace() {
     void load();
   }, [load]);
 
-  async function onDecide(pair: PairView, decision: DecisionValue, notes: string) {
+  async function onDecide(pair: PairView, decision: DecisionValue, notes: string, conclusion?: Conclusion) {
     try {
-      await saveDraft(caseId, id, pair, decision, notes);
+      await saveDraft(caseId, id, pair, decision, notes, conclusion);
       setWorksheet((ws) => {
         if (!ws) return ws;
         const pairs = ws.pairs.map((p) =>
-          pairKey(p) === pairKey(pair) ? { ...p, draft: { decision, notes } } : p,
+          pairKey(p) === pairKey(pair) ? { ...p, draft: { decision, notes, conclusion } } : p,
         );
         return { ...ws, pairs, drafted: pairs.filter((p) => p.draft).length };
       });
@@ -225,17 +285,13 @@ export default function AnalysisWorkspace() {
     }
   }
 
-  async function onIssue() {
-    if (!window.confirm(t("analyses.issueConfirm"))) return;
-    setBusy(true);
+  async function onAssess(traceId: number, suitability: Suitability) {
     try {
-      const report = await issueReport(caseId, id);
-      toast.success(t("analyses.issued", { number: report.number }));
-      await load();
+      await assessTrace(caseId, id, traceId, suitability, "");
+      setMaterial((list) => list.map((m) => (m.traceId === traceId ? { ...m, suitability } : m)));
+      toast.success(t("analyses.suitabilitySaved"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("analyses.saveError"));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -248,11 +304,13 @@ export default function AnalysisWorkspace() {
     ? t("analyses.workspaceTitle", { type: t(typeKey(analysis.type)), sequence: analysis.sequence, caseId })
     : t("analyses.workspaceTitleShort", { caseId });
   const editable = !!worksheet?.yourStep;
-  const canIssue =
-    !!analysis &&
-    analysis.status === "OPEN" &&
-    analysis.stage === "REPORT" &&
-    analysis.examiners.VERIFICATOR?.userId === user?.id;
+  const firstExaminer = !!analysis && analysis.examiners.VERIFICATOR?.userId === user?.id;
+  const canIssue = !!analysis && analysis.status === "OPEN" && analysis.stage === "REPORT" && firstExaminer;
+  // The first examiner records image quality while they examine, and until the report is issued.
+  const canAssess = !blind && !!analysis && analysis.status === "OPEN" && firstExaminer &&
+    (worksheet?.yourStep === "VERIFICATOR" || analysis.stage === "REPORT");
+  const materialByFeature = new Map(material.map((m) => [m.featureId, m]));
+  const showReport = !blind && !!analysis && (analysis.stage === "REPORT" || analysis.status === "CLOSED");
 
   return (
     <>
@@ -301,11 +359,7 @@ export default function AnalysisWorkspace() {
                     {t("analyses.submit")}
                   </Button>
                 )}
-                {canIssue && (
-                  <Button size="sm" onClick={() => void onIssue()} disabled={busy}>
-                    {t("analyses.issueReport")}
-                  </Button>
-                )}
+
               </div>
             </div>
             {worksheet.yourStep === "REVIEWER" && (
@@ -319,6 +373,16 @@ export default function AnalysisWorkspace() {
             )}
           </ComponentCard>
 
+          {showReport && analysis && (
+            <ReportPanel
+              caseId={caseId}
+              analysisId={id}
+              canWrite={canIssue}
+              canDeliver={!!user?.coordinator || analysis.report.issuedBy === user?.username}
+              onIssued={() => void load()}
+            />
+          )}
+
           {worksheet.pairs.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">{t("analyses.noPairs")}</p>
           ) : (
@@ -331,7 +395,11 @@ export default function AnalysisWorkspace() {
                 index={index}
                 editable={editable}
                 blind={blind}
+                comparison={worksheet.type === "FACIAL_COMPARISON"}
+                material={materialByFeature.get(pair.questioned.featureId ?? "")}
+                canAssess={canAssess}
                 onDecide={onDecide}
+                onAssess={onAssess}
               />
             ))
           )}

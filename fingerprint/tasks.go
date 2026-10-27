@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
 	"github.com/rodfileto/trackid/biometricmatch"
 	"github.com/rodfileto/trackid/cluster"
@@ -55,8 +54,7 @@ const (
 	// TaskTypeExtractIdentityFeature extracts a KNOWN ten-print's template
 	// (a FINGERPRINT_TEMPLATE biometricfeature), enqueued by identity.Ingest.
 	TaskTypeExtractIdentityFeature = "fingerprint:extract_identity_feature"
-	// TaskTypeSync runs matching (and clustering, when Neo4j is available)
-	// after a template lands. See RunSync.
+	// TaskTypeSync runs matching and clustering after a template lands. See RunSync.
 	TaskTypeSync = "fingerprint:sync"
 )
 
@@ -305,30 +303,28 @@ func enqueueSync(queue Enqueuer) {
 	}
 }
 
-// HandleSync returns the asynq.Handler for TaskTypeSync. driver may be nil.
-func HandleSync(sqlDB *sql.DB, client *Client, driver neo4j.DriverWithContext) func(context.Context, *asynq.Task) error {
+// HandleSync returns the asynq.Handler for TaskTypeSync.
+func HandleSync(sqlDB *sql.DB, client *Client) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, t *asynq.Task) error {
-		return RunSync(ctx, sqlDB, client, driver)
+		return RunSync(ctx, sqlDB, client)
 	}
 }
 
 // RunSync scores every unmatched template under the current fingerprint
 // threshold version (biometricmatch.RunTemplatesBand; read on every call, so a
 // new version applies without a restart; DefaultBand when none is set), then
-// reconciles clusters with cluster.Run when driver is non-nil. Unlike embedding.SyncFace, matching doesn't wait for Neo4j: the
-// decisions are written either way, and any later cluster.Run (a face sync,
-// cmd/cluster-biometrics) picks them up. Like SyncFace, it repeats until no
+// reconciles clusters with cluster.Run. Like embedding.SyncFace, it repeats until no
 // decision or template arrived while it ran (cluster.Settle).
-func RunSync(ctx context.Context, sqlDB *sql.DB, client *Client, driver neo4j.DriverWithContext) error {
+func RunSync(ctx context.Context, sqlDB *sql.DB, client *Client) error {
 	unmatched := func(ctx context.Context) (int64, error) {
 		return db.New(sqlDB).CountUnmatchedBiometricTemplates(ctx, TemplateType)
 	}
 	return cluster.Settle(ctx, sqlDB, unmatched, func(ctx context.Context) error {
-		return runSyncOnce(ctx, sqlDB, client, driver)
+		return runSyncOnce(ctx, sqlDB, client)
 	})
 }
 
-func runSyncOnce(ctx context.Context, sqlDB *sql.DB, client *Client, driver neo4j.DriverWithContext) error {
+func runSyncOnce(ctx context.Context, sqlDB *sql.DB, client *Client) error {
 	version, err := biometricmatch.CurrentBand(ctx, sqlDB, TemplateType, DefaultBand)
 	if err != nil {
 		return fmt.Errorf("fingerprint: sync match: %w", err)
@@ -336,10 +332,7 @@ func runSyncOnce(ctx context.Context, sqlDB *sql.DB, client *Client, driver neo4
 	if _, err := biometricmatch.RunTemplatesBand(ctx, sqlDB, client, TemplateType, version, TemplateType); err != nil {
 		return fmt.Errorf("fingerprint: sync match: %w", err)
 	}
-	if driver == nil {
-		return nil
-	}
-	if _, err := cluster.Run(ctx, sqlDB, driver); err != nil {
+	if _, err := cluster.Run(ctx, sqlDB); err != nil {
 		return fmt.Errorf("fingerprint: sync cluster: %w", err)
 	}
 	return nil

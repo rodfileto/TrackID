@@ -16,6 +16,7 @@ import (
 	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/cases"
+	"github.com/rodfileto/trackid/cluster"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/db/migrations"
 	"github.com/rodfileto/trackid/distribution"
@@ -125,7 +126,7 @@ func TestAgreementAndComparison(t *testing.T) {
 		check("assigning "+u.Username, distribution.Assign(ctx, sqlDB, id, &u.ID, chief.ID), nil)
 	}
 	draft := func(u auth.UserProfile, id int64, p examination.Pair, decision string) error {
-		return examination.SaveDraft(ctx, sqlDB, u, id, p, decision, "")
+		return examination.SaveDraft(ctx, sqlDB, u, id, p, decision, "", levelFor(ctx, sqlDB, id, decision))
 	}
 	submit := func(u auth.UserProfile, id int64, decisions int, stage analyses.Stage) {
 		t.Helper()
@@ -225,4 +226,15 @@ func TestAgreementAndComparison(t *testing.T) {
 	if rows, err := q.ListAnalysisDecisions(ctx, sql.NullInt64{Int64: cmp, Valid: true}); err != nil || len(rows) != 7 {
 		t.Fatalf("comparison decisions = %d, %v; want 3 + 3 + 1", len(rows), err)
 	}
+}
+
+// levelFor is the conclusion a test draft carries: none in a review, and in a comparison a level
+// that maps onto decision (strong support, inconclusive or exclusion).
+func levelFor(ctx context.Context, sqlDB *sql.DB, analysisID int64, decision string) cluster.Conclusion {
+	t, err := analyses.GetTarget(ctx, db.New(sqlDB), analysisID)
+	if err != nil || t.Type != analyses.FacialComparison {
+		return ""
+	}
+	return map[string]cluster.Conclusion{"POSITIVE": cluster.ConclusionStrongSupport, "INCONCLUSIVE": cluster.ConclusionInconclusive,
+		"NEGATIVE": cluster.ConclusionExclusion}[decision]
 }

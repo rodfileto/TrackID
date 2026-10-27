@@ -8,6 +8,44 @@ export type AnalysisStage = "EXAMINATION" | "VERIFICATION" | "INCONSISTENCE" | "
  * VERIFICATOR (first examination), REVIEWER (blind verification), INCONSISTENCE. */
 export type AnalysisStep = "VERIFICATOR" | "REVIEWER" | "INCONSISTENCE";
 export type DecisionValue = "POSITIVE" | "NEGATIVE" | "INCONCLUSIVE";
+/** A comparison's (laudo's) graded conclusion on a pair, strongest support first. */
+export type Conclusion =
+  | "IDENTIFICATION"
+  | "STRONG_SUPPORT"
+  | "MODERATE_SUPPORT"
+  | "LIMITED_SUPPORT"
+  | "INCONCLUSIVE"
+  | "LIMITED_EXCLUSION"
+  | "EXCLUSION";
+
+export const conclusions: Conclusion[] = [
+  "IDENTIFICATION",
+  "STRONG_SUPPORT",
+  "MODERATE_SUPPORT",
+  "LIMITED_SUPPORT",
+  "INCONCLUSIVE",
+  "LIMITED_EXCLUSION",
+  "EXCLUSION",
+];
+
+/** The decision a conclusion maps onto, as the server's conclusion_decision. */
+export function conclusionDecision(c: Conclusion): DecisionValue {
+  if (c === "INCONCLUSIVE") return "INCONCLUSIVE";
+  if (c === "LIMITED_EXCLUSION" || c === "EXCLUSION") return "NEGATIVE";
+  return "POSITIVE";
+}
+
+/** How strong a reviewed link is: a lead, or a laudo at its level. */
+export interface LinkStrength {
+  basis: "LEAD" | "LAUDO";
+  conclusion?: Conclusion;
+  identified: boolean;
+  /** A later comparison that left a lead standing: PENDING, DISPUTED or INCONCLUSIVE. */
+  laterLaudo?: string;
+}
+
+export type Suitability = "SUITABLE" | "LEAD_ONLY" | "UNSUITABLE";
+export const suitabilities: Suitability[] = ["SUITABLE", "LEAD_ONLY", "UNSUITABLE"];
 
 export const analysisSteps: AnalysisStep[] = ["VERIFICATOR", "REVIEWER", "INCONSISTENCE"];
 
@@ -24,6 +62,9 @@ export interface FeaturePair {
 }
 
 export interface AnalysisReport {
+  id: number;
+  /** The number of the report this one complements (a laudo complementar). */
+  complements?: string;
   type: string;
   status: "DRAFT" | "ISSUED";
   number?: string;
@@ -42,12 +83,15 @@ export interface Analysis {
   createdAt: string;
   closedAt?: string;
   pairs: FeaturePair[];
+  /** The request it answers. */
+  requestId?: number;
   report: AnalysisReport;
 }
 
 export interface Decision {
   step?: AnalysisStep;
   decision: DecisionValue;
+  conclusion?: Conclusion;
   notes?: string;
   username?: string;
 }
@@ -140,11 +184,12 @@ export async function openAnalysis(
   caseId: string,
   type: AnalysisType,
   pairs: FeaturePair[],
+  options: { requestId?: number; complements?: number } = {},
 ): Promise<Analysis[]> {
   return requestApi<Analysis[]>(`/admin/cases/${encodeURIComponent(caseId)}/analyses`, {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ type, pairs }),
+    body: JSON.stringify({ type, pairs, ...options }),
   });
 }
 
@@ -174,11 +219,27 @@ export async function saveDraft(
   pair: FeaturePair,
   decision: DecisionValue,
   notes: string,
+  conclusion?: Conclusion,
 ): Promise<void> {
   await requestApi<{ saved: boolean }>(`${analysisPath(caseId, analysisId)}/decisions`, {
     method: "PUT",
     headers: authHeaders(),
-    body: JSON.stringify({ ...pair, decision, notes }),
+    body: JSON.stringify({ ...pair, decision, notes, conclusion }),
+  });
+}
+
+/** The first examiner's value determination of a questioned face of the case. */
+export async function assessTrace(
+  caseId: string,
+  analysisId: number,
+  traceId: number,
+  suitability: Suitability,
+  notes: string,
+): Promise<void> {
+  await requestApi(`${analysisPath(caseId, analysisId)}/suitability`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ traceId, suitability, notes }),
   });
 }
 
@@ -196,6 +257,119 @@ export async function issueReport(caseId: string, analysisId: number): Promise<A
   return requestApi<AnalysisReport>(`${analysisPath(caseId, analysisId)}/report`, {
     method: "POST",
     headers: authHeaders(),
+  });
+}
+
+export interface ReportSummary {
+  preliminary: boolean;
+  reportType: string;
+  title: string;
+  number?: string;
+  caseId: string;
+  occurrence?: string;
+  request?: string;
+  questions: number;
+  material: string;
+  references: string;
+  verification: string;
+  previous: string[];
+  examiners: string;
+  results?: { questioned: string; counterpart: string; level: string; result: string; resultCode: string; lead: string }[];
+  faces?: { face: string; suitability: string; result: string; resultCode: string; leads: string }[];
+  notice?: string;
+}
+
+export interface ReportDelivery {
+  deliveredOn: string;
+  method: string;
+  recipient: string;
+  notes?: string;
+  recordedBy?: string;
+  recordedAt?: string;
+}
+
+export interface ReportVersion {
+  version: number;
+  generated: boolean;
+  createdBy?: string;
+  createdAt: string;
+  stale: boolean;
+}
+
+export interface ReportOverview {
+  status: "DRAFT" | "ISSUED";
+  number?: string;
+  summary: ReportSummary;
+  draft?: ReportVersion;
+  docxSha256?: string;
+  pdfSha256?: string;
+  deliveries: ReportDelivery[];
+  /** Sections a laudo cannot be issued without. */
+  required: string[];
+}
+
+export async function getReport(caseId: string, analysisId: number): Promise<ReportOverview> {
+  return requestApi<ReportOverview>(`${analysisPath(caseId, analysisId)}/report`, { headers: authHeaders() });
+}
+
+async function failure(response: Response, fallback: string): Promise<Error> {
+  const body = (await response.json().catch(() => ({}))) as { error?: string };
+  return new Error(body.error ?? fallback);
+}
+
+/** The draft .docx to edit (generated on first use), with whether the data changed since. */
+export async function getReportDraft(
+  caseId: string,
+  analysisId: number,
+): Promise<{ bytes: ArrayBuffer; version: number; stale: boolean }> {
+  const response = await fetch(`${apiBaseUrl}${analysisPath(caseId, analysisId)}/report/draft`, { headers: authHeaders() });
+  if (!response.ok) throw await failure(response, "Could not load the draft");
+  return {
+    bytes: await response.arrayBuffer(),
+    version: Number(response.headers.get("X-Report-Version") ?? 0),
+    stale: response.headers.get("X-Report-Stale") === "true",
+  };
+}
+
+/** Saves the examiner's edited .docx as the draft's next version. */
+export async function saveReportDraft(caseId: string, analysisId: number, bytes: ArrayBuffer): Promise<ReportVersion> {
+  const response = await fetch(`${apiBaseUrl}${analysisPath(caseId, analysisId)}/report/draft`, {
+    method: "PUT",
+    headers: { ...authHeaders(), "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+    body: bytes,
+  });
+  if (!response.ok) throw await failure(response, "Could not save the draft");
+  return (await response.json()) as ReportVersion;
+}
+
+export async function refreshReportDraft(caseId: string, analysisId: number): Promise<ReportVersion> {
+  return requestApi<ReportVersion>(`${analysisPath(caseId, analysisId)}/report/draft/refresh`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+}
+
+/** Downloads an issued report's PDF or .docx through the browser. */
+export async function downloadReport(caseId: string, analysisId: number, format: "pdf" | "docx"): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}${analysisPath(caseId, analysisId)}/report/document?format=${format}`, {
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw await failure(response, "Could not download the report");
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const name = decodeURIComponent(disposition.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? `report.${format}`);
+  const url = URL.createObjectURL(await response.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function deliverReport(caseId: string, analysisId: number, delivery: ReportDelivery): Promise<ReportOverview> {
+  return requestApi<ReportOverview>(`${analysisPath(caseId, analysisId)}/report/deliveries`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(delivery),
   });
 }
 

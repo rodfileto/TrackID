@@ -10,7 +10,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.12.3
 	github.com/minio/minio-go/v7 v7.3.0
-	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/pressly/goose/v3 v3.24.1
 	github.com/rodfileto/trackid-vision v0.4.0
 	github.com/sqlc-dev/pqtype v0.3.0

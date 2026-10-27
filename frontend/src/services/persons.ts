@@ -1,5 +1,6 @@
 import { apiBaseUrl, requestApi } from "./api";
 import { getToken } from "./auth";
+import type { LinkStrength } from "./analyses";
 
 /** One identity_file row -- a raw file produced by an enrollment event (a
  * photo, a NIST record, ...) -- plus the KNOWN biometric feature it yielded.
@@ -66,6 +67,9 @@ export interface PersonClusterMember {
   traceId?: number;
   thumbnailFileId?: number;
   thumbnailBox?: ThumbnailBox;
+  /** How a QUESTIONED member is identified as this person: its strongest direct reviewed link
+   * (a laudo, a lead); absent when only an indirect path links it. */
+  link?: LinkStrength;
 }
 
 /** One biometric cluster a person's enrolled features have resolved into

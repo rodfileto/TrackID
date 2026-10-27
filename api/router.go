@@ -9,6 +9,7 @@ import (
 	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/cases"
 	"github.com/rodfileto/trackid/geocode"
+	"github.com/rodfileto/trackid/reports"
 	"github.com/rodfileto/trackid/storage"
 )
 
@@ -32,6 +33,13 @@ type Dependencies struct {
 	// Geocoder backs the occurrence form's address search and map-click addresses. Nil means
 	// those endpoints return 503; occurrences can still be placed on the map.
 	Geocoder geocode.Geocoder
+	// ReportRenderer renders an issued report's PDF (reports.CLIRenderer over WORDCRAFT_CLI). Nil
+	// means issuing returns 503; drafts still work.
+	ReportRenderer reports.Renderer
+	// WordcraftWebDir is WordCraft's web build, served at /wordcraft/ so the report editor runs on
+	// the app's own origin (its postMessage bridge only talks to a same-origin parent). Empty
+	// serves nothing there.
+	WordcraftWebDir string
 	// Register is an optional hook called after the core routes are registered.
 	// It receives the engine and the authenticated route group (mounted under
 	// /api) so integrations can attach their own routes. May be nil.
@@ -43,6 +51,9 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	router.Use(gin.Recovery())
 	router.GET("/health", healthHandler)
 	router.GET("/health/db", DatabaseHealthHandler(deps.DB))
+	if deps.WordcraftWebDir != "" {
+		router.Static("/wordcraft", deps.WordcraftWebDir)
+	}
 
 	api := router.Group("/api")
 	authRepository := auth.NewRepository(deps.DB)
@@ -72,6 +83,8 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	coordination.POST("cases/:caseId/analyses", OpenAnalysisHandler(deps.DB))
 	coordination.PUT("analyses/:analysisId/assignment", AssignAnalysisHandler(deps.DB))
 	coordination.GET("analyses/:analysisId/prior-deciders", PriorDecidersHandler(deps.DB))
+	coordination.POST("cases/:caseId/requests", CreateCaseRequestHandler(deps.DB))
+	coordination.POST("cases/:caseId/requests/:requestId/files", AttachRequestFilesHandler(deps.DB))
 	protected.GET("cases", ListCasesHandler(deps.DB))
 	protected.POST("cases", CreateCaseHandler(deps.DB))
 	protected.GET("cases/years", ListCaseYearsHandler(deps.DB))
@@ -85,9 +98,22 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	oneCase.GET("clusters", ListCaseClustersHandler(deps.DB))
 	oneCase.GET("identity-decisions", ListCaseIdentityDecisionsHandler(deps.DB))
 	oneCase.GET("analyses", ListCaseAnalysesHandler(deps.DB))
+	oneCase.GET("requests", ListCaseRequestsHandler(deps.DB))
+	oneCase.GET("material", ListCaseMaterialHandler(deps.DB))
+	oneCase.GET("videos", ListVideosHandler(deps.DB))
+	oneCase.POST("videos", AddVideoHandler(deps.DB, deps.Storage, deps.Queue))
+	oneCase.POST("videos/:fileId/frames", ExtractFrameHandler(deps.DB, deps.Storage, deps.Queue))
+	oneCase.PUT("traces/:traceId/role", SetTraceRoleHandler(deps.DB))
 	oneCase.GET("analyses/:analysisId/assignments", AnalysisAssignmentsHandler(deps.DB))
-	oneCase.POST("analyses/:analysisId/report", IssueReportHandler(deps.DB))
+	oneCase.GET("analyses/:analysisId/report", GetReportHandler(deps.DB))
+	oneCase.GET("analyses/:analysisId/report/draft", ReportDraftHandler(deps.DB, deps.Storage))
+	oneCase.PUT("analyses/:analysisId/report/draft", SaveReportDraftHandler(deps.DB, deps.Storage))
+	oneCase.POST("analyses/:analysisId/report/draft/refresh", RefreshReportDraftHandler(deps.DB, deps.Storage))
+	oneCase.POST("analyses/:analysisId/report", IssueReportHandler(deps.DB, deps.Storage, deps.ReportRenderer))
+	oneCase.GET("analyses/:analysisId/report/document", ReportDocumentHandler(deps.DB, deps.Storage))
+	oneCase.POST("analyses/:analysisId/report/deliveries", DeliverReportHandler(deps.DB))
 	oneCase.GET("analyses/:analysisId/pairs", AnalysisWorksheetHandler(deps.DB))
+	oneCase.PUT("analyses/:analysisId/suitability", AssessTraceHandler(deps.DB))
 	oneCase.GET("analyses/:analysisId/pairs/image", PairImageHandler(deps.DB, deps.Storage))
 	oneCase.PUT("analyses/:analysisId/decisions", SaveDraftHandler(deps.DB))
 	oneCase.POST("analyses/:analysisId/submit", SubmitStepHandler(deps.DB, deps.Queue))

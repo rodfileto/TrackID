@@ -36,6 +36,7 @@ const (
 // decided for it (IdentityDecision), best score first.
 type CaseFaceIdentities struct {
 	TraceID    int64              `json:"traceId"`
+	Role       string             `json:"role"` // QUESTIONED, or REFERENCE: known material sent in, not a face to identify
 	Identities []IdentityDecision `json:"identities"`
 }
 
@@ -54,6 +55,12 @@ type IdentityDecision struct {
 	Status         string   `json:"status"`
 	DecisionRole   string   `json:"decisionRole,omitempty"`
 	DecidedBy      string   `json:"decidedBy,omitempty"`
+	// Basis is what settled it: a review (LEAD) or a comparison (LAUDO, with its Conclusion).
+	Basis      cluster.LinkBasis  `json:"basis,omitempty"`
+	Conclusion cluster.Conclusion `json:"conclusion,omitempty"`
+	// Link is a confirmed identity's strength (cluster.ReviewedLink): identified or only supported,
+	// and a later comparison that left a lead standing.
+	Link *cluster.Link `json:"link,omitempty"`
 }
 
 // ListCaseIdentityDecisions returns, for each codified face of a case, every
@@ -106,10 +113,22 @@ func ListCaseIdentityDecisions(ctx context.Context, sqlDB *sql.DB, caseID string
 	if err != nil {
 		return nil, err
 	}
+	level, err := cluster.IdentificationLevel(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	material, err := q.ListCaseTraceMaterial(ctx, caseID)
+	if err != nil {
+		return nil, err
+	}
+	roles := map[int64]string{}
+	for _, m := range material {
+		roles[m.ID] = m.TraceRole
+	}
 
 	out := make([]CaseFaceIdentities, 0, len(traceIDs))
 	for i, traceID := range traceIDs {
-		face := CaseFaceIdentities{TraceID: traceID, Identities: []IdentityDecision{}}
+		face := CaseFaceIdentities{TraceID: traceID, Role: roles[traceID], Identities: []IdentityDecision{}}
 		for known, chain := range chains[featureIDs[i]] {
 			person, ok := described[known]
 			if !ok {
@@ -127,6 +146,10 @@ func ListCaseIdentityDecisions(ctx context.Context, sqlDB *sql.DB, caseID string
 				d.DecidedBy = "" // the matcher, or a first examiner whose step is not settled yet
 			} else {
 				d.DecisionRole = role
+				d.Basis, d.Conclusion = roundBasis(chainEntries(chain))
+			}
+			if l, ok := cluster.ReviewedLink(chainEntries(chain), level); ok {
+				d.Link = &l
 			}
 			face.Identities = append(face.Identities, d)
 		}
@@ -173,4 +196,26 @@ func scoreOf(d IdentityDecision) float64 {
 		return -1
 	}
 	return *d.Score
+}
+
+// roundBasis is what kind of round decided a chain (cluster.DecidingRound): a comparison's laudo,
+// with the level it settled on, or else a lead.
+func roundBasis(chain []cluster.ChainEntry) (cluster.LinkBasis, cluster.Conclusion) {
+	round, _, ok := cluster.DecidingRound(chain)
+	if !ok {
+		return "", ""
+	}
+	basis, level := cluster.LinkLead, cluster.Conclusion("")
+	for _, e := range chain {
+		if e.Role == cluster.RoleSystem || e.Analysis != round {
+			continue
+		}
+		if e.AnalysisType == "FACIAL_COMPARISON" {
+			basis = cluster.LinkLaudo
+			if e.Role == cluster.RoleInconsistence || (e.Role == cluster.RoleReviewer && level == "") {
+				level = e.Conclusion
+			}
+		}
+	}
+	return basis, level
 }

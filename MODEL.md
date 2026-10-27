@@ -1,7 +1,7 @@
 # TrackID — Forensic Data Model
 
 This document explains the core data model: how forensic biometric data (fingerprints,
-faces) and forensic intelligence are structured across Postgres and Neo4j. It is the
+faces) and forensic intelligence are structured in Postgres. It is the
 specification to implement against — the evidence hierarchy and the biometric-feature
 concept are the heart of the package.
 
@@ -47,17 +47,21 @@ many files; each file yields one or more features.
 ### 2.2 Evidence hierarchy (QUESTIONED)
 
 ```
-biometric_cases ──< case_files
+biometric_cases ──< case_requests ──< case_request_questions
+biometric_cases ──< case_files (>── case_requests: the material a request sent in)
 biometric_cases ──< case_evidences ──< case_traces ──< case_codifications
+case_files (video) ── case_videos;  case_evidences >── case_files (video): a frame's source
 case_traces ── biometricfeature
 ```
 
 | Table | Role |
 | --- | --- |
 | `biometric_cases` | the base case (`case_id`; `case_type` = `CRIMINAL` \| `CIVIL`; `modality` = `FACIAL` \| `FINGERPRINT`) |
-| `case_files` | raw files attached to a case (`evidence`, `document`, `forensic_report`, `face_crop`, `codification_image`) |
-| `case_evidences` | one evidence item within a case (e.g. a lift card, an image) |
-| `case_traces` | one biometric trace within an evidence (one face in an image, one lift on a card); its `trace_type` is the feature type it yields, `FACE_CAPTURE` or `FINGERPRINT_LIFT` |
+| `case_requests` | what the case answers: an authority's request (ofício) with its document, dates, the occurrence or inquiry number it cites (and the occurrence it resolved to), and its questions (`case_request_questions`, quesitos); `requests` package |
+| `case_files` | raw files attached to a case (`evidence`, `video`, `document`, `forensic_report`, `report_draft`, `face_crop`, `codification_image`), with their SHA-256; `case_request_id` marks the material a request sent in |
+| `case_videos` | a video sent in and its processing: the tracks of faces trackid-vision's `videoproc` found (`video` package) |
+| `case_evidences` | one evidence item within a case (e.g. a lift card, an image); a frame taken from a video records the video, its time and frame number (`source_*`) |
+| `case_traces` | one biometric trace within an evidence (one face in an image, one lift on a card); its `trace_type` is the feature type it yields, `FACE_CAPTURE` or `FINGERPRINT_LIFT`; its `trace_role` is `QUESTIONED` (to identify) or `REFERENCE` (known material sent in for comparison); a questioned trace carries the examiner's `suitability` (`SUITABLE`, `LEAD_ONLY`, `UNSUITABLE`) |
 | `case_codifications` | one processed encoding of a trace (e.g. a minutiae set, an embedding) |
 | `biometricfeature` | the typed QUESTIONED feature for a trace |
 
@@ -67,9 +71,15 @@ is its legal nature: `CRIMINAL` (e.g. latent prints from a crime scene) or `CIVI
 bodies). `modality` is the biometric the case works with. The two are independent, and
 the rest of the hierarchy is the same for both case types.
 
+A request is not the occurrence: the occurrence is the event, a request is an administrative act
+about it, one occurrence can lead to several, and a civil case has a request but no occurrence.
+`requests.Create` links a request to the occurrence its cited number names exactly, and the case
+too when it has none. Every analysis answers a request (`case_analyses.case_request_id`); the
+case's first request is what its automatic review answers.
+
 A codification is a processing artifact, not a comparison record — the pairwise comparison
 outcome lives entirely in `biometric_decisions` (section 3), keyed by the two features'
-graph ids rather than by codification.
+feature ids (section 5) rather than by codification.
 
 ### 2.3 Occurrences and locations (POLE: Event and Location)
 
@@ -115,8 +125,8 @@ form a series to put on a map.
 ## 3. Decisions (`biometric_decisions`)
 
 An append-only event log of every decision made about a pair of features. This is the
-**source of truth** for a pair's confirmation state; cluster membership/status in Neo4j is
-a *derived view*, never written authoritatively to the graph.
+**source of truth** for a pair's confirmation state; clusters (section 4) are a *derived
+view* of it, rebuilt by `cluster.Run`.
 
 | Column | Meaning |
 | --- | --- |
@@ -124,6 +134,7 @@ a *derived view*, never written authoritatively to the graph.
 | `modality` | `FACIAL` \| `FINGERPRINT`, as in `biometric_cases` |
 | `role` | `SYSTEM` (automatic), `VERIFICATOR`, `REVIEWER`, `INCONSISTENCE` |
 | `decision` | `POSITIVE` \| `NEGATIVE` \| `INCONCLUSIVE` |
+| `conclusion` | a comparison's level on the laudo scale (`cluster.Conclusion`): `IDENTIFICATION`, `STRONG_SUPPORT`, `MODERATE_SUPPORT`, `LIMITED_SUPPORT`, `INCONCLUSIVE`, `LIMITED_EXCLUSION`, `EXCLUSION`; it maps onto `decision` (the database's `conclusion_decision`), NULL outside a `FACIAL_COMPARISON` |
 | `system_source` / `username` | who/what decided (exactly one set, per role) |
 | `confidence`, `threshold` | score and the cutoff it was classified against (SYSTEM only) |
 | `notes` | examiner rationale (esp. on INCONSISTENCE) |
@@ -173,10 +184,27 @@ report it leads to. For faces, following FISWG:
 | `FACIAL_COMPARISON` | one-to-one forensic examination of specific pairs (`case_analysis_pairs`), each with a face of the case | by a coordinator (`analyses.Open`) | `FACIAL_COMPARISON_REPORT` (laudo) |
 
 Fingerprint analyses (crime scene, laboratory, documents) are not modelled yet, so a FINGERPRINT
-case has none. An analysis is `OPEN` until its report is issued. Each has one report
-(`analysis_reports`), a `DRAFT` until its examiner issues it (`analyses.IssueReport`), which numbers
-it `"<year>.<sequence>"` per report type and closes the analysis; the document itself is not
-generated yet (`case_file_id` will point at it).
+case has none. An analysis is `OPEN` until its report is issued, and answers one of the case's
+requests. In a comparison each pair is decided on the conclusion scale (`biometric_decisions.conclusion`),
+and the verifier must reach the same level for the pair to be settled; a different level is a
+disagreement for the third examiner. The first examiner records each questioned face's
+suitability while they examine it.
+
+**Reports** (`reports` package; `docs/facial-reports-plan.md`). Each analysis has one report
+(`analysis_reports`), a `DRAFT` until its examiner issues it. The server generates the draft as a
+.docx from a Portuguese template and the data (`reports.Build`): an executive summary, then the
+lead report's or the laudo's sections. Everything that comes from the database is locked text;
+the sections the examiner writes are editable regions (`w:permStart`/`w:permEnd` in a document
+protected read-only), which WordCraft's web build enforces in the analysis page and the server
+checks again on every save (`analysis_report_versions`). Issuing (`reports.Service.Issue`, which
+calls `analyses.IssueReport`) refuses a draft whose locked text no longer matches the data (the
+examiner refreshes it, keeping their text) or a laudo with an empty exam or answer; then, in one
+transaction, it numbers the report `"<year>.<sequence>"` per type, freezes the data as
+`snapshot`, puts the number and date in the examiner's document, renders the PDF with
+`wordcraft-cli` (the same layout as the editor) and keeps the .docx and the PDF as
+`forensic_report` files with their SHA-256 (`docx_file_id`, `case_file_id`), and closes the
+analysis. An issued report never changes: a laudo complementar is a new comparison whose report
+`complements_report_id` the first. `report_deliveries` records where an issued report was sent.
 
 **Stages and decisions** (`examination` package). An open analysis goes through
 stages, each worked by one examiner in one step -- the `biometric_decisions` role their decisions
@@ -270,53 +298,46 @@ Clusters come in two layers (`clusters.basis`), reconciled the same way by
   comparison, with its state -- awaiting review, confirmed, excluded, inconclusive or disputed.
   It is the review's own record, so a SYSTEM POSITIVE shows as awaiting review, never as
   confirmed. The case's blind verifier (REVIEWER step, analysis at VERIFICATION) gets none.
-- `cluster.Identify` writes `IDENTIFIED_AS` for both layers, each from the decisions that build it.
+- Each reviewed link has a **basis** (`cluster.ReviewedLink`), from the round that settled it: a
+  lead (a review) or a laudo at its conclusion level (a comparison). A lead identifies while it is
+  the pair's only human round; a comparison that concludes replaces it, one still pending or
+  ending inconclusive leaves it standing (shown beside it), and an exclusion takes the pair out of
+  the layer. A laudo identifies at or above the identification level (`identification_levels`, as
+  data; `STRONG_SUPPORT` by default) and only supports the link below it. The case page, the
+  person profile and the sim's `eval` carry it; a cluster can
+  hold links of both bases, so it is per link, never per cluster.
 
 This separates the two uses of a match instead of changing the decision rule: a SYSTEM POSITIVE
 is still CONFIRMED, so matching stays fast for intelligence, while forensic work rests only on
 reviewed links.
 
-## 5. Neo4j mapping
+## 5. Feature ids
 
-```
-(:Person {personId})
-  -[:HAS_IDENTITY]->
-(:Object:Identification {documentId})
-  -[:HAS_REGISTRATION]->
-(:Object:IdentityRegister {registerId})
-  -[:HAS_FEATURE]->
-(:Object:BiometricFeature {featureId, featureType, provenance: "KNOWN"})
-
-(:Object:Evidence {evidenceId, evidenceType})
-  -[:HAS_FEATURE]->
-(:Object:BiometricFeature {featureId, featureType, provenance: "QUESTIONED"})
-
-(:Object:BiometricFeature) -[:IN_CLUSTER]-> (:Object:BiometricCluster {clusterId, basis})  // one per layer
-(:Object:BiometricCluster) -[:IDENTIFIED_AS {confidence, identifiedBy, identifiedAt}]-> (:Person)
-(:Person) -[:SAME_AS {method, status, confidence}]-> (:Person)   // person↔person merge (later)
-```
-
-Feature id conventions (stable, so callers never round-trip through Neo4j to discover one):
+Stable, so decisions, clusters and the API key on the same strings:
 
 - enrolled (KNOWN): the bare `identity_file.id`
 - questioned (evidence): `"TRACE:<case_trace_id>#feature"`
+
+(`graph.KnownFeatureID`, `graph.QuestionedFeatureID`.) Postgres is the only store: an earlier
+Neo4j projection of evidence, identities and clusters was removed on 2026-10-27, since nothing
+read it.
 
 ## 6. Flow
 
 ```
 organization import cmd ──► Postgres (the tables above)
                                │
-    sync-graph          ──► Evidence + BiometricFeature          (Neo4j)
-    sync-identity       ──► Person / Identification / IdentityRegister / KNOWN features
-    cluster-biometrics  ──► BiometricCluster + IN_CLUSTER       (Neo4j)
-    identify            ──► IDENTIFIED_AS cluster → person       (Neo4j)
+    cmd/worker          ──► embeddings and templates ──► SYSTEM decisions ──► clusters
+    examiners (the API) ──► human decisions ──► clusters
+    cluster-biometrics  ──► clusters, on demand
 ```
 
 Every logic entry point reads Postgres — never an external file or a third-party system.
 
 File bytes live in object storage (MinIO/S3), referenced by `storage_ref`. The layout is
 trackid's, content-addressed by sha256: `identity/<register>/<file_type>/<sha256>`,
-`evidence/<case>/<sha256>` and `codification/<case>/<trace>/<sha256>`. An import cmd holding
+`evidence/<case>/<sha256>`, `codification/<case>/<trace>/<sha256>`, `videos/<case>/<sha256>` and
+`reports/<case>/<sha256>` (report drafts and issued documents). An import cmd holding
 raw bytes uploads them with `identity.UploadFile` / `cases.UploadEvidenceFile`, which return the
 `FileInput` to pass to `Ingest`; `Ingest` itself never touches storage.
 
@@ -335,30 +356,24 @@ Done (core), end to end:
   (append-only decision log, `007_biometric_decisions`); `clusters`/`cluster_members`/
   `cluster_merges` (`008_clusters`). This is the model's current shape written directly: the
   21 migrations that built it up were merged on 2026-10-20, before any deployment, so no
-  intermediate step is carried.
+  intermediate step is carried. Facial reports add requests, trace roles and suitability, the
+  conclusion scale and report documents (`009_reports`) and video (`010_video`).
 - **Occurrences** (`db/migrations/003_occurrences.sql`): `locations` (PostGIS), `occurrences`,
   `occurrence_types` (seeded), `occurrence_classifications`, `municipalities`, and
-  `biometric_cases.occurrence_id` (section 2.3). Postgres only: not yet synced to Neo4j, and
-  no ingest helper beyond the `db` queries.
-- **Sync** (`graph` package): `graph.Sync` materializes Evidence + QUESTIONED
-  `BiometricFeature` nodes from the evidence hierarchy; `graph.SyncIdentity` materializes
-  Person + the Identification/IdentityRegister/KNOWN-`BiometricFeature` chain from
-  `biometricfeature`/`identity_file` (`graph/migrations/004_identity_chain.cypher` pins the
-  constraints).
+  `biometric_cases.occurrence_id` (section 2.3), ingested by `occurrences.Ingest`.
 - **Decisions and clustering** (`cluster` package): `cluster.DeriveEdgeStatus`
   (`cluster/decision.go`, unit-tested) turns a pair's `biometric_decisions` chain into
   PENDING_REVIEW/CONFIRMED/DISPUTED/REJECTED; `cluster.Run` derives AUTOMATIC clusters from
-  CONFIRMED pairs and REVIEWED clusters from the pairs people confirmed (section 4.1); `cluster.Identify` derives `IDENTIFIED_AS` from a CONFIRMED decision linking a
-  QUESTIONED feature to a KNOWN one.
-- **Commands**: `sync-graph`, `sync-identity`, `cluster-biometrics`, `identify` (all
-  dry-run by default, `-commit` to write).
+  CONFIRMED pairs and REVIEWED clusters from the pairs people confirmed (section 4.1), in
+  Postgres; a cluster holding an enrolled feature identifies its questioned members.
+- **Commands**: `cluster-biometrics`, `match-embeddings`, `match-threshold` and the backfills
+  (dry-run by default, `-commit` to write).
 
-Verified against a live Postgres: the full migration chain applies cleanly (goose version 8
+Verified against a live Postgres: the full migration chain applies cleanly (goose version 10
 reached), and a smoke insert through
 `identity_register → identity_file → biometricfeature (KNOWN)` and
 `case_evidences → case_traces → biometricfeature (QUESTIONED)`, joined by one
-`biometric_decisions` row, reproduces the expected cluster (`cluster.Run`) and identification
-(`cluster.Identify`).
+`biometric_decisions` row, reproduces the expected cluster (`cluster.Run`) and identification.
 
 **Not in core** (by design — core is the shared model/library; ingestion is a downstream
 concern): an organization import command that populates these tables from source files.

@@ -103,6 +103,16 @@ forense, só contam os clusters revisados -- os casos de uma pessoa são os caso
 peritos ligaram a ela. Um cluster com dois cadastros diferentes é possível, e é um sinal: ou a
 mesma pessoa foi cadastrada duas vezes, ou um dos vínculos está errado.
 
+Na camada revisada, cada vínculo diz **em que se apoia**: numa indicação (a revisão de candidatos)
+ou num laudo, com o seu nível. Uma indicação identifica enquanto é a única rodada humana sobre o
+par -- a página da pessoa mostra "identificado (indicação)". Um laudo que conclui substitui a
+indicação: no nível de identificação ou acima (por padrão, suporte forte), "identificado (laudo)";
+abaixo dele, o vínculo é só um "suporte". Um laudo em andamento ou inconclusivo -- por exemplo,
+porque a imagem não tem qualidade para uma conclusão pericial -- não desfaz a indicação, que
+continua valendo e aparece ao lado do resultado do laudo; uma exclusão a desfaz. Como um cluster
+pode reunir vínculos de um e de outro tipo, a base é dita vínculo a vínculo, nunca para o cluster
+inteiro.
+
 ::: {.callout-tip appearance="simple"}
 ## Na prática
 

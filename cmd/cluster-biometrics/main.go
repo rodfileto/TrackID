@@ -1,6 +1,5 @@
-// cluster-biometrics groups biometric features into same-modality clusters,
-// reading biometric_decisions from Postgres and writing BiometricCluster nodes
-// to Neo4j. See cluster.Run.
+// cluster-biometrics groups biometric features into same-modality clusters
+// from biometric_decisions, in Postgres. See cluster.Run.
 //
 // Defaults to a dry run that only reports counts. Pass -commit to write.
 package main
@@ -35,10 +34,7 @@ func main() {
 		return
 	}
 
-	driver := cmdutil.OpenNeo4j(ctx)
-	defer driver.Close(ctx)
-
-	stats, err := cluster.Run(ctx, db, driver)
+	stats, err := cluster.Run(ctx, db)
 	cmdutil.Fatal(err)
 	log.Printf("clustering complete: %d automatic cluster(s) over %d evidence item(s); %d created, %d merged",
 		stats.Clusters, stats.Evidence, stats.Created, stats.Merged)

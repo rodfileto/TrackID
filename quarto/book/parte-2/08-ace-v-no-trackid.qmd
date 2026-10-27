@@ -104,16 +104,55 @@ Os nomes das etapas no banco de dados são os papéis das decisões: `VERIFICATO
 `REVIEWER` para a verificação e `INCONSISTENCE` para a inconsistência. A correspondência com os
 termos da FISWG está na seção final do capítulo e nas Convenções.
 
-## Documentos: relatório de revisão e laudo de comparação
+## Requisição, material e qualidade
+
+Na maior parte das vezes o exame é passivo: uma autoridade encaminha imagens ou vídeos e formula
+quesitos. A **requisição** é registrada à parte da ocorrência -- a ocorrência é o fato; a
+requisição, o ato administrativo sobre ele, e uma ocorrência pode gerar várias -- com a
+autoridade, o documento (o ofício), as datas de recebimento e de prazo, o número de ocorrência ou
+de inquérito que cita e os quesitos. Os arquivos que ela encaminhou ficam ligados a ela, com o
+seu SHA-256. Cada análise responde a uma requisição, e o laudo responde aos quesitos dela.
+
+As faces do caso têm um papel: **questionada**, a identificar, ou **padrão**, uma imagem de
+referência encaminhada para comparação (por exemplo, a fotografia de um suspeito). De um vídeo, o
+sistema separa as pessoas em trilhas; o perito escolhe os quadros a examinar, e cada quadro vira
+um vestígio que registra o vídeo, o instante e o número do quadro.
+
+Antes de comparar, o primeiro perito registra a **qualidade** de cada face questionada (a fase de
+análise do ACE-V): apta para comparação, apta apenas para indicação investigativa, ou sem
+qualidade. É o que permite que uma indicação positiva conviva com uma imagem que não sustenta um
+laudo, e o coordenador é alertado ao abrir uma comparação sobre uma face que não foi julgada apta.
+
+## A escala de conclusões do laudo
+
+A revisão decide cada candidato como positivo, negativo ou inconclusivo. A comparação decide cada
+par numa **escala graduada**: identificação, suporte forte, moderado ou limitado à mesma origem,
+inconclusivo, suporte limitado a pessoas distintas, exclusão. Cada nível corresponde a uma das
+três decisões -- os de suporte e a identificação a positivo, as exclusões a negativo --, de modo
+que as regras das rodadas abaixo continuam valendo. Na verificação, porém, o segundo perito precisa
+chegar ao **mesmo nível**, não só à mesma decisão: um laudo afirma um nível, e uma diferença de
+nível vai para o terceiro perito como qualquer divergência.
+
+## Documentos: relatório de indicação e laudo de comparação
 
 Cada análise tem um documento desde que é aberta, como **rascunho**. Quando a análise chega à
-etapa de documento, o primeiro perito o emite: o documento recebe um número no formato
-*ano.sequência* (por exemplo, `2026.0001`), contado separadamente para relatórios de revisão e
-para laudos de comparação, e a análise é encerrada. Só o primeiro perito pode emitir, e só depois
-que todos os pares estiverem resolvidos.
+etapa de documento, o TrackID gera o rascunho a partir dos dados: um **sumário executivo** de uma
+página (requisição, material, resultados par a par, verificação, documentos anteriores e peritos)
+e as seções do relatório de indicação ou do laudo -- preâmbulo, histórico, objetivo, material,
+método, exames, processo de verificação, conclusão, resposta aos quesitos e encerramento. Tudo o
+que vem dos dados é texto **travado**; o perito escreve só nas seções que lhe cabem (o objetivo, a
+descrição do material, a análise de cada par, as respostas aos quesitos), num editor embutido na
+página da análise que mostra a paginação exata do documento final. Cada gravação é uma nova versão,
+e o servidor recusa uma versão que altere o texto travado.
 
-O TrackID ainda não gera o texto do documento: registra o número, quem o emitiu e quando, e
-reserva o lugar do arquivo que o conterá.
+Ao emitir, o documento recebe um número no formato *ano.sequência* (por exemplo, `2026.0001`),
+contado separadamente para relatórios de indicação e para laudos, e a análise é encerrada. Só o
+primeiro perito pode emitir, só depois que todos os pares estiverem resolvidos, só com as seções
+obrigatórias preenchidas e só se os dados não tiverem mudado desde o rascunho (se mudaram, o
+rascunho é atualizado e o texto do perito é mantido). A emissão congela os dados, gera o PDF e
+guarda o documento e o PDF com o seu SHA-256. Um documento emitido não muda: uma correção é um
+**laudo complementar**, uma nova comparação que aponta para o laudo que complementa. O relatório
+de indicação traz sempre o aviso de que não constitui identificação.
 
 ## Várias rodadas sobre o mesmo par
 
@@ -163,17 +202,19 @@ fala do registro de decisões.
 O fluxo implementa a verificação cega, mas não o desmascaramento sequencial linear (*linear
 sequential unmasking*) [@dror2015]: o primeiro perito vê as duas imagens ao mesmo tempo e, na
 revisão, também o escore e a decisão do sistema, sem documentar antes o que viu na imagem
-questionada. A escala de conclusões tem três valores; não há razão de verossimilhança. Análises de
-impressões digitais, pares entre casos diferentes e a geração do texto do documento ainda não
-existem.
+questionada. A escala de conclusões do laudo é graduada, mas verbal; não há razão de
+verossimilhança. Análises de impressões digitais e pares entre casos diferentes ainda não existem.
 :::
 
 ::: {.callout-tip appearance="simple"}
 ## No TrackID
 
-Pacotes `analyses` (tipos, etapas, documentos) e `examination` (pares, rascunhos, envio);
-`cluster.DecidingRound` (a rodada que decide o par) e `cluster.Reviewed` (confirmado por
-peritos); `db/migrations/006_analyses.sql`; telas Minhas análises e de trabalho da análise; `MODEL.md` seção 3.1.
+Pacotes `analyses` (tipos, etapas, emissão), `examination` (pares, rascunhos, envio, qualidade),
+`requests` (requisições e quesitos), `reports` (rascunho, versões, emissão, PDF, sumário
+executivo) e `video` (trilhas e quadros); `cluster.DecidingRound` (a rodada que decide o par),
+`cluster.Reviewed` (confirmado por peritos) e `cluster.Conclusion` (a escala do laudo);
+`db/migrations/006_analyses.sql`, `009_reports.sql` e `010_video.sql`; telas Minhas análises e
+de trabalho da análise; `MODEL.md` seção 3.1; `docs/facial-reports-plan.md`.
 :::
 
 ::: {.callout-warning appearance="simple"}

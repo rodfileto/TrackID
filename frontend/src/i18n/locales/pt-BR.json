@@ -692,7 +692,27 @@
     "blindQuestioned": "Imagem questionada",
     "blindReference": "Imagem padrão",
     "blindCase": "Exame cego",
-    "backToMyAnalyses": "Voltar às minhas análises"
+    "backToMyAnalyses": "Voltar às minhas análises",
+    "conclusion": {
+      "IDENTIFICATION": "Identificação",
+      "STRONG_SUPPORT": "Suporte forte",
+      "MODERATE_SUPPORT": "Suporte moderado",
+      "LIMITED_SUPPORT": "Suporte limitado",
+      "INCONCLUSIVE": "Inconclusivo",
+      "LIMITED_EXCLUSION": "Suporte limitado a pessoas distintas",
+      "EXCLUSION": "Exclusão"
+    },
+    "conclusionHint": "Na comparação, cada par é decidido na escala de conclusões; o verificador precisa chegar ao mesmo nível para o par ser concluído.",
+    "suitability": {
+      "SUITABLE": "Apta para comparação",
+      "LEAD_ONLY": "Apenas indicação",
+      "UNSUITABLE": "Sem qualidade",
+      "none": "Não avaliada"
+    },
+    "suitabilityLabel": "Qualidade da imagem",
+    "suitabilitySaved": "Qualidade registrada",
+    "answersRequest": "Responde à requisição nº {{sequence}}",
+    "complements": "Complementa o documento {{number}}"
   },
   "distribution": {
     "title": "Distribuição",
@@ -773,5 +793,120 @@
       "intelligence_analyst": "Inteligência",
       "coordinator": "Coordenador"
     }
+  },
+  "links": {
+    "LEAD": "Identificado (indicação)",
+    "LAUDO_IDENTIFIED": "Identificado (laudo, {{level}})",
+    "LAUDO_SUPPORTED": "Suporte (laudo, {{level}})",
+    "laterLaudo": {
+      "PENDING": "comparação em andamento",
+      "DISPUTED": "comparação com divergência",
+      "INCONCLUSIVE": "comparação inconclusiva"
+    },
+    "indirect": "Vínculo indireto"
+  },
+  "requests": {
+    "title": "Requisições",
+    "desc": "Quem solicitou o exame, o que perguntou e o que encaminhou.",
+    "none": "Nenhuma requisição registrada.",
+    "register": "Registrar requisição",
+    "registerTitle": "Registrar requisição",
+    "authority": "Autoridade requisitante",
+    "documentReference": "Documento (ex.: Ofício nº 123/2026)",
+    "documentDate": "Data do documento",
+    "receivedOn": "Recebida em",
+    "dueOn": "Prazo",
+    "citedReference": "Nº da ocorrência ou do inquérito citado",
+    "notes": "Observações",
+    "questions": "Quesitos (um por linha)",
+    "files": "Material encaminhado",
+    "save": "Registrar",
+    "saved": "Requisição registrada",
+    "overdue": "Em atraso",
+    "occurrenceLinked": "Ocorrência {{number}}",
+    "occurrenceUnlinked": "cita {{reference}} (não vinculada)",
+    "questionsCount_one": "{{count}} quesito",
+    "questionsCount_other": "{{count}} quesitos",
+    "filesCount_one": "{{count}} arquivo",
+    "filesCount_other": "{{count}} arquivos",
+    "registeredBy": "registrada por {{user}}",
+    "attach": "Vincular arquivos",
+    "sequence": "Requisição nº {{sequence}}",
+    "material": "Faces do caso",
+    "role": {
+      "QUESTIONED": "Questionada",
+      "REFERENCE": "Padrão encaminhado"
+    },
+    "makeReference": "Marcar como padrão",
+    "makeQuestioned": "Marcar como questionada",
+    "roleSaved": "Papel registrado"
+  },
+  "reports": {
+    "title": "Documento",
+    "summary": "Sumário executivo",
+    "preliminary": "Preliminar — o documento ainda não foi emitido",
+    "edit": "Editar documento",
+    "close": "Fechar editor",
+    "editorTitle": "{{title}} — rascunho v{{version}}",
+    "saved": "Rascunho salvo (v{{version}})",
+    "stale": "Os dados mudaram desde que este rascunho foi gerado. Atualize-o antes de emitir; seu texto é mantido.",
+    "refresh": "Atualizar com os dados",
+    "refreshed": "Rascunho atualizado (v{{version}})",
+    "issue": "Emitir documento",
+    "issueConfirm": "Emitir o documento? Ele recebe o número e não poderá mais ser alterado.",
+    "issued": "Documento {{number}} emitido",
+    "download": "Baixar {{format}}",
+    "required": "Seções obrigatórias: {{sections}}",
+    "deliveries": "Entregas",
+    "noDeliveries": "Ainda não entregue.",
+    "deliver": "Registrar entrega",
+    "deliveredOn": "Entregue em",
+    "method": "Meio",
+    "recipient": "Destinatário",
+    "delivered": "Entrega registrada",
+    "hash": "SHA-256 do PDF: {{hash}}",
+    "unsaved": "Alterações não salvas",
+    "editorLoading": "Carregando o editor…",
+    "editorUnavailable": "O editor de documentos não está disponível neste servidor (WORDCRAFT_WEB_DIR).",
+    "fields": {
+      "document": "Documento",
+      "case": "Caso",
+      "occurrence": "Ocorrência",
+      "request": "Requisição",
+      "material": "Material questionado",
+      "references": "Material de referência",
+      "verification": "Verificação",
+      "previous": "Documentos anteriores",
+      "examiners": "Peritos"
+    },
+    "columns": {
+      "questioned": "Questionado",
+      "reference": "Referência",
+      "conclusion": "Conclusão",
+      "result": "Resultado",
+      "lead": "Indicação anterior",
+      "face": "Face",
+      "quality": "Qualidade",
+      "leads": "Indicado(s)"
+    }
+  },
+  "videos": {
+    "title": "Vídeos",
+    "desc": "Vídeos encaminhados: cada pessoa que o sistema acompanha é uma trilha; use um quadro para examiná-la.",
+    "none": "Nenhum vídeo.",
+    "upload": "Enviar vídeo",
+    "uploaded": "Vídeo recebido; em processamento",
+    "status": {
+      "PENDING": "Aguardando",
+      "PROCESSING": "Processando",
+      "DONE": "Processado",
+      "FAILED": "Falhou"
+    },
+    "noTracks": "Nenhuma face encontrada.",
+    "track": "Trilha {{n}}",
+    "detections_one": "{{count}} detecção",
+    "detections_other": "{{count}} detecções",
+    "useFrame": "Usar este quadro",
+    "frameAdded": "Quadro de {{time}} adicionado como vestígio"
   }
 }

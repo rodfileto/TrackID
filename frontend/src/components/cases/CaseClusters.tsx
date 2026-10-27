@@ -12,6 +12,7 @@ import { openAnalysis } from "../../services/analyses";
 import type { CaseCluster, PathStep, TraceLink } from "../../services/cases";
 import type { CodificationThumbnail } from "../../hooks/useCodificationThumbnails";
 import { codificationLabel } from "../../hooks/useCodificationThumbnails";
+import LinkBadge from "../analyses/LinkBadge";
 
 interface CaseClustersProps {
   caseId: string;
@@ -56,11 +57,14 @@ function DecisionBadge({ link }: { link: TraceLink }) {
     );
   }
   return (
-    <Badge size="sm" color="success">
-      {t("caseClusters.confirmedBy", { name: link.decidedBy || t("caseClusters.anExaminer") })}
-      {link.confidence !== undefined &&
-        ` · ${(link.confidence * 100).toFixed(1)}%`}
-    </Badge>
+    <div className="flex flex-col items-end gap-1">
+      <Badge size="sm" color="success">
+        {t("caseClusters.confirmedBy", { name: link.decidedBy || t("caseClusters.anExaminer") })}
+        {link.confidence !== undefined &&
+          ` · ${(link.confidence * 100).toFixed(1)}%`}
+      </Badge>
+      <LinkBadge link={link.link} />
+    </div>
   );
 }
 

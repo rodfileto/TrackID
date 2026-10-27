@@ -1,6 +1,7 @@
 import { apiBaseUrl, requestApi } from "./api";
 import { getToken } from "./auth";
 import type { ThumbnailBox } from "./persons";
+import type { Conclusion, LinkStrength } from "./analyses";
 
 /** CRIMINAL, or CIVIL for non-criminal identification (e.g. DVI, unidentified bodies). */
 export type CaseType = "CRIMINAL" | "CIVIL";
@@ -96,6 +97,8 @@ export interface TraceLink {
   decisionRole?: string;
   decidedBy?: string;
   confidence?: number;
+  /** A direct link's strength: a lead, or a laudo at its level. */
+  link?: LinkStrength;
 }
 
 /** One sample an indirect TraceLink is reached through -- see cases.PathStep. */
@@ -303,11 +306,18 @@ export interface IdentityDecision {
   status: "PENDING" | "CONFIRMED" | "EXCLUDED" | "INCONCLUSIVE" | "DISPUTED";
   decisionRole?: string;
   decidedBy?: string;
+  /** What settled it: a review (LEAD) or a comparison (LAUDO, with its conclusion). */
+  basis?: "LEAD" | "LAUDO";
+  conclusion?: Conclusion;
+  /** A confirmed identity's strength. */
+  link?: LinkStrength;
 }
 
 /** One codified face of the case and its identity decisions, best score first. */
 export interface CaseFaceIdentities {
   traceId: number;
+  /** REFERENCE: known material sent in for comparison, not a face to identify. */
+  role?: "QUESTIONED" | "REFERENCE";
   identities: IdentityDecision[];
 }
 

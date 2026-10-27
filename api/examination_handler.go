@@ -9,6 +9,7 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/rodfileto/trackid/analyses"
+	"github.com/rodfileto/trackid/cluster"
 	"github.com/rodfileto/trackid/embedding"
 	"github.com/rodfileto/trackid/examination"
 	"github.com/rodfileto/trackid/storage"
@@ -33,10 +34,11 @@ func AnalysisWorksheetHandler(sqlDB *sql.DB) gin.HandlerFunc {
 }
 
 type saveDraftRequest struct {
-	FeatureA string `json:"featureA" binding:"required"`
-	FeatureB string `json:"featureB" binding:"required"`
-	Decision string `json:"decision" binding:"required"`
-	Notes    string `json:"notes"`
+	FeatureA   string `json:"featureA" binding:"required"`
+	FeatureB   string `json:"featureB" binding:"required"`
+	Decision   string `json:"decision" binding:"required"`
+	Conclusion string `json:"conclusion"`
+	Notes      string `json:"notes"`
 }
 
 // SaveDraftHandler records the signed-in examiner's draft decision on one pair
@@ -53,7 +55,8 @@ func SaveDraftHandler(sqlDB *sql.DB) gin.HandlerFunc {
 			return
 		}
 		err := examination.SaveDraft(context.Request.Context(), sqlDB, currentUser(context), target.ID,
-			examination.Pair{FeatureA: request.FeatureA, FeatureB: request.FeatureB}, request.Decision, request.Notes)
+			examination.Pair{FeatureA: request.FeatureA, FeatureB: request.FeatureB}, request.Decision, request.Notes,
+			cluster.Conclusion(request.Conclusion))
 		if !writeExaminationError(context, err) {
 			context.JSON(http.StatusOK, gin.H{"saved": true})
 		}
@@ -90,7 +93,9 @@ func writeExaminationError(context *gin.Context, err error) bool {
 		context.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 	case errors.As(err, &incomplete), errors.Is(err, examination.ErrNothingToSubmit):
 		context.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-	case errors.Is(err, examination.ErrInvalidDecision), errors.Is(err, examination.ErrNotInScope):
+	case errors.Is(err, examination.ErrInvalidDecision), errors.Is(err, examination.ErrNotInScope),
+		errors.Is(err, examination.ErrNeedsConclusion), errors.Is(err, examination.ErrNoConclusion),
+		errors.Is(err, examination.ErrInvalidSuitability), errors.Is(err, examination.ErrNotQuestioned):
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	default:
 		context.JSON(http.StatusInternalServerError, gin.H{"error": "could not record the decision"})
@@ -125,5 +130,32 @@ func PairImageHandler(sqlDB *sql.DB, store *storage.Client) gin.HandlerFunc {
 		}
 		context.Header("Cache-Control", "private, no-store")
 		context.Data(http.StatusOK, contentType, img.Data)
+	}
+}
+
+type assessTraceRequest struct {
+	TraceID     int64  `json:"traceId" binding:"required"`
+	Suitability string `json:"suitability" binding:"required"`
+	Notes       string `json:"notes"`
+}
+
+// AssessTraceHandler records the first examiner's value determination of a questioned trace of the
+// case (examination.AssessTrace).
+func AssessTraceHandler(sqlDB *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		target, ok := caseAnalysis(context, sqlDB)
+		if !ok {
+			return
+		}
+		var request assessTraceRequest
+		if err := context.ShouldBindJSON(&request); err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid assessment"})
+			return
+		}
+		err := examination.AssessTrace(context.Request.Context(), sqlDB, currentUser(context), target.ID, request.TraceID,
+			examination.Suitability(request.Suitability), request.Notes)
+		if !writeExaminationError(context, err) {
+			context.JSON(http.StatusOK, gin.H{"saved": true})
+		}
 	}
 }

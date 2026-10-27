@@ -2,7 +2,7 @@
 -- biometric_decisions is the append-only event log of every decision made about one pair of
 -- biometric features (fingerprint or face), whether made automatically (an AFIS score, an ANN
 -- similarity) or by a human examiner. This is the source of truth for a pair's confirmation state
--- -- clusters (the clusters tables, and Neo4j IN_CLUSTER) are a view derived from it, never
+-- -- clusters (the clusters tables) are a view derived from it, never
 -- written authoritatively. See MODEL.md section 3.
 --
 -- Within one round, a pair goes through up to four roles, enforced structurally below (one row

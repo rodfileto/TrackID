@@ -52,6 +52,11 @@ export default defineConfig({
         target: "http://localhost:8082",
         changeOrigin: true,
       },
+      // The report editor (WordCraft's web build), served by the API so it shares this origin.
+      "/wordcraft": {
+        target: "http://localhost:8082",
+        changeOrigin: true,
+      },
     },
   },
 });

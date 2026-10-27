@@ -18,17 +18,16 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/rodfileto/trackid-vision/vision"
 
 	"github.com/rodfileto/trackid/embedding"
 	"github.com/rodfileto/trackid/fingerprint"
-	"github.com/rodfileto/trackid/graph"
 	"github.com/rodfileto/trackid/internal/config"
 	"github.com/rodfileto/trackid/internal/database"
 	"github.com/rodfileto/trackid/internal/env"
 	"github.com/rodfileto/trackid/internal/queue"
 	"github.com/rodfileto/trackid/storage"
+	"github.com/rodfileto/trackid/video"
 )
 
 func main() {
@@ -71,31 +70,6 @@ func main() {
 		log.Printf("object storage is not configured; embedding tasks will fail")
 	}
 
-	// Optional, like Vision below: sync-face clustering always materializes
-	// to Neo4j (see cluster.Run), so its handler is only registered when
-	// this succeeds -- an embedding still gets computed either way, it just
-	// won't trigger an automatic match+cluster run until Neo4j is reachable.
-	var neo4jDriver neo4j.DriverWithContext
-	if configuration.Neo4jURL == "" {
-		log.Printf("NEO4J_URL is not configured; %s will not be processed", embedding.TaskTypeSyncFace)
-	} else if password := os.Getenv("NEO4J_PASSWORD"); password == "" {
-		log.Printf("NEO4J_URL is configured but NEO4J_PASSWORD is not; %s will not be processed", embedding.TaskTypeSyncFace)
-	} else {
-		username := os.Getenv("NEO4J_USERNAME")
-		if username == "" {
-			username = "neo4j"
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		driver, err := graph.OpenDriver(ctx, configuration.Neo4jURL, username, password)
-		cancel()
-		if err != nil {
-			log.Printf("neo4j is configured but unreachable; %s will not be processed: %v", embedding.TaskTypeSyncFace, err)
-		} else {
-			neo4jDriver = driver
-			defer driver.Close(context.Background())
-		}
-	}
-
 	mux := asynq.NewServeMux()
 
 	if configuration.VisionDetectorPath == "" || configuration.VisionRecognizerPath == "" {
@@ -116,16 +90,16 @@ func main() {
 			log.Printf("registered handler for %s", embedding.TaskTypeComputeCodification)
 			mux.HandleFunc(embedding.TaskTypeComputeIdentityFeature, embedding.HandleComputeIdentityFeature(sqlDB, store, vis, queueClient))
 			log.Printf("registered handler for %s", embedding.TaskTypeComputeIdentityFeature)
+			// Video sent in as material: tracks of faces (needs ffmpeg/ffprobe on PATH).
+			mux.HandleFunc(video.TaskTypeProcess, video.HandleProcess(sqlDB, store, video.VisionTracker(vis)))
+			log.Printf("registered handler for %s", video.TaskTypeProcess)
 		}
 	}
 
-	if neo4jDriver != nil {
-		mux.HandleFunc(embedding.TaskTypeSyncFace, embedding.HandleSyncFace(sqlDB, neo4jDriver))
-		log.Printf("registered handler for %s", embedding.TaskTypeSyncFace)
-	}
+	mux.HandleFunc(embedding.TaskTypeSyncFace, embedding.HandleSyncFace(sqlDB))
+	log.Printf("registered handler for %s", embedding.TaskTypeSyncFace)
 
-	// Fingerprint doesn't need Vision or Neo4j: the sidecar extracts and
-	// matches, and fingerprint.RunSync clusters only when a driver is given.
+	// Fingerprint doesn't need Vision: the sidecar extracts and matches.
 	if configuration.FingerprintSidecarURL == "" {
 		log.Printf("FINGERPRINT_SIDECAR_URL not configured; fingerprint tasks will not be processed")
 	} else {
@@ -137,7 +111,7 @@ func main() {
 		} else {
 			mux.HandleFunc(fingerprint.TaskTypeExtractCodification, fingerprint.HandleExtractCodification(sqlDB, store, fp, queueClient))
 			mux.HandleFunc(fingerprint.TaskTypeExtractIdentityFeature, fingerprint.HandleExtractIdentityFeature(sqlDB, store, fp, queueClient))
-			mux.HandleFunc(fingerprint.TaskTypeSync, fingerprint.HandleSync(sqlDB, fp, neo4jDriver))
+			mux.HandleFunc(fingerprint.TaskTypeSync, fingerprint.HandleSync(sqlDB, fp))
 			log.Printf("registered handlers for %s, %s, %s",
 				fingerprint.TaskTypeExtractCodification, fingerprint.TaskTypeExtractIdentityFeature, fingerprint.TaskTypeSync)
 		}

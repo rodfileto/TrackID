@@ -38,13 +38,7 @@ stop_process "Go API" "$RUN_DIR/backend.pid"
 if command -v docker >/dev/null 2>&1; then
   echo "Stopping TrackID infrastructure..."
   cd "$ROOT_DIR"
-  if [[ -n "$(docker compose --profile graph ps -q neo4j 2>/dev/null)" ]]; then
-    echo "Neo4j: stopping running container"
-    docker compose --profile graph stop postgres redis minio sourceafis-sidecar neo4j
-  else
-    echo "Neo4j: not running, skipping"
-    docker compose stop postgres redis minio sourceafis-sidecar
-  fi
+  docker compose stop postgres redis minio sourceafis-sidecar
 fi
 
 echo "TrackID development stack stopped."

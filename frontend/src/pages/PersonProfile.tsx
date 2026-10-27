@@ -15,6 +15,7 @@ import Badge from "../components/ui/badge/Badge";
 import IdentityFileThumbnail from "../components/persons/IdentityFileThumbnail";
 import CaseTraceThumbnail from "../components/cases/CaseTraceThumbnail";
 import { useCurrentUser } from "../context/CurrentUserContext";
+import LinkBadge from "../components/analyses/LinkBadge";
 import {
   getPersonIdentity,
   getPersonProfile,
@@ -88,6 +89,11 @@ function ClusterMemberCard({ member }: { member: PersonClusterMember }) {
       <Badge size="sm" color="warning">
         {t("personProfile.caseEvidence")}
       </Badge>
+      {member.link ? (
+        <LinkBadge link={member.link} />
+      ) : (
+        <span className="text-[10px] text-gray-500 dark:text-gray-400">{t("links.indirect")}</span>
+      )}
       <Link
         to={`/cases/${encodeURIComponent(member.caseId ?? "")}`}
         className="line-clamp-2 w-full break-all text-xs text-brand-500 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300"

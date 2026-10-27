@@ -23,8 +23,10 @@ import (
 	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/cases"
+	"github.com/rodfileto/trackid/cluster"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/graph"
+	"github.com/rodfileto/trackid/storage"
 )
 
 // Decisions an examiner can make (biometric_decisions.decision).
@@ -37,6 +39,8 @@ const (
 // Errors returned to callers.
 var (
 	ErrInvalidDecision = errors.New("decision must be POSITIVE, NEGATIVE or INCONCLUSIVE")
+	ErrNeedsConclusion = errors.New("a comparison decides each pair on the conclusion scale: conclusion is required and must match the decision")
+	ErrNoConclusion    = errors.New("only a comparison records a conclusion level")
 	ErrNotInScope      = errors.New("that pair is not one this step decides")
 	ErrNothingToSubmit = errors.New("this stage has no decisions to submit")
 )
@@ -63,10 +67,11 @@ func ordered(a, b string) Pair {
 
 // Decision is a decision on one pair: a draft, or one submitted in a step.
 type Decision struct {
-	Step     analyses.Step `json:"step,omitempty"`
-	Decision string        `json:"decision"`
-	Notes    string        `json:"notes,omitempty"`
-	Username string        `json:"username,omitempty"`
+	Step       analyses.Step      `json:"step,omitempty"`
+	Decision   string             `json:"decision"`
+	Conclusion cluster.Conclusion `json:"conclusion,omitempty"` // a comparison's level (cluster.Conclusion)
+	Notes      string             `json:"notes,omitempty"`
+	Username   string             `json:"username,omitempty"`
 }
 
 // PairView is one pair as an examiner sees it. Questioned is a face of the case; Counterpart the
@@ -180,16 +185,18 @@ func decisionsByPair(ctx context.Context, q *db.Queries, analysisID int64) (map[
 			out[p] = map[analyses.Step]Decision{}
 		}
 		step := analyses.Step(r.Role)
-		out[p][step] = Decision{Step: step, Decision: r.Decision, Notes: r.Notes.String, Username: r.Username.String}
+		out[p][step] = Decision{Step: step, Decision: r.Decision, Conclusion: cluster.Conclusion(r.Conclusion.String), Notes: r.Notes.String,
+			Username: r.Username.String}
 	}
 	return out, nil
 }
 
-// disputed reports whether the first two examiners decided p differently.
+// disputed reports whether the first two examiners decided p differently: another decision, or in
+// a comparison another conclusion level.
 func disputed(d map[analyses.Step]Decision) bool {
 	v, okV := d[analyses.StepVerificator]
 	r, okR := d[analyses.StepReviewer]
-	return okV && okR && v.Decision != r.Decision
+	return okV && okR && (v.Decision != r.Decision || v.Conclusion != r.Conclusion)
 }
 
 // stepScope narrows an analysis's pairs to those step decides: every pair, except at
@@ -253,7 +260,8 @@ func GetWorksheet(ctx context.Context, sqlDB *sql.DB, user auth.UserProfile, ana
 			return Worksheet{}, err
 		}
 		for _, r := range rows {
-			drafts[Pair{r.FeatureAID, r.FeatureBID}] = Decision{Step: step, Decision: r.Decision, Notes: r.Notes.String}
+			drafts[Pair{r.FeatureAID, r.FeatureBID}] = Decision{Step: step, Decision: r.Decision, Conclusion: cluster.Conclusion(r.Conclusion.String),
+				Notes: r.Notes.String}
 		}
 	}
 	// Blind work (analyses.BlindWork): the second and third examiners see the two images and
@@ -303,8 +311,10 @@ func imageOnly(l cases.TraceLink) cases.TraceLink {
 	return cases.TraceLink{Kind: l.Kind, FeatureID: l.FeatureID}
 }
 
-// SaveDraft records or replaces user's draft decision on one pair of the step they are working.
-func SaveDraft(ctx context.Context, sqlDB *sql.DB, user auth.UserProfile, analysisID int64, pair Pair, decision, notes string) error {
+// SaveDraft records or replaces user's draft decision on one pair of the step they are working. In
+// a comparison the decision comes with a conclusion level that maps onto it (cluster.Conclusion);
+// in a review there is none.
+func SaveDraft(ctx context.Context, sqlDB *sql.DB, user auth.UserProfile, analysisID int64, pair Pair, decision, notes string, conclusion cluster.Conclusion) error {
 	if decision != Positive && decision != Negative && decision != Inconclusive {
 		return ErrInvalidDecision
 	}
@@ -312,6 +322,13 @@ func SaveDraft(ctx context.Context, sqlDB *sql.DB, user auth.UserProfile, analys
 	t, err := analyses.GetTarget(ctx, q, analysisID)
 	if err != nil {
 		return err
+	}
+	if t.Type == analyses.FacialComparison {
+		if !conclusion.Valid() || string(conclusion.Decision()) != decision {
+			return ErrNeedsConclusion
+		}
+	} else if conclusion != "" {
+		return ErrNoConclusion
 	}
 	step, err := analyses.CanWork(user, t)
 	if err != nil {
@@ -339,6 +356,7 @@ func SaveDraft(ctx context.Context, sqlDB *sql.DB, user auth.UserProfile, analys
 	return q.UpsertDecisionDraft(ctx, db.UpsertDecisionDraftParams{
 		CaseAnalysisID: t.ID, Step: string(step), FeatureAID: p.FeatureA, FeatureBID: p.FeatureB,
 		Decision: decision, Notes: sql.NullString{String: notes, Valid: notes != ""}, UserID: user.ID,
+		Conclusion: sql.NullString{String: string(conclusion), Valid: conclusion != ""},
 	})
 }
 
@@ -409,14 +427,14 @@ func Submit(ctx context.Context, sqlDB *sql.DB, user auth.UserProfile, analysisI
 		if _, err := q.InsertBiometricDecision(ctx, db.InsertBiometricDecisionParams{
 			FeatureAID: c.pair.FeatureA, FeatureBID: c.pair.FeatureB, Modality: t.Type.DecisionModality(),
 			Role: string(step), Decision: d.Decision, Username: sql.NullString{String: user.Username, Valid: true},
-			Notes: d.Notes, CaseAnalysisID: sql.NullInt64{Int64: t.ID, Valid: true},
+			Notes: d.Notes, CaseAnalysisID: sql.NullInt64{Int64: t.ID, Valid: true}, Conclusion: d.Conclusion,
 		}); err != nil {
 			return SubmitResult{}, err
 		}
 		if decided[c.pair] == nil {
 			decided[c.pair] = map[analyses.Step]Decision{}
 		}
-		decided[c.pair][step] = Decision{Step: step, Decision: d.Decision}
+		decided[c.pair][step] = Decision{Step: step, Decision: d.Decision, Conclusion: cluster.Conclusion(d.Conclusion.String)}
 	}
 	if err := q.DeleteDecisionDrafts(ctx, db.DeleteDecisionDraftsParams{CaseAnalysisID: t.ID, Step: string(step)}); err != nil {
 		return SubmitResult{}, err
@@ -443,4 +461,42 @@ func Submit(ctx context.Context, sqlDB *sql.DB, user auth.UserProfile, analysisI
 		return SubmitResult{}, err
 	}
 	return SubmitResult{Decisions: len(pairs), Stage: next}, nil
+}
+
+// Record is one pair of an analysis with the matcher's proposal and every decision submitted on
+// it, by step: what its report states.
+type Record struct {
+	Pair
+	SystemDecision string                     `json:"systemDecision,omitempty"`
+	Score          *float64                   `json:"score,omitempty"`
+	Decisions      map[analyses.Step]Decision `json:"decisions"`
+	Disputed       bool                       `json:"disputed"`
+}
+
+// Records returns every pair of an analysis (its scope, as GetWorksheet's) with its decisions, in
+// the analysis's order, and the case's own face feature ids.
+func Records(ctx context.Context, q *db.Queries, t analyses.Target) ([]Record, map[string]bool, error) {
+	all, own, err := scope(ctx, q, t)
+	if err != nil {
+		return nil, nil, err
+	}
+	decided, err := decisionsByPair(ctx, q, t.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	out := make([]Record, len(all))
+	for i, c := range all {
+		d := decided[c.pair]
+		if d == nil {
+			d = map[analyses.Step]Decision{}
+		}
+		out[i] = Record{Pair: c.pair, SystemDecision: c.decision, Score: c.score, Decisions: d, Disputed: disputed(d)}
+	}
+	return out, own, nil
+}
+
+// FeatureImage returns the image of any feature, a questioned one cut to its box: PairImage
+// without the analysis's scope, for the report the server builds.
+func FeatureImage(ctx context.Context, sqlDB *sql.DB, store *storage.Client, featureID string) (Image, error) {
+	return featureImage(ctx, sqlDB, store, featureID)
 }

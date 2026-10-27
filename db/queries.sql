@@ -138,15 +138,19 @@ RETURNING id;
 -- name: InsertBiometricDecision :one
 INSERT INTO biometric_decisions
     (feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
-     related_reference, related_reference_kind, case_analysis_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     related_reference, related_reference_kind, case_analysis_id, conclusion)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, sqlc.narg('conclusion'))
 RETURNING id, feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, threshold, notes,
     related_reference, related_reference_kind, decided_at, created_at, case_analysis_id;
 
 -- name: ListBiometricDecisions :many
-SELECT feature_a_id, feature_b_id, modality, role, decision, system_source, username, confidence, case_analysis_id
-FROM biometric_decisions
-ORDER BY feature_a_id, feature_b_id, decided_at;
+-- analysis_type and conclusion say what a human round was: a review (a lead) or a comparison (a
+-- laudo, with its level).
+SELECT d.feature_a_id, d.feature_b_id, d.modality, d.role, d.decision, d.system_source, d.username, d.confidence,
+       d.case_analysis_id, ca.analysis_type, d.conclusion
+FROM biometric_decisions d
+LEFT JOIN case_analyses ca ON ca.id = d.case_analysis_id
+ORDER BY d.feature_a_id, d.feature_b_id, d.decided_at;
 
 -- name: ListBiometricFeatures :many
 SELECT id, feature_type, provenance, identity_file_id, case_trace_id
@@ -489,48 +493,6 @@ FROM case_decisions
 WHERE biometric_case_id = $1
 ORDER BY decided_at;
 
--- name: ListAllBiometricCases :many
-SELECT case_id, case_type, modality, description
-FROM biometric_cases
-ORDER BY case_id;
-
--- name: ListQuestionedFeatures :many
-SELECT bf.case_trace_id, bf.feature_type, bc.case_id
-FROM biometricfeature bf
-JOIN case_traces tr ON tr.id = bf.case_trace_id
-JOIN case_evidences ev ON ev.id = tr.evidence_id
-JOIN biometric_cases bc ON bc.id = ev.biometric_case_id
-WHERE bf.provenance = 'QUESTIONED'
-ORDER BY bf.case_trace_id;
-
--- name: ListPersonIDs :many
-SELECT person_id FROM person ORDER BY person_id;
-
--- name: ListKnownIdentityChain :many
-SELECT
-    p.person_id,
-    d.id AS document_id, d.document_number, d.document_type, d.fiscal_number,
-    r.id AS register_id, r.register_number, r.name,
-    r.parent_1_name, r.parent_1_gender, r.parent_2_name, r.parent_2_gender,
-    r.birth_date,
-    f.id AS identity_file_id, bf.feature_type, f.source_path, f.storage_ref, f.content_type, f.size_bytes
-FROM biometricfeature bf
-JOIN identity_file f ON f.id = bf.identity_file_id
-JOIN identity_register r ON r.id = f.register_id
-JOIN identity_document d ON d.id = r.document_id
-JOIN person p ON p.id = d.person_id
-WHERE bf.provenance = 'KNOWN'
-ORDER BY bf.id;
-
--- name: ListKnownFeaturePersons :many
-SELECT p.person_id, f.id AS identity_file_id
-FROM biometricfeature bf
-JOIN identity_file f ON f.id = bf.identity_file_id
-JOIN identity_register r ON r.id = f.register_id
-JOIN identity_document d ON d.id = r.document_id
-JOIN person p ON p.id = d.person_id
-WHERE bf.provenance = 'KNOWN';
-
 -- Clusters come in two layers (clusters.basis, migrations/008_clusters.sql): AUTOMATIC, from every CONFIRMED
 -- pair, and REVIEWED, from the pairs people confirmed. Every query resolving features to clusters
 -- names its layer; cluster ids are unique across both, so queries by cluster id need none.
@@ -545,12 +507,6 @@ ORDER BY id;
 SELECT cluster_id, feature_id
 FROM cluster_members
 WHERE basis = $1;
-
--- name: ListClusterMembersJoined :many
-SELECT c.id AS cluster_id, c.modality, c.basis, m.feature_id
-FROM clusters c
-JOIN cluster_members m ON m.cluster_id = c.id
-ORDER BY c.id, m.feature_id;
 
 -- name: CreateCluster :one
 INSERT INTO clusters (modality, basis) VALUES ($1, $2) RETURNING id;
@@ -636,10 +592,12 @@ WHERE basis = @basis AND feature_id = ANY(@feature_ids::text[]);
 -- cluster.DeriveEdgeStatus) and who/what decided it (see
 -- cases.ListCaseClusters). A decision between two of the given features
 -- appears once from each side.
-SELECT feature_id, counterpart_id, role, decision, system_source, username, confidence, case_analysis_id
-FROM biometric_decision_sides
-WHERE feature_id = ANY(@feature_ids::text[])
-ORDER BY feature_id, counterpart_id, decided_at;
+SELECT s.feature_id, s.counterpart_id, s.role, s.decision, s.system_source, s.username, s.confidence, s.case_analysis_id,
+       ca.analysis_type, s.conclusion
+FROM biometric_decision_sides s
+LEFT JOIN case_analyses ca ON ca.id = s.case_analysis_id
+WHERE s.feature_id = ANY(@feature_ids::text[])
+ORDER BY s.feature_id, s.counterpart_id, s.decided_at;
 
 -- name: ListClustersByIDs :many
 SELECT id, modality, basis, created_at
@@ -1003,8 +961,9 @@ SELECT id FROM biometric_cases WHERE id = $1 FOR UPDATE;
 
 -- name: InsertCaseAnalysis :one
 -- The case's next analysis, numbered after its last one (lock the case first: LockBiometricCase).
-INSERT INTO case_analyses (biometric_case_id, sequence, analysis_type, requested_by)
-SELECT @biometric_case_id::bigint, COALESCE(MAX(sequence), 0) + 1, @analysis_type::text, sqlc.narg('requested_by')::bigint
+INSERT INTO case_analyses (biometric_case_id, sequence, analysis_type, requested_by, case_request_id)
+SELECT @biometric_case_id::bigint, COALESCE(MAX(sequence), 0) + 1, @analysis_type::text, sqlc.narg('requested_by')::bigint,
+       sqlc.narg('case_request_id')::bigint
 FROM case_analyses
 WHERE biometric_case_id = @biometric_case_id::bigint
 RETURNING id, sequence;
@@ -1049,7 +1008,7 @@ SELECT ca.id, ca.sequence, ca.analysis_type, ca.status, ca.stage, ca.created_at,
        ru.id AS reviewer_id, ru.username AS reviewer,
        iu.id AS inconsistence_id, iu.username AS inconsistence,
        ar.report_type, ar.status AS report_status, ar.report_year, ar.report_number, ar.issued_at,
-       ib.username AS issued_by
+       ib.username AS issued_by, ca.case_request_id, ar.id AS report_id, ar.complements_report_id
 FROM case_analyses ca
 JOIN biometric_cases bc ON bc.id = ca.biometric_case_id
 LEFT JOIN users rq ON rq.id = ca.requested_by
@@ -1168,13 +1127,14 @@ FROM biometric_cases bc
 WHERE bc.case_id = @case_id::text;
 
 -- name: UpsertDecisionDraft :exec
-INSERT INTO analysis_decision_drafts (case_analysis_id, step, feature_a_id, feature_b_id, decision, notes, user_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO analysis_decision_drafts (case_analysis_id, step, feature_a_id, feature_b_id, decision, notes, user_id, conclusion)
+VALUES ($1, $2, $3, $4, $5, $6, $7, sqlc.narg('conclusion'))
 ON CONFLICT (case_analysis_id, step, feature_a_id, feature_b_id) DO UPDATE SET
-    decision = EXCLUDED.decision, notes = EXCLUDED.notes, user_id = EXCLUDED.user_id, updated_at = NOW();
+    decision = EXCLUDED.decision, notes = EXCLUDED.notes, user_id = EXCLUDED.user_id, conclusion = EXCLUDED.conclusion,
+    updated_at = NOW();
 
 -- name: ListDecisionDrafts :many
-SELECT feature_a_id, feature_b_id, decision, notes
+SELECT feature_a_id, feature_b_id, decision, notes, conclusion
 FROM analysis_decision_drafts
 WHERE case_analysis_id = $1 AND step = $2;
 
@@ -1183,7 +1143,7 @@ DELETE FROM analysis_decision_drafts WHERE case_analysis_id = $1 AND step = $2;
 
 -- name: ListAnalysisDecisions :many
 -- The human decisions submitted in one analysis.
-SELECT feature_a_id, feature_b_id, role, decision, username, notes, decided_at
+SELECT feature_a_id, feature_b_id, role, decision, username, notes, decided_at, conclusion
 FROM biometric_decisions
 WHERE case_analysis_id = $1
 ORDER BY feature_a_id, feature_b_id, id;
@@ -1202,7 +1162,7 @@ WHERE report_type = $1 AND report_year = $2;
 
 -- name: IssueAnalysisReport :one
 UPDATE analysis_reports
-SET status = 'ISSUED', report_year = $2, report_number = $3, issued_by = $4, issued_at = NOW()
+SET status = 'ISSUED', report_year = $2, report_number = $3, issued_by = $4, issued_at = $5
 WHERE case_analysis_id = $1 AND status = 'DRAFT'
 RETURNING report_type, report_year, report_number, issued_at;
 
@@ -1226,3 +1186,241 @@ SELECT COUNT(*) FROM biometric_templates WHERE template_type = $1 AND matched_at
 
 -- name: InsertAccessLog :exec
 INSERT INTO access_log (user_id, username, kind, subject, route) VALUES ($1, $2, $3, $4, $5);
+
+-- Requests and received material (docs/facial-reports-plan.md, phase 1).
+
+-- name: InsertCaseRequest :one
+-- The case's next request, numbered after its last one (lock the case first: LockBiometricCase).
+INSERT INTO case_requests (biometric_case_id, sequence, authority, document_reference, document_date, received_on, due_on,
+    cited_reference, occurrence_id, notes, registered_by)
+SELECT @biometric_case_id::bigint, COALESCE(MAX(sequence), 0) + 1, @authority::text, @document_reference::text,
+       sqlc.narg('document_date')::date, @received_on::date, sqlc.narg('due_on')::date, sqlc.narg('cited_reference')::text,
+       sqlc.narg('occurrence_id')::bigint, sqlc.narg('notes')::text, sqlc.narg('registered_by')::bigint
+FROM case_requests
+WHERE biometric_case_id = @biometric_case_id::bigint
+RETURNING id, sequence;
+
+-- name: InsertCaseRequestQuestion :exec
+INSERT INTO case_request_questions (case_request_id, sequence, question) VALUES ($1, $2, $3);
+
+-- name: ListCaseRequests :many
+-- A case's requests in order, with the occurrence each was linked to and who registered it.
+SELECT r.id, r.sequence, r.authority, r.document_reference, r.document_date, r.received_on, r.due_on, r.cited_reference,
+       r.occurrence_id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
+       r.notes, u.username AS registered_by, r.created_at
+FROM case_requests r
+JOIN biometric_cases bc ON bc.id = r.biometric_case_id
+LEFT JOIN occurrences o ON o.id = r.occurrence_id
+LEFT JOIN users u ON u.id = r.registered_by
+WHERE bc.case_id = $1
+ORDER BY r.sequence;
+
+-- name: ListCaseRequestQuestions :many
+SELECT q.case_request_id, q.sequence, q.question
+FROM case_request_questions q
+JOIN case_requests r ON r.id = q.case_request_id
+JOIN biometric_cases bc ON bc.id = r.biometric_case_id
+WHERE bc.case_id = $1
+ORDER BY r.sequence, q.sequence;
+
+-- name: AttachRequestFiles :execrows
+-- Marks a case's evidence files as material the request sent in.
+UPDATE case_files SET case_request_id = @case_request_id::bigint, updated_at = NOW()
+WHERE biometric_case_id = @biometric_case_id::bigint AND category IN ('evidence', 'video') AND id = ANY(@file_ids::bigint[]);
+
+-- name: ListRequestFiles :many
+-- Every evidence file of a case with the request that sent it, if any.
+SELECT f.id, f.case_request_id, f.filename, f.hash_id, f.content_type, f.size_bytes, f.created_at
+FROM case_files f
+JOIN biometric_cases bc ON bc.id = f.biometric_case_id
+WHERE bc.case_id = $1 AND f.category IN ('evidence', 'video')
+ORDER BY f.id;
+
+-- name: FindOccurrenceByReference :many
+-- Occurrences a request's cited number names exactly: the TrackID number ("2026.0001") or the
+-- police agency's own number. More than one row is ambiguous.
+SELECT o.id
+FROM occurrences o
+WHERE (o.occurrence_year::text || '.' || lpad(o.occurrence_seq::text, 4, '0')) = @reference::text
+   OR o.occurrence_number = @reference::text
+ORDER BY o.id
+LIMIT 2;
+
+-- name: GetCaseRequestOfCase :one
+SELECT r.id FROM case_requests r WHERE r.id = $1 AND r.biometric_case_id = $2;
+
+-- name: AttachUnrequestedAnalyses :execrows
+-- Analyses of a case opened before it had any request (its automatic review) answer its first one.
+UPDATE case_analyses SET case_request_id = $2 WHERE biometric_case_id = $1 AND case_request_id IS NULL;
+
+-- name: ListCaseTraceMaterial :many
+-- Every trace of a case with its evidence file, role and suitability.
+SELECT ct.id, ct.sequence, ce.sequence AS evidence_sequence, ce.case_file_id, ct.trace_type, ct.trace_role,
+       ct.suitability, ct.suitability_notes, su.username AS suitability_by, ct.suitability_at,
+       ct.case_file_id AS crop_file_id, ct.box_x1, ct.box_y1, ct.box_x2, ct.box_y2,
+       vf.filename AS source_video, vf.hash_id AS source_video_sha256, ce.source_timestamp_ms, ce.source_frame
+FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+JOIN biometric_cases bc ON bc.id = ce.biometric_case_id
+LEFT JOIN users su ON su.id = ct.suitability_by
+LEFT JOIN case_files vf ON vf.id = ce.source_video_file_id
+WHERE bc.case_id = $1
+ORDER BY ce.sequence, ct.sequence;
+
+-- name: GetCaseTraceOfCase :one
+SELECT ct.id, ct.trace_role, ct.suitability
+FROM case_traces ct
+JOIN case_evidences ce ON ce.id = ct.evidence_id
+WHERE ct.id = $1 AND ce.biometric_case_id = $2;
+
+-- name: SetCaseTraceRole :exec
+-- A reference carries no suitability: its value is not assessed.
+UPDATE case_traces SET trace_role = $2,
+    suitability = CASE WHEN $2 = 'REFERENCE' THEN NULL ELSE suitability END,
+    suitability_notes = CASE WHEN $2 = 'REFERENCE' THEN NULL ELSE suitability_notes END,
+    suitability_by = CASE WHEN $2 = 'REFERENCE' THEN NULL ELSE suitability_by END,
+    suitability_at = CASE WHEN $2 = 'REFERENCE' THEN NULL ELSE suitability_at END,
+    updated_at = NOW()
+WHERE id = $1;
+
+-- name: CountHumanDecisionsOnFeature :one
+SELECT COUNT(*) FROM biometric_decisions
+WHERE role <> 'SYSTEM' AND (feature_a_id = @feature_id::text OR feature_b_id = @feature_id::text);
+
+-- name: SetCaseTraceSuitability :exec
+UPDATE case_traces SET suitability = $2, suitability_notes = $3, suitability_by = $4, suitability_at = NOW(), updated_at = NOW()
+WHERE id = $1 AND trace_role = 'QUESTIONED';
+
+-- name: CurrentIdentificationLevel :one
+SELECT minimum_conclusion FROM identification_levels ORDER BY id DESC LIMIT 1;
+
+-- name: InsertIdentificationLevel :one
+INSERT INTO identification_levels (minimum_conclusion, source) VALUES ($1, $2) RETURNING id;
+
+-- Report documents (phase 4).
+
+-- name: GetAnalysisReport :one
+SELECT ar.id, ar.case_analysis_id, ar.report_type, ar.status, ar.report_year, ar.report_number, ar.issued_at,
+       ib.username AS issued_by, ar.case_file_id, ar.docx_file_id, ar.snapshot, ar.complements_report_id
+FROM analysis_reports ar
+LEFT JOIN users ib ON ib.id = ar.issued_by
+WHERE ar.case_analysis_id = $1;
+
+-- name: GetReportNumber :one
+SELECT report_type, report_year, report_number FROM analysis_reports WHERE id = $1;
+
+-- name: LatestReportVersion :one
+SELECT v.id, v.version, v.case_file_id, v.generated, u.username AS created_by, v.created_at, f.storage_ref
+FROM analysis_report_versions v
+JOIN case_files f ON f.id = v.case_file_id
+LEFT JOIN users u ON u.id = v.created_by
+WHERE v.analysis_report_id = $1
+ORDER BY v.version DESC
+LIMIT 1;
+
+-- name: InsertReportVersion :one
+INSERT INTO analysis_report_versions (analysis_report_id, version, case_file_id, generated, created_by)
+SELECT @analysis_report_id::bigint, COALESCE(MAX(version), 0) + 1, @case_file_id::bigint, @generated::bool,
+       sqlc.narg('created_by')::bigint
+FROM analysis_report_versions
+WHERE analysis_report_id = @analysis_report_id::bigint
+RETURNING id, version;
+
+-- name: SetReportDocuments :exec
+UPDATE analysis_reports SET case_file_id = $2, docx_file_id = $3, snapshot = $4 WHERE id = $1;
+
+-- name: SetReportComplements :exec
+UPDATE analysis_reports SET complements_report_id = $2 WHERE id = $1;
+
+-- name: InsertReportDelivery :one
+INSERT INTO report_deliveries (analysis_report_id, delivered_on, method, recipient, notes, recorded_by)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, created_at;
+
+-- name: ListReportDeliveries :many
+SELECT d.id, d.delivered_on, d.method, d.recipient, d.notes, u.username AS recorded_by, d.created_at
+FROM report_deliveries d
+JOIN users u ON u.id = d.recorded_by
+WHERE d.analysis_report_id = $1
+ORDER BY d.delivered_on, d.id;
+
+-- name: GetCaseForReport :one
+SELECT bc.id, bc.case_id, bc.case_type, bc.modality, bc.description, bc.occurrence_id,
+       o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
+       COALESCE((SELECT string_agg(c.type_code, ', ' ORDER BY c.type_code) FROM occurrence_classifications c
+                 WHERE c.occurrence_id = o.id), '')::text AS occurrence_types
+FROM biometric_cases bc
+LEFT JOIN occurrences o ON o.id = bc.occurrence_id
+WHERE bc.id = $1;
+
+-- name: GetUserNames :many
+SELECT id, username, first_name, last_name, staff_number, job_title FROM users WHERE id = ANY(@ids::bigint[]);
+
+-- name: GetUsersByUsername :many
+SELECT id, username, first_name, last_name, staff_number, job_title FROM users WHERE username = ANY(@usernames::text[]);
+
+-- name: ListCaseReports :many
+-- The issued reports of a case, for a report's history section.
+SELECT ar.id, ar.report_type, ar.report_year, ar.report_number, ar.issued_at, ca.id AS case_analysis_id, ca.analysis_type
+FROM analysis_reports ar
+JOIN case_analyses ca ON ca.id = ar.case_analysis_id
+WHERE ca.biometric_case_id = $1 AND ar.status = 'ISSUED'
+ORDER BY ar.issued_at, ar.id;
+
+-- name: LatestCaseRequest :one
+SELECT id FROM case_requests WHERE biometric_case_id = $1 ORDER BY sequence DESC LIMIT 1;
+
+-- name: ListEnrolledReferences :many
+-- Enrolled records used as reference material in a report: who, by which document and register,
+-- enrolled when.
+SELECT f.id AS identity_file_id, p.person_id, r.name, r.register_number, d.document_type, d.document_number,
+       r.created_at AS enrolled_at, f.content_type
+FROM identity_file f
+JOIN identity_register r ON r.id = f.register_id
+JOIN identity_document d ON d.id = r.document_id
+JOIN person p ON p.id = d.person_id
+WHERE f.id = ANY(@identity_file_ids::bigint[]);
+
+-- name: ListSystemSourcesForFeatures :many
+-- Which matcher, at which cutoff, proposed candidates for the given features: a review report's
+-- method.
+SELECT DISTINCT system_source, threshold, related_reference
+FROM biometric_decisions
+WHERE role = 'SYSTEM' AND (feature_a_id = ANY(@feature_ids::text[]) OR feature_b_id = ANY(@feature_ids::text[]))
+ORDER BY system_source, threshold;
+
+-- Video (docs/facial-reports-plan.md, phase 5).
+
+-- name: InsertCaseVideo :exec
+INSERT INTO case_videos (case_file_id) VALUES ($1) ON CONFLICT (case_file_id) DO NOTHING;
+
+-- name: StartCaseVideo :exec
+UPDATE case_videos SET status = 'PROCESSING', error = NULL WHERE case_file_id = $1;
+
+-- name: FinishCaseVideo :exec
+UPDATE case_videos SET status = 'DONE', duration_seconds = $2, frame_rate = $3, tracks = $4, error = NULL, processed_at = NOW()
+WHERE case_file_id = $1;
+
+-- name: FailCaseVideo :exec
+UPDATE case_videos SET status = 'FAILED', error = $2, processed_at = NOW() WHERE case_file_id = $1;
+
+-- name: GetCaseVideo :one
+SELECT v.case_file_id, v.status, v.duration_seconds, v.frame_rate, v.tracks, v.error, v.created_at, v.processed_at,
+       f.biometric_case_id, f.filename, f.hash_id, f.storage_ref, f.content_type, f.size_bytes, bc.case_id
+FROM case_videos v
+JOIN case_files f ON f.id = v.case_file_id
+JOIN biometric_cases bc ON bc.id = f.biometric_case_id
+WHERE v.case_file_id = $1;
+
+-- name: ListCaseVideos :many
+SELECT v.case_file_id, v.status, v.duration_seconds, v.frame_rate, v.tracks, v.error, v.created_at, v.processed_at,
+       f.filename, f.hash_id, f.content_type, f.size_bytes, f.case_request_id
+FROM case_videos v
+JOIN case_files f ON f.id = v.case_file_id
+JOIN biometric_cases bc ON bc.id = f.biometric_case_id
+WHERE bc.case_id = $1
+ORDER BY v.case_file_id;
+
+-- name: SetEvidenceVideoSource :execrows
+UPDATE case_evidences SET source_video_file_id = $2, source_timestamp_ms = $3, source_frame = $4, updated_at = NOW()
+WHERE case_file_id = $1;

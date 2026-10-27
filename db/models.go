@@ -40,19 +40,33 @@ type AnalysisDecisionDraft struct {
 	Notes          sql.NullString `db:"notes" json:"notes"`
 	UserID         int64          `db:"user_id" json:"user_id"`
 	UpdatedAt      time.Time      `db:"updated_at" json:"updated_at"`
+	Conclusion     sql.NullString `db:"conclusion" json:"conclusion"`
 }
 
 type AnalysisReport struct {
-	ID             int64         `db:"id" json:"id"`
-	CaseAnalysisID int64         `db:"case_analysis_id" json:"case_analysis_id"`
-	ReportType     string        `db:"report_type" json:"report_type"`
-	Status         string        `db:"status" json:"status"`
-	ReportYear     sql.NullInt32 `db:"report_year" json:"report_year"`
-	ReportNumber   sql.NullInt32 `db:"report_number" json:"report_number"`
-	IssuedBy       sql.NullInt64 `db:"issued_by" json:"issued_by"`
-	IssuedAt       sql.NullTime  `db:"issued_at" json:"issued_at"`
-	CaseFileID     sql.NullInt64 `db:"case_file_id" json:"case_file_id"`
-	CreatedAt      time.Time     `db:"created_at" json:"created_at"`
+	ID                  int64                 `db:"id" json:"id"`
+	CaseAnalysisID      int64                 `db:"case_analysis_id" json:"case_analysis_id"`
+	ReportType          string                `db:"report_type" json:"report_type"`
+	Status              string                `db:"status" json:"status"`
+	ReportYear          sql.NullInt32         `db:"report_year" json:"report_year"`
+	ReportNumber        sql.NullInt32         `db:"report_number" json:"report_number"`
+	IssuedBy            sql.NullInt64         `db:"issued_by" json:"issued_by"`
+	IssuedAt            sql.NullTime          `db:"issued_at" json:"issued_at"`
+	CaseFileID          sql.NullInt64         `db:"case_file_id" json:"case_file_id"`
+	CreatedAt           time.Time             `db:"created_at" json:"created_at"`
+	DocxFileID          sql.NullInt64         `db:"docx_file_id" json:"docx_file_id"`
+	Snapshot            pqtype.NullRawMessage `db:"snapshot" json:"snapshot"`
+	ComplementsReportID sql.NullInt64         `db:"complements_report_id" json:"complements_report_id"`
+}
+
+type AnalysisReportVersion struct {
+	ID               int64         `db:"id" json:"id"`
+	AnalysisReportID int64         `db:"analysis_report_id" json:"analysis_report_id"`
+	Version          int32         `db:"version" json:"version"`
+	CaseFileID       int64         `db:"case_file_id" json:"case_file_id"`
+	Generated        bool          `db:"generated" json:"generated"`
+	CreatedBy        sql.NullInt64 `db:"created_by" json:"created_by"`
+	CreatedAt        time.Time     `db:"created_at" json:"created_at"`
 }
 
 type BiometricCase struct {
@@ -85,6 +99,7 @@ type BiometricDecision struct {
 	RelatedReferenceKind sql.NullString  `db:"related_reference_kind" json:"related_reference_kind"`
 	DecidedAt            time.Time       `db:"decided_at" json:"decided_at"`
 	CreatedAt            time.Time       `db:"created_at" json:"created_at"`
+	Conclusion           sql.NullString  `db:"conclusion" json:"conclusion"`
 }
 
 type BiometricDecisionSide struct {
@@ -104,6 +119,7 @@ type BiometricDecisionSide struct {
 	RelatedReferenceKind sql.NullString  `db:"related_reference_kind" json:"related_reference_kind"`
 	DecidedAt            time.Time       `db:"decided_at" json:"decided_at"`
 	CreatedAt            time.Time       `db:"created_at" json:"created_at"`
+	Conclusion           sql.NullString  `db:"conclusion" json:"conclusion"`
 }
 
 type BiometricTemplate struct {
@@ -137,6 +153,7 @@ type CaseAnalysis struct {
 	RequestedBy     sql.NullInt64 `db:"requested_by" json:"requested_by"`
 	CreatedAt       time.Time     `db:"created_at" json:"created_at"`
 	ClosedAt        sql.NullTime  `db:"closed_at" json:"closed_at"`
+	CaseRequestID   sql.NullInt64 `db:"case_request_id" json:"case_request_id"`
 }
 
 type CaseAnalysisPair struct {
@@ -181,13 +198,16 @@ type CaseDecision struct {
 }
 
 type CaseEvidence struct {
-	ID              int64          `db:"id" json:"id"`
-	BiometricCaseID int64          `db:"biometric_case_id" json:"biometric_case_id"`
-	Sequence        int16          `db:"sequence" json:"sequence"`
-	CaseFileID      sql.NullInt64  `db:"case_file_id" json:"case_file_id"`
-	Description     sql.NullString `db:"description" json:"description"`
-	CreatedAt       time.Time      `db:"created_at" json:"created_at"`
-	UpdatedAt       time.Time      `db:"updated_at" json:"updated_at"`
+	ID                int64          `db:"id" json:"id"`
+	BiometricCaseID   int64          `db:"biometric_case_id" json:"biometric_case_id"`
+	Sequence          int16          `db:"sequence" json:"sequence"`
+	CaseFileID        sql.NullInt64  `db:"case_file_id" json:"case_file_id"`
+	Description       sql.NullString `db:"description" json:"description"`
+	CreatedAt         time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt         time.Time      `db:"updated_at" json:"updated_at"`
+	SourceVideoFileID sql.NullInt64  `db:"source_video_file_id" json:"source_video_file_id"`
+	SourceTimestampMs sql.NullInt64  `db:"source_timestamp_ms" json:"source_timestamp_ms"`
+	SourceFrame       sql.NullInt64  `db:"source_frame" json:"source_frame"`
 }
 
 type CaseFile struct {
@@ -203,21 +223,61 @@ type CaseFile struct {
 	SizeBytes       sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
 	CreatedAt       time.Time      `db:"created_at" json:"created_at"`
 	UpdatedAt       time.Time      `db:"updated_at" json:"updated_at"`
+	CaseRequestID   sql.NullInt64  `db:"case_request_id" json:"case_request_id"`
+}
+
+type CaseRequest struct {
+	ID                int64          `db:"id" json:"id"`
+	BiometricCaseID   int64          `db:"biometric_case_id" json:"biometric_case_id"`
+	Sequence          int16          `db:"sequence" json:"sequence"`
+	Authority         string         `db:"authority" json:"authority"`
+	DocumentReference string         `db:"document_reference" json:"document_reference"`
+	DocumentDate      sql.NullTime   `db:"document_date" json:"document_date"`
+	ReceivedOn        time.Time      `db:"received_on" json:"received_on"`
+	DueOn             sql.NullTime   `db:"due_on" json:"due_on"`
+	CitedReference    sql.NullString `db:"cited_reference" json:"cited_reference"`
+	OccurrenceID      sql.NullInt64  `db:"occurrence_id" json:"occurrence_id"`
+	Notes             sql.NullString `db:"notes" json:"notes"`
+	RegisteredBy      sql.NullInt64  `db:"registered_by" json:"registered_by"`
+	CreatedAt         time.Time      `db:"created_at" json:"created_at"`
+}
+
+type CaseRequestQuestion struct {
+	ID            int64  `db:"id" json:"id"`
+	CaseRequestID int64  `db:"case_request_id" json:"case_request_id"`
+	Sequence      int16  `db:"sequence" json:"sequence"`
+	Question      string `db:"question" json:"question"`
 }
 
 type CaseTrace struct {
-	ID             int64           `db:"id" json:"id"`
-	EvidenceID     int64           `db:"evidence_id" json:"evidence_id"`
-	Sequence       int16           `db:"sequence" json:"sequence"`
-	TraceType      string          `db:"trace_type" json:"trace_type"`
-	BoxX1          sql.NullFloat64 `db:"box_x1" json:"box_x1"`
-	BoxY1          sql.NullFloat64 `db:"box_y1" json:"box_y1"`
-	BoxX2          sql.NullFloat64 `db:"box_x2" json:"box_x2"`
-	BoxY2          sql.NullFloat64 `db:"box_y2" json:"box_y2"`
-	DetectionScore sql.NullFloat64 `db:"detection_score" json:"detection_score"`
-	CaseFileID     sql.NullInt64   `db:"case_file_id" json:"case_file_id"`
-	CreatedAt      time.Time       `db:"created_at" json:"created_at"`
-	UpdatedAt      time.Time       `db:"updated_at" json:"updated_at"`
+	ID               int64           `db:"id" json:"id"`
+	EvidenceID       int64           `db:"evidence_id" json:"evidence_id"`
+	Sequence         int16           `db:"sequence" json:"sequence"`
+	TraceType        string          `db:"trace_type" json:"trace_type"`
+	BoxX1            sql.NullFloat64 `db:"box_x1" json:"box_x1"`
+	BoxY1            sql.NullFloat64 `db:"box_y1" json:"box_y1"`
+	BoxX2            sql.NullFloat64 `db:"box_x2" json:"box_x2"`
+	BoxY2            sql.NullFloat64 `db:"box_y2" json:"box_y2"`
+	DetectionScore   sql.NullFloat64 `db:"detection_score" json:"detection_score"`
+	CaseFileID       sql.NullInt64   `db:"case_file_id" json:"case_file_id"`
+	CreatedAt        time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt        time.Time       `db:"updated_at" json:"updated_at"`
+	TraceRole        string          `db:"trace_role" json:"trace_role"`
+	Suitability      sql.NullString  `db:"suitability" json:"suitability"`
+	SuitabilityNotes sql.NullString  `db:"suitability_notes" json:"suitability_notes"`
+	SuitabilityBy    sql.NullInt64   `db:"suitability_by" json:"suitability_by"`
+	SuitabilityAt    sql.NullTime    `db:"suitability_at" json:"suitability_at"`
+}
+
+type CaseVideo struct {
+	CaseFileID      int64                 `db:"case_file_id" json:"case_file_id"`
+	Status          string                `db:"status" json:"status"`
+	DurationSeconds sql.NullFloat64       `db:"duration_seconds" json:"duration_seconds"`
+	FrameRate       sql.NullFloat64       `db:"frame_rate" json:"frame_rate"`
+	Tracks          pqtype.NullRawMessage `db:"tracks" json:"tracks"`
+	Error           sql.NullString        `db:"error" json:"error"`
+	CreatedAt       time.Time             `db:"created_at" json:"created_at"`
+	ProcessedAt     sql.NullTime          `db:"processed_at" json:"processed_at"`
 }
 
 type Cluster struct {
@@ -269,6 +329,13 @@ type FeatureEmbedding struct {
 type Gender struct {
 	Code  string `db:"code" json:"code"`
 	Label string `db:"label" json:"label"`
+}
+
+type IdentificationLevel struct {
+	ID                int64     `db:"id" json:"id"`
+	MinimumConclusion string    `db:"minimum_conclusion" json:"minimum_conclusion"`
+	Source            string    `db:"source" json:"source"`
+	CreatedAt         time.Time `db:"created_at" json:"created_at"`
 }
 
 type IdentityDocument struct {
@@ -380,6 +447,17 @@ type Person struct {
 	Meta      pqtype.NullRawMessage `db:"meta" json:"meta"`
 	CreatedAt time.Time             `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time             `db:"updated_at" json:"updated_at"`
+}
+
+type ReportDelivery struct {
+	ID               int64          `db:"id" json:"id"`
+	AnalysisReportID int64          `db:"analysis_report_id" json:"analysis_report_id"`
+	DeliveredOn      time.Time      `db:"delivered_on" json:"delivered_on"`
+	Method           string         `db:"method" json:"method"`
+	Recipient        string         `db:"recipient" json:"recipient"`
+	Notes            sql.NullString `db:"notes" json:"notes"`
+	RecordedBy       int64          `db:"recorded_by" json:"recorded_by"`
+	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
 }
 
 type User struct {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,7 @@ import (
 	"github.com/rodfileto/trackid/internal/env"
 	"github.com/rodfileto/trackid/internal/queue"
 	"github.com/rodfileto/trackid/internal/web"
+	"github.com/rodfileto/trackid/reports"
 	"github.com/rodfileto/trackid/storage"
 )
 
@@ -109,6 +111,9 @@ func Run() error {
 		Queue:       queueClient,
 		FaceVision:  faceVision,
 		Geocoder:    geocoder,
+		// The report editor and the PDF renderer are WordCraft's (docs/facial-reports-plan.md).
+		ReportRenderer:  reportRenderer(),
+		WordcraftWebDir: os.Getenv("WORDCRAFT_WEB_DIR"),
 	})
 
 	if distDir := web.DistDir(); distDir != "" {
@@ -120,4 +125,14 @@ func Run() error {
 
 	log.Printf("trackid backend listening on :%s", configuration.Port)
 	return router.Run(":" + configuration.Port)
+}
+
+// reportRenderer renders issued reports with wordcraft-cli at WORDCRAFT_CLI; nil when unset.
+func reportRenderer() reports.Renderer {
+	path := os.Getenv("WORDCRAFT_CLI")
+	if path == "" {
+		log.Printf("WORDCRAFT_CLI not set: reports can be drafted but not issued")
+		return nil
+	}
+	return reports.CLIRenderer{Path: path}
 }

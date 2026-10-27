@@ -20,6 +20,7 @@ import (
 	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/graph"
+	"github.com/sqlc-dev/pqtype"
 )
 
 // Type is an analysis type (case_analyses.analysis_type).
@@ -124,6 +125,8 @@ var (
 	ErrCannotDecide     = errors.New("only the examiner of the analysis's current stage, examining its modality, can work on it while it is open")
 	ErrNotReportStage   = errors.New("the report can only be issued once every pair is settled")
 	ErrNotDraft         = errors.New("the report is already issued")
+	ErrUnknownRequest   = errors.New("the request is not one of this case")
+	ErrBadComplement    = errors.New("a complement names an issued report of this case, of the same type")
 )
 
 // Pair is two features, as biometric_decisions keys them (graph feature ids).
@@ -133,12 +136,15 @@ type Pair struct {
 }
 
 // Report is an analysis's report. Number is "<year>.<sequence>" once issued, empty while a draft.
+// Complements names the report a laudo complementar complements, by number.
 type Report struct {
-	Type     string     `json:"type"`
-	Status   string     `json:"status"`
-	Number   string     `json:"number,omitempty"`
-	IssuedBy string     `json:"issuedBy,omitempty"`
-	IssuedAt *time.Time `json:"issuedAt,omitempty"`
+	ID          int64      `json:"id"`
+	Complements string     `json:"complements,omitempty"`
+	Type        string     `json:"type"`
+	Status      string     `json:"status"`
+	Number      string     `json:"number,omitempty"`
+	IssuedBy    string     `json:"issuedBy,omitempty"`
+	IssuedAt    *time.Time `json:"issuedAt,omitempty"`
 }
 
 // Examiner is who holds one step of an analysis.
@@ -158,7 +164,8 @@ type Analysis struct {
 	Examiners   map[Step]Examiner `json:"examiners"`             // current examiner per step; a missing step is unassigned
 	CreatedAt   time.Time         `json:"createdAt"`
 	ClosedAt    *time.Time        `json:"closedAt,omitempty"`
-	Pairs       []Pair            `json:"pairs"` // a comparison's pairs; empty for a review
+	Pairs       []Pair            `json:"pairs"`               // a comparison's pairs; empty for a review
+	RequestID   int64             `json:"requestId,omitempty"` // the request it answers (requests package)
 	Report      Report            `json:"report"`
 }
 
@@ -178,14 +185,24 @@ func OpenAutomatic(ctx context.Context, q *db.Queries, biometricCaseID int64, mo
 	if err != nil || n > 0 {
 		return 0, err
 	}
-	return insert(ctx, q, biometricCaseID, FacialReview, sql.NullInt64{})
+	return insert(ctx, q, biometricCaseID, FacialReview, sql.NullInt64{}, sql.NullInt64{})
 }
 
-func insert(ctx context.Context, q *db.Queries, biometricCaseID int64, t Type, requestedBy sql.NullInt64) (int64, error) {
+// Options are what else an analysis can be opened with.
+type Options struct {
+	// RequestID is the request it answers (case_requests); 0 is the case's latest one, if any.
+	RequestID int64
+	// Complements is the case analysis whose issued report this one's report complements (a laudo
+	// complementar); 0 for none. It must be of the same type.
+	Complements int64
+}
+
+func insert(ctx context.Context, q *db.Queries, biometricCaseID int64, t Type, requestedBy, requestID sql.NullInt64) (int64, error) {
 	if _, err := q.LockBiometricCase(ctx, biometricCaseID); err != nil {
 		return 0, err
 	}
-	row, err := q.InsertCaseAnalysis(ctx, db.InsertCaseAnalysisParams{BiometricCaseID: biometricCaseID, AnalysisType: string(t), RequestedBy: requestedBy})
+	row, err := q.InsertCaseAnalysis(ctx, db.InsertCaseAnalysisParams{BiometricCaseID: biometricCaseID, AnalysisType: string(t), RequestedBy: requestedBy,
+		CaseRequestID: requestID})
 	if err != nil {
 		return 0, err
 	}
@@ -200,6 +217,11 @@ func insert(ctx context.Context, q *db.Queries, biometricCaseID int64, t Type, r
 // requestedBy is the admin; checking that they are one is the caller's job. The analysis starts
 // pending, for distribution.
 func Open(ctx context.Context, sqlDB *sql.DB, caseID string, t Type, pairs []Pair, requestedBy int64) (int64, error) {
+	return OpenWith(ctx, sqlDB, caseID, t, pairs, requestedBy, Options{})
+}
+
+// OpenWith is Open with Options: the request the analysis answers, and the report it complements.
+func OpenWith(ctx context.Context, sqlDB *sql.DB, caseID string, t Type, pairs []Pair, requestedBy int64, opts Options) (int64, error) {
 	if !t.Valid() {
 		return 0, ErrInvalidType
 	}
@@ -252,9 +274,47 @@ func Open(ctx context.Context, sqlDB *sql.DB, caseID string, t Type, pairs []Pai
 		}
 	}
 
-	id, err := insert(ctx, q, c.ID, t, sql.NullInt64{Int64: requestedBy, Valid: true})
+	requestID := sql.NullInt64{}
+	if opts.RequestID != 0 {
+		if _, err := q.GetCaseRequestOfCase(ctx, db.GetCaseRequestOfCaseParams{ID: opts.RequestID, BiometricCaseID: c.ID}); errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrUnknownRequest
+		} else if err != nil {
+			return 0, err
+		}
+		requestID = sql.NullInt64{Int64: opts.RequestID, Valid: true}
+	} else if latest, err := q.LatestCaseRequest(ctx, c.ID); err == nil {
+		requestID = sql.NullInt64{Int64: latest, Valid: true}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	var complements int64
+	if opts.Complements != 0 {
+		r, err := q.GetAnalysisReport(ctx, opts.Complements)
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrBadComplement
+		}
+		if err != nil {
+			return 0, err
+		}
+		prior, err := GetTarget(ctx, q, opts.Complements)
+		if err != nil || prior.BiometricCaseID != c.ID || prior.Type != t || r.Status != ReportIssued {
+			return 0, ErrBadComplement
+		}
+		complements = r.ID
+	}
+
+	id, err := insert(ctx, q, c.ID, t, sql.NullInt64{Int64: requestedBy, Valid: true}, requestID)
 	if err != nil {
 		return 0, err
+	}
+	if complements != 0 {
+		r, err := q.GetAnalysisReport(ctx, id)
+		if err != nil {
+			return 0, err
+		}
+		if err := q.SetReportComplements(ctx, db.SetReportComplementsParams{ID: r.ID, ComplementsReportID: sql.NullInt64{Int64: complements, Valid: true}}); err != nil {
+			return 0, err
+		}
 	}
 	for _, p := range ordered {
 		if err := q.InsertCaseAnalysisPair(ctx, db.InsertCaseAnalysisPairParams{CaseAnalysisID: id, FeatureAID: p.FeatureA, FeatureBID: p.FeatureB}); err != nil {
@@ -294,7 +354,8 @@ func List(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Analysis, error)
 	for i, r := range rows {
 		a := Analysis{ID: r.ID, Sequence: r.Sequence, Type: Type(r.AnalysisType), Status: r.Status, Stage: Stage(r.Stage),
 			RequestedBy: r.RequestedBy.String, Examiners: map[Step]Examiner{}, CreatedAt: r.CreatedAt, Pairs: pairs[r.ID],
-			Report: Report{Type: r.ReportType.String, Status: r.ReportStatus.String, IssuedBy: r.IssuedBy.String}}
+			RequestID: r.CaseRequestID.Int64,
+			Report:    Report{ID: r.ReportID.Int64, Type: r.ReportType.String, Status: r.ReportStatus.String, IssuedBy: r.IssuedBy.String}}
 		if a.Pairs == nil {
 			a.Pairs = []Pair{}
 		}
@@ -314,6 +375,15 @@ func List(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Analysis, error)
 			a.Report.IssuedAt = &r.IssuedAt.Time
 		}
 		out[i] = a
+	}
+	numbers := map[int64]string{}
+	for _, a := range out {
+		numbers[a.Report.ID] = a.Report.Number
+	}
+	for i, r := range rows {
+		if r.ComplementsReportID.Valid {
+			out[i].Report.Complements = numbers[r.ComplementsReportID.Int64]
+		}
 	}
 	return out, nil
 }
@@ -375,10 +445,23 @@ func CanWork(user auth.UserProfile, t Target) (Step, error) {
 	return "", ErrCannotDecide
 }
 
+// Documents produces an issued report's documents inside IssueReport's transaction, once the
+// report has its number: the frozen data, and the .docx and PDF as case_files rows. The reports
+// package provides it.
+type Documents func(ctx context.Context, q *db.Queries, t Target, r Report) (Issued, error)
+
+// Issued is what Documents produced.
+type Issued struct {
+	Snapshot   []byte // JSON
+	DocxFileID int64
+	PDFFileID  int64
+}
+
 // IssueReport issues an analysis's report once every pair is settled (stage REPORT): it numbers it
-// "<year>.<sequence>" per report type and year, records who issued it, and closes the analysis.
-// Only its first examiner may (CanWork at REPORT).
-func IssueReport(ctx context.Context, sqlDB *sql.DB, analysisID int64, user auth.UserProfile, now time.Time) (Report, error) {
+// "<year>.<sequence>" per report type and year, records who issued it, has docs produce its
+// documents, and closes the analysis -- all or nothing. Only its first examiner may (CanWork at
+// REPORT).
+func IssueReport(ctx context.Context, sqlDB *sql.DB, analysisID int64, user auth.UserProfile, now time.Time, docs Documents) (Report, error) {
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	if err != nil {
 		return Report{}, err
@@ -403,16 +486,35 @@ func IssueReport(ctx context.Context, sqlDB *sql.DB, analysisID int64, user auth
 	if err != nil {
 		return Report{}, err
 	}
-	row, err := q.IssueAnalysisReport(ctx, db.IssueAnalysisReportParams{
+	current, err := q.GetAnalysisReport(ctx, analysisID)
+	if err != nil {
+		return Report{}, err
+	}
+	if current.Status != ReportDraft {
+		return Report{}, ErrNotDraft
+	}
+	issuedAt := now
+	report := Report{ID: current.ID, Type: current.ReportType, Status: ReportIssued, Number: reportNumber(year, max+1),
+		IssuedBy: user.Username, IssuedAt: &issuedAt}
+	out, err := docs(ctx, q, t, report)
+	if err != nil {
+		return Report{}, err
+	}
+	if err := q.SetReportDocuments(ctx, db.SetReportDocumentsParams{ID: current.ID,
+		CaseFileID: sql.NullInt64{Int64: out.PDFFileID, Valid: out.PDFFileID != 0},
+		DocxFileID: sql.NullInt64{Int64: out.DocxFileID, Valid: out.DocxFileID != 0},
+		Snapshot:   pqtype.NullRawMessage{RawMessage: out.Snapshot, Valid: true}}); err != nil {
+		return Report{}, err
+	}
+	if _, err := q.IssueAnalysisReport(ctx, db.IssueAnalysisReportParams{
 		CaseAnalysisID: analysisID,
 		ReportYear:     sql.NullInt32{Int32: year, Valid: true},
 		ReportNumber:   sql.NullInt32{Int32: max + 1, Valid: true},
 		IssuedBy:       sql.NullInt64{Int64: user.ID, Valid: true},
-	})
-	if errors.Is(err, sql.ErrNoRows) {
+		IssuedAt:       sql.NullTime{Time: now, Valid: true},
+	}); errors.Is(err, sql.ErrNoRows) {
 		return Report{}, ErrNotDraft
-	}
-	if err != nil {
+	} else if err != nil {
 		return Report{}, err
 	}
 	if err := q.CloseCaseAnalysis(ctx, analysisID); err != nil {
@@ -421,6 +523,5 @@ func IssueReport(ctx context.Context, sqlDB *sql.DB, analysisID int64, user auth
 	if err := tx.Commit(); err != nil {
 		return Report{}, err
 	}
-	return Report{Type: row.ReportType, Status: ReportIssued, Number: reportNumber(row.ReportYear.Int32, row.ReportNumber.Int32),
-		IssuedBy: user.Username, IssuedAt: &row.IssuedAt.Time}, nil
+	return report, nil
 }

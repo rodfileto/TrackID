@@ -16,6 +16,7 @@ import (
 	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/cases"
+	"github.com/rodfileto/trackid/cluster"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/db/migrations"
 	"github.com/rodfileto/trackid/distribution"
@@ -145,7 +146,7 @@ func TestDecisionFlow(t *testing.T) {
 		return ws
 	}
 	draft := func(u auth.UserProfile, id int64, p examination.Pair, decision string) error {
-		return examination.SaveDraft(ctx, sqlDB, u, id, p, decision, "")
+		return examination.SaveDraft(ctx, sqlDB, u, id, p, decision, "", levelFor(ctx, sqlDB, id, decision))
 	}
 
 	// EXAMINATION: ana, the least-loaded facial examiner.
@@ -238,10 +239,10 @@ func TestDecisionFlow(t *testing.T) {
 
 	// REPORT: only ana, the first examiner.
 	now := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
-	if _, err := analyses.IssueReport(ctx, sqlDB, id, caio, now); !errors.Is(err, analyses.ErrCannotDecide) {
+	if _, err := analyses.IssueReport(ctx, sqlDB, id, caio, now, noDocs); !errors.Is(err, analyses.ErrCannotDecide) {
 		t.Fatalf("caio issuing the report: %v", err)
 	}
-	if report, err := analyses.IssueReport(ctx, sqlDB, id, ana, now); err != nil || report.Number != "2026.0001" {
+	if report, err := analyses.IssueReport(ctx, sqlDB, id, ana, now, noDocs); err != nil || report.Number != "2026.0001" {
 		t.Fatalf("ana's report = %+v, %v", report, err)
 	}
 
@@ -253,7 +254,7 @@ func TestDecisionFlow(t *testing.T) {
 	if _, err := analyses.Open(ctx, sqlDB, "F1", analyses.FacialComparison, []analyses.Pair{{FeatureA: trace1, FeatureB: "TRACE:999999#feature"}}, chief.ID); !errors.Is(err, analyses.ErrInvalidPair) {
 		t.Fatalf("a comparison with another case's face: %v", err)
 	}
-	if _, err := analyses.IssueReport(ctx, sqlDB, cmp, ana, now); !errors.Is(err, analyses.ErrNotReportStage) {
+	if _, err := analyses.IssueReport(ctx, sqlDB, cmp, ana, now, noDocs); !errors.Is(err, analyses.ErrNotReportStage) {
 		t.Fatalf("issuing before deciding: %v", err)
 	}
 	check("comparison to ana", distribution.Assign(ctx, sqlDB, cmp, &ana.ID, chief.ID), nil)
@@ -374,4 +375,21 @@ func TestAutomaticReviewAndAccess(t *testing.T) {
 	if err := distribution.CanOpen(ctx, sqlDB, chief, "NOPE"); !errors.Is(err, analyses.ErrCaseNotFound) {
 		t.Fatalf("an unknown case: %v", err)
 	}
+}
+
+// levelFor is the conclusion a test draft carries: none in a review, and in a comparison a level
+// that maps onto decision (strong support, inconclusive or exclusion).
+func levelFor(ctx context.Context, sqlDB *sql.DB, analysisID int64, decision string) cluster.Conclusion {
+	t, err := analyses.GetTarget(ctx, db.New(sqlDB), analysisID)
+	if err != nil || t.Type != analyses.FacialComparison {
+		return ""
+	}
+	return map[string]cluster.Conclusion{"POSITIVE": cluster.ConclusionStrongSupport, "INCONCLUSIVE": cluster.ConclusionInconclusive,
+		"NEGATIVE": cluster.ConclusionExclusion}[decision]
+}
+
+// noDocs stands in for the reports package when a test issues a report: an empty snapshot, no
+// files.
+func noDocs(context.Context, *db.Queries, analyses.Target, analyses.Report) (analyses.Issued, error) {
+	return analyses.Issued{Snapshot: []byte(`{}`)}, nil
 }

@@ -59,6 +59,11 @@ func PairImage(ctx context.Context, sqlDB *sql.DB, store *storage.Client, user a
 		return Image{}, ErrNotInScope
 	}
 
+	return featureImage(ctx, sqlDB, store, featureID)
+}
+
+func featureImage(ctx context.Context, sqlDB *sql.DB, store *storage.Client, featureID string) (Image, error) {
+	q := db.New(sqlDB)
 	described, err := cases.DescribeFeatures(ctx, q, []string{featureID})
 	if err != nil {
 		return Image{}, err

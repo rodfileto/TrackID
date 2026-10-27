@@ -7,6 +7,8 @@ import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import ComponentCard from "../components/common/ComponentCard";
 import CaseOccurrenceCard from "../components/cases/CaseOccurrenceCard";
 import CaseAnalysesCard from "../components/analyses/CaseAnalysesCard";
+import CaseRequestsCard from "../components/cases/CaseRequestsCard";
+import CaseVideosCard from "../components/cases/CaseVideosCard";
 import {
   Table,
   TableBody,
@@ -225,7 +227,16 @@ export default function CaseDetailPage() {
 
           <CaseOccurrenceCard caseId={detail.caseId} />
 
+          <CaseRequestsCard
+            caseId={detail.caseId}
+            evidences={evidences}
+            refreshKey={analysesKey}
+            onChanged={() => setAnalysesKey((k) => k + 1)}
+          />
+
           <CaseAnalysesCard caseId={detail.caseId} refreshKey={analysesKey} />
+
+          {detail.modality === "FACIAL" && <CaseVideosCard caseId={detail.caseId} onEvidenceAdded={load} />}
 
           {detail.modality === "FACIAL" ? (
             <FacialCaseWorkspace

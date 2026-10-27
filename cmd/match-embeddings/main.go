@@ -1,7 +1,6 @@
 // match-embeddings runs ANN similarity search over feature_embeddings and
 // records SYSTEM biometric_decisions for pairs within threshold. See
-// biometricmatch.Run. Unlike the graph-writing commands, it only touches
-// Postgres -- no Neo4j driver is involved.
+// biometricmatch.Run.
 //
 // Defaults to a dry run that only reports counts. Pass -commit to write.
 package main

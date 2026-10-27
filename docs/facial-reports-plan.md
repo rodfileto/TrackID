@@ -152,12 +152,46 @@ conclusion levels, and the investigative-lead notice in it.
 3. **Conclusion scale and link basis.** `conclusion` on `biometric_decisions` and on the
    drafts, with its mapping to `decision` in Go and a CHECK; the minimum level as data. The
    deciding round reports its basis (LEAD / LAUDO + level); `cluster_members` or the link views
-   carry it, Neo4j `IDENTIFIED_AS` gets a `basis` property; case page, person profile and badges
+   carry it (Neo4j `IDENTIFIED_AS` got a `basis` property until Neo4j was removed, 2026-10-27); case page, person profile and badges
    show the labels. Sim `eval` scores identifications per basis.
 4. **Report content and issuing.** Template (Portuguese) and docx generation in Go; draft
    versions; data snapshot and the identical-sections check; server-side PDF; hashes; complement
    reports; delivery record. Embedded editor in the analysis page.
 5. **Video.** videoproc ingestion as above.
+
+## Status (2026-10-27)
+
+Implemented, phases 0–5.
+
+- **Spike: go.** WordCraft's web build already has a host bridge for an embedding page
+  (`?host=parent`: `wordcraft:ready`, `wordcraft:open`, `wordcraft:save`, `wordcraft:dirty`), on
+  the same origin only, so the API serves it at `/wordcraft/` (`WORDCRAFT_WEB_DIR`). Restrict
+  Editing is Word's own: a `readOnly` document with `w:permStart`/`w:permEnd` ranges, enforced by
+  the engine ("only the editable regions of this protected document can change"). A draft edited
+  and saved by WordCraft keeps its locked text byte-identical, images included; one with
+  protection stopped and locked text changed fails the server's check. The issue placeholders
+  survive its saves. WordCraft renumbers the regions' ids, so regions are matched by order.
+- Checked end to end in a browser on a scratch database: the draft opens in the analysis page,
+  only a region takes typing, Ctrl+S saves a new version the server accepts, issuing numbers it
+  and the PDF (rendered by `wordcraft-cli`, the faces in it) carries the number and date; the
+  SHA-256 shown is the downloaded file's.
+- Video: a clip processed with the real models gives one track per person; a frame taken from a
+  track becomes an evidence recording the video, time and frame number, which the laudo's
+  material table states.
+- Schema: `009_reports` (requests, roles, suitability, conclusions, report documents) and
+  `010_video`.
+- trackid-sim: every loaded case gets a request citing its occurrence (derived at load, not a
+  world rule); `eval` scores identifications by basis; `plant` issues its lead reports through
+  `reports`.
+
+Not done:
+
+- The sim sends no reference photos: whether a request sends one, how often, and of whom (the
+  true person, a wrong suspect) is a world rule to decide.
+- A refresh carries the examiner's text over as plain paragraphs: formatting in a section is
+  lost when the data changes under a draft.
+- Headings can still end a page with their pair's images on the next (WordCraft's keep-with-next
+  does not reach into the image table).
 
 ## Docs
 

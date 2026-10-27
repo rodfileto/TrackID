@@ -81,6 +81,8 @@ type TraceLink struct {
 	DecisionRole string   `json:"decisionRole,omitempty"` // VERIFICATOR | REVIEWER | INCONSISTENCE
 	DecidedBy    string   `json:"decidedBy,omitempty"`
 	Confidence   *float64 `json:"confidence,omitempty"`
+	// Link is how strong a direct link is: a lead, or a laudo at its level (cluster.ReviewedLink).
+	Link *cluster.Link `json:"link,omitempty"`
 }
 
 // PathStep is one sample an indirect TraceLink is reached through: another
@@ -191,6 +193,10 @@ func ListCaseClusters(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Case
 	if err != nil {
 		return nil, err
 	}
+	level, err := cluster.IdentificationLevel(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 
 	// Every decision touching a member, seen from the member's side:
 	// chains[own][counterpart] is that pair's chain. A pair joins the reviewed
@@ -252,6 +258,9 @@ func ListCaseClusters(ctx context.Context, sqlDB *sql.DB, caseID string) ([]Case
 			if len(path) == 2 {
 				link.Direct = true
 				link.DecisionRole, link.DecidedBy, link.Confidence = reviewedDecision(chains[path[0]][m])
+				if l, ok := cluster.ReviewedLink(chainEntries(chains[path[0]][m]), level); ok {
+					link.Link = &l
+				}
 			} else {
 				for _, step := range path[1 : len(path)-1] {
 					link.Path = append(link.Path, pathStep(described[step]))
@@ -309,7 +318,8 @@ func shortestPaths(sources []string, edges map[string][]string) map[string][]str
 func chainEntries(chain []db.ListBiometricDecisionsForFeaturesRow) []cluster.ChainEntry {
 	entries := make([]cluster.ChainEntry, len(chain))
 	for i, r := range chain {
-		entries[i] = cluster.ChainEntry{Role: cluster.Role(r.Role), Decision: cluster.Decision(r.Decision), Analysis: r.CaseAnalysisID.Int64}
+		entries[i] = cluster.ChainEntry{Role: cluster.Role(r.Role), Decision: cluster.Decision(r.Decision), Analysis: r.CaseAnalysisID.Int64,
+			AnalysisType: r.AnalysisType.String, Conclusion: cluster.Conclusion(r.Conclusion.String)}
 	}
 	return entries
 }

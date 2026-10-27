@@ -48,6 +48,10 @@ type ChainEntry struct {
 	// Analysis is the case_analysis_id a human decision was made in; 0 for SYSTEM, or for a
 	// human decision recorded before analyses existed.
 	Analysis int64
+	// AnalysisType is that analysis's type (FACIAL_REVIEW, FACIAL_COMPARISON), empty without one.
+	AnalysisType string
+	// Conclusion is a comparison's level for the pair (Conclusion), empty elsewhere.
+	Conclusion Conclusion
 }
 
 // Counts reports whether e is part of round's chain: a SYSTEM decision, which counts in every
@@ -141,7 +145,8 @@ func DecidingRoundBy(chain []ChainEntry) (round int64, status EdgeStatus, settle
 //     INCONCLUSIVE leaves the pair DISPUTED.
 //   - VERIFICATOR and REVIEWER together settle the pair by agreement: matching
 //     decisions confirm/reject (or, both INCONCLUSIVE, stay PENDING_REVIEW);
-//     differing decisions are DISPUTED.
+//     differing decisions are DISPUTED, and so are differing conclusion levels in a
+//     comparison (the laudo states one level).
 //   - VERIFICATOR alone is always PENDING_REVIEW.
 //   - SYSTEM alone is CONFIRMED for a POSITIVE score, PENDING_REVIEW for
 //     INCONCLUSIVE, or REJECTED for an explicit NEGATIVE.
@@ -155,14 +160,17 @@ func deriveRound(chain []ChainEntry) (status EdgeStatus, ok bool) {
 // or SYSTEM.
 func deriveRoundBy(chain []ChainEntry) (status EdgeStatus, settledBy Role, ok bool) {
 	var system, verificator, reviewer, inconsistence *Decision
+	var verificatorLevel, reviewerLevel Conclusion
 	for i := range chain {
 		switch chain[i].Role {
 		case RoleSystem:
 			system = &chain[i].Decision
 		case RoleVerificator:
 			verificator = &chain[i].Decision
+			verificatorLevel = chain[i].Conclusion
 		case RoleReviewer:
 			reviewer = &chain[i].Decision
+			reviewerLevel = chain[i].Conclusion
 		case RoleInconsistence:
 			inconsistence = &chain[i].Decision
 		}
@@ -172,7 +180,8 @@ func deriveRoundBy(chain []ChainEntry) (status EdgeStatus, settledBy Role, ok bo
 		return decisionOutcome(*inconsistence, EdgeStatusDisputed), RoleInconsistence, true
 	}
 	if verificator != nil && reviewer != nil {
-		if *verificator == *reviewer {
+		// In a comparison the two must reach the same level, not only the same decision.
+		if *verificator == *reviewer && verificatorLevel == reviewerLevel {
 			return decisionOutcome(*verificator, EdgeStatusPendingReview), RoleReviewer, true
 		}
 		return EdgeStatusDisputed, RoleReviewer, true
@@ -198,15 +207,12 @@ func decisionOutcome(d Decision, inconclusive EdgeStatus) EdgeStatus {
 }
 
 // confirmedPair is a pair of features whose decision chain has settled to
-// CONFIRMED. confidence/identifiedBy describe who/what settled it, for the
-// IDENTIFIED_AS edge Identify writes.
+// CONFIRMED.
 type confirmedPair struct {
-	featureA     string
-	featureB     string
-	modality     string // "FACIAL" | "FINGERPRINT"
-	reviewed     bool   // settled by people (Reviewed), not by a SYSTEM decision alone
-	confidence   *float64
-	identifiedBy string
+	featureA string
+	featureB string
+	modality string // "FACIAL" | "FINGERPRINT"
+	reviewed bool   // settled by people (Reviewed), not by a SYSTEM decision alone
 }
 
 // loadConfirmedPairs reads every biometric_decisions row, groups them into
@@ -234,70 +240,106 @@ func loadConfirmedPairs(ctx context.Context, sqlDB *sql.DB) ([]confirmedPair, er
 		rowsForPair := chains[k]
 		chain := make([]ChainEntry, len(rowsForPair))
 		for i, r := range rowsForPair {
-			chain[i] = ChainEntry{Role: Role(r.Role), Decision: Decision(r.Decision), Analysis: r.CaseAnalysisID.Int64}
+			chain[i] = ChainEntry{Role: Role(r.Role), Decision: Decision(r.Decision), Analysis: r.CaseAnalysisID.Int64,
+				AnalysisType: r.AnalysisType.String, Conclusion: Conclusion(r.Conclusion.String)}
 		}
-		round, status, ok := DecidingRound(chain)
-		if !ok || status != EdgeStatusConfirmed {
+		if _, status, ok := DecidingRound(chain); !ok || status != EdgeStatusConfirmed {
 			continue
 		}
-		current := rowsForPair[:0:0]
-		for i, r := range rowsForPair {
-			if chain[i].Counts(round) {
-				current = append(current, r)
-			}
-		}
 		pairs = append(pairs, confirmedPair{
-			featureA:     k.a,
-			featureB:     k.b,
-			modality:     rowsForPair[0].Modality,
-			reviewed:     Reviewed(chain),
-			confidence:   chainConfidence(current),
-			identifiedBy: chainIdentifiedBy(current),
+			featureA: k.a,
+			featureB: k.b,
+			modality: rowsForPair[0].Modality,
+			reviewed: Reviewed(chain),
 		})
 	}
 	return pairs, nil
 }
 
-func chainConfidence(rows []db.ListBiometricDecisionsRow) *float64 {
-	for _, r := range rows {
-		if r.Confidence.Valid {
-			v := r.Confidence.Float64
-			return &v
-		}
-	}
-	return nil
+// LinkBasis says what kind of human round settled a reviewed pair: a FACIAL_REVIEW (an
+// investigative lead) or a FACIAL_COMPARISON (a laudo).
+type LinkBasis string
+
+const (
+	LinkLead  LinkBasis = "LEAD"
+	LinkLaudo LinkBasis = "LAUDO"
+)
+
+// comparisonType is analyses.FacialComparison (this package cannot import analyses).
+const comparisonType = "FACIAL_COMPARISON"
+
+// Link is how strong a reviewed pair is, from the round that settled it (DecidingRound): a lead,
+// or a laudo at its conclusion level. Identified is every lead, and a laudo at or above the
+// identification level; a laudo below it supports the link without identifying. LaterLaudo is a
+// later comparison of the pair that did not settle it -- PENDING, DISPUTED or INCONCLUSIVE -- shown
+// beside the lead it leaves standing.
+type Link struct {
+	Basis      LinkBasis  `json:"basis"`
+	Conclusion Conclusion `json:"conclusion,omitempty"`
+	Identified bool       `json:"identified"`
+	LaterLaudo string     `json:"laterLaudo,omitempty"`
 }
 
-func chainIdentifiedBy(rows []db.ListBiometricDecisionsRow) string {
-	var inconsistence, reviewer, verificator, systemSource string
-	for _, r := range rows {
-		switch r.Role {
-		case "SYSTEM":
-			if r.SystemSource.Valid {
-				systemSource = r.SystemSource.String
-			}
-		case "VERIFICATOR":
-			if r.Username.Valid {
-				verificator = r.Username.String
-			}
-		case "REVIEWER":
-			if r.Username.Valid {
-				reviewer = r.Username.String
-			}
-		case "INCONSISTENCE":
-			if r.Username.Valid {
-				inconsistence = r.Username.String
-			}
+// ReviewedLink describes a reviewed pair (Reviewed) as Link; ok is false for a pair that is not
+// reviewed. minimum is the identification level (IdentificationLevel).
+func ReviewedLink(chain []ChainEntry, minimum Conclusion) (link Link, ok bool) {
+	round, status, settledBy, ok := DecidingRoundBy(chain)
+	if !ok || status != EdgeStatusConfirmed || settledBy == RoleSystem {
+		return Link{}, false
+	}
+	link = Link{Basis: LinkLead, Identified: true}
+	rounds := map[int64]string{}
+	for _, e := range chain {
+		if e.Role != RoleSystem {
+			rounds[e.Analysis] = e.AnalysisType
 		}
 	}
-	switch {
-	case inconsistence != "":
-		return inconsistence
-	case reviewer != "":
-		return reviewer
-	case verificator != "":
-		return verificator
-	default:
-		return systemSource
+	if rounds[round] == comparisonType {
+		level := roundConclusion(chain, round)
+		link = Link{Basis: LinkLaudo, Conclusion: level, Identified: level.AtLeast(minimum)}
 	}
+	later := make([]int64, 0, len(rounds))
+	for r := range rounds {
+		later = append(later, r)
+	}
+	slices.Sort(later) // the latest unsettled comparison is the one shown
+	for _, r := range later {
+		if r <= round || rounds[r] != comparisonType {
+			continue
+		}
+		var roundChain []ChainEntry
+		for _, e := range chain {
+			if e.Role != RoleSystem && e.Analysis == r {
+				roundChain = append(roundChain, e)
+			}
+		}
+		s, by, _ := deriveRoundBy(roundChain)
+		switch {
+		case s == EdgeStatusDisputed:
+			link.LaterLaudo = "DISPUTED"
+		case s == EdgeStatusPendingReview && by == RoleReviewer:
+			link.LaterLaudo = string(ConclusionInconclusive) // both examiners concluded inconclusive
+		default:
+			link.LaterLaudo = "PENDING"
+		}
+	}
+	return link, true
+}
+
+// roundConclusion is the level a comparison round settled on: its INCONSISTENCE decision's, or
+// else the agreed REVIEWER's.
+func roundConclusion(chain []ChainEntry, round int64) Conclusion {
+	var reviewer Conclusion
+	for _, e := range chain {
+		if e.Role == RoleSystem || e.Analysis != round {
+			continue
+		}
+		switch e.Role {
+		case RoleInconsistence:
+			return e.Conclusion
+		case RoleReviewer:
+			reviewer = e.Conclusion
+		}
+	}
+	return reviewer
 }

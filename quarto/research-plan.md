@@ -25,7 +25,7 @@ Suggested order: P1 + P3 in parallel (no data dependency) → P2 → P7 → P6 �
 | P5 | Human-in-the-loop face triage: thresholds, calibration, demographic differentials | IET Biometrics / FSI | trackid-sim Phase 3 (real images) |
 | P6 | Design Science Research: breaking forensic data silos | DESRIST → Government Information Quarterly | Quarto technical-report as base |
 | P7 | Auditability as an LGPD safeguard in biometric intelligence systems | FSI: Synergy / Brazilian public-law journal | decision log (done) |
-| P8 (optional) | Neo4j schema as a forensic ontology aligned to CASE/UCO | FSI: Digital Investigation | — |
+| P8 (optional) | Graph schema as a forensic ontology aligned to CASE/UCO (TrackID's Neo4j projection was removed on 2026-10-27; the schema would be rebuilt as an export from Postgres) | FSI: Digital Investigation | — |
 
 ### Venue notes
 

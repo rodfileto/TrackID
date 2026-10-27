@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -49,8 +48,10 @@ func DistributeHandler(sqlDB *sql.DB) gin.HandlerFunc {
 }
 
 type openAnalysisRequest struct {
-	Type  analyses.Type   `json:"type"`
-	Pairs []analyses.Pair `json:"pairs"`
+	Type        analyses.Type   `json:"type"`
+	Pairs       []analyses.Pair `json:"pairs"`
+	RequestID   int64           `json:"requestId"`   // the request it answers; 0 the case's latest
+	Complements int64           `json:"complements"` // the analysis whose issued report this one complements
 }
 
 // OpenAnalysisHandler is an admin opening an analysis on a case (analyses.Open): a
@@ -63,12 +64,14 @@ func OpenAnalysisHandler(sqlDB *sql.DB) gin.HandlerFunc {
 			return
 		}
 		caseID := context.Param("caseId")
-		_, err := analyses.Open(context.Request.Context(), sqlDB, caseID, request.Type, request.Pairs, currentUser(context).ID)
+		_, err := analyses.OpenWith(context.Request.Context(), sqlDB, caseID, request.Type, request.Pairs, currentUser(context).ID,
+			analyses.Options{RequestID: request.RequestID, Complements: request.Complements})
 		switch {
 		case errors.Is(err, analyses.ErrCaseNotFound):
 			context.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		case errors.Is(err, analyses.ErrInvalidType), errors.Is(err, analyses.ErrWrongModality), errors.Is(err, analyses.ErrNeedsPairs),
-			errors.Is(err, analyses.ErrUnexpectedPairs), errors.Is(err, analyses.ErrInvalidPair):
+			errors.Is(err, analyses.ErrUnexpectedPairs), errors.Is(err, analyses.ErrInvalidPair),
+			errors.Is(err, analyses.ErrUnknownRequest), errors.Is(err, analyses.ErrBadComplement):
 			context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		case err != nil:
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not open analysis"})
@@ -132,28 +135,6 @@ func AnalysisAssignmentsHandler(sqlDB *sql.DB) gin.HandlerFunc {
 			return
 		}
 		context.JSON(http.StatusOK, history)
-	}
-}
-
-// IssueReportHandler issues an analysis's report (analyses.IssueReport): only its first examiner,
-// once every pair is settled; it closes the analysis.
-func IssueReportHandler(sqlDB *sql.DB) gin.HandlerFunc {
-	return func(context *gin.Context) {
-		target, ok := caseAnalysis(context, sqlDB)
-		if !ok {
-			return
-		}
-		report, err := analyses.IssueReport(context.Request.Context(), sqlDB, target.ID, currentUser(context), time.Now())
-		switch {
-		case errors.Is(err, analyses.ErrCannotDecide):
-			context.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
-		case errors.Is(err, analyses.ErrNotDraft), errors.Is(err, analyses.ErrNotReportStage):
-			context.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-		case err != nil:
-			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not issue report"})
-		default:
-			context.JSON(http.StatusOK, report)
-		}
 	}
 }
 

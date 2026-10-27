@@ -1,7 +1,7 @@
 // Package cluster groups biometric features into same-modality clusters driven
 // by biometric_decisions: a POSITIVE decision that settles to CONFIRMED links
 // two features. Clusters are persisted in Postgres with stable, sequential ids
-// and updated incrementally (extend/merge/split), then materialized to Neo4j.
+// and updated incrementally (extend/merge/split).
 //
 // There are two layers of clusters (Basis). AUTOMATIC clusters follow every
 // CONFIRMED pair, a SYSTEM match included, for intelligence; REVIEWED clusters
@@ -14,14 +14,9 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/graph"
 )
-
-// clusterSource is the value stored on BiometricCluster.source for clusters
-// this package materializes.
-const clusterSource = "TRACKID_CLUSTERING"
 
 // Basis names a layer of clusters (clusters.basis).
 type Basis string
@@ -55,67 +50,46 @@ type Stats struct {
 }
 
 // Run reconciles the confirmed decisions against the persisted clusters of
-// both layers (Persist) and materializes the result to Neo4j. It reads only
-// from Postgres.
-func Run(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) (Stats, error) {
-	st, featureTypes, err := run(ctx, sqlDB, true)
-	if err != nil {
-		return Stats{}, err
-	}
-	if err := materialize(ctx, sqlDB, driver, featureTypes); err != nil {
-		return Stats{}, err
-	}
-	return st, nil
-}
-
-// Persist reconciles the confirmed decisions against the persisted clusters of
-// both layers and writes the result to Postgres only. Run is Persist plus the
-// Neo4j materialization; Persist alone serves callers with no graph, e.g.
-// database tests.
-func Persist(ctx context.Context, sqlDB *sql.DB) (Stats, error) {
-	st, _, err := run(ctx, sqlDB, true)
-	return st, err
+// both layers and writes the result.
+func Run(ctx context.Context, sqlDB *sql.DB) (Stats, error) {
+	return run(ctx, sqlDB, true)
 }
 
 // Plan returns the counts a Run would produce, without writing anything.
 func Plan(ctx context.Context, sqlDB *sql.DB) (Stats, error) {
-	st, _, err := run(ctx, sqlDB, false)
-	return st, err
+	return run(ctx, sqlDB, false)
 }
 
-// run reconciles both layers, writing them when commit is set, and returns the stats and every
-// feature's graph feature type (for materialize).
-func run(ctx context.Context, sqlDB *sql.DB, commit bool) (Stats, map[string]string, error) {
+// run reconciles both layers, writing them when commit is set.
+func run(ctx context.Context, sqlDB *sql.DB, commit bool) (Stats, error) {
 	if sqlDB == nil {
-		return Stats{}, nil, fmt.Errorf("database is not configured")
+		return Stats{}, fmt.Errorf("database is not configured")
 	}
 
 	featureInfos, err := loadFeatures(ctx, sqlDB)
 	if err != nil {
-		return Stats{}, nil, err
+		return Stats{}, err
 	}
 	pairs, err := loadConfirmedPairs(ctx, sqlDB)
 	if err != nil {
-		return Stats{}, nil, err
+		return Stats{}, err
 	}
 
 	modalities := make(map[string]string, len(featureInfos))
-	featureTypes := make(map[string]string, len(featureInfos))
 	for id, fi := range featureInfos {
 		modalities[id] = fi.modality
-		featureTypes[id] = fi.featureType
 	}
 
 	var out Stats
 	for _, basis := range Bases {
 		existing, memberCluster, err := loadClusters(ctx, sqlDB, basis)
 		if err != nil {
-			return Stats{}, nil, err
+			return Stats{}, err
 		}
 		p := reconcile(modalities, edgesFor(pairs, basis), existing)
 		if commit {
 			if err := apply(ctx, sqlDB, basis, p, memberCluster, existing); err != nil {
-				return Stats{}, nil, err
+				return Stats{}, err
 			}
 		}
 		if basis == BasisReviewed {
@@ -124,7 +98,7 @@ func run(ctx context.Context, sqlDB *sql.DB, commit bool) (Stats, map[string]str
 			out.LayerStats = stats(p)
 		}
 	}
-	return out, featureTypes, nil
+	return out, nil
 }
 
 func stats(p plan) LayerStats {
@@ -143,14 +117,13 @@ func stats(p plan) LayerStats {
 	}
 }
 
-// featureInfo is a biometricfeature's modality (case type) and graph feature type.
+// featureInfo is a biometricfeature's modality.
 type featureInfo struct {
-	modality    string
-	featureType string
+	modality string
 }
 
-// loadFeatures reads every biometricfeature and maps its graph feature id to its
-// case type and feature type. Feature ids follow graph.KnownFeatureID /
+// loadFeatures reads every biometricfeature and maps its feature id to its
+// modality. Feature ids follow graph.KnownFeatureID /
 // graph.QuestionedFeatureID, the single source of truth for those conventions.
 func loadFeatures(ctx context.Context, sqlDB *sql.DB) (map[string]featureInfo, error) {
 	rows, err := db.New(sqlDB).ListBiometricFeatures(ctx)
@@ -170,7 +143,7 @@ func loadFeatures(ctx context.Context, sqlDB *sql.DB) (map[string]featureInfo, e
 		} else {
 			featureID = graph.QuestionedFeatureID(r.CaseTraceID.Int64)
 		}
-		out[featureID] = featureInfo{modality: modality, featureType: r.FeatureType}
+		out[featureID] = featureInfo{modality: modality}
 	}
 	return out, nil
 }
@@ -285,102 +258,3 @@ func apply(ctx context.Context, sqlDB *sql.DB, basis Basis, p plan, memberCluste
 
 	return tx.Commit()
 }
-
-// materialize reads the persisted clusters and memberships of both layers and
-// writes the BiometricCluster nodes (with their basis) and IN_CLUSTER edges to
-// Neo4j, so a feature has one IN_CLUSTER edge per layer. It rebuilds IN_CLUSTER
-// edges from the DB each run but never touches IDENTIFIED_AS. Evidence and
-// feature nodes are created by Sync/SyncIdentity, not here.
-func materialize(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext, featureTypes map[string]string) error {
-	rows, err := db.New(sqlDB).ListClusterMembersJoined(ctx)
-	if err != nil {
-		return err
-	}
-
-	type clusterData struct {
-		modality string
-		basis    string
-		members  []string
-	}
-	var order []int64
-	byID := map[int64]*clusterData{}
-	for _, r := range rows {
-		c, ok := byID[r.ClusterID]
-		if !ok {
-			c = &clusterData{modality: r.Modality, basis: r.Basis}
-			byID[r.ClusterID] = c
-			order = append(order, r.ClusterID)
-		}
-		c.members = append(c.members, r.FeatureID)
-	}
-
-	params := make([]map[string]any, 0, len(order))
-	ids := make([]string, 0, len(order))
-	for _, id := range order {
-		c := byID[id]
-		mapping, ok := graph.Modalities[c.modality]
-		if !ok {
-			continue
-		}
-		clusterID := fmt.Sprintf("CLUSTER-%d", id)
-		ids = append(ids, clusterID)
-		members := make([]map[string]any, 0, len(c.members))
-		for _, m := range c.members {
-			members = append(members, map[string]any{
-				"featureId":   m,
-				"featureType": featureTypes[m],
-			})
-		}
-		params = append(params, map[string]any{
-			"clusterId":    clusterID,
-			"clusterLabel": mapping.ClusterLabel,
-			"basis":        c.basis,
-			"members":      members,
-		})
-	}
-
-	session := driver.NewSession(ctx, neo4j.SessionConfig{})
-	defer session.Close(ctx)
-
-	if _, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-		if _, err := tx.Run(ctx, deleteInClusterQuery, nil); err != nil {
-			return nil, err
-		}
-		if _, err := tx.Run(ctx, deleteStaleClustersQuery, map[string]any{"ids": ids}); err != nil {
-			return nil, err
-		}
-		if len(params) > 0 {
-			_, err := tx.Run(ctx, upsertClustersQuery, map[string]any{"clusters": params, "source": clusterSource})
-			return nil, err
-		}
-		return nil, nil
-	}); err != nil {
-		return fmt.Errorf("materialize clusters: %w", err)
-	}
-	return nil
-}
-
-const deleteInClusterQuery = `
-MATCH ()-[r:IN_CLUSTER]->(:BiometricCluster)
-DELETE r
-`
-
-const deleteStaleClustersQuery = `
-MATCH (c:BiometricCluster)
-WHERE NOT c.clusterId IN $ids
-DETACH DELETE c
-`
-
-const upsertClustersQuery = `
-UNWIND $clusters AS cluster
-MERGE (c:Object:BiometricCluster {clusterId: cluster.clusterId})
-ON CREATE SET c.createdAt = datetime(), c.source = $source
-SET c.basis = cluster.basis
-FOREACH (_ IN CASE WHEN cluster.clusterLabel = 'Fingerprint' THEN [1] ELSE [] END | SET c:Fingerprint)
-FOREACH (_ IN CASE WHEN cluster.clusterLabel = 'Face' THEN [1] ELSE [] END | SET c:Face)
-WITH c, cluster
-UNWIND cluster.members AS member
-MERGE (f:Object:BiometricFeature {featureId: member.featureId})
-SET f.featureType = member.featureType
-MERGE (f)-[:IN_CLUSTER]->(c)
-`

@@ -3,7 +3,7 @@
 TrackID is a reusable package for intelligence and forensic agencies that manage
 biometric cases (criminal, and civil such as DVI) for biometric traces (fingerprints, faces, and other modalities).
 
-It provides a stable core — the Postgres and Neo4j schemas plus all non-import logic —
+It provides a stable core — the Postgres schema plus all non-import logic —
 and a single, well-defined extension point: **import commands**. An organization builds
 its own distribution on top of this package and contributes only the commands that
 translate its own data formats into the core schema. Nothing organization-specific lives
@@ -15,11 +15,10 @@ The package is deliberately split into two halves:
 
 - **Core (this repository):**
   - the Postgres schema (users, the enrollment and evidence hierarchies, the unified
-    `biometricfeature` table, `biometric_decisions`, and clusters) and the Neo4j schema
-    (identity enrollment, forensic evidence, biometric clusters);
-  - the non-import logic: authentication, the `cases` read API, the Postgres → Neo4j
-    graph sync, biometric clustering by modality (with stable cluster ids), and
-    identified-person linkage;
+    `biometricfeature` table, `biometric_decisions`, and clusters);
+  - the non-import logic: authentication, the `cases` read API, biometric matching and
+    clustering by modality (with stable cluster ids), identified-person linkage, the
+    examination workflow and its reports;
   - the base frontend (auth + app layout).
 - **Organization layer (built by each agency):** the import commands that read their
   specific files or systems and write normalized records into the core schema, plus any
@@ -30,9 +29,8 @@ The package is deliberately split into two halves:
 ```
 organization import cmd  ──►  Postgres (core schema)
                                      │
-         core logic commands  ◄──────┘   (read the DB only)
+         core logic commands  ◄──────┘   (read and write the DB only)
                                      │
-                                      ├──►  Neo4j (evidence, identity, clusters)
                                      └──►  core API ──► frontend
 ```
 
@@ -58,16 +56,23 @@ organizations import to build their import commands) and an **internal** runtime
   hierarchy
 - `cluster/` — decision-status derivation and biometric clustering by modality
   (persisted, stable ids; extend/merge/split) plus identified-person linkage, all
-  driven by `biometric_decisions`, reading Postgres and writing Neo4j
-- `graph/` — embedded Neo4j (Cypher) schema migrations, their applier, the feature-type
-  mapping, and the Postgres → Neo4j sync of evidence, the identity chain, and
-  biometric features
+  driven by `biometric_decisions`, all in Postgres
+- `graph/` — the feature conventions shared by every package: feature types, how files,
+  traces and modalities map onto them, and the stable feature ids decisions and clusters
+  key on (the name is historical)
 - `biometricmatch/` — ANN similarity search over `feature_embeddings` (`Run`) and
   matcher scoring over `biometric_templates` (`RunTemplates`), both writing SYSTEM
   decisions
 - `fingerprint/` — the Go client for `sourceafis-sidecar/` (extract + match a
   fingerprint template) and the Asynq tasks that extract on codification/enrollment
   save and store into `biometric_templates`, the fingerprint counterpart of `embedding/`
+- `requests/` — what a case answers: an authority's request with its questions (quesitos) and
+  the material it sent in, citing the occurrence (`docs/facial-reports-plan.md`)
+- `reports/` — an analysis's report (lead report, laudo): the draft generated as a .docx with
+  locked data and editable sections, its versions, the checks on save and issue, the PDF rendered
+  by WordCraft, the executive summary and deliveries
+- `video/` — video sent in as material: tracks of faces through trackid-vision's `videoproc`,
+  and frames taken as evidences that record their time and frame number (needs ffmpeg)
 - `storage/` — MinIO/S3 object-storage client
 - `db/` — sqlc queries and models for the core Postgres schema (`queries.sql`) and the
   goose migrations (`db/migrations`)
@@ -77,7 +82,7 @@ organizations import to build their import commands) and an **internal** runtime
 - `internal/config/`, `internal/env/`, `internal/database/` — configuration, dotenv
   loading, and the Postgres connection pool
 - `internal/cmdutil/` — shared bootstrap helpers for the `cmd/` tools (`-commit`
-  dry-run flag, DB/Neo4j opening)
+  dry-run flag, opening the database)
 - `internal/server/` — the composition root: wires the API router and mounts the
   prototype frontend
 - `internal/web/` — serves the built frontend as a single-page application
@@ -85,7 +90,7 @@ organizations import to build their import commands) and an **internal** runtime
 **Commands and other:**
 
 - `cmd/` — thin `main()` wrappers: `migrate` (Postgres schema), `trackid` (API server
-  + frontend), `sync-graph`, `sync-identity`, `cluster-biometrics`, `identify`, and
+  + frontend), `worker` (the task processor), `cluster-biometrics`, and
   `match-embeddings`, `match-threshold` (the matcher's versioned review/confirm cutoffs),
   `create-superuser` (the first SUPER_ADMIN account)
 - `frontend/` — React + Vite, based on the [TailAdmin React](https://github.com/TailAdmin/free-react-tailwind-admin-dashboard)
@@ -100,7 +105,7 @@ organizations import to build their import commands) and an **internal** runtime
   `uv run python fetch.py --states RJ`, then
   `go run ./cmd/load-municipalities -file tools/municipalities/municipalities.geojson -commit`
 - `db/postgres/` — the Postgres image: pgvector plus PostGIS (no official image has both)
-- `docker-compose.yml` — Postgres, Redis, MinIO, `sourceafis-sidecar`, and optional Neo4j
+- `docker-compose.yml` — Postgres, Redis, MinIO and `sourceafis-sidecar`
 - `sourceafis-sidecar/` — the Java sidecar `fingerprint/` talks to (SourceAFIS behind a
   plain HTTP server; see "Models and licences")
 
@@ -127,6 +132,14 @@ scripts/start_dev.sh   # starts the stack, migrates, and runs the API + frontend
 
 There is no public sign-up. Create the first account with `cmd/create-superuser` (see its
 package comment); that SUPER_ADMIN then creates the others under `/api/admin/users`.
+
+Reports are edited in [WordCraft](https://github.com/storytold/wordcraft) (MIT or Apache-2.0)
+and rendered by it, so the page the examiner edits is the page issued. Build it beside this repo
+and point `.env` at it: `WORDCRAFT_CLI` (`cargo build --release -p wordcraft-cli`) renders issued
+reports, and `WORDCRAFT_WEB_DIR` (`trunk build --release` in `apps/wordcraft-web`, which writes
+`dist/web`) is served at `/wordcraft/` on the app's own origin, as its host bridge requires.
+Without them reports can be drafted but not edited in the app or issued. Video processing needs
+`ffmpeg`/`ffprobe` on the worker's and the API's `PATH`.
 
 Postgres runs the image built from `db/postgres/` (pgvector + PostGIS); migrations from 011 on
 need PostGIS, so a database for `TRACKID_TEST_DATABASE_URL` must run it too. Switching an

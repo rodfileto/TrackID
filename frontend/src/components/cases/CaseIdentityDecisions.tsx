@@ -11,6 +11,7 @@ import {
 } from "../../services/cases";
 import type { CodificationThumbnail } from "../../hooks/useCodificationThumbnails";
 import { codificationLabel } from "../../hooks/useCodificationThumbnails";
+import LinkBadge from "../analyses/LinkBadge";
 
 interface CaseIdentityDecisionsProps {
   caseId: string;
@@ -34,6 +35,15 @@ function StatusBadge({ decision }: { decision: IdentityDecision }) {
       <Badge size="sm" color={statusColor[decision.status]}>
         {t(`caseIdentities.status.${decision.status}`)}
       </Badge>
+      {decision.link ? (
+        <div className="mt-1">
+          <LinkBadge link={decision.link} />
+        </div>
+      ) : (
+        decision.conclusion && (
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{t(`analyses.conclusion.${decision.conclusion}`)}</p>
+        )
+      )}
       {decision.decidedBy && (
         <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
           {t("caseIdentities.decidedBy", { name: decision.decidedBy })}
@@ -66,6 +76,11 @@ function FaceIdentities({
             ? t("caseIdentities.face", { label: codificationLabel(thumbnail.codification) })
             : t("caseIdentities.faceTrace", { id: face.traceId })}
         </p>
+        {face.role === "REFERENCE" && (
+          <Badge size="sm" color="info">
+            {t("requests.role.REFERENCE")}
+          </Badge>
+        )}
       </div>
       {face.identities.length === 0 ? (
         <p className="text-sm text-gray-400 dark:text-white/30">{t("caseIdentities.noCandidates")}</p>

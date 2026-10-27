@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/rodfileto/trackid-vision/vision"
 
 	"github.com/rodfileto/trackid/biometricmatch"
@@ -356,12 +355,10 @@ func enqueueSyncFace(queue Enqueuer) {
 }
 
 // HandleSyncFace returns the asynq.Handler cmd/worker registers for
-// TaskTypeSyncFace, bound to the given dependencies. driver must be non-nil
-// -- cluster.Run always materializes to Neo4j -- so cmd/worker only
-// registers this handler once Neo4j is reachable.
-func HandleSyncFace(sqlDB *sql.DB, driver neo4j.DriverWithContext) func(context.Context, *asynq.Task) error {
+// TaskTypeSyncFace.
+func HandleSyncFace(sqlDB *sql.DB) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, t *asynq.Task) error {
-		return SyncFace(ctx, sqlDB, driver)
+		return SyncFace(ctx, sqlDB)
 	}
 }
 
@@ -377,16 +374,16 @@ func HandleSyncFace(sqlDB *sql.DB, driver neo4j.DriverWithContext) func(context.
 // redo the same (cheap, index-backed) reads and write nothing. It repeats
 // until no decision or embedding arrived while it ran (cluster.Settle), since
 // those arrivals' own enqueues were rejected as duplicates of this run.
-func SyncFace(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) error {
+func SyncFace(ctx context.Context, sqlDB *sql.DB) error {
 	unmatched := func(ctx context.Context) (int64, error) {
 		return db.New(sqlDB).CountUnmatchedFeatureEmbeddings(ctx, EmbeddingType)
 	}
 	return cluster.Settle(ctx, sqlDB, unmatched, func(ctx context.Context) error {
-		return syncFaceOnce(ctx, sqlDB, driver)
+		return syncFaceOnce(ctx, sqlDB)
 	})
 }
 
-func syncFaceOnce(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithContext) error {
+func syncFaceOnce(ctx context.Context, sqlDB *sql.DB) error {
 	version, err := biometricmatch.CurrentBand(ctx, sqlDB, EmbeddingType, DefaultFaceBand)
 	if err != nil {
 		return fmt.Errorf("embedding: sync face match: %w", err)
@@ -394,7 +391,7 @@ func syncFaceOnce(ctx context.Context, sqlDB *sql.DB, driver neo4j.DriverWithCon
 	if _, err := biometricmatch.RunBand(ctx, sqlDB, EmbeddingType, version, EmbeddingType); err != nil {
 		return fmt.Errorf("embedding: sync face match: %w", err)
 	}
-	if _, err := cluster.Run(ctx, sqlDB, driver); err != nil {
+	if _, err := cluster.Run(ctx, sqlDB); err != nil {
 		return fmt.Errorf("embedding: sync face cluster: %w", err)
 	}
 	return nil

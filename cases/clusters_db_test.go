@@ -84,7 +84,7 @@ func TestCaseClustersShowOnlyReviewedLinks(t *testing.T) {
 	decide(t1, t4, "SYSTEM", "POSITIVE", "")
 	decideIn(c1Analyses[0].ID, t1, t4, "VERIFICATOR", "POSITIVE", "ana") // C1 - C4: a SYSTEM match, its review still pending
 
-	st, err := cluster.Persist(ctx, sqlDB)
+	st, err := cluster.Run(ctx, sqlDB)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,15 +182,12 @@ func TestCaseClustersShowOnlyReviewedLinks(t *testing.T) {
 	if overview.Total != 1 || overview.Items[0].MemberCount != 5 || overview.Items[0].ClusterID == reviewedID {
 		t.Fatalf("overview = %+v; want only the automatic cluster, C4 included", overview.Items)
 	}
-	if n, err := cluster.IdentifyPlan(ctx, sqlDB); err != nil || n != 2 {
-		t.Fatalf("IdentifyPlan = %d, %v; want P1 identified in each layer", n, err)
-	}
 
 	// Revoking C2 - C3 splits the reviewed cluster. The part holding its anchor -- the smallest
 	// feature id, P1's photo -- keeps the cluster number, so C3 and P1 keep it and C1 and C2 move
 	// to a new cluster.
 	decide(t2, t3, "INCONSISTENCE", "NEGATIVE", "caio")
-	if _, err := cluster.Persist(ctx, sqlDB); err != nil {
+	if _, err := cluster.Run(ctx, sqlDB); err != nil {
 		t.Fatal(err)
 	}
 	c1 = caseClusters("C1")

@@ -1,3 +1,8 @@
+// Package graph holds the feature conventions the rest of TrackID shares: the feature types
+// (FACE_RECORD, FACE_CAPTURE, FINGERPRINT_TEMPLATE, FINGERPRINT_LIFT), how a file, trace or
+// modality maps onto them, and the stable feature ids biometric_decisions and the clusters key on
+// (a bare identity_file id for a KNOWN feature, "TRACE:<case_trace_id>#feature" for a QUESTIONED
+// one). The name is historical: the features once also lived in a graph database.
 package graph
 
 import (
@@ -5,36 +10,6 @@ import (
 	"strconv"
 	"strings"
 )
-
-// ModalityMapping describes how a biometric_cases.modality maps onto Neo4j
-// labels and type values. It is the single place that connects the relational
-// modality to the graph schema (see migrations/001_init.cypher,
-// migrations/002_forensic_evidence_capture.cypher, and
-// migrations/003_biometric_cluster.cypher).
-type ModalityMapping struct {
-	// EvidenceType is the value stored on Object:Evidence.evidenceType.
-	EvidenceType string
-	// FeatureType is the value stored on BiometricFeature.featureType for a
-	// QUESTIONED feature of this modality.
-	FeatureType string
-	// ClusterLabel is the BiometricCluster sub-label (e.g. "Fingerprint").
-	ClusterLabel string
-}
-
-// Modalities maps each supported biometric_cases.modality to its graph
-// representation.
-var Modalities = map[string]ModalityMapping{
-	"FACIAL": {
-		EvidenceType: "FACE_CAPTURE",
-		FeatureType:  FeatureTypeFaceCapture,
-		ClusterLabel: "Face",
-	},
-	"FINGERPRINT": {
-		EvidenceType: "LATENT_FINGERPRINT",
-		FeatureType:  FeatureTypeFingerprintLift,
-		ClusterLabel: "Fingerprint",
-	},
-}
 
 // Feature types, per MODEL.md: the modality and provenance of every feature.
 const (
@@ -114,7 +89,7 @@ func TraceTypeForModality(modality string) (string, bool) {
 }
 
 // ModalityForFeatureType maps a feature type to its biometric_cases.modality
-// (the modality vocabulary used by the clusters table and graph.Modalities).
+// (the modality vocabulary used by the clusters table).
 func ModalityForFeatureType(featureType string) (string, bool) {
 	switch featureType {
 	case FeatureTypeFaceRecord, FeatureTypeFaceCapture:
@@ -126,13 +101,13 @@ func ModalityForFeatureType(featureType string) (string, bool) {
 	}
 }
 
-// KnownFeatureID returns the graph node id for an enrolled (KNOWN) feature: the
-// bare identity_file.id. Callers never round-trip through Neo4j to discover it.
+// KnownFeatureID returns the feature id of an enrolled (KNOWN) feature: the
+// bare identity_file.id.
 func KnownFeatureID(identityFileID int64) string {
 	return fmt.Sprintf("%d", identityFileID)
 }
 
-// QuestionedFeatureID returns the graph node id for a case_trace's QUESTIONED
+// QuestionedFeatureID returns the feature id of a case_trace's QUESTIONED
 // biometric feature. The "TRACE:" prefix keeps case_trace ids (a distinct
 // Postgres bigserial sequence) from colliding with identity_file ids.
 func QuestionedFeatureID(caseTraceID int64) string {
@@ -140,9 +115,9 @@ func QuestionedFeatureID(caseTraceID int64) string {
 }
 
 // ParseQuestionedFeatureID is the inverse of QuestionedFeatureID: it recovers
-// the case_trace_id from a graph feature id, so a caller that only has
+// the case_trace_id from a feature id, so a caller that only has
 // cluster_members.feature_id (e.g. after resolving a cluster's membership)
-// can join back to case_traces without a round trip through Neo4j. ok is
+// can join back to case_traces. ok is
 // false for a KNOWN member (a bare identity_file id, with no "TRACE:" prefix)
 // or a malformed string.
 func ParseQuestionedFeatureID(featureID string) (caseTraceID int64, ok bool) {

@@ -692,7 +692,27 @@
     "blindQuestioned": "Questioned image",
     "blindReference": "Reference image",
     "blindCase": "Blind examination",
-    "backToMyAnalyses": "Back to my analyses"
+    "backToMyAnalyses": "Back to my analyses",
+    "conclusion": {
+      "IDENTIFICATION": "Identification",
+      "STRONG_SUPPORT": "Strong support",
+      "MODERATE_SUPPORT": "Moderate support",
+      "LIMITED_SUPPORT": "Limited support",
+      "INCONCLUSIVE": "Inconclusive",
+      "LIMITED_EXCLUSION": "Limited support for different persons",
+      "EXCLUSION": "Exclusion"
+    },
+    "conclusionHint": "A comparison decides each pair on the conclusion scale; the verifier must reach the same level for the pair to be settled.",
+    "suitability": {
+      "SUITABLE": "Suitable for comparison",
+      "LEAD_ONLY": "Lead only",
+      "UNSUITABLE": "Unsuitable",
+      "none": "Not assessed"
+    },
+    "suitabilityLabel": "Image quality",
+    "suitabilitySaved": "Quality recorded",
+    "answersRequest": "Answers request #{{sequence}}",
+    "complements": "Complements report {{number}}"
   },
   "distribution": {
     "title": "Distribution",
@@ -773,5 +793,120 @@
       "intelligence_analyst": "Intelligence",
       "coordinator": "Coordinator"
     }
+  },
+  "links": {
+    "LEAD": "Identified (lead)",
+    "LAUDO_IDENTIFIED": "Identified (laudo, {{level}})",
+    "LAUDO_SUPPORTED": "Supported (laudo, {{level}})",
+    "laterLaudo": {
+      "PENDING": "comparison under way",
+      "DISPUTED": "comparison disputed",
+      "INCONCLUSIVE": "comparison inconclusive"
+    },
+    "indirect": "Indirect link"
+  },
+  "requests": {
+    "title": "Requests",
+    "desc": "Who asked for this examination, what they asked and what they sent.",
+    "none": "No request registered yet.",
+    "register": "Register request",
+    "registerTitle": "Register a request",
+    "authority": "Requesting authority",
+    "documentReference": "Document (e.g. Ofício nº 123/2026)",
+    "documentDate": "Document date",
+    "receivedOn": "Received on",
+    "dueOn": "Due on",
+    "citedReference": "Occurrence or inquiry number cited",
+    "notes": "Notes",
+    "questions": "Questions (one per line)",
+    "files": "Material sent in",
+    "save": "Register",
+    "saved": "Request registered",
+    "overdue": "Overdue",
+    "occurrenceLinked": "Occurrence {{number}}",
+    "occurrenceUnlinked": "cited {{reference}} (not linked)",
+    "questionsCount_one": "{{count}} question",
+    "questionsCount_other": "{{count}} questions",
+    "filesCount_one": "{{count}} file",
+    "filesCount_other": "{{count}} files",
+    "registeredBy": "registered by {{user}}",
+    "attach": "Attach files",
+    "sequence": "Request #{{sequence}}",
+    "material": "Faces of the case",
+    "role": {
+      "QUESTIONED": "Questioned",
+      "REFERENCE": "Reference sent in"
+    },
+    "makeReference": "Mark as reference",
+    "makeQuestioned": "Mark as questioned",
+    "roleSaved": "Role saved"
+  },
+  "reports": {
+    "title": "Report",
+    "summary": "Executive summary",
+    "preliminary": "Preliminary — the report is not issued yet",
+    "edit": "Edit report",
+    "close": "Close editor",
+    "editorTitle": "{{title}} — draft v{{version}}",
+    "saved": "Draft saved (v{{version}})",
+    "stale": "The data changed since this draft was generated. Refresh it before issuing; your text is kept.",
+    "refresh": "Refresh from data",
+    "refreshed": "Draft refreshed (v{{version}})",
+    "issue": "Issue report",
+    "issueConfirm": "Issue the report? It gets its number and can no longer be changed.",
+    "issued": "Report {{number}} issued",
+    "download": "Download {{format}}",
+    "required": "Required sections: {{sections}}",
+    "deliveries": "Deliveries",
+    "noDeliveries": "Not delivered yet.",
+    "deliver": "Record delivery",
+    "deliveredOn": "Delivered on",
+    "method": "Method",
+    "recipient": "Recipient",
+    "delivered": "Delivery recorded",
+    "hash": "SHA-256 of the PDF: {{hash}}",
+    "unsaved": "Unsaved changes",
+    "editorLoading": "Loading the editor…",
+    "editorUnavailable": "The report editor is not available on this server (WORDCRAFT_WEB_DIR).",
+    "fields": {
+      "document": "Document",
+      "case": "Case",
+      "occurrence": "Occurrence",
+      "request": "Request",
+      "material": "Questioned material",
+      "references": "Reference material",
+      "verification": "Verification",
+      "previous": "Previous documents",
+      "examiners": "Examiners"
+    },
+    "columns": {
+      "questioned": "Questioned",
+      "reference": "Reference",
+      "conclusion": "Conclusion",
+      "result": "Result",
+      "lead": "Earlier lead",
+      "face": "Face",
+      "quality": "Quality",
+      "leads": "Lead(s)"
+    }
+  },
+  "videos": {
+    "title": "Videos",
+    "desc": "Video sent in: each person the system follows through it is a track; use a frame to examine it.",
+    "none": "No video.",
+    "upload": "Upload video",
+    "uploaded": "Video received; processing it",
+    "status": {
+      "PENDING": "Waiting",
+      "PROCESSING": "Processing",
+      "DONE": "Processed",
+      "FAILED": "Failed"
+    },
+    "noTracks": "No face found.",
+    "track": "Track {{n}}",
+    "detections_one": "{{count}} detection",
+    "detections_other": "{{count}} detections",
+    "useFrame": "Use this frame",
+    "frameAdded": "Frame at {{time}} added as evidence"
   }
 }

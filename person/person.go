@@ -4,8 +4,7 @@
 // biometric cases linked to them through those clusters.
 //
 // Every view here is a Postgres-only projection over person / identity_* /
-// biometricfeature / cluster_* / case_* (see MODEL.md) -- there is no Neo4j
-// dependency. A person is never linked to a cluster or a case by raw
+// biometricfeature / cluster_* / case_* (see MODEL.md). A person is never linked to a cluster or a case by raw
 // co-occurrence: the link always runs through the REVIEWED layer of
 // cluster_members (cluster.BasisReviewed), which only grows from a
 // biometric_decisions chain people confirmed (cluster.Reviewed) -- never from
