@@ -1201,6 +1201,31 @@ func (q *Queries) GetCaseForReport(ctx context.Context, id int64) (GetCaseForRep
 	return i, err
 }
 
+const getCaseForRequest = `-- name: GetCaseForRequest :one
+SELECT id, case_id, case_type, modality, description FROM biometric_cases WHERE case_id = $1
+`
+
+type GetCaseForRequestRow struct {
+	ID          int64  `db:"id" json:"id"`
+	CaseID      string `db:"case_id" json:"case_id"`
+	CaseType    string `db:"case_type" json:"case_type"`
+	Modality    string `db:"modality" json:"modality"`
+	Description string `db:"description" json:"description"`
+}
+
+func (q *Queries) GetCaseForRequest(ctx context.Context, caseID string) (GetCaseForRequestRow, error) {
+	row := q.db.QueryRowContext(ctx, getCaseForRequest, caseID)
+	var i GetCaseForRequestRow
+	err := row.Scan(
+		&i.ID,
+		&i.CaseID,
+		&i.CaseType,
+		&i.Modality,
+		&i.Description,
+	)
+	return i, err
+}
+
 const getCaseOccurrenceID = `-- name: GetCaseOccurrenceID :one
 SELECT id, case_type, occurrence_id FROM biometric_cases WHERE case_id = $1
 `
@@ -1219,19 +1244,19 @@ func (q *Queries) GetCaseOccurrenceID(ctx context.Context, caseID string) (GetCa
 }
 
 const getCaseRequestOfCase = `-- name: GetCaseRequestOfCase :one
-SELECT r.id FROM case_requests r WHERE r.id = $1 AND r.biometric_case_id = $2
+SELECT case_request_id FROM case_request_cases WHERE case_request_id = $1 AND biometric_case_id = $2
 `
 
 type GetCaseRequestOfCaseParams struct {
-	ID              int64 `db:"id" json:"id"`
+	CaseRequestID   int64 `db:"case_request_id" json:"case_request_id"`
 	BiometricCaseID int64 `db:"biometric_case_id" json:"biometric_case_id"`
 }
 
 func (q *Queries) GetCaseRequestOfCase(ctx context.Context, arg GetCaseRequestOfCaseParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getCaseRequestOfCase, arg.ID, arg.BiometricCaseID)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
+	row := q.db.QueryRowContext(ctx, getCaseRequestOfCase, arg.CaseRequestID, arg.BiometricCaseID)
+	var case_request_id int64
+	err := row.Scan(&case_request_id)
+	return case_request_id, err
 }
 
 const getCaseTraceForFile = `-- name: GetCaseTraceForFile :one
@@ -1637,6 +1662,29 @@ func (q *Queries) GetOccurrenceIDByNumber(ctx context.Context, arg GetOccurrence
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getOccurrenceNumbers = `-- name: GetOccurrenceNumbers :one
+SELECT agency, occurrence_number, occurrence_year, occurrence_seq FROM occurrences WHERE id = $1
+`
+
+type GetOccurrenceNumbersRow struct {
+	Agency           sql.NullString `db:"agency" json:"agency"`
+	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
+	OccurrenceYear   sql.NullInt32  `db:"occurrence_year" json:"occurrence_year"`
+	OccurrenceSeq    sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
+}
+
+func (q *Queries) GetOccurrenceNumbers(ctx context.Context, id int64) (GetOccurrenceNumbersRow, error) {
+	row := q.db.QueryRowContext(ctx, getOccurrenceNumbers, id)
+	var i GetOccurrenceNumbersRow
+	err := row.Scan(
+		&i.Agency,
+		&i.OccurrenceNumber,
+		&i.OccurrenceYear,
+		&i.OccurrenceSeq,
+	)
+	return i, err
 }
 
 const getOccurrenceSummary = `-- name: GetOccurrenceSummary :one
@@ -2141,18 +2189,15 @@ func (q *Queries) InsertCaseDecision(ctx context.Context, arg InsertCaseDecision
 
 const insertCaseRequest = `-- name: InsertCaseRequest :one
 
-INSERT INTO case_requests (biometric_case_id, sequence, authority, document_reference, document_date, received_on, due_on,
+INSERT INTO case_requests (authority, document_reference, document_date, received_on, due_on,
     cited_reference, occurrence_id, notes, registered_by)
-SELECT $1::bigint, COALESCE(MAX(sequence), 0) + 1, $2::text, $3::text,
-       $4::date, $5::date, $6::date, $7::text,
-       $8::bigint, $9::text, $10::bigint
-FROM case_requests
-WHERE biometric_case_id = $1::bigint
-RETURNING id, sequence
+VALUES ($1::text, $2::text, $3::date, $4::date,
+        $5::date, $6::text, $7::bigint,
+        $8::text, $9::bigint)
+RETURNING id
 `
 
 type InsertCaseRequestParams struct {
-	BiometricCaseID   int64          `db:"biometric_case_id" json:"biometric_case_id"`
 	Authority         string         `db:"authority" json:"authority"`
 	DocumentReference string         `db:"document_reference" json:"document_reference"`
 	DocumentDate      sql.NullTime   `db:"document_date" json:"document_date"`
@@ -2164,16 +2209,9 @@ type InsertCaseRequestParams struct {
 	RegisteredBy      sql.NullInt64  `db:"registered_by" json:"registered_by"`
 }
 
-type InsertCaseRequestRow struct {
-	ID       int64 `db:"id" json:"id"`
-	Sequence int16 `db:"sequence" json:"sequence"`
-}
-
 // Requests and received material (docs/facial-reports-plan.md, phase 1).
-// The case's next request, numbered after its last one (lock the case first: LockBiometricCase).
-func (q *Queries) InsertCaseRequest(ctx context.Context, arg InsertCaseRequestParams) (InsertCaseRequestRow, error) {
+func (q *Queries) InsertCaseRequest(ctx context.Context, arg InsertCaseRequestParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, insertCaseRequest,
-		arg.BiometricCaseID,
 		arg.Authority,
 		arg.DocumentReference,
 		arg.DocumentDate,
@@ -2184,9 +2222,9 @@ func (q *Queries) InsertCaseRequest(ctx context.Context, arg InsertCaseRequestPa
 		arg.Notes,
 		arg.RegisteredBy,
 	)
-	var i InsertCaseRequestRow
-	err := row.Scan(&i.ID, &i.Sequence)
-	return i, err
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const insertCaseRequestQuestion = `-- name: InsertCaseRequestQuestion :exec
@@ -2410,14 +2448,14 @@ func (q *Queries) IssueAnalysisReport(ctx context.Context, arg IssueAnalysisRepo
 }
 
 const latestCaseRequest = `-- name: LatestCaseRequest :one
-SELECT id FROM case_requests WHERE biometric_case_id = $1 ORDER BY sequence DESC LIMIT 1
+SELECT case_request_id FROM case_request_cases WHERE biometric_case_id = $1 ORDER BY sequence DESC LIMIT 1
 `
 
 func (q *Queries) LatestCaseRequest(ctx context.Context, biometricCaseID int64) (int64, error) {
 	row := q.db.QueryRowContext(ctx, latestCaseRequest, biometricCaseID)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
+	var case_request_id int64
+	err := row.Scan(&case_request_id)
+	return case_request_id, err
 }
 
 const latestHumanDecisionID = `-- name: LatestHumanDecisionID :one
@@ -2466,6 +2504,28 @@ func (q *Queries) LatestReportVersion(ctx context.Context, analysisReportID int6
 		&i.StorageRef,
 	)
 	return i, err
+}
+
+const linkCaseRequest = `-- name: LinkCaseRequest :one
+INSERT INTO case_request_cases (case_request_id, biometric_case_id, sequence)
+SELECT $1::bigint, $2::bigint, COALESCE(MAX(sequence), 0) + 1
+FROM case_request_cases
+WHERE biometric_case_id = $2::bigint
+RETURNING sequence
+`
+
+type LinkCaseRequestParams struct {
+	CaseRequestID   int64 `db:"case_request_id" json:"case_request_id"`
+	BiometricCaseID int64 `db:"biometric_case_id" json:"biometric_case_id"`
+}
+
+// A request joins a case as its next request, numbered after its last one (lock the case first:
+// LockBiometricCase).
+func (q *Queries) LinkCaseRequest(ctx context.Context, arg LinkCaseRequestParams) (int16, error) {
+	row := q.db.QueryRowContext(ctx, linkCaseRequest, arg.CaseRequestID, arg.BiometricCaseID)
+	var sequence int16
+	err := row.Scan(&sequence)
+	return sequence, err
 }
 
 const listAnalysesAssignedTo = `-- name: ListAnalysesAssignedTo :many
@@ -3292,13 +3352,54 @@ func (q *Queries) ListCaseReports(ctx context.Context, biometricCaseID int64) ([
 	return items, nil
 }
 
+const listCaseRequestCases = `-- name: ListCaseRequestCases :many
+SELECT rc.case_request_id, obc.case_id, obc.modality
+FROM case_request_cases rc
+JOIN biometric_cases obc ON obc.id = rc.biometric_case_id
+WHERE rc.case_request_id IN (
+    SELECT mine.case_request_id FROM case_request_cases mine
+    JOIN biometric_cases bc ON bc.id = mine.biometric_case_id
+    WHERE bc.case_id = $1)
+ORDER BY rc.case_request_id, obc.case_id
+`
+
+type ListCaseRequestCasesRow struct {
+	CaseRequestID int64  `db:"case_request_id" json:"case_request_id"`
+	CaseID        string `db:"case_id" json:"case_id"`
+	Modality      string `db:"modality" json:"modality"`
+}
+
+// Every case each of a case's requests opened or joined, this one included.
+func (q *Queries) ListCaseRequestCases(ctx context.Context, caseID string) ([]ListCaseRequestCasesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCaseRequestCases, caseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCaseRequestCasesRow
+	for rows.Next() {
+		var i ListCaseRequestCasesRow
+		if err := rows.Scan(&i.CaseRequestID, &i.CaseID, &i.Modality); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCaseRequestQuestions = `-- name: ListCaseRequestQuestions :many
 SELECT q.case_request_id, q.sequence, q.question
 FROM case_request_questions q
-JOIN case_requests r ON r.id = q.case_request_id
-JOIN biometric_cases bc ON bc.id = r.biometric_case_id
+JOIN case_request_cases rc ON rc.case_request_id = q.case_request_id
+JOIN biometric_cases bc ON bc.id = rc.biometric_case_id
 WHERE bc.case_id = $1
-ORDER BY r.sequence, q.sequence
+ORDER BY rc.sequence, q.sequence
 `
 
 type ListCaseRequestQuestionsRow struct {
@@ -3331,15 +3432,16 @@ func (q *Queries) ListCaseRequestQuestions(ctx context.Context, caseID string) (
 }
 
 const listCaseRequests = `-- name: ListCaseRequests :many
-SELECT r.id, r.sequence, r.authority, r.document_reference, r.document_date, r.received_on, r.due_on, r.cited_reference,
+SELECT r.id, rc.sequence, r.authority, r.document_reference, r.document_date, r.received_on, r.due_on, r.cited_reference,
        r.occurrence_id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
        r.notes, u.username AS registered_by, r.created_at
 FROM case_requests r
-JOIN biometric_cases bc ON bc.id = r.biometric_case_id
+JOIN case_request_cases rc ON rc.case_request_id = r.id
+JOIN biometric_cases bc ON bc.id = rc.biometric_case_id
 LEFT JOIN occurrences o ON o.id = r.occurrence_id
 LEFT JOIN users u ON u.id = r.registered_by
 WHERE bc.case_id = $1
-ORDER BY r.sequence
+ORDER BY rc.sequence
 `
 
 type ListCaseRequestsRow struct {
@@ -4975,6 +5077,72 @@ func (q *Queries) ListRequestFiles(ctx context.Context, caseID string) ([]ListRe
 	return items, nil
 }
 
+const listRequests = `-- name: ListRequests :many
+SELECT r.id, r.authority, r.document_reference, r.received_on, r.due_on, r.cited_reference,
+       o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
+       (SELECT COUNT(*) FROM case_analyses ca WHERE ca.case_request_id = r.id AND ca.status = 'OPEN')::bigint AS open_analyses,
+       COALESCE((SELECT array_agg(bc.case_id ORDER BY bc.case_id)
+                 FROM case_request_cases rc JOIN biometric_cases bc ON bc.id = rc.biometric_case_id
+                 WHERE rc.case_request_id = r.id), '{}')::text[] AS case_ids
+FROM case_requests r
+LEFT JOIN occurrences o ON o.id = r.occurrence_id
+ORDER BY r.due_on NULLS LAST, r.received_on DESC, r.id DESC
+LIMIT $1::int
+`
+
+type ListRequestsRow struct {
+	ID                int64          `db:"id" json:"id"`
+	Authority         string         `db:"authority" json:"authority"`
+	DocumentReference string         `db:"document_reference" json:"document_reference"`
+	ReceivedOn        time.Time      `db:"received_on" json:"received_on"`
+	DueOn             sql.NullTime   `db:"due_on" json:"due_on"`
+	CitedReference    sql.NullString `db:"cited_reference" json:"cited_reference"`
+	OccurrenceYear    sql.NullInt32  `db:"occurrence_year" json:"occurrence_year"`
+	OccurrenceSeq     sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
+	Agency            sql.NullString `db:"agency" json:"agency"`
+	OccurrenceNumber  sql.NullString `db:"occurrence_number" json:"occurrence_number"`
+	OpenAnalyses      int64          `db:"open_analyses" json:"open_analyses"`
+	CaseIds           []string       `db:"case_ids" json:"case_ids"`
+}
+
+// Every request, overdue and soonest due first: what the coordinator has to answer. open counts
+// the analyses still open that answer it.
+func (q *Queries) ListRequests(ctx context.Context, rowLimit int32) ([]ListRequestsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRequests, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRequestsRow
+	for rows.Next() {
+		var i ListRequestsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Authority,
+			&i.DocumentReference,
+			&i.ReceivedOn,
+			&i.DueOn,
+			&i.CitedReference,
+			&i.OccurrenceYear,
+			&i.OccurrenceSeq,
+			&i.Agency,
+			&i.OccurrenceNumber,
+			&i.OpenAnalyses,
+			pq.Array(&i.CaseIds),
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSystemDecisionsForFeatures = `-- name: ListSystemDecisionsForFeatures :many
 SELECT feature_a_id, feature_b_id, decision, confidence
 FROM biometric_decisions
@@ -5420,6 +5588,23 @@ type SetBiometricCaseOccurrenceParams struct {
 // A NULL occurrence_id unlinks the case.
 func (q *Queries) SetBiometricCaseOccurrence(ctx context.Context, arg SetBiometricCaseOccurrenceParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, setBiometricCaseOccurrence, arg.OccurrenceID, arg.CaseID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const setBiometricCaseOccurrenceIfNone = `-- name: SetBiometricCaseOccurrenceIfNone :execrows
+UPDATE biometric_cases SET occurrence_id = $2, updated_at = NOW() WHERE id = $1 AND occurrence_id IS NULL
+`
+
+type SetBiometricCaseOccurrenceIfNoneParams struct {
+	ID           int64         `db:"id" json:"id"`
+	OccurrenceID sql.NullInt64 `db:"occurrence_id" json:"occurrence_id"`
+}
+
+func (q *Queries) SetBiometricCaseOccurrenceIfNone(ctx context.Context, arg SetBiometricCaseOccurrenceIfNoneParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setBiometricCaseOccurrenceIfNone, arg.ID, arg.OccurrenceID)
 	if err != nil {
 		return 0, err
 	}

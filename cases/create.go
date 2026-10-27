@@ -41,50 +41,58 @@ func Create(ctx context.Context, sqlDB *sql.DB, input CreateInput) (Case, error)
 	if sqlDB == nil {
 		return Case{}, fmt.Errorf("cases: nil db")
 	}
-
-	caseType := strings.ToUpper(strings.TrimSpace(input.CaseType))
-	if !validCaseType(caseType) {
-		return Case{}, ValidationError("case_type must be CRIMINAL or CIVIL")
-	}
-	modality := strings.ToUpper(strings.TrimSpace(input.Modality))
-	if modality != "FACIAL" && modality != "FINGERPRINT" {
-		return Case{}, ValidationError("modality must be FACIAL or FINGERPRINT")
-	}
-	description := strings.TrimSpace(input.Description)
-	if description == "" {
-		return Case{}, ValidationError("description is required")
-	}
-
-	year := time.Now().Year()
-
 	for attempt := 1; ; attempt++ {
-		created, err := createNumbered(ctx, sqlDB, year, caseType, modality, description)
+		created, err := createNumbered(ctx, sqlDB, input)
 		if err == nil {
 			return created, nil
 		}
-		if !isDuplicateNumber(err) || attempt >= maxNumberingAttempts {
+		if !IsDuplicateNumber(err) || attempt >= maxNumberingAttempts {
 			return Case{}, err
 		}
 	}
 }
 
-// createNumbered reads the current max case_number for the year and inserts the
-// next one in a single transaction.
-func createNumbered(ctx context.Context, sqlDB *sql.DB, year int, caseType, modality, description string) (Case, error) {
+// createNumbered creates the case in a transaction of its own.
+func createNumbered(ctx context.Context, sqlDB *sql.DB, input CreateInput) (Case, error) {
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	if err != nil {
 		return Case{}, err
 	}
 	defer tx.Rollback()
+	created, _, err := CreateWith(ctx, db.New(tx), input)
+	if err != nil {
+		return Case{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Case{}, err
+	}
+	return created, nil
+}
 
-	q := db.New(tx)
+// CreateWith is Create on q, inside the caller's transaction (registering a request opens its
+// cases this way): it validates input, numbers the case after the year's highest and opens its
+// automatic analyses. It returns the case and its row id. A concurrent create can take the same
+// number; the caller retries its whole transaction when IsDuplicateNumber.
+func CreateWith(ctx context.Context, q *db.Queries, input CreateInput) (Case, int64, error) {
+	caseType := strings.ToUpper(strings.TrimSpace(input.CaseType))
+	if !validCaseType(caseType) {
+		return Case{}, 0, ValidationError("case_type must be CRIMINAL or CIVIL")
+	}
+	modality := strings.ToUpper(strings.TrimSpace(input.Modality))
+	if modality != "FACIAL" && modality != "FINGERPRINT" {
+		return Case{}, 0, ValidationError("modality must be FACIAL or FINGERPRINT")
+	}
+	description := strings.TrimSpace(input.Description)
+	if description == "" {
+		return Case{}, 0, ValidationError("description is required")
+	}
 
+	year := time.Now().Year()
 	maxNumber, err := q.MaxCaseNumberForYear(ctx, int32(year))
 	if err != nil {
-		return Case{}, fmt.Errorf("cases: read max case number: %w", err)
+		return Case{}, 0, fmt.Errorf("cases: read max case number: %w", err)
 	}
 	number := maxNumber + 1
-
 	caseID := fmt.Sprintf("%04d.%04d", year, number)
 
 	row, err := q.CreateBiometricCase(ctx, db.CreateBiometricCaseParams{
@@ -96,22 +104,17 @@ func createNumbered(ctx context.Context, sqlDB *sql.DB, year int, caseType, moda
 		CaseNumber:  sql.NullInt32{Int32: number, Valid: true},
 	})
 	if err != nil {
-		return Case{}, fmt.Errorf("cases: create biometric case: %w", err)
+		return Case{}, 0, fmt.Errorf("cases: create biometric case: %w", err)
 	}
 	if _, err := analyses.OpenAutomatic(ctx, q, row.ID, row.Modality); err != nil {
-		return Case{}, fmt.Errorf("cases: open the case's automatic analyses: %w", err)
+		return Case{}, 0, fmt.Errorf("cases: open the case's automatic analyses: %w", err)
 	}
-
-	if err := tx.Commit(); err != nil {
-		return Case{}, err
-	}
-
-	return Case{CaseID: row.CaseID, CaseType: row.CaseType, Modality: row.Modality, Description: row.Description}, nil
+	return Case{CaseID: row.CaseID, CaseType: row.CaseType, Modality: row.Modality, Description: row.Description}, row.ID, nil
 }
 
-// isDuplicateNumber reports whether err is a unique violation on the
+// IsDuplicateNumber reports whether err is a unique violation on the
 // (case_year, case_number) index — the signature of a concurrent create that
 // raced for the same number.
-func isDuplicateNumber(err error) bool {
+func IsDuplicateNumber(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "biometric_cases_year_number_key")
 }

@@ -17,6 +17,8 @@ import Clusters from "./pages/Clusters";
 import AnalysisWorkspace from "./pages/AnalysisWorkspace";
 import MyAnalyses from "./pages/MyAnalyses";
 import Distribution from "./pages/Distribution";
+import Requests from "./pages/Requests";
+import RegisterRequest from "./pages/RegisterRequest";
 import Users from "./pages/Users";
 // A lazy page whose code fails to load -- the tab predates a new build or a dev-server
 // restart, so the chunk it asks for no longer exists -- reloads once to fetch the current
@@ -65,6 +67,8 @@ export default function App() {
               <Route path="/analyses" element={<MyAnalyses />} />
               <Route element={<RequireCapability need="coordinator" />}>
                 <Route path="/admin/distribution" element={<Distribution />} />
+                <Route path="/requests" element={<Requests />} />
+                <Route path="/requests/new" element={<RegisterRequest />} />
               </Route>
               <Route element={<RequireCapability need="admin" />}>
                 <Route path="/admin/users" element={<Users />} />

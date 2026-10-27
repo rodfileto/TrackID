@@ -1,9 +1,11 @@
-// Package requests holds what a case answers (case_requests, db/migrations/009_reports.sql): an
+// Package requests holds what cases answer (case_requests, db/migrations/009_reports.sql): an
 // authority asking the institute to examine material, with its questions (quesitos) and the files
-// it sent in. A request is not the occurrence: it cites one (the occurrence or inquiry number), and
-// Create links it when that number names exactly one occurrence. Every analysis answers a request
+// it sent in. A request comes first: Register records it, finds or creates the occurrence it cites
+// and opens or joins its cases (case_request_cases, 011_request_cases.sql), one per exam asked.
+// Create adds a later request to a case already open. A request is not the occurrence: it cites
+// one, by the police agency's number or TrackID's. Every analysis answers a request
 // (case_analyses.case_request_id); the laudo answers that request's questions. See
-// docs/facial-reports-plan.md.
+// docs/facial-reports-plan.md, "Request first".
 package requests
 
 import (
@@ -11,9 +13,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/rodfileto/trackid/cases"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/occurrences"
 )
@@ -39,7 +43,54 @@ type Input struct {
 	OccurrenceID      *int64   `json:"occurrenceId"`      // the occurrence, when the caller already resolved it
 	Notes             string   `json:"notes"`
 	Questions         []string `json:"questions"` // the quesitos, in order
-	FileIDs           []int64  `json:"fileIds"`   // evidence files of the case it sent in
+	FileIDs           []int64  `json:"fileIds"`   // evidence files of the case it sent in (Create only)
+}
+
+// RegisterInput is a request as it arrives, with what it opens: the occurrence it cites, when
+// TrackID does not have it yet, and its cases.
+type RegisterInput struct {
+	Input
+	// Occurrence is the occurrence to create when the request cites one TrackID does not have
+	// (Input.OccurrenceID and Input.CitedReference find existing ones). Its CaseID is ignored.
+	Occurrence *occurrences.CreateInput
+	// CaseType is the nature of new cases when there is no occurrence (a civil request may have
+	// none); with an occurrence, its nature is theirs.
+	CaseType string
+	Cases    []CaseInput
+}
+
+// CaseInput is one case a request opens (Modality and Description) or joins (CaseID).
+type CaseInput struct {
+	CaseID      string `json:"caseId"`
+	Modality    string `json:"modality"`
+	Description string `json:"description"`
+}
+
+// Registered is what registering a request made.
+type Registered struct {
+	RequestID  int64        `json:"requestId"`
+	Occurrence *Occurrence  `json:"occurrence,omitempty"`
+	Cases      []cases.Case `json:"cases"`
+}
+
+// CaseRef is a case a request opened or joined.
+type CaseRef struct {
+	CaseID   string `json:"caseId"`
+	Modality string `json:"modality"`
+}
+
+// Summary is a request in the list of every request.
+type Summary struct {
+	ID                int64    `json:"id"`
+	Authority         string   `json:"authority"`
+	DocumentReference string   `json:"documentReference"`
+	ReceivedOn        string   `json:"receivedOn"`
+	DueOn             string   `json:"dueOn,omitempty"`
+	OpenAnalyses      int64    `json:"openAnalyses"`
+	Overdue           bool     `json:"overdue"`
+	CitedReference    string   `json:"citedReference,omitempty"`
+	OccurrenceNumber  string   `json:"occurrenceNumber,omitempty"` // TrackID's, else the agency's
+	CaseIDs           []string `json:"caseIds"`
 }
 
 // Request is a registered request.
@@ -59,6 +110,7 @@ type Request struct {
 	CreatedAt         time.Time   `json:"createdAt"`
 	Questions         []string    `json:"questions"`
 	Files             []File      `json:"files"`
+	Cases             []CaseRef   `json:"cases"` // every case it opened or joined, this one included
 }
 
 // Occurrence is the occurrence a request was linked to, by its numbers.
@@ -99,96 +151,287 @@ func nullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
 }
 
-// Create registers a request on a case: its questions and the evidence files it sent in, and the
-// occurrence it cites -- in.OccurrenceID, or else the one in.CitedReference names exactly (its
-// TrackID number or the police number); an ambiguous or unknown number is kept as cited and left
-// unlinked. When the case has no occurrence yet it is linked to that one too (same nature only,
-// occurrences.LinkCase). The case's first request is what its analyses opened before it answer.
-// registeredBy is the coordinator; checking that they are one is the caller's job.
-func Create(ctx context.Context, sqlDB *sql.DB, caseID string, in Input, registeredBy int64) (Request, error) {
-	authority, document := strings.TrimSpace(in.Authority), strings.TrimSpace(in.DocumentReference)
-	if authority == "" {
-		return Request{}, ValidationError("authority is required")
+// maxAttempts bounds how often Register retries when a concurrent create took the number it gave
+// a new case or occurrence.
+const maxAttempts = 3
+
+// fields is a request's own fields, checked.
+type fields struct {
+	authority, document         string
+	documentDate, received, due sql.NullTime
+	questions                   []string
+}
+
+func check(in Input) (fields, error) {
+	f := fields{authority: strings.TrimSpace(in.Authority), document: strings.TrimSpace(in.DocumentReference)}
+	if f.authority == "" {
+		return f, ValidationError("authority is required")
 	}
-	if document == "" {
-		return Request{}, ValidationError("documentReference is required")
+	if f.document == "" {
+		return f, ValidationError("documentReference is required")
 	}
-	documentDate, err := parseDate("documentDate", in.DocumentDate, false)
-	if err != nil {
-		return Request{}, err
+	var err error
+	if f.documentDate, err = parseDate("documentDate", in.DocumentDate, false); err != nil {
+		return f, err
 	}
-	received, err := parseDate("receivedOn", in.ReceivedOn, true)
-	if err != nil {
-		return Request{}, err
+	if f.received, err = parseDate("receivedOn", in.ReceivedOn, true); err != nil {
+		return f, err
 	}
-	due, err := parseDate("dueOn", in.DueOn, false)
-	if err != nil {
-		return Request{}, err
+	if f.due, err = parseDate("dueOn", in.DueOn, false); err != nil {
+		return f, err
 	}
-	if due.Valid && due.Time.Before(received.Time) {
-		return Request{}, ValidationError("dueOn cannot be before receivedOn")
+	if f.due.Valid && f.due.Time.Before(f.received.Time) {
+		return f, ValidationError("dueOn cannot be before receivedOn")
 	}
-	var questions []string
 	for _, q := range in.Questions {
 		if q = strings.TrimSpace(q); q != "" {
-			questions = append(questions, q)
+			f.questions = append(f.questions, q)
 		}
 	}
+	return f, nil
+}
 
+// Register records a request as it arrives and what it opens, in one transaction: the occurrence
+// it cites -- in.OccurrenceID, else the one in.CitedReference names exactly (TrackID's number or
+// the police number), else in.Occurrence created now; an unknown cited number with no occurrence
+// to create is kept as cited, unlinked -- and its cases, new ones numbered and opened with their
+// automatic analyses (which answer this request), existing ones joined. A case with no occurrence
+// is linked to the request's when their nature agrees. registeredBy is the coordinator; checking
+// that they are one is the caller's job.
+func Register(ctx context.Context, sqlDB *sql.DB, in RegisterInput, registeredBy int64, now time.Time) (Registered, error) {
+	f, err := check(in.Input)
+	if err != nil {
+		return Registered{}, err
+	}
+	if len(in.Cases) == 0 {
+		return Registered{}, ValidationError("a request opens or joins at least one case")
+	}
+	if len(in.FileIDs) > 0 {
+		return Registered{}, ValidationError("attach files after registering, to the case they belong to")
+	}
+	for attempt := 1; ; attempt++ {
+		out, err := register(ctx, sqlDB, in, f, registeredBy, now)
+		if err == nil || attempt >= maxAttempts || !(cases.IsDuplicateNumber(err) || occurrences.IsDuplicateNumber(err)) {
+			return out, err
+		}
+	}
+}
+
+func register(ctx context.Context, sqlDB *sql.DB, in RegisterInput, f fields, registeredBy int64, now time.Time) (Registered, error) {
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return Registered{}, err
+	}
+	defer tx.Rollback()
+	q := db.New(tx)
+
+	occurrence, err := resolveOccurrence(ctx, q, in, now)
+	if err != nil {
+		return Registered{}, err
+	}
+	nature := strings.ToUpper(strings.TrimSpace(in.CaseType))
+	if occurrence.Valid {
+		natures, err := q.ListOccurrenceCaseTypes(ctx, occurrence.Int64)
+		if err != nil {
+			return Registered{}, err
+		}
+		if len(natures) == 0 {
+			return Registered{}, ValidationError("occurrence not found")
+		}
+		nature = natures[0]
+	}
+
+	type opened struct {
+		id int64
+		c  cases.Case
+	}
+	var list []opened
+	seen := map[string]bool{}
+	for _, ci := range in.Cases {
+		var o opened
+		if id := strings.TrimSpace(ci.CaseID); id != "" {
+			row, err := q.GetCaseForRequest(ctx, id)
+			if errors.Is(err, sql.ErrNoRows) {
+				return Registered{}, ValidationError("case " + id + " not found")
+			}
+			if err != nil {
+				return Registered{}, err
+			}
+			o = opened{id: row.ID, c: cases.Case{CaseID: row.CaseID, CaseType: row.CaseType, Modality: row.Modality, Description: row.Description}}
+		} else {
+			if nature == "" {
+				return Registered{}, ValidationError("caseType is required for a new case when the request has no occurrence")
+			}
+			c, id, err := cases.CreateWith(ctx, q, cases.CreateInput{CaseType: nature, Modality: ci.Modality, Description: ci.Description})
+			var vErr cases.ValidationError
+			if errors.As(err, &vErr) {
+				return Registered{}, ValidationError(vErr.Error())
+			}
+			if err != nil {
+				return Registered{}, err
+			}
+			o = opened{id: id, c: c}
+		}
+		if seen[o.c.CaseID] {
+			return Registered{}, ValidationError("case " + o.c.CaseID + " is listed twice")
+		}
+		seen[o.c.CaseID] = true
+		list = append(list, o)
+	}
+
+	requestID, err := insertRequest(ctx, q, in.Input, f, occurrence, registeredBy)
+	if err != nil {
+		return Registered{}, err
+	}
+	out := Registered{RequestID: requestID, Cases: []cases.Case{}}
+	for _, o := range list {
+		if err := joinCase(ctx, q, requestID, o.id, o.c.CaseType, occurrence); err != nil {
+			return Registered{}, err
+		}
+		out.Cases = append(out.Cases, o.c)
+	}
+	if occurrence.Valid {
+		if out.Occurrence, err = occurrenceRef(ctx, q, occurrence.Int64); err != nil {
+			return Registered{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return Registered{}, err
+	}
+	return out, nil
+}
+
+// resolveOccurrence finds the occurrence a request cites, or creates in.Occurrence.
+func resolveOccurrence(ctx context.Context, q *db.Queries, in RegisterInput, now time.Time) (sql.NullInt64, error) {
+	if in.OccurrenceID != nil {
+		return sql.NullInt64{Int64: *in.OccurrenceID, Valid: true}, nil
+	}
+	if cited := strings.TrimSpace(in.CitedReference); cited != "" {
+		ids, err := q.FindOccurrenceByReference(ctx, cited)
+		if err != nil {
+			return sql.NullInt64{}, err
+		}
+		if len(ids) == 1 {
+			return sql.NullInt64{Int64: ids[0], Valid: true}, nil
+		}
+	}
+	if in.Occurrence == nil {
+		return sql.NullInt64{}, nil
+	}
+	o := *in.Occurrence
+	o.CaseID = ""
+	created, err := occurrences.CreateWith(ctx, q, o, now)
+	var vErr occurrences.ValidationError
+	if errors.As(err, &vErr) {
+		return sql.NullInt64{}, ValidationError(vErr.Error())
+	}
+	if err != nil {
+		return sql.NullInt64{}, err
+	}
+	return sql.NullInt64{Int64: created.ID, Valid: true}, nil
+}
+
+func occurrenceRef(ctx context.Context, q *db.Queries, id int64) (*Occurrence, error) {
+	o, err := q.GetOccurrenceNumbers(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	ref := &Occurrence{ID: id, Agency: o.Agency.String, OccurrenceNumber: o.OccurrenceNumber.String}
+	if o.OccurrenceYear.Valid && o.OccurrenceSeq.Valid {
+		ref.Number = fmt.Sprintf("%04d.%04d", o.OccurrenceYear.Int32, o.OccurrenceSeq.Int32)
+	}
+	return ref, nil
+}
+
+func insertRequest(ctx context.Context, q *db.Queries, in Input, f fields, occurrence sql.NullInt64, registeredBy int64) (int64, error) {
+	cited := strings.TrimSpace(in.CitedReference)
+	id, err := q.InsertCaseRequest(ctx, db.InsertCaseRequestParams{
+		Authority: f.authority, DocumentReference: f.document, DocumentDate: f.documentDate,
+		ReceivedOn: f.received.Time, DueOn: f.due, CitedReference: nullString(cited), OccurrenceID: occurrence,
+		Notes: nullString(in.Notes), RegisteredBy: sql.NullInt64{Int64: registeredBy, Valid: registeredBy != 0},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("requests: insert: %w", err)
+	}
+	for i, question := range f.questions {
+		if err := q.InsertCaseRequestQuestion(ctx, db.InsertCaseRequestQuestionParams{CaseRequestID: id, Sequence: int16(i + 1), Question: question}); err != nil {
+			return 0, err
+		}
+	}
+	return id, nil
+}
+
+// joinCase makes the request the case's next one. The case's first request is what its analyses
+// opened before it answer, and a case with no occurrence takes the request's when their nature
+// agrees (otherwise only the request keeps the link).
+func joinCase(ctx context.Context, q *db.Queries, requestID, caseID int64, caseType string, occurrence sql.NullInt64) error {
+	if _, err := q.LockBiometricCase(ctx, caseID); err != nil {
+		return err
+	}
+	sequence, err := q.LinkCaseRequest(ctx, db.LinkCaseRequestParams{CaseRequestID: requestID, BiometricCaseID: caseID})
+	if err != nil {
+		return fmt.Errorf("requests: join case: %w", err)
+	}
+	if sequence == 1 {
+		if _, err := q.AttachUnrequestedAnalyses(ctx, db.AttachUnrequestedAnalysesParams{BiometricCaseID: caseID, CaseRequestID: sql.NullInt64{Int64: requestID, Valid: true}}); err != nil {
+			return err
+		}
+	}
+	if !occurrence.Valid {
+		return nil
+	}
+	natures, err := q.ListOccurrenceCaseTypes(ctx, occurrence.Int64)
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(natures, caseType) {
+		return nil
+	}
+	_, err = q.SetBiometricCaseOccurrenceIfNone(ctx, db.SetBiometricCaseOccurrenceIfNoneParams{ID: caseID, OccurrenceID: occurrence})
+	return err
+}
+
+// Create registers a later request on a case already open: its questions, the evidence files of
+// the case it sent in, and the occurrence it cites, found as Register finds it (never created).
+// registeredBy is the coordinator; checking that they are one is the caller's job.
+func Create(ctx context.Context, sqlDB *sql.DB, caseID string, in Input, registeredBy int64) (Request, error) {
+	f, err := check(in)
+	if err != nil {
+		return Request{}, err
+	}
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	if err != nil {
 		return Request{}, err
 	}
 	defer tx.Rollback()
 	q := db.New(tx)
-	c, err := q.GetCaseOccurrenceID(ctx, caseID)
+	c, err := q.GetCaseForRequest(ctx, caseID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Request{}, ErrCaseNotFound
 	}
 	if err != nil {
 		return Request{}, err
 	}
-	if _, err := q.LockBiometricCase(ctx, c.ID); err != nil {
+	occurrence, err := resolveOccurrence(ctx, q, RegisterInput{Input: in}, time.Now())
+	if err != nil {
 		return Request{}, err
 	}
-
-	occurrence := sql.NullInt64{}
-	if in.OccurrenceID != nil {
-		occurrence = sql.NullInt64{Int64: *in.OccurrenceID, Valid: true}
-	} else if cited := strings.TrimSpace(in.CitedReference); cited != "" {
-		ids, err := q.FindOccurrenceByReference(ctx, cited)
-		if err != nil {
-			return Request{}, err
-		}
-		if len(ids) == 1 {
-			occurrence = sql.NullInt64{Int64: ids[0], Valid: true}
-		}
-	}
 	if occurrence.Valid {
-		natures, err := q.ListOccurrenceCaseTypes(ctx, occurrence.Int64)
-		if err != nil {
+		if natures, err := q.ListOccurrenceCaseTypes(ctx, occurrence.Int64); err != nil {
 			return Request{}, err
-		}
-		if len(natures) == 0 {
+		} else if len(natures) == 0 {
 			return Request{}, ValidationError("occurrence not found")
 		}
 	}
-
-	row, err := q.InsertCaseRequest(ctx, db.InsertCaseRequestParams{
-		BiometricCaseID: c.ID, Authority: authority, DocumentReference: document, DocumentDate: documentDate,
-		ReceivedOn: received.Time, DueOn: due, CitedReference: nullString(in.CitedReference), OccurrenceID: occurrence,
-		Notes: nullString(in.Notes), RegisteredBy: sql.NullInt64{Int64: registeredBy, Valid: registeredBy != 0},
-	})
+	requestID, err := insertRequest(ctx, q, in, f, occurrence, registeredBy)
 	if err != nil {
-		return Request{}, fmt.Errorf("requests: insert: %w", err)
+		return Request{}, err
 	}
-	for i, question := range questions {
-		if err := q.InsertCaseRequestQuestion(ctx, db.InsertCaseRequestQuestionParams{CaseRequestID: row.ID, Sequence: int16(i + 1), Question: question}); err != nil {
-			return Request{}, err
-		}
+	if err := joinCase(ctx, q, requestID, c.ID, c.CaseType, occurrence); err != nil {
+		return Request{}, err
 	}
 	if len(in.FileIDs) > 0 {
-		n, err := q.AttachRequestFiles(ctx, db.AttachRequestFilesParams{CaseRequestID: row.ID, BiometricCaseID: c.ID, FileIds: in.FileIDs})
+		n, err := q.AttachRequestFiles(ctx, db.AttachRequestFilesParams{CaseRequestID: requestID, BiometricCaseID: c.ID, FileIds: in.FileIDs})
 		if err != nil {
 			return Request{}, err
 		}
@@ -196,35 +439,54 @@ func Create(ctx context.Context, sqlDB *sql.DB, caseID string, in Input, registe
 			return Request{}, ValidationError("every file must be an evidence file of this case")
 		}
 	}
-	if row.Sequence == 1 {
-		if _, err := q.AttachUnrequestedAnalyses(ctx, db.AttachUnrequestedAnalysesParams{BiometricCaseID: c.ID, CaseRequestID: sql.NullInt64{Int64: row.ID, Valid: true}}); err != nil {
-			return Request{}, err
-		}
-	}
 	if err := tx.Commit(); err != nil {
 		return Request{}, err
-	}
-	if occurrence.Valid && !c.OccurrenceID.Valid {
-		// Best effort: a case of another nature than the occurrence keeps the request's link only.
-		var vErr occurrences.ValidationError
-		if err := occurrences.LinkCase(ctx, sqlDB, caseID, &occurrence.Int64); err != nil && !errors.As(err, &vErr) {
-			return Request{}, err
-		}
 	}
 	list, err := List(ctx, sqlDB, caseID)
 	if err != nil {
 		return Request{}, err
 	}
 	for _, r := range list {
-		if r.ID == row.ID {
+		if r.ID == requestID {
 			return r, nil
 		}
 	}
-	return Request{}, fmt.Errorf("requests: %d not found after insert", row.ID)
+	return Request{}, fmt.Errorf("requests: %d not found after insert", requestID)
 }
 
-// AttachFiles marks more of a case's evidence files as sent in by one of its requests.
-func AttachFiles(ctx context.Context, sqlDB *sql.DB, caseID string, requestID int64, fileIDs []int64) error {
+// ListAll returns up to limit requests across every case, soonest due first (no due date last),
+// each with its cases and whether it is overdue.
+func ListAll(ctx context.Context, sqlDB *sql.DB, limit int) ([]Summary, error) {
+	rows, err := db.New(sqlDB).ListRequests(ctx, int32(limit))
+	if err != nil {
+		return nil, err
+	}
+	today := time.Now()
+	out := make([]Summary, len(rows))
+	for i, r := range rows {
+		s := Summary{ID: r.ID, Authority: r.Authority, DocumentReference: r.DocumentReference,
+			ReceivedOn: r.ReceivedOn.Format(dateLayout), OpenAnalyses: r.OpenAnalyses,
+			CitedReference: r.CitedReference.String, CaseIDs: r.CaseIds}
+		if s.CaseIDs == nil {
+			s.CaseIDs = []string{}
+		}
+		if r.DueOn.Valid {
+			s.DueOn = r.DueOn.Time.Format(dateLayout)
+			s.Overdue = r.OpenAnalyses > 0 && today.After(r.DueOn.Time.AddDate(0, 0, 1))
+		}
+		if r.OccurrenceYear.Valid && r.OccurrenceSeq.Valid {
+			s.OccurrenceNumber = fmt.Sprintf("%04d.%04d", r.OccurrenceYear.Int32, r.OccurrenceSeq.Int32)
+		} else if r.OccurrenceNumber.Valid {
+			s.OccurrenceNumber = r.Agency.String + " " + r.OccurrenceNumber.String
+		}
+		out[i] = s
+	}
+	return out, nil
+}
+
+// Check reports whether requestID is one of caseID's requests: ErrCaseNotFound for an unknown
+// case, a ValidationError for a request of another case.
+func Check(ctx context.Context, sqlDB *sql.DB, caseID string, requestID int64) error {
 	q := db.New(sqlDB)
 	c, err := q.GetCaseByCaseID(ctx, caseID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -233,9 +495,22 @@ func AttachFiles(ctx context.Context, sqlDB *sql.DB, caseID string, requestID in
 	if err != nil {
 		return err
 	}
-	if _, err := q.GetCaseRequestOfCase(ctx, db.GetCaseRequestOfCaseParams{ID: requestID, BiometricCaseID: c.ID}); errors.Is(err, sql.ErrNoRows) {
+	if _, err := q.GetCaseRequestOfCase(ctx, db.GetCaseRequestOfCaseParams{CaseRequestID: requestID, BiometricCaseID: c.ID}); errors.Is(err, sql.ErrNoRows) {
 		return ValidationError("the request is not one of this case")
 	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
+// AttachFiles marks more of a case's evidence files as sent in by one of its requests.
+func AttachFiles(ctx context.Context, sqlDB *sql.DB, caseID string, requestID int64, fileIDs []int64) error {
+	if err := Check(ctx, sqlDB, caseID, requestID); err != nil {
+		return err
+	}
+	q := db.New(sqlDB)
+	c, err := q.GetCaseByCaseID(ctx, caseID)
+	if err != nil {
 		return err
 	}
 	n, err := q.AttachRequestFiles(ctx, db.AttachRequestFilesParams{CaseRequestID: requestID, BiometricCaseID: c.ID, FileIds: fileIDs})
@@ -273,6 +548,10 @@ func ListWith(ctx context.Context, q *db.Queries, caseID string) ([]Request, err
 	if err != nil {
 		return nil, err
 	}
+	caseRows, err := q.ListCaseRequestCases(ctx, caseID)
+	if err != nil {
+		return nil, err
+	}
 	analysisRows, err := q.ListCaseAnalyses(ctx, caseID)
 	if err != nil {
 		return nil, err
@@ -288,7 +567,12 @@ func ListWith(ctx context.Context, q *db.Queries, caseID string) ([]Request, err
 	for i, r := range rows {
 		req := Request{ID: r.ID, Sequence: r.Sequence, Authority: r.Authority, DocumentReference: r.DocumentReference,
 			ReceivedOn: r.ReceivedOn.Format(dateLayout), CitedReference: r.CitedReference.String, Notes: r.Notes.String,
-			RegisteredBy: r.RegisteredBy.String, CreatedAt: r.CreatedAt, Questions: []string{}, Files: []File{}}
+			RegisteredBy: r.RegisteredBy.String, CreatedAt: r.CreatedAt, Questions: []string{}, Files: []File{}, Cases: []CaseRef{}}
+		for _, cr := range caseRows {
+			if cr.CaseRequestID == r.ID {
+				req.Cases = append(req.Cases, CaseRef{CaseID: cr.CaseID, Modality: cr.Modality})
+			}
+		}
 		if r.DocumentDate.Valid {
 			req.DocumentDate = r.DocumentDate.Time.Format(dateLayout)
 		}

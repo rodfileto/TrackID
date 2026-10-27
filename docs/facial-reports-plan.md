@@ -193,6 +193,48 @@ Not done:
 - Headings can still end a page with their pair's images on the next (WordCraft's keep-with-next
   does not reach into the image table).
 
+## Request first (decided 2026-10-27)
+
+As built, a case came first and a request was registered inside it; the cited occurrence was only
+looked up, never created. The work arrives the other way round: an ofício comes in, and the case
+and occurrence are made from it. Decisions:
+
+1. **A request is a top-level record that opens or joins one or more cases.** One ofício can ask
+   for a facial and a fingerprint exam (two cases, one per modality), and a later ofício can ask
+   more of a case already open. `case_request_cases` (migration 011) links them; a request keeps
+   its number per case there (`sequence`), so a case still lists "Request 1, 2, ...".
+2. **The occurrence is found or created on the registration screen, complete.** By the agency and
+   its report number (or TrackID's number); when none matches, the screen asks for what an
+   occurrence requires (types, when, where, description), which the ofício and the police report
+   copy carry. No half-empty occurrences: the schema keeps them required. A civil request may have
+   no occurrence; its cases' nature is then given on the screen.
+3. **A coordinator registers it, occurrence included,** without the intelligence profile. Viewing
+   and editing occurrences stays with intelligence.
+4. **Registering opens the cases' automatic analyses** (a facial case's review), answering this
+   request. Comparisons stay opened by the coordinator, as now.
+5. **"New case" without a request stays** for internal or intelligence work. A laudo still needs a
+   request.
+
+Flow: `POST /api/requests` (`requests.Register`, one transaction): request → occurrence (link or
+create) → cases (new, numbered; or existing) linked to the occurrence when they have none → files
+uploaded per case then attached to the request. Follow-up requests on an open case keep
+`POST /cases/:caseId/requests`. The frontend gets a Requests page (list, overdue first) and a
+registration page; the case page's card registers follow-ups.
+
+trackid-sim's `load` keeps ingesting cases and then registering one request per case through
+`requests.Create`: the result in the database is the same, and the world's rules do not change.
+
+**Implemented 2026-10-27.** Migration `011_request_cases`; `requests.Register` and `ListAll`;
+`cases.CreateWith` and `occurrences.CreateWith` run inside its transaction (the whole
+registration is retried when a concurrent create took a case or occurrence number). Coordinators
+reach the occurrence form's routes (types, search, nearby places, geocoding) but not the map, and
+receive material into a request's case without holding an analysis
+(`POST /api/admin/cases/:caseId/requests/:requestId/material`). Checked with a DB test
+(`requests/requests_db_test.go`) and in a browser on a scratch database: one ofício citing an
+existing occurrence opened a facial and a fingerprint case, both linked to it, with an image and a
+video received into the facial case and its review answering the request. Migration 011's Down
+keeps a request that spans cases on its first case only.
+
 ## Docs
 
 MODEL.md sections 2.2, 3, 3.1 and 4.1 (link basis); the book chapters on analyses and clusters.

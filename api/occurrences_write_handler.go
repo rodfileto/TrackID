@@ -43,6 +43,19 @@ type createOccurrenceRequest struct {
 	} `json:"place"`
 }
 
+func (r createOccurrenceRequest) input() occurrences.CreateInput {
+	return occurrences.CreateInput{
+		Types: r.Types, Attempted: r.Attempted, OccurredFrom: r.OccurredFrom, OccurredTo: r.OccurredTo,
+		ReportedAt: r.ReportedAt, Status: r.Status, Description: r.Description,
+		Agency: r.Agency, AgencyNumber: r.AgencyNumber, OffenderCount: r.OffenderCount, VictimCount: r.VictimCount,
+		CaseID: r.CaseID,
+		Place: occurrences.PlaceInput{
+			ExistingID: r.Place.ExistingID, Lon: r.Place.Lon, Lat: r.Place.Lat, Precision: r.Place.Precision,
+			Name: r.Place.Name, Address: r.Place.Address, Neighbourhood: r.Place.Neighbourhood, PlaceType: r.Place.PlaceType,
+		},
+	}
+}
+
 // CreateOccurrenceHandler registers an occurrence (occurrences.Create): TrackID numbers it.
 func CreateOccurrenceHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -66,16 +79,7 @@ func CreateOccurrenceHandler(sqlDB *sql.DB) gin.HandlerFunc {
 				return
 			}
 		}
-		created, err := occurrences.Create(c.Request.Context(), sqlDB, occurrences.CreateInput{
-			Types: r.Types, Attempted: r.Attempted, OccurredFrom: r.OccurredFrom, OccurredTo: r.OccurredTo,
-			ReportedAt: r.ReportedAt, Status: r.Status, Description: r.Description,
-			Agency: r.Agency, AgencyNumber: r.AgencyNumber, OffenderCount: r.OffenderCount, VictimCount: r.VictimCount,
-			CaseID: r.CaseID,
-			Place: occurrences.PlaceInput{
-				ExistingID: r.Place.ExistingID, Lon: r.Place.Lon, Lat: r.Place.Lat, Precision: r.Place.Precision,
-				Name: r.Place.Name, Address: r.Place.Address, Neighbourhood: r.Place.Neighbourhood, PlaceType: r.Place.PlaceType,
-			},
-		}, time.Now())
+		created, err := occurrences.Create(c.Request.Context(), sqlDB, r.input(), time.Now())
 		if err != nil {
 			writeOccurrenceError(c, err, "could not register occurrence")
 			return

@@ -228,8 +228,6 @@ type CaseFile struct {
 
 type CaseRequest struct {
 	ID                int64          `db:"id" json:"id"`
-	BiometricCaseID   int64          `db:"biometric_case_id" json:"biometric_case_id"`
-	Sequence          int16          `db:"sequence" json:"sequence"`
 	Authority         string         `db:"authority" json:"authority"`
 	DocumentReference string         `db:"document_reference" json:"document_reference"`
 	DocumentDate      sql.NullTime   `db:"document_date" json:"document_date"`
@@ -240,6 +238,13 @@ type CaseRequest struct {
 	Notes             sql.NullString `db:"notes" json:"notes"`
 	RegisteredBy      sql.NullInt64  `db:"registered_by" json:"registered_by"`
 	CreatedAt         time.Time      `db:"created_at" json:"created_at"`
+}
+
+type CaseRequestCase struct {
+	CaseRequestID   int64     `db:"case_request_id" json:"case_request_id"`
+	BiometricCaseID int64     `db:"biometric_case_id" json:"biometric_case_id"`
+	Sequence        int16     `db:"sequence" json:"sequence"`
+	CreatedAt       time.Time `db:"created_at" json:"created_at"`
 }
 
 type CaseRequestQuestion struct {

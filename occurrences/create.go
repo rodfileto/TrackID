@@ -80,18 +80,21 @@ func Create(ctx context.Context, sqlDB *sql.DB, in CreateInput, now time.Time) (
 	if sqlDB == nil {
 		return Created{}, fmt.Errorf("occurrences: nil db")
 	}
-	if err := normalize(ctx, db.New(sqlDB), &in, now); err != nil {
-		return Created{}, err
-	}
 	for attempt := 1; ; attempt++ {
-		c, err := createNumbered(ctx, sqlDB, in, now.Year())
+		c, err := createNumbered(ctx, sqlDB, in, now)
 		if err == nil {
 			return c, nil
 		}
-		if !strings.Contains(err.Error(), "occurrences_year_seq_key") || attempt >= maxNumberingAttempts {
+		if !IsDuplicateNumber(err) || attempt >= maxNumberingAttempts {
 			return Created{}, err
 		}
 	}
+}
+
+// IsDuplicateNumber reports whether err is a concurrent create that took the same
+// "<year>.<sequence>"; the whole transaction can be retried.
+func IsDuplicateNumber(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "occurrences_year_seq_key")
 }
 
 // normalize trims and checks in, filling defaults.
@@ -192,14 +195,29 @@ func normalize(ctx context.Context, q *db.Queries, in *CreateInput, now time.Tim
 	return nil
 }
 
-func createNumbered(ctx context.Context, sqlDB *sql.DB, in CreateInput, year int) (Created, error) {
+func createNumbered(ctx context.Context, sqlDB *sql.DB, in CreateInput, now time.Time) (Created, error) {
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	if err != nil {
 		return Created{}, err
 	}
 	defer tx.Rollback()
-	q := db.New(tx)
+	c, err := CreateWith(ctx, db.New(tx), in, now)
+	if err != nil {
+		return Created{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Created{}, err
+	}
+	return c, nil
+}
 
+// CreateWith is Create on q, inside the caller's transaction (registering a request creates the
+// occurrence it cites this way). The caller retries its whole transaction when IsDuplicateNumber.
+func CreateWith(ctx context.Context, q *db.Queries, in CreateInput, now time.Time) (Created, error) {
+	if err := normalize(ctx, q, &in, now); err != nil {
+		return Created{}, err
+	}
+	year := now.Year()
 	locationID, err := placeLocation(ctx, q, in.Place)
 	if err != nil {
 		return Created{}, err
@@ -235,9 +253,6 @@ func createNumbered(ctx context.Context, sqlDB *sql.DB, in CreateInput, year int
 		}); err != nil {
 			return Created{}, fmt.Errorf("occurrences: link case %s: %w", in.CaseID, err)
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return Created{}, err
 	}
 	return Created{ID: row.ID, TrackIDNumber: fmt.Sprintf("%04d.%04d", year, seq), Year: year, LocationID: locationID, CaseID: in.CaseID}, nil
 }

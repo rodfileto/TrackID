@@ -91,6 +91,9 @@ func contentType(filename string) string {
 	return videoExtensions[strings.ToLower(filepath.Ext(filename))]
 }
 
+// IsVideo reports whether filename is of a video format Add takes.
+func IsVideo(filename string) bool { return contentType(filename) != "" }
+
 // Add stores a video sent in for a case and queues its processing (a nil queue leaves it pending).
 // The same bytes added again are the same video.
 func Add(ctx context.Context, sqlDB *sql.DB, store *storage.Client, queue embedding.Enqueuer, caseID, filename string, data []byte) (Video, error) {

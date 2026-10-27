@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import {
   BoxCubeIcon,
   ChevronDownIcon,
+  DocsIcon,
   FolderIcon,
   GridIcon,
   GroupIcon,
@@ -47,6 +48,12 @@ const allNavItems: NavItem[] = [
     icon: <ListIcon />,
     name: "nav.myAnalyses",
     path: "/analyses",
+  },
+  {
+    icon: <DocsIcon />,
+    name: "nav.requests",
+    path: "/requests",
+    requires: "coordinator",
   },
   {
     icon: <TableIcon />,

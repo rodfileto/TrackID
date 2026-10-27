@@ -225,6 +225,14 @@ func RequireIntelligence(sqlDB *sql.DB) gin.HandlerFunc {
 	return requireCapability(sqlDB, auth.UserProfile.IntelligenceAccess, "intelligence access required")
 }
 
+// RequireOccurrenceForm guards what registering an occurrence needs (its types, search, places,
+// geocoding): analysts, and coordinators registering the occurrence a request cites.
+func RequireOccurrenceForm(sqlDB *sql.DB) gin.HandlerFunc {
+	return requireCapability(sqlDB, func(u auth.UserProfile) bool {
+		return u.IntelligenceAccess() || u.Coordinates()
+	}, "intelligence or coordinator access required")
+}
+
 // RequireCoordinator guards distribution, reassignment and opening comparisons.
 func RequireCoordinator(sqlDB *sql.DB) gin.HandlerFunc {
 	return requireCapability(sqlDB, auth.UserProfile.Coordinates, "coordinator access required")

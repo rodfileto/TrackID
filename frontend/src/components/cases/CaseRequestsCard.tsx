@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 import ComponentCard from "../common/ComponentCard";
 import Badge from "../ui/badge/Badge";
 import Button from "../ui/button/Button";
@@ -11,6 +12,7 @@ import { listCaseVideos } from "../../services/videos";
 import {
   createCaseRequest,
   listCaseMaterial,
+  receiveMaterial,
   listCaseRequests,
   setTraceRole,
   type CaseRequest,
@@ -168,12 +170,31 @@ export default function CaseRequestsCard({
   const [requests, setRequests] = useState<CaseRequest[] | null>(null);
   const [material, setMaterial] = useState<MaterialTrace[]>([]);
   const [registering, setRegistering] = useState(false);
+  const [receiving, setReceiving] = useState<number | null>(null);
 
   const load = useCallback(() => {
     listCaseRequests(caseId).then(setRequests).catch(() => setRequests([]));
     listCaseMaterial(caseId).then(setMaterial).catch(() => setMaterial([]));
   }, [caseId]);
   useEffect(load, [load, refreshKey]);
+
+  /** Coordinator: receive more files a request sent in, into this case. */
+  async function receive(requestId: number, files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setReceiving(requestId);
+    try {
+      for (const file of Array.from(files)) {
+        await receiveMaterial(caseId, requestId, file);
+      }
+      toast.success(t("requests.saved"));
+      load();
+      onChanged?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReceiving(null);
+    }
+  }
 
   async function toggleRole(m: MaterialTrace) {
     try {
@@ -213,6 +234,22 @@ export default function CaseRequestsCard({
                   : ""}
               {r.registeredBy && ` · ${t("requests.registeredBy", { user: r.registeredBy })}`}
             </p>
+            {r.cases.length > 1 && (
+              <p className="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">
+                {t("requests.alsoIn")}{" "}
+                {r.cases
+                  .filter((c) => c.caseId !== caseId)
+                  .map((c, i) => (
+                    <span key={c.caseId}>
+                      {i > 0 && ", "}
+                      <Link to={`/cases/${encodeURIComponent(c.caseId)}`} className="text-brand-500 hover:underline">
+                        {c.caseId}
+                      </Link>{" "}
+                      ({t(`modality.${c.modality.toLowerCase()}`)})
+                    </span>
+                  ))}
+              </p>
+            )}
             {r.questions.length > 0 && (
               <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-sm text-gray-700 dark:text-gray-300">
                 {r.questions.map((q, i) => (
@@ -228,6 +265,13 @@ export default function CaseRequestsCard({
                   </li>
                 ))}
               </ul>
+            )}
+            {isCoordinator && (
+              <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-theme-xs text-brand-500 hover:underline">
+                {receiving === r.id ? "…" : t("requests.receive")}
+                <input type="file" multiple accept="image/*,application/pdf,video/*" className="hidden" disabled={receiving !== null}
+                  onChange={(e) => void receive(r.id, e.target.files)} />
+              </label>
             )}
           </li>
         ))}

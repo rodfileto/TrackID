@@ -47,7 +47,8 @@ many files; each file yields one or more features.
 ### 2.2 Evidence hierarchy (QUESTIONED)
 
 ```
-biometric_cases ──< case_requests ──< case_request_questions
+case_requests ──< case_request_questions
+case_requests ──< case_request_cases >── biometric_cases   (a request opens or joins its cases)
 biometric_cases ──< case_files (>── case_requests: the material a request sent in)
 biometric_cases ──< case_evidences ──< case_traces ──< case_codifications
 case_files (video) ── case_videos;  case_evidences >── case_files (video): a frame's source
@@ -57,7 +58,7 @@ case_traces ── biometricfeature
 | Table | Role |
 | --- | --- |
 | `biometric_cases` | the base case (`case_id`; `case_type` = `CRIMINAL` \| `CIVIL`; `modality` = `FACIAL` \| `FINGERPRINT`) |
-| `case_requests` | what the case answers: an authority's request (ofício) with its document, dates, the occurrence or inquiry number it cites (and the occurrence it resolved to), and its questions (`case_request_questions`, quesitos); `requests` package |
+| `case_requests` | what cases answer: an authority's request (ofício) with its document, dates, the occurrence or inquiry number it cites (and the occurrence it resolved to), and its questions (`case_request_questions`, quesitos). Registered first: it finds or creates its occurrence and opens or joins its cases, one per exam asked (`case_request_cases`, which also numbers it per case); `requests` package |
 | `case_files` | raw files attached to a case (`evidence`, `video`, `document`, `forensic_report`, `report_draft`, `face_crop`, `codification_image`), with their SHA-256; `case_request_id` marks the material a request sent in |
 | `case_videos` | a video sent in and its processing: the tracks of faces trackid-vision's `videoproc` found (`video` package) |
 | `case_evidences` | one evidence item within a case (e.g. a lift card, an image); a frame taken from a video records the video, its time and frame number (`source_*`) |

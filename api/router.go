@@ -83,8 +83,11 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	coordination.POST("cases/:caseId/analyses", OpenAnalysisHandler(deps.DB))
 	coordination.PUT("analyses/:analysisId/assignment", AssignAnalysisHandler(deps.DB))
 	coordination.GET("analyses/:analysisId/prior-deciders", PriorDecidersHandler(deps.DB))
+	coordination.GET("requests", ListRequestsHandler(deps.DB))
+	coordination.POST("requests", RegisterRequestHandler(deps.DB))
 	coordination.POST("cases/:caseId/requests", CreateCaseRequestHandler(deps.DB))
 	coordination.POST("cases/:caseId/requests/:requestId/files", AttachRequestFilesHandler(deps.DB))
+	coordination.POST("cases/:caseId/requests/:requestId/material", ReceiveMaterialHandler(deps.DB, deps.Storage, deps.Queue))
 	protected.GET("cases", ListCasesHandler(deps.DB))
 	protected.POST("cases", CreateCaseHandler(deps.DB))
 	protected.GET("cases/years", ListCaseYearsHandler(deps.DB))
@@ -151,16 +154,21 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	intelligence.GET("clusters", ListClustersHandler(deps.DB))
 	intelligence.GET("clusters/graph", ClustersGraphHandler(deps.DB))
 
+	// What the occurrence form needs: a coordinator registering a request creates the occurrence
+	// it cites (docs/facial-reports-plan.md, "Request first"); the map and the rest stay
+	// intelligence's.
+	occurrenceForm := protected.Group("")
+	occurrenceForm.Use(RequireOccurrenceForm(deps.DB))
 	intelligence.GET("occurrences/map", OccurrenceMapHandler(deps.DB))
-	intelligence.GET("occurrences/types", OccurrenceTypesHandler(deps.DB))
+	occurrenceForm.GET("occurrences/types", OccurrenceTypesHandler(deps.DB))
 	intelligence.GET("occurrences/years", OccurrenceYearsHandler(deps.DB))
-	intelligence.GET("occurrences/search", SearchOccurrencesHandler(deps.DB))
+	occurrenceForm.GET("occurrences/search", SearchOccurrencesHandler(deps.DB))
 	intelligence.POST("occurrences", CreateOccurrenceHandler(deps.DB))
 	oneCase.GET("occurrence", CaseOccurrenceHandler(deps.DB))
 	oneCase.PUT("occurrence", RequireIntelligence(deps.DB), LinkCaseOccurrenceHandler(deps.DB))
-	intelligence.GET("locations/nearby", NearbyLocationsHandler(deps.DB))
-	intelligence.GET("geocode/search", GeocodeSearchHandler(deps.Geocoder))
-	intelligence.GET("geocode/reverse", GeocodeReverseHandler(deps.Geocoder))
+	occurrenceForm.GET("locations/nearby", NearbyLocationsHandler(deps.DB))
+	occurrenceForm.GET("geocode/search", GeocodeSearchHandler(deps.Geocoder))
+	occurrenceForm.GET("geocode/reverse", GeocodeReverseHandler(deps.Geocoder))
 
 	if deps.Register != nil {
 		deps.Register(router, protected)

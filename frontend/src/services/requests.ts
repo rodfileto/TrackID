@@ -1,6 +1,7 @@
-import { requestApi } from "./api";
+import { apiBaseUrl, requestApi } from "./api";
 import { getToken } from "./auth";
 import type { Suitability } from "./analyses";
+import type { CreateOccurrenceInput } from "./occurrences";
 
 /** A request: an authority asking the institute to examine material, with its questions. */
 export interface CaseRequest {
@@ -19,6 +20,43 @@ export interface CaseRequest {
   createdAt: string;
   questions: string[];
   files: { id: number; filename: string; sha256: string; contentType?: string; sizeBytes: number; addedAt: string }[];
+  /** Every case the request opened or joined, this one included. */
+  cases: { caseId: string; modality: string }[];
+}
+
+/** A request in the list of every request. */
+export interface RequestSummary {
+  id: number;
+  authority: string;
+  documentReference: string;
+  receivedOn: string;
+  dueOn?: string;
+  openAnalyses: number;
+  overdue: boolean;
+  citedReference?: string;
+  occurrenceNumber?: string;
+  caseIds: string[];
+}
+
+/** One case a request opens (modality and description) or joins (caseId). */
+export interface RequestCaseInput {
+  caseId?: string;
+  modality?: string;
+  description?: string;
+}
+
+/** A request as it arrives, with the occurrence it cites and the cases it opens. */
+export interface RegisterRequestInput extends Omit<CaseRequestInput, "fileIds"> {
+  occurrenceId?: number;
+  occurrence?: CreateOccurrenceInput;
+  caseType?: string;
+  cases: RequestCaseInput[];
+}
+
+export interface RegisteredRequest {
+  requestId: number;
+  occurrence?: CaseRequest["occurrence"];
+  cases: { caseId: string; caseType: string; modality: string; description: string }[];
 }
 
 export interface CaseRequestInput {
@@ -57,7 +95,37 @@ export async function listCaseRequests(caseId: string): Promise<CaseRequest[]> {
   return requestApi<CaseRequest[]>(`/cases/${encodeURIComponent(caseId)}/requests`, { headers: authHeaders() });
 }
 
-/** Coordinator: register a request on a case. */
+/** Coordinator: every request, soonest due first. */
+export async function listRequests(): Promise<RequestSummary[]> {
+  return requestApi<RequestSummary[]>("/admin/requests", { headers: authHeaders() });
+}
+
+/** Coordinator: register a request as it arrives, opening its cases and its occurrence. */
+export async function registerRequest(input: RegisterRequestInput): Promise<RegisteredRequest> {
+  return requestApi<RegisteredRequest>("/admin/requests", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+}
+
+/** Coordinator: receive one file a request sent in, into one of its cases. */
+export async function receiveMaterial(caseId: string, requestId: number, file: File): Promise<number> {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${apiBaseUrl}/admin/cases/${encodeURIComponent(caseId)}/requests/${requestId}/material`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Could not receive ${file.name}`);
+  }
+  return ((await response.json()) as { fileId: number }).fileId;
+}
+
+/** Coordinator: register a later request on a case already open. */
 export async function createCaseRequest(caseId: string, input: CaseRequestInput): Promise<CaseRequest> {
   return requestApi<CaseRequest>(`/admin/cases/${encodeURIComponent(caseId)}/requests`, {
     method: "POST",

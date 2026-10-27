@@ -276,7 +276,7 @@ func OpenWith(ctx context.Context, sqlDB *sql.DB, caseID string, t Type, pairs [
 
 	requestID := sql.NullInt64{}
 	if opts.RequestID != 0 {
-		if _, err := q.GetCaseRequestOfCase(ctx, db.GetCaseRequestOfCaseParams{ID: opts.RequestID, BiometricCaseID: c.ID}); errors.Is(err, sql.ErrNoRows) {
+		if _, err := q.GetCaseRequestOfCase(ctx, db.GetCaseRequestOfCaseParams{CaseRequestID: opts.RequestID, BiometricCaseID: c.ID}); errors.Is(err, sql.ErrNoRows) {
 			return 0, ErrUnknownRequest
 		} else if err != nil {
 			return 0, err

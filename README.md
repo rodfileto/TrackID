@@ -66,8 +66,9 @@ organizations import to build their import commands) and an **internal** runtime
 - `fingerprint/` — the Go client for `sourceafis-sidecar/` (extract + match a
   fingerprint template) and the Asynq tasks that extract on codification/enrollment
   save and store into `biometric_templates`, the fingerprint counterpart of `embedding/`
-- `requests/` — what a case answers: an authority's request with its questions (quesitos) and
-  the material it sent in, citing the occurrence (`docs/facial-reports-plan.md`)
+- `requests/` — what cases answer: an authority's request with its questions (quesitos) and
+  the material it sent in. Registered first, it finds or creates the occurrence it cites and
+  opens or joins its cases (`docs/facial-reports-plan.md`)
 - `reports/` — an analysis's report (lead report, laudo): the draft generated as a .docx with
   locked data and editable sections, its versions, the checks on save and issue, the PDF rendered
   by WordCraft, the executive summary and deliveries
