@@ -15,6 +15,7 @@ require (
 	github.com/rodfileto/trackid-vision v0.4.0
 	github.com/sqlc-dev/pqtype v0.3.0
 	golang.org/x/crypto v0.55.0
+	golang.org/x/term v0.45.0
 )
 
 require (

@@ -1,7 +1,8 @@
 // create-superuser creates a SUPER_ADMIN account, the way a deployment gets its first one:
 // there is no public sign-up, and every other account is created by an admin in the app
 // (POST /api/admin/users). The password is read from TRACKID_SUPERUSER_PASSWORD or, when that
-// is unset, from the first line of standard input, so it never appears in the shell history:
+// is unset, from a hidden prompt when standard input is a terminal, or else from the first line
+// of standard input, so it never appears in the shell history:
 //
 //	read -rs PW && echo "$PW" | create-superuser -first-name Ana -last-name Souza -staff-number 0001 -job-title Perita -username ana.souza
 //
@@ -15,6 +16,7 @@ import (
 	"database/sql"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -22,6 +24,7 @@ import (
 	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/internal/cmdutil"
 	"github.com/rodfileto/trackid/internal/env"
+	"golang.org/x/term"
 )
 
 func main() {
@@ -83,9 +86,31 @@ func readPassword() (string, error) {
 	if password := os.Getenv("TRACKID_SUPERUSER_PASSWORD"); password != "" {
 		return password, nil
 	}
+	if fd := int(os.Stdin.Fd()); term.IsTerminal(fd) {
+		password, err := promptHidden(fd, "Enter password: ")
+		if err != nil {
+			return "", err
+		}
+		confirm, err := promptHidden(fd, "Confirm password: ")
+		if err != nil {
+			return "", err
+		}
+		if password == "" || password != confirm {
+			return "", errors.New("passwords are empty or do not match")
+		}
+		return password, nil
+	}
 	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
 	if err != nil && line == "" {
 		return "", errors.New("no password: set TRACKID_SUPERUSER_PASSWORD or pipe it on standard input")
 	}
 	return strings.TrimRight(line, "\r\n"), nil
+}
+
+// promptHidden asks on standard error and reads a line from the terminal without echoing it.
+func promptHidden(fd int, prompt string) (string, error) {
+	fmt.Fprint(os.Stderr, prompt)
+	b, err := term.ReadPassword(fd)
+	fmt.Fprintln(os.Stderr)
+	return string(b), err
 }
