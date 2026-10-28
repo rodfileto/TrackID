@@ -176,10 +176,14 @@ FROM biometricfeature
 ORDER BY id;
 
 -- name: ListCaseFilesByBiometricCase :many
-SELECT id, biometric_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes, created_at
-FROM case_files
-WHERE biometric_case_id = $1
-ORDER BY id;
+-- With the request that sent each file in, if any: material is received with its request.
+SELECT f.id, f.biometric_case_id, f.category, f.media_type, f.hash_id, f.filename, f.source_path, f.storage_ref,
+       f.content_type, f.size_bytes, f.created_at,
+       r.id AS request_id, r.document_reference AS request_document, r.received_on AS request_received_on
+FROM case_files f
+LEFT JOIN case_requests r ON r.id = f.case_request_id
+WHERE f.biometric_case_id = $1
+ORDER BY f.id;
 
 -- name: GetCaseFile :one
 SELECT id, category, filename, storage_ref, content_type

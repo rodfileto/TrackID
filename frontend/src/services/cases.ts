@@ -22,6 +22,8 @@ export interface Evidence {
   contentType?: string;
   sizeBytes: number;
   createdAt: string;
+  /** The request that sent the file in, when one did; createdAt is when it was stored. */
+  request?: { id: number; documentReference: string; receivedOn: string };
 }
 
 export interface CaseDetail {

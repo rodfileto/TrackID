@@ -13,6 +13,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
 
+	"github.com/rodfileto/trackid/cases"
 	"github.com/rodfileto/trackid/db/migrations"
 	"github.com/rodfileto/trackid/occurrences"
 	"github.com/rodfileto/trackid/requests"
@@ -112,6 +113,37 @@ func TestRegister(t *testing.T) {
 	}
 	if answering.Int64 != r.RequestID {
 		t.Errorf("the facial review answers request %v, want %d", answering, r.RequestID)
+	}
+
+	// Material sent with the request: the case lists each file with the request that sent it.
+	var fileID int64
+	if err := sqlDB.QueryRow(`INSERT INTO case_files (biometric_case_id, category, media_type, hash_id, filename)
+		SELECT id, 'evidence', 'image', 'abc123', 'cctv.jpg' FROM biometric_cases WHERE case_id = $1 RETURNING id`, facial).Scan(&fileID); err != nil {
+		t.Fatal(err)
+	}
+	unsent := int64(0)
+	if err := sqlDB.QueryRow(`INSERT INTO case_files (biometric_case_id, category, media_type, hash_id, filename)
+		SELECT id, 'evidence', 'image', 'def456', 'found.jpg' FROM biometric_cases WHERE case_id = $1 RETURNING id`, facial).Scan(&unsent); err != nil {
+		t.Fatal(err)
+	}
+	if err := requests.AttachFiles(ctx, sqlDB, facial, r.RequestID, []int64{fileID}); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := cases.Get(ctx, sqlDB, facial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range detail.Evidences {
+		switch f.ID {
+		case fileID:
+			if f.Request == nil || f.Request.ID != r.RequestID || f.Request.DocumentReference != "Ofício 123/2026" || f.Request.ReceivedOn != "2026-10-27" {
+				t.Errorf("sent file's request %+v", f.Request)
+			}
+		case unsent:
+			if f.Request != nil {
+				t.Errorf("a file no request sent names request %+v", f.Request)
+			}
+		}
 	}
 
 	// The same occurrence again is refused, not duplicated.

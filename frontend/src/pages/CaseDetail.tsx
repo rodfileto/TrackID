@@ -62,6 +62,12 @@ function formatDate(iso: string, locale: string): string {
   return new Date(iso).toLocaleString(locale);
 }
 
+/** A calendar date (YYYY-MM-DD) as the locale writes it, without shifting it by the time zone. */
+function formatDay(day: string, locale: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(locale);
+}
+
 export default function CaseDetailPage() {
   const { t, i18n } = useTranslation();
   const { caseId } = useParams<{ caseId: string }>();
@@ -340,7 +346,7 @@ export default function CaseDetailPage() {
                         isHeader
                         className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                       >
-                        {t("caseDetail.columns.uploaded")}
+                        {t("caseDetail.columns.received")}
                       </TableCell>
                       <TableCell
                         isHeader
@@ -380,7 +386,22 @@ export default function CaseDetailPage() {
                           {formatBytes(evidence.sizeBytes)}
                         </TableCell>
                         <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
-                          {formatDate(evidence.createdAt, i18n.resolvedLanguage ?? "en")}
+                          {evidence.request ? (
+                            <>
+                              <span className="block text-gray-800 dark:text-white/90">
+                                {formatDay(evidence.request.receivedOn, i18n.resolvedLanguage ?? "en")}
+                              </span>
+                              <span className="block text-theme-xs">{evidence.request.documentReference}</span>
+                              <span className="block text-theme-xs" title={t("caseDetail.storedAt")}>
+                                {t("caseDetail.stored", { date: formatDate(evidence.createdAt, i18n.resolvedLanguage ?? "en") })}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              {formatDate(evidence.createdAt, i18n.resolvedLanguage ?? "en")}
+                              <span className="block text-theme-xs">{t("caseDetail.noRequest")}</span>
+                            </>
+                          )}
                         </TableCell>
                         <TableCell className="px-4 py-3 text-start text-theme-sm">
                           <div className="flex items-center gap-2">

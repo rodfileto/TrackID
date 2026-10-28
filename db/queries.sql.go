@@ -3280,26 +3280,33 @@ func (q *Queries) ListCaseDecisionsByBiometricCase(ctx context.Context, biometri
 }
 
 const listCaseFilesByBiometricCase = `-- name: ListCaseFilesByBiometricCase :many
-SELECT id, biometric_case_id, category, media_type, hash_id, filename, source_path, storage_ref, content_type, size_bytes, created_at
-FROM case_files
-WHERE biometric_case_id = $1
-ORDER BY id
+SELECT f.id, f.biometric_case_id, f.category, f.media_type, f.hash_id, f.filename, f.source_path, f.storage_ref,
+       f.content_type, f.size_bytes, f.created_at,
+       r.id AS request_id, r.document_reference AS request_document, r.received_on AS request_received_on
+FROM case_files f
+LEFT JOIN case_requests r ON r.id = f.case_request_id
+WHERE f.biometric_case_id = $1
+ORDER BY f.id
 `
 
 type ListCaseFilesByBiometricCaseRow struct {
-	ID              int64          `db:"id" json:"id"`
-	BiometricCaseID int64          `db:"biometric_case_id" json:"biometric_case_id"`
-	Category        string         `db:"category" json:"category"`
-	MediaType       sql.NullString `db:"media_type" json:"media_type"`
-	HashID          sql.NullString `db:"hash_id" json:"hash_id"`
-	Filename        sql.NullString `db:"filename" json:"filename"`
-	SourcePath      sql.NullString `db:"source_path" json:"source_path"`
-	StorageRef      sql.NullString `db:"storage_ref" json:"storage_ref"`
-	ContentType     sql.NullString `db:"content_type" json:"content_type"`
-	SizeBytes       sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
-	CreatedAt       time.Time      `db:"created_at" json:"created_at"`
+	ID                int64          `db:"id" json:"id"`
+	BiometricCaseID   int64          `db:"biometric_case_id" json:"biometric_case_id"`
+	Category          string         `db:"category" json:"category"`
+	MediaType         sql.NullString `db:"media_type" json:"media_type"`
+	HashID            sql.NullString `db:"hash_id" json:"hash_id"`
+	Filename          sql.NullString `db:"filename" json:"filename"`
+	SourcePath        sql.NullString `db:"source_path" json:"source_path"`
+	StorageRef        sql.NullString `db:"storage_ref" json:"storage_ref"`
+	ContentType       sql.NullString `db:"content_type" json:"content_type"`
+	SizeBytes         sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
+	CreatedAt         time.Time      `db:"created_at" json:"created_at"`
+	RequestID         sql.NullInt64  `db:"request_id" json:"request_id"`
+	RequestDocument   sql.NullString `db:"request_document" json:"request_document"`
+	RequestReceivedOn sql.NullTime   `db:"request_received_on" json:"request_received_on"`
 }
 
+// With the request that sent each file in, if any: material is received with its request.
 func (q *Queries) ListCaseFilesByBiometricCase(ctx context.Context, biometricCaseID int64) ([]ListCaseFilesByBiometricCaseRow, error) {
 	rows, err := q.db.QueryContext(ctx, listCaseFilesByBiometricCase, biometricCaseID)
 	if err != nil {
@@ -3321,6 +3328,9 @@ func (q *Queries) ListCaseFilesByBiometricCase(ctx context.Context, biometricCas
 			&i.ContentType,
 			&i.SizeBytes,
 			&i.CreatedAt,
+			&i.RequestID,
+			&i.RequestDocument,
+			&i.RequestReceivedOn,
 		); err != nil {
 			return nil, err
 		}

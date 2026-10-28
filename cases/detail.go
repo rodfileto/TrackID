@@ -26,6 +26,16 @@ type File struct {
 	ContentType string    `json:"contentType,omitempty"`
 	SizeBytes   int64     `json:"sizeBytes"`
 	CreatedAt   time.Time `json:"createdAt"`
+	// Request is the request that sent the file in, when one did: the material's receipt. CreatedAt
+	// is when it was stored here.
+	Request *FileRequest `json:"request,omitempty"`
+}
+
+// FileRequest names the request a file came with.
+type FileRequest struct {
+	ID                int64  `json:"id"`
+	DocumentReference string `json:"documentReference"`
+	ReceivedOn        string `json:"receivedOn"` // YYYY-MM-DD
 }
 
 // CaseDetail is a case plus its evidence files.
@@ -254,7 +264,7 @@ func DownloadEvidence(ctx context.Context, sqlDB *sql.DB, store *storage.Client,
 }
 
 func fileFromRow(r db.ListCaseFilesByBiometricCaseRow) File {
-	return File{
+	f := File{
 		ID:          r.ID,
 		Category:    r.Category,
 		MediaType:   r.MediaType.String,
@@ -264,4 +274,8 @@ func fileFromRow(r db.ListCaseFilesByBiometricCaseRow) File {
 		SizeBytes:   r.SizeBytes.Int64,
 		CreatedAt:   r.CreatedAt,
 	}
+	if r.RequestID.Valid {
+		f.Request = &FileRequest{ID: r.RequestID.Int64, DocumentReference: r.RequestDocument.String, ReceivedOn: r.RequestReceivedOn.Time.Format("2006-01-02")}
+	}
+	return f
 }

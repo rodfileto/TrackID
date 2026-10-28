@@ -131,12 +131,16 @@
       "type": "Type",
       "size": "Size",
       "uploaded": "Uploaded",
-      "actions": "Actions"
+      "actions": "Actions",
+      "received": "Received"
     },
     "markTraces": "Mark traces",
     "excluding": "Excluding...",
     "exclude": "Exclude",
-    "noEvidence": "No evidence yet."
+    "noEvidence": "No evidence yet.",
+    "stored": "Stored {{date}}",
+    "storedAt": "When the file was stored in TrackID",
+    "noRequest": "Not sent by a request"
   },
   "personLookup": {
     "pageTitle": "Persons",
@@ -379,7 +383,8 @@
     "comparisonDesc": "Two faces side by side, with independent zoom and image adjustment.",
     "scoring": "Scoring...",
     "swap": "Swap",
-    "clearBoth": "Clear both"
+    "clearBoth": "Clear both",
+    "sentWith": "Sent with {{document}}, received {{date}}"
   },
   "viewer": {
     "bicubic": "Bicubic",

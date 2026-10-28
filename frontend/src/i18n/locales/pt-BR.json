@@ -131,12 +131,16 @@
       "type": "Tipo",
       "size": "Tamanho",
       "uploaded": "Enviado em",
-      "actions": "Ações"
+      "actions": "Ações",
+      "received": "Recebido"
     },
     "markTraces": "Marcar vestígios",
     "excluding": "Excluindo...",
     "exclude": "Excluir",
-    "noEvidence": "Nenhuma evidência ainda."
+    "noEvidence": "Nenhuma evidência ainda.",
+    "stored": "Armazenado em {{date}}",
+    "storedAt": "Quando o arquivo foi armazenado no TrackID",
+    "noRequest": "Não enviado por requisição"
   },
   "personLookup": {
     "pageTitle": "Pessoas",
@@ -379,7 +383,8 @@
     "comparisonDesc": "Duas faces lado a lado, com zoom e ajuste de imagem independentes.",
     "scoring": "Calculando...",
     "swap": "Trocar",
-    "clearBoth": "Limpar ambas"
+    "clearBoth": "Limpar ambas",
+    "sentWith": "Enviado com {{document}}, recebido em {{date}}"
   },
   "viewer": {
     "bicubic": "Bicúbica",

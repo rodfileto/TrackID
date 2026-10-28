@@ -784,6 +784,14 @@ export default function FacialCaseWorkspace({
                 <p className="truncate text-sm font-medium text-gray-800 dark:text-white/90">
                   {selectedEvidence?.filename ?? t("facial.noEvidenceSelected")}
                 </p>
+                {selectedEvidence?.request && (
+                  <p className="truncate text-xs text-gray-500 dark:text-gray-400">
+                    {t("facial.sentWith", {
+                      document: selectedEvidence.request.documentReference,
+                      date: selectedEvidence.request.receivedOn.split("-").reverse().join("/"),
+                    })}
+                  </p>
+                )}
                 {drawing ? (
                   <p className="text-xs text-brand-500">
                     {t("facial.dragToBox")}

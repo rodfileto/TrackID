@@ -116,7 +116,7 @@ Three problems follow for this feature:
    - Rendering is always the server's. The Go code is a new `imageproc` package in trackid, pure
      Go with no OpenCV or cgo. It can move to trackid-vision later if another tool needs it.
 
-## Data model (migration 013; 012 became the user avatar)
+## Data model (migration 014; 012 became the user avatar, 013 the request tasks)
 
 - `case_codifications`:
   - `recipe JSONB` and `recipe_version SMALLINT`;
@@ -237,7 +237,7 @@ Checked on a fake finger photo:
 
 Not yet built: phases 0–3 inside cases.
 
-- migration 013, the recipe and ppi on codifications, and `capture_type` on traces;
+- migration 014, the recipe and ppi on codifications, and `capture_type` on traces;
 - the render endpoint for traces;
 - the Processing panel in `CodificationEditorModal`;
 - points drawn through the transform (`Result.Transform` is ready for it).
