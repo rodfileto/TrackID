@@ -470,7 +470,7 @@ func (q *Queries) CreateOccurrence(ctx context.Context, arg CreateOccurrencePara
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (first_name, last_name, staff_number, job_title, username, email, password_hash, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
+RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at
 `
 
 type CreateUserParams struct {
@@ -489,19 +489,20 @@ type CreateUserParams struct {
 }
 
 type CreateUserRow struct {
-	ID                  int64  `db:"id" json:"id"`
-	FirstName           string `db:"first_name" json:"first_name"`
-	LastName            string `db:"last_name" json:"last_name"`
-	StaffNumber         string `db:"staff_number" json:"staff_number"`
-	JobTitle            string `db:"job_title" json:"job_title"`
-	Username            string `db:"username" json:"username"`
-	Email               string `db:"email" json:"email"`
-	AccountRole         string `db:"account_role" json:"account_role"`
-	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
-	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
-	IntelligenceAnalyst bool   `db:"intelligence_analyst" json:"intelligence_analyst"`
-	Coordinator         bool   `db:"coordinator" json:"coordinator"`
-	IsActive            bool   `db:"is_active" json:"is_active"`
+	ID                  int64        `db:"id" json:"id"`
+	FirstName           string       `db:"first_name" json:"first_name"`
+	LastName            string       `db:"last_name" json:"last_name"`
+	StaffNumber         string       `db:"staff_number" json:"staff_number"`
+	JobTitle            string       `db:"job_title" json:"job_title"`
+	Username            string       `db:"username" json:"username"`
+	Email               string       `db:"email" json:"email"`
+	AccountRole         string       `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool         `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool         `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool         `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool         `db:"coordinator" json:"coordinator"`
+	IsActive            bool         `db:"is_active" json:"is_active"`
+	AvatarUpdatedAt     sql.NullTime `db:"avatar_updated_at" json:"avatar_updated_at"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
@@ -534,6 +535,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		&i.IntelligenceAnalyst,
 		&i.Coordinator,
 		&i.IsActive,
+		&i.AvatarUpdatedAt,
 	)
 	return i, err
 }
@@ -1780,26 +1782,43 @@ func (q *Queries) GetReportNumber(ctx context.Context, id int64) (GetReportNumbe
 	return i, err
 }
 
+const getUserAvatar = `-- name: GetUserAvatar :one
+SELECT avatar, avatar_updated_at FROM users WHERE id = $1 AND avatar IS NOT NULL
+`
+
+type GetUserAvatarRow struct {
+	Avatar          []byte       `db:"avatar" json:"avatar"`
+	AvatarUpdatedAt sql.NullTime `db:"avatar_updated_at" json:"avatar_updated_at"`
+}
+
+func (q *Queries) GetUserAvatar(ctx context.Context, id int64) (GetUserAvatarRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserAvatar, id)
+	var i GetUserAvatarRow
+	err := row.Scan(&i.Avatar, &i.AvatarUpdatedAt)
+	return i, err
+}
+
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
+SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at
 FROM users
 WHERE id = $1
 `
 
 type GetUserByIDRow struct {
-	ID                  int64  `db:"id" json:"id"`
-	FirstName           string `db:"first_name" json:"first_name"`
-	LastName            string `db:"last_name" json:"last_name"`
-	StaffNumber         string `db:"staff_number" json:"staff_number"`
-	JobTitle            string `db:"job_title" json:"job_title"`
-	Username            string `db:"username" json:"username"`
-	Email               string `db:"email" json:"email"`
-	AccountRole         string `db:"account_role" json:"account_role"`
-	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
-	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
-	IntelligenceAnalyst bool   `db:"intelligence_analyst" json:"intelligence_analyst"`
-	Coordinator         bool   `db:"coordinator" json:"coordinator"`
-	IsActive            bool   `db:"is_active" json:"is_active"`
+	ID                  int64        `db:"id" json:"id"`
+	FirstName           string       `db:"first_name" json:"first_name"`
+	LastName            string       `db:"last_name" json:"last_name"`
+	StaffNumber         string       `db:"staff_number" json:"staff_number"`
+	JobTitle            string       `db:"job_title" json:"job_title"`
+	Username            string       `db:"username" json:"username"`
+	Email               string       `db:"email" json:"email"`
+	AccountRole         string       `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool         `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool         `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool         `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool         `db:"coordinator" json:"coordinator"`
+	IsActive            bool         `db:"is_active" json:"is_active"`
+	AvatarUpdatedAt     sql.NullTime `db:"avatar_updated_at" json:"avatar_updated_at"`
 }
 
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error) {
@@ -1819,31 +1838,33 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 		&i.IntelligenceAnalyst,
 		&i.Coordinator,
 		&i.IsActive,
+		&i.AvatarUpdatedAt,
 	)
 	return i, err
 }
 
 const getUserByStaffNumber = `-- name: GetUserByStaffNumber :one
-SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, password_hash
+SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at, password_hash
 FROM users
 WHERE staff_number = $1
 `
 
 type GetUserByStaffNumberRow struct {
-	ID                  int64  `db:"id" json:"id"`
-	FirstName           string `db:"first_name" json:"first_name"`
-	LastName            string `db:"last_name" json:"last_name"`
-	StaffNumber         string `db:"staff_number" json:"staff_number"`
-	JobTitle            string `db:"job_title" json:"job_title"`
-	Username            string `db:"username" json:"username"`
-	Email               string `db:"email" json:"email"`
-	AccountRole         string `db:"account_role" json:"account_role"`
-	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
-	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
-	IntelligenceAnalyst bool   `db:"intelligence_analyst" json:"intelligence_analyst"`
-	Coordinator         bool   `db:"coordinator" json:"coordinator"`
-	IsActive            bool   `db:"is_active" json:"is_active"`
-	PasswordHash        string `db:"password_hash" json:"password_hash"`
+	ID                  int64        `db:"id" json:"id"`
+	FirstName           string       `db:"first_name" json:"first_name"`
+	LastName            string       `db:"last_name" json:"last_name"`
+	StaffNumber         string       `db:"staff_number" json:"staff_number"`
+	JobTitle            string       `db:"job_title" json:"job_title"`
+	Username            string       `db:"username" json:"username"`
+	Email               string       `db:"email" json:"email"`
+	AccountRole         string       `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool         `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool         `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool         `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool         `db:"coordinator" json:"coordinator"`
+	IsActive            bool         `db:"is_active" json:"is_active"`
+	AvatarUpdatedAt     sql.NullTime `db:"avatar_updated_at" json:"avatar_updated_at"`
+	PasswordHash        string       `db:"password_hash" json:"password_hash"`
 }
 
 func (q *Queries) GetUserByStaffNumber(ctx context.Context, staffNumber string) (GetUserByStaffNumberRow, error) {
@@ -1863,6 +1884,7 @@ func (q *Queries) GetUserByStaffNumber(ctx context.Context, staffNumber string) 
 		&i.IntelligenceAnalyst,
 		&i.Coordinator,
 		&i.IsActive,
+		&i.AvatarUpdatedAt,
 		&i.PasswordHash,
 	)
 	return i, err
@@ -1909,6 +1931,17 @@ func (q *Queries) GetUserNames(ctx context.Context, ids []int64) ([]GetUserNames
 		return nil, err
 	}
 	return items, nil
+}
+
+const getUserPasswordHash = `-- name: GetUserPasswordHash :one
+SELECT password_hash FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUserPasswordHash(ctx context.Context, id int64) (string, error) {
+	row := q.db.QueryRowContext(ctx, getUserPasswordHash, id)
+	var password_hash string
+	err := row.Scan(&password_hash)
+	return password_hash, err
 }
 
 const getUsersByUsername = `-- name: GetUsersByUsername :many
@@ -5269,25 +5302,26 @@ func (q *Queries) ListUnmatchedFeatureEmbeddings(ctx context.Context, embeddingT
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
+SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at
 FROM users
 ORDER BY last_name, first_name, id
 `
 
 type ListUsersRow struct {
-	ID                  int64  `db:"id" json:"id"`
-	FirstName           string `db:"first_name" json:"first_name"`
-	LastName            string `db:"last_name" json:"last_name"`
-	StaffNumber         string `db:"staff_number" json:"staff_number"`
-	JobTitle            string `db:"job_title" json:"job_title"`
-	Username            string `db:"username" json:"username"`
-	Email               string `db:"email" json:"email"`
-	AccountRole         string `db:"account_role" json:"account_role"`
-	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
-	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
-	IntelligenceAnalyst bool   `db:"intelligence_analyst" json:"intelligence_analyst"`
-	Coordinator         bool   `db:"coordinator" json:"coordinator"`
-	IsActive            bool   `db:"is_active" json:"is_active"`
+	ID                  int64        `db:"id" json:"id"`
+	FirstName           string       `db:"first_name" json:"first_name"`
+	LastName            string       `db:"last_name" json:"last_name"`
+	StaffNumber         string       `db:"staff_number" json:"staff_number"`
+	JobTitle            string       `db:"job_title" json:"job_title"`
+	Username            string       `db:"username" json:"username"`
+	Email               string       `db:"email" json:"email"`
+	AccountRole         string       `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool         `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool         `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool         `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool         `db:"coordinator" json:"coordinator"`
+	IsActive            bool         `db:"is_active" json:"is_active"`
+	AvatarUpdatedAt     sql.NullTime `db:"avatar_updated_at" json:"avatar_updated_at"`
 }
 
 func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
@@ -5313,6 +5347,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 			&i.IntelligenceAnalyst,
 			&i.Coordinator,
 			&i.IsActive,
+			&i.AvatarUpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -5742,6 +5777,26 @@ func (q *Queries) SetReportDocuments(ctx context.Context, arg SetReportDocuments
 	return err
 }
 
+const setUserAvatar = `-- name: SetUserAvatar :execrows
+UPDATE users SET avatar = $1::bytea,
+    avatar_updated_at = CASE WHEN $1::bytea IS NULL THEN NULL ELSE NOW() END, updated_at = NOW()
+WHERE id = $2
+`
+
+type SetUserAvatarParams struct {
+	Avatar []byte `db:"avatar" json:"avatar"`
+	ID     int64  `db:"id" json:"id"`
+}
+
+// A NULL avatar removes it (and its timestamp).
+func (q *Queries) SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setUserAvatar, arg.Avatar, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setUserPassword = `-- name: SetUserPassword :execrows
 UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1
 `
@@ -5818,7 +5873,7 @@ UPDATE users
 SET account_role = $2, examines_fingerprint = $3, examines_facial = $4, intelligence_analyst = $5, coordinator = $6,
     is_active = $7, updated_at = NOW()
 WHERE id = $1
-RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
+RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at
 `
 
 type UpdateUserAccessParams struct {
@@ -5832,19 +5887,20 @@ type UpdateUserAccessParams struct {
 }
 
 type UpdateUserAccessRow struct {
-	ID                  int64  `db:"id" json:"id"`
-	FirstName           string `db:"first_name" json:"first_name"`
-	LastName            string `db:"last_name" json:"last_name"`
-	StaffNumber         string `db:"staff_number" json:"staff_number"`
-	JobTitle            string `db:"job_title" json:"job_title"`
-	Username            string `db:"username" json:"username"`
-	Email               string `db:"email" json:"email"`
-	AccountRole         string `db:"account_role" json:"account_role"`
-	ExaminesFingerprint bool   `db:"examines_fingerprint" json:"examines_fingerprint"`
-	ExaminesFacial      bool   `db:"examines_facial" json:"examines_facial"`
-	IntelligenceAnalyst bool   `db:"intelligence_analyst" json:"intelligence_analyst"`
-	Coordinator         bool   `db:"coordinator" json:"coordinator"`
-	IsActive            bool   `db:"is_active" json:"is_active"`
+	ID                  int64        `db:"id" json:"id"`
+	FirstName           string       `db:"first_name" json:"first_name"`
+	LastName            string       `db:"last_name" json:"last_name"`
+	StaffNumber         string       `db:"staff_number" json:"staff_number"`
+	JobTitle            string       `db:"job_title" json:"job_title"`
+	Username            string       `db:"username" json:"username"`
+	Email               string       `db:"email" json:"email"`
+	AccountRole         string       `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool         `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool         `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool         `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool         `db:"coordinator" json:"coordinator"`
+	IsActive            bool         `db:"is_active" json:"is_active"`
+	AvatarUpdatedAt     sql.NullTime `db:"avatar_updated_at" json:"avatar_updated_at"`
 }
 
 // Username, staff_number and email are not updatable: decisions name their decider by username.
@@ -5873,6 +5929,65 @@ func (q *Queries) UpdateUserAccess(ctx context.Context, arg UpdateUserAccessPara
 		&i.IntelligenceAnalyst,
 		&i.Coordinator,
 		&i.IsActive,
+		&i.AvatarUpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserDetails = `-- name: UpdateUserDetails :one
+UPDATE users SET first_name = $2, last_name = $3, job_title = $4, updated_at = NOW()
+WHERE id = $1
+RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at
+`
+
+type UpdateUserDetailsParams struct {
+	ID        int64  `db:"id" json:"id"`
+	FirstName string `db:"first_name" json:"first_name"`
+	LastName  string `db:"last_name" json:"last_name"`
+	JobTitle  string `db:"job_title" json:"job_title"`
+}
+
+type UpdateUserDetailsRow struct {
+	ID                  int64        `db:"id" json:"id"`
+	FirstName           string       `db:"first_name" json:"first_name"`
+	LastName            string       `db:"last_name" json:"last_name"`
+	StaffNumber         string       `db:"staff_number" json:"staff_number"`
+	JobTitle            string       `db:"job_title" json:"job_title"`
+	Username            string       `db:"username" json:"username"`
+	Email               string       `db:"email" json:"email"`
+	AccountRole         string       `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool         `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool         `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool         `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool         `db:"coordinator" json:"coordinator"`
+	IsActive            bool         `db:"is_active" json:"is_active"`
+	AvatarUpdatedAt     sql.NullTime `db:"avatar_updated_at" json:"avatar_updated_at"`
+}
+
+// What a user may change about themselves (PATCH /api/me): their name and job title.
+func (q *Queries) UpdateUserDetails(ctx context.Context, arg UpdateUserDetailsParams) (UpdateUserDetailsRow, error) {
+	row := q.db.QueryRowContext(ctx, updateUserDetails,
+		arg.ID,
+		arg.FirstName,
+		arg.LastName,
+		arg.JobTitle,
+	)
+	var i UpdateUserDetailsRow
+	err := row.Scan(
+		&i.ID,
+		&i.FirstName,
+		&i.LastName,
+		&i.StaffNumber,
+		&i.JobTitle,
+		&i.Username,
+		&i.Email,
+		&i.AccountRole,
+		&i.ExaminesFingerprint,
+		&i.ExaminesFacial,
+		&i.IntelligenceAnalyst,
+		&i.Coordinator,
+		&i.IsActive,
+		&i.AvatarUpdatedAt,
 	)
 	return i, err
 }

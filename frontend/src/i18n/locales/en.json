@@ -400,7 +400,6 @@
   },
   "auth": {
     "signInError": "Could not sign in",
-    "backToDashboard": "Back to dashboard",
     "signInTitle": "Sign In",
     "signInSubtitle": "Enter your staff number and password to sign in.",
     "staffNumber": "Staff number",
@@ -408,10 +407,9 @@
     "password": "Password",
     "passwordPlaceholder": "Enter your password",
     "keepLoggedIn": "Keep me logged in",
-    "forgotPassword": "Forgot password?",
     "signingIn": "Signing in...",
     "signIn": "Sign in",
-    "accountsByAdmin": "Accounts are created by an administrator.",
+    "accountsByAdmin": "Accounts are created, and forgotten passwords reset, by an administrator.",
     "tagline": "Forensic biometric intelligence",
     "accountCreated": "Account created. Sign in with your staff number.",
     "createError": "Could not create account",
@@ -434,7 +432,9 @@
     "haveAccount": "Already have an account?"
   },
   "dashboard": {
-    "metaDescription": "Biometric cluster overview"
+    "metaDescription": "Biometric cluster overview",
+    "welcome": "Welcome, {{name}}",
+    "welcomeDesc": "TrackID: forensic biometric cases, from the request to the report."
   },
   "occurrenceMap": {
     "title": "Occurrence map",
@@ -1041,6 +1041,51 @@
       "score": "Score {{score}}",
       "above": "— at or above the threshold",
       "below": "— below the threshold"
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "desc": "Your TrackID account",
+    "staffNumber": "Staff number",
+    "username": "Username",
+    "email": "Email",
+    "role": "Account role",
+    "roles": {
+      "SUPER_ADMIN": "Super admin",
+      "ADMIN": "Admin",
+      "USER": "User"
+    },
+    "capabilities": "What you may do",
+    "none": "No capability yet: an admin grants them.",
+    "capability": {
+      "examines_fingerprint": "Fingerprint examiner",
+      "examines_facial": "Facial examiner",
+      "intelligence_analyst": "Intelligence analyst",
+      "coordinator": "Coordinator"
+    },
+    "managedByAdmin": "Accounts and capabilities are changed by an admin.",
+    "notSignedIn": "Not signed in.",
+    "details": "Your details",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "jobTitle": "Job title",
+    "saved": "Profile saved",
+    "fixedHint": "Staff number, username and email cannot be changed: decisions are signed with the username. Your role is set by an admin.",
+    "picture": {
+      "change": "Change picture",
+      "uploading": "Uploading…",
+      "remove": "Remove picture",
+      "removing": "Removing…",
+      "hint": "JPEG or PNG; it is cropped to a square and stored at 256 × 256 pixels, without its metadata."
+    },
+    "password": {
+      "title": "Change password",
+      "current": "Current password",
+      "new": "New password (8 characters or more)",
+      "confirm": "Repeat the new password",
+      "submit": "Change password",
+      "mismatch": "The new passwords do not match.",
+      "changed": "Password changed"
     }
   }
 }

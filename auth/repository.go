@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -30,6 +31,9 @@ type UserProfile struct {
 	IntelligenceAnalyst bool `json:"intelligence_analyst"`
 	Coordinator         bool `json:"coordinator"`
 	IsActive            bool `json:"is_active"`
+	// AvatarUpdatedAt is when the user's picture was last set, nil while they have none; the
+	// picture is GET /api/users/{id}/avatar.
+	AvatarUpdatedAt *time.Time `json:"avatar_updated_at,omitempty"`
 }
 
 // Repository is auth's data-access layer, backed by the sqlc-generated
@@ -53,9 +57,14 @@ type authenticatedUser struct {
 // profileFrom maps a users row onto a UserProfile. sqlc emits one row type per query; the
 // profile-shaped ones (CreateUserRow, ListUsersRow, ...) convert to GetUserByIDRow.
 func profileFrom(row db.GetUserByIDRow) UserProfile {
-	return UserProfile{ID: row.ID, FirstName: row.FirstName, LastName: row.LastName, StaffNumber: row.StaffNumber, JobTitle: row.JobTitle,
+	profile := UserProfile{ID: row.ID, FirstName: row.FirstName, LastName: row.LastName, StaffNumber: row.StaffNumber, JobTitle: row.JobTitle,
 		Username: row.Username, Email: row.Email, AccountRole: AccountRole(row.AccountRole), ExaminesFingerprint: row.ExaminesFingerprint, ExaminesFacial: row.ExaminesFacial,
 		IntelligenceAnalyst: row.IntelligenceAnalyst, Coordinator: row.Coordinator, IsActive: row.IsActive}
+	if row.AvatarUpdatedAt.Valid {
+		at := row.AvatarUpdatedAt.Time
+		profile.AvatarUpdatedAt = &at
+	}
+	return profile
 }
 
 func (r *Repository) CreateUser(ctx context.Context, params db.CreateUserParams) (UserProfile, error) {
@@ -74,7 +83,7 @@ func (r *Repository) FindByStaffNumber(ctx context.Context, staffNumber string) 
 	return authenticatedUser{
 		Profile: profileFrom(db.GetUserByIDRow{ID: row.ID, FirstName: row.FirstName, LastName: row.LastName, StaffNumber: row.StaffNumber, JobTitle: row.JobTitle,
 			Username: row.Username, Email: row.Email, AccountRole: row.AccountRole, ExaminesFingerprint: row.ExaminesFingerprint, ExaminesFacial: row.ExaminesFacial,
-			IntelligenceAnalyst: row.IntelligenceAnalyst, Coordinator: row.Coordinator, IsActive: row.IsActive}),
+			IntelligenceAnalyst: row.IntelligenceAnalyst, Coordinator: row.Coordinator, IsActive: row.IsActive, AvatarUpdatedAt: row.AvatarUpdatedAt}),
 		PasswordHash: row.PasswordHash,
 	}, nil
 }
@@ -127,6 +136,46 @@ func (r *Repository) SetPassword(ctx context.Context, id int64, password string)
 		err = sql.ErrNoRows
 	}
 	return err
+}
+
+// Details are what users may change about themselves: their name and job title. Username, staff
+// number and email are fixed (decisions name their decider by username).
+type Details struct {
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	JobTitle  string `json:"job_title"`
+}
+
+// ErrInvalidDetails is returned for an empty name or a field over 100 characters.
+var ErrInvalidDetails = errors.New("first and last name are required, and no field may exceed 100 characters")
+
+// ErrWrongPassword is returned when the current password given to ChangePassword is not the
+// account's.
+var ErrWrongPassword = errors.New("the current password is not correct")
+
+// UpdateDetails sets a user's name and job title, trimmed.
+func (r *Repository) UpdateDetails(ctx context.Context, id int64, d Details) (UserProfile, error) {
+	d.FirstName, d.LastName, d.JobTitle = strings.TrimSpace(d.FirstName), strings.TrimSpace(d.LastName), strings.TrimSpace(d.JobTitle)
+	if d.FirstName == "" || d.LastName == "" || len(d.FirstName) > 100 || len(d.LastName) > 100 || len(d.JobTitle) > 100 {
+		return UserProfile{}, ErrInvalidDetails
+	}
+	row, err := r.queries.UpdateUserDetails(ctx, db.UpdateUserDetailsParams{ID: id, FirstName: d.FirstName, LastName: d.LastName, JobTitle: d.JobTitle})
+	if err != nil {
+		return UserProfile{}, err
+	}
+	return profileFrom(db.GetUserByIDRow(row)), nil
+}
+
+// ChangePassword replaces a user's own password, given the current one.
+func (r *Repository) ChangePassword(ctx context.Context, id int64, current, next string) error {
+	hash, err := r.queries.GetUserPasswordHash(ctx, id)
+	if err != nil {
+		return err
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(current)) != nil {
+		return ErrWrongPassword
+	}
+	return r.SetPassword(ctx, id, next)
 }
 
 // NewUser is what creating an account takes, from an admin (POST /api/admin/users) or from

@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "../../components/common/LanguageSwitcher";
 import ThemeTogglerTwo from "../../components/common/ThemeTogglerTwo";
+import Brand from "../../components/common/Brand";
 
 export default function AuthLayout({
   children,
@@ -21,12 +22,7 @@ export default function AuthLayout({
             <GridShape />
             <div className="flex flex-col items-center max-w-xs">
               <Link to="/" className="block mb-4">
-                <img
-                  width={231}
-                  height={48}
-                  src="/images/logo/auth-logo.svg"
-                  alt={t("common.logo")}
-                />
+                <Brand inverse size={44} />
               </Link>
               <p className="text-center text-gray-400 dark:text-white/60">
                 {t("auth.tagline")}

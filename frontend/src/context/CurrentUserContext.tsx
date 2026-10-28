@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { getCurrentUser, getStoredUser, type UserProfile } from "../services/auth";
+import { getCurrentUser, getStoredUser, storeUser, type UserProfile } from "../services/auth";
 
 /** What the signed-in user may do (docs/access-profiles-plan.md). The server decides; these only
  * keep the screens from offering what it would refuse. isAdmin is account management only. */
@@ -9,6 +9,8 @@ interface CurrentUserValue {
   isExaminer: boolean;
   isIntelligence: boolean;
   isCoordinator: boolean;
+  /** Replaces the signed-in user after they edit their profile, stored and shown everywhere. */
+  updateUser: (user: UserProfile) => void;
 }
 
 const CurrentUserContext = createContext<CurrentUserValue>({
@@ -17,6 +19,7 @@ const CurrentUserContext = createContext<CurrentUserValue>({
   isExaminer: false,
   isIntelligence: false,
   isCoordinator: false,
+  updateUser: () => {},
 });
 
 /** Holds the signed-in user, starting from the stored profile and refreshed from /me once, so
@@ -28,7 +31,10 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     getCurrentUser()
       .then((fresh) => {
-        if (!cancelled) setUser(fresh);
+        if (!cancelled) {
+          setUser(fresh);
+          storeUser(fresh);
+        }
       })
       .catch(() => {});
     return () => {
@@ -43,6 +49,10 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
     isExaminer: active && (!!user?.examines_facial || !!user?.examines_fingerprint),
     isIntelligence: active && !!user?.intelligence_analyst,
     isCoordinator: active && !!user?.coordinator,
+    updateUser: (next) => {
+      storeUser(next);
+      setUser(next);
+    },
   };
   return <CurrentUserContext.Provider value={value}>{children}</CurrentUserContext.Provider>;
 }

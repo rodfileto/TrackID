@@ -3,13 +3,15 @@ import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { clearSession, getStoredUser } from "../../services/auth";
+import { clearSession } from "../../services/auth";
+import UserAvatar from "../common/UserAvatar";
+import { useCurrentUser } from "../../context/CurrentUserContext";
 
 export default function UserDropdown() {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
-  const user = getStoredUser();
+  const { user } = useCurrentUser();
   const fullName = user ? `${user.first_name} ${user.last_name}`.trim() : t("common.user");
 
   function toggleDropdown() {
@@ -31,9 +33,7 @@ export default function UserDropdown() {
         onClick={toggleDropdown}
         className="flex items-center text-gray-700 dropdown-toggle dark:text-gray-400"
       >
-        <span className="mr-3 overflow-hidden rounded-full h-11 w-11">
-          <img src="/images/user/owner.jpg" alt={t("common.user")} />
-        </span>
+        <UserAvatar user={user} className="mr-3 h-11 w-11 text-sm" />
 
         <span className="block mr-1 font-medium text-theme-sm">
           {user?.first_name ?? t("common.user")}

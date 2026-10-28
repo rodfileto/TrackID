@@ -1,20 +1,20 @@
 -- name: CreateUser :one
 INSERT INTO users (first_name, last_name, staff_number, job_title, username, email, password_hash, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active;
+RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at;
 
 -- name: GetUserByStaffNumber :one
-SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, password_hash
+SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at, password_hash
 FROM users
 WHERE staff_number = $1;
 
 -- name: GetUserByID :one
-SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
+SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at
 FROM users
 WHERE id = $1;
 
 -- name: ListUsers :many
-SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active
+SELECT id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at
 FROM users
 ORDER BY last_name, first_name, id;
 
@@ -24,10 +24,28 @@ UPDATE users
 SET account_role = $2, examines_fingerprint = $3, examines_facial = $4, intelligence_analyst = $5, coordinator = $6,
     is_active = $7, updated_at = NOW()
 WHERE id = $1
-RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active;
+RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at;
 
 -- name: SetUserPassword :execrows
 UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: UpdateUserDetails :one
+-- What a user may change about themselves (PATCH /api/me): their name and job title.
+UPDATE users SET first_name = $2, last_name = $3, job_title = $4, updated_at = NOW()
+WHERE id = $1
+RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at;
+
+-- name: SetUserAvatar :execrows
+-- A NULL avatar removes it (and its timestamp).
+UPDATE users SET avatar = sqlc.narg(avatar)::bytea,
+    avatar_updated_at = CASE WHEN sqlc.narg(avatar)::bytea IS NULL THEN NULL ELSE NOW() END, updated_at = NOW()
+WHERE id = sqlc.arg(id);
+
+-- name: GetUserAvatar :one
+SELECT avatar, avatar_updated_at FROM users WHERE id = $1 AND avatar IS NOT NULL;
+
+-- name: GetUserPasswordHash :one
+SELECT password_hash FROM users WHERE id = $1;
 
 -- name: UpsertBiometricCase :one
 -- (xmax = 0) tells a real insert apart from a row that already existed: RowsAffected() is

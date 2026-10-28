@@ -466,20 +466,22 @@ type ReportDelivery struct {
 }
 
 type User struct {
-	ID                  int64     `db:"id" json:"id"`
-	FirstName           string    `db:"first_name" json:"first_name"`
-	LastName            string    `db:"last_name" json:"last_name"`
-	StaffNumber         string    `db:"staff_number" json:"staff_number"`
-	JobTitle            string    `db:"job_title" json:"job_title"`
-	Username            string    `db:"username" json:"username"`
-	Email               string    `db:"email" json:"email"`
-	PasswordHash        string    `db:"password_hash" json:"password_hash"`
-	AccountRole         string    `db:"account_role" json:"account_role"`
-	ExaminesFingerprint bool      `db:"examines_fingerprint" json:"examines_fingerprint"`
-	ExaminesFacial      bool      `db:"examines_facial" json:"examines_facial"`
-	IntelligenceAnalyst bool      `db:"intelligence_analyst" json:"intelligence_analyst"`
-	Coordinator         bool      `db:"coordinator" json:"coordinator"`
-	IsActive            bool      `db:"is_active" json:"is_active"`
-	CreatedAt           time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt           time.Time `db:"updated_at" json:"updated_at"`
+	ID                  int64        `db:"id" json:"id"`
+	FirstName           string       `db:"first_name" json:"first_name"`
+	LastName            string       `db:"last_name" json:"last_name"`
+	StaffNumber         string       `db:"staff_number" json:"staff_number"`
+	JobTitle            string       `db:"job_title" json:"job_title"`
+	Username            string       `db:"username" json:"username"`
+	Email               string       `db:"email" json:"email"`
+	PasswordHash        string       `db:"password_hash" json:"password_hash"`
+	AccountRole         string       `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool         `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool         `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool         `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool         `db:"coordinator" json:"coordinator"`
+	IsActive            bool         `db:"is_active" json:"is_active"`
+	CreatedAt           time.Time    `db:"created_at" json:"created_at"`
+	UpdatedAt           time.Time    `db:"updated_at" json:"updated_at"`
+	Avatar              []byte       `db:"avatar" json:"avatar"`
+	AvatarUpdatedAt     sql.NullTime `db:"avatar_updated_at" json:"avatar_updated_at"`
 }

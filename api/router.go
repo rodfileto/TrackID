@@ -68,6 +68,11 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected := api.Group("/")
 	protected.Use(Middleware(deps.JWTSecret), ActiveUser(authRepository))
 	protected.GET("me", MeHandler())
+	protected.PATCH("me", UpdateMeHandler(authRepository))
+	protected.PUT("me/password", ChangeMyPasswordHandler(authRepository))
+	protected.PUT("me/avatar", SetMyAvatarHandler(authRepository))
+	protected.DELETE("me/avatar", RemoveMyAvatarHandler(authRepository))
+	protected.GET("users/:userId/avatar", UserAvatarHandler(authRepository))
 	protected.GET("me/analyses", MyAnalysesHandler(deps.DB))
 
 	// Account management only (docs/access-profiles-plan.md): an admin sees no case or person

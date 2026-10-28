@@ -400,7 +400,6 @@
   },
   "auth": {
     "signInError": "Não foi possível entrar",
-    "backToDashboard": "Voltar ao painel",
     "signInTitle": "Entrar",
     "signInSubtitle": "Informe sua matrícula e senha para entrar.",
     "staffNumber": "Matrícula",
@@ -408,10 +407,9 @@
     "password": "Senha",
     "passwordPlaceholder": "Informe sua senha",
     "keepLoggedIn": "Manter conectado",
-    "forgotPassword": "Esqueceu a senha?",
     "signingIn": "Entrando...",
     "signIn": "Entrar",
-    "accountsByAdmin": "As contas são criadas por um administrador.",
+    "accountsByAdmin": "As contas são criadas, e as senhas esquecidas redefinidas, por um administrador.",
     "tagline": "Inteligência biométrica forense",
     "accountCreated": "Conta criada. Entre com sua matrícula.",
     "createError": "Não foi possível criar a conta",
@@ -434,7 +432,9 @@
     "haveAccount": "Já tem uma conta?"
   },
   "dashboard": {
-    "metaDescription": "Visão geral dos clusters biométricos"
+    "metaDescription": "Visão geral dos clusters biométricos",
+    "welcome": "Bem-vindo(a), {{name}}",
+    "welcomeDesc": "TrackID: casos de biometria forense, da requisição ao laudo."
   },
   "occurrenceMap": {
     "title": "Mapa de ocorrências",
@@ -1041,6 +1041,51 @@
       "score": "Pontuação {{score}}",
       "above": "— no limiar ou acima",
       "below": "— abaixo do limiar"
+    }
+  },
+  "profile": {
+    "title": "Perfil",
+    "desc": "Sua conta no TrackID",
+    "staffNumber": "Matrícula",
+    "username": "Usuário",
+    "email": "E-mail",
+    "role": "Papel da conta",
+    "roles": {
+      "SUPER_ADMIN": "Superadministrador",
+      "ADMIN": "Administrador",
+      "USER": "Usuário"
+    },
+    "capabilities": "O que você pode fazer",
+    "none": "Nenhuma capacidade ainda: um administrador as concede.",
+    "capability": {
+      "examines_fingerprint": "Perito em impressões digitais",
+      "examines_facial": "Perito em comparação facial",
+      "intelligence_analyst": "Analista de inteligência",
+      "coordinator": "Coordenador"
+    },
+    "managedByAdmin": "Contas e capacidades são alteradas por um administrador.",
+    "notSignedIn": "Sessão não iniciada.",
+    "details": "Seus dados",
+    "firstName": "Nome",
+    "lastName": "Sobrenome",
+    "jobTitle": "Cargo",
+    "saved": "Perfil salvo",
+    "fixedHint": "Matrícula, usuário e e-mail não podem ser alterados: as decisões são assinadas com o usuário. Seu papel é definido por um administrador.",
+    "picture": {
+      "change": "Trocar foto",
+      "uploading": "Enviando…",
+      "remove": "Remover foto",
+      "removing": "Removendo…",
+      "hint": "JPEG ou PNG; é recortada em quadrado e guardada com 256 × 256 pixels, sem os metadados."
+    },
+    "password": {
+      "title": "Trocar senha",
+      "current": "Senha atual",
+      "new": "Nova senha (8 caracteres ou mais)",
+      "confirm": "Repita a nova senha",
+      "submit": "Trocar senha",
+      "mismatch": "As novas senhas não conferem.",
+      "changed": "Senha alterada"
     }
   }
 }

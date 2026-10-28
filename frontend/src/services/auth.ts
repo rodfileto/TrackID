@@ -1,4 +1,4 @@
-import { requestApi } from "./api";
+import { apiBaseUrl, requestApi } from "./api";
 
 export interface UserProfile {
   id: number;
@@ -17,6 +17,8 @@ export interface UserProfile {
   /** Distributes analyses, reassigns their steps, opens comparisons. */
   coordinator: boolean;
   is_active: boolean;
+  /** When the user's picture was last set; absent while they have none. */
+  avatar_updated_at?: string;
 }
 
 interface LoginResponse {
@@ -91,4 +93,61 @@ export async function getCurrentUser(): Promise<UserProfile> {
       Authorization: `Bearer ${token}`,
     },
   });
+}
+
+function bearer(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/** Replaces the stored profile, in whichever storage the session uses. */
+export function storeUser(user: UserProfile): void {
+  if (sessionStorage.getItem(sessionUserKey) !== null) sessionStorage.setItem(sessionUserKey, JSON.stringify(user));
+  else localStorage.setItem(localUserKey, JSON.stringify(user));
+}
+
+/** What a user may change about themselves; username, staff number and email are fixed. */
+export interface UserDetails {
+  first_name: string;
+  last_name: string;
+  job_title: string;
+}
+
+export function updateMe(details: UserDetails): Promise<UserProfile> {
+  return requestApi<UserProfile>("/me", { method: "PATCH", headers: bearer(), body: JSON.stringify(details) });
+}
+
+export async function changeMyPassword(currentPassword: string, newPassword: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/me/password`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...bearer() },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Could not change the password");
+  }
+}
+
+export async function uploadAvatar(file: File): Promise<UserProfile> {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${apiBaseUrl}/me/avatar`, { method: "PUT", headers: bearer(), body: form });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Could not store the picture");
+  }
+  return (await response.json()) as UserProfile;
+}
+
+export function removeAvatar(): Promise<UserProfile> {
+  return requestApi<UserProfile>("/me/avatar", { method: "DELETE", headers: bearer() });
+}
+
+/** A user's picture as an object URL (the request needs the token, so an <img> cannot load it
+ * directly). The caller revokes it. */
+export async function fetchAvatar(userId: number, version: string): Promise<string> {
+  const response = await fetch(`${apiBaseUrl}/users/${userId}/avatar?v=${encodeURIComponent(version)}`, { headers: bearer() });
+  if (!response.ok) throw new Error("no picture");
+  return URL.createObjectURL(await response.blob());
 }
