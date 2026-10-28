@@ -97,6 +97,9 @@ export interface ImageViewerProps {
   showFilters?: boolean;
   /** Allow dragging the stage to pan. */
   draggable?: boolean;
+  /** Keep the zoom, pan and rotation when `src` changes to an image of the same size (a new
+   * render of the same picture), instead of fitting it again. */
+  keepView?: boolean;
   /** Called once the image element has loaded with its natural dimensions. */
   onLoad?: (naturalWidth: number, naturalHeight: number) => void;
   /**
@@ -195,6 +198,7 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
       showRotate = true,
       showFilters = false,
       draggable = true,
+      keepView = false,
       onLoad,
       extraLayers,
       onStageMouseDown,
@@ -253,18 +257,24 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
 
   // ── Load image; reset rotation/filters when src changes ─────────────────
   useEffect(() => {
-    setRotation(0);
-    setBrightness(0);
-    setContrast(0);
-    setSaturation(0);
-    setInterpolation(null);
-    setImage(null);
+    if (!keepView) {
+      setRotation(0);
+      setBrightness(0);
+      setContrast(0);
+      setSaturation(0);
+      setInterpolation(null);
+      setImage(null);
+    }
     const img = new window.Image();
     img.crossOrigin = "anonymous";
     img.src = src;
     img.onload = () => {
       setImage(img);
-      setNatural({ w: img.naturalWidth, h: img.naturalHeight });
+      setNatural((prev) =>
+        prev.w === img.naturalWidth && prev.h === img.naturalHeight
+          ? prev
+          : { w: img.naturalWidth, h: img.naturalHeight },
+      );
       onLoad?.(img.naturalWidth, img.naturalHeight);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -287,14 +297,16 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
     [],
   );
 
-  // Auto-fit when image or stage size becomes available
+  // Auto-fit when image or stage size becomes available. With keepView, a new image of the
+  // same size keeps the view: natural only changes (and so re-fits) when the size does.
+  const fitKey = keepView ? natural : image;
   useEffect(() => {
     if (image && stageSize.width > 0 && stageSize.height > 0) {
       fitTo(stageSize.width, stageSize.height, natural.w, natural.h, 0);
     }
     // Only re-fit when image or stage size changes, not on rotation
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [image, stageSize.width, stageSize.height]);
+  }, [fitKey, image === null, stageSize.width, stageSize.height]);
 
   // Konva filters need a cached (rasterized) node to run against. Caching is
   // keyed on the loaded image, not on the filter values themselves --

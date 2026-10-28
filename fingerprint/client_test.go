@@ -52,19 +52,19 @@ func TestExtractMatch(t *testing.T) {
 	client := sidecar(t)
 	ctx := context.Background()
 
-	rolled0, err := client.Extract(ctx, testdata(t, "f000_r0.png"))
+	rolled0, err := client.Extract(ctx, testdata(t, "f000_r0.png"), fingerprint.DefaultDPI)
 	if err != nil {
 		t.Fatalf("extract f000_r0: %v", err)
 	}
-	rolled1, err := client.Extract(ctx, testdata(t, "f000_r1.png"))
+	rolled1, err := client.Extract(ctx, testdata(t, "f000_r1.png"), fingerprint.DefaultDPI)
 	if err != nil {
 		t.Fatalf("extract f000_r1: %v", err)
 	}
-	latent0, err := client.Extract(ctx, testdata(t, "f000_l0.png"))
+	latent0, err := client.Extract(ctx, testdata(t, "f000_l0.png"), fingerprint.DefaultDPI)
 	if err != nil {
 		t.Fatalf("extract f000_l0: %v", err)
 	}
-	otherRolled0, err := client.Extract(ctx, testdata(t, "f001_r0.png"))
+	otherRolled0, err := client.Extract(ctx, testdata(t, "f001_r0.png"), fingerprint.DefaultDPI)
 	if err != nil {
 		t.Fatalf("extract f001_r0: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestExtractMatch(t *testing.T) {
 func TestExtractUnusableImage(t *testing.T) {
 	client := sidecar(t)
 	ctx := context.Background()
-	_, err := client.Extract(ctx, []byte("not an image"))
+	_, err := client.Extract(ctx, []byte("not an image"), fingerprint.DefaultDPI)
 	if !errors.Is(err, fingerprint.ErrUnusableImage) {
 		t.Fatalf("err = %v, want ErrUnusableImage", err)
 	}

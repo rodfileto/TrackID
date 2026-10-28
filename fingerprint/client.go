@@ -52,10 +52,19 @@ func NewClient(ctx context.Context, baseURL string) (*Client, error) {
 	return c, nil
 }
 
+// DefaultDPI is the resolution Extract is told when the image's own is not
+// known: trackid-sim's prints and ten-print cards are 500 ppi.
+const DefaultDPI = 500
+
 // Extract returns the SourceAFIS template of a fingerprint image (any format
-// SourceAFIS decodes: PNG, JPEG, BMP, WSQ, ...), assuming 500 dpi.
-func (c *Client) Extract(ctx context.Context, image []byte) ([]byte, error) {
-	body, status, err := c.post(ctx, "/extract", "application/octet-stream", image)
+// SourceAFIS decodes: PNG, JPEG, BMP, WSQ, ...) at dpi pixels per inch.
+// SourceAFIS measures minutia distances in millimetres through it, so a wrong
+// dpi spoils the template.
+func (c *Client) Extract(ctx context.Context, image []byte, dpi float64) ([]byte, error) {
+	if dpi <= 0 {
+		dpi = DefaultDPI
+	}
+	body, status, err := c.post(ctx, fmt.Sprintf("/extract?dpi=%g", dpi), "application/octet-stream", image)
 	if err != nil {
 		return nil, err
 	}

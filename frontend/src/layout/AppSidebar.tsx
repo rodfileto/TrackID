@@ -12,6 +12,7 @@ import {
   HorizontaLDots,
   LockIcon,
   ListIcon,
+  PencilIcon,
   PieChartIcon,
   TableIcon,
   UserCircleIcon,
@@ -48,6 +49,11 @@ const allNavItems: NavItem[] = [
     icon: <ListIcon />,
     name: "nav.myAnalyses",
     path: "/analyses",
+  },
+  {
+    icon: <PencilIcon />,
+    name: "nav.imageLab",
+    path: "/image-lab",
   },
   {
     icon: <DocsIcon />,

@@ -130,15 +130,15 @@ func TestRunTemplatesFingerprintPair(t *testing.T) {
 	// what fingerprint.ExtractForIdentityFeature/ExtractForCodification do
 	// once they've resolved a source image -- this test skips the storage
 	// download step and goes straight from testdata bytes to the sidecar.
-	rolledTemplate, err := sidecar.Extract(ctx, rolled)
+	rolledTemplate, err := sidecar.Extract(ctx, rolled, fingerprint.DefaultDPI)
 	if err != nil {
 		t.Fatalf("extract rolled: %v", err)
 	}
-	latentTemplate, err := sidecar.Extract(ctx, latent)
+	latentTemplate, err := sidecar.Extract(ctx, latent, fingerprint.DefaultDPI)
 	if err != nil {
 		t.Fatalf("extract latent: %v", err)
 	}
-	otherRolledTemplate, err := sidecar.Extract(ctx, otherRolled)
+	otherRolledTemplate, err := sidecar.Extract(ctx, otherRolled, fingerprint.DefaultDPI)
 	if err != nil {
 		t.Fatalf("extract other rolled: %v", err)
 	}

@@ -16,6 +16,7 @@ import (
 
 	"github.com/rodfileto/trackid/api"
 	"github.com/rodfileto/trackid/cases"
+	"github.com/rodfileto/trackid/fingerprint"
 	"github.com/rodfileto/trackid/geocode"
 	"github.com/rodfileto/trackid/internal/config"
 	"github.com/rodfileto/trackid/internal/database"
@@ -91,6 +92,19 @@ func Run() error {
 		log.Printf("VISION_DETECTOR_PATH/VISION_RECOGNIZER_PATH not configured; face detection and on-the-fly face comparison will return 503")
 	}
 
+	// The image lab compares its renders with SourceAFIS when the sidecar is configured and up.
+	var fingerprintClient *fingerprint.Client
+	if configuration.FingerprintSidecarURL != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		fp, err := fingerprint.NewClient(ctx, configuration.FingerprintSidecarURL)
+		cancel()
+		if err != nil {
+			log.Printf("fingerprint sidecar unavailable; the image lab will not compare: %v", err)
+		} else {
+			fingerprintClient = fp
+		}
+	}
+
 	// One client for the process, so its pacing keeps the whole API within the geocoding
 	// server's rate limit.
 	var geocoder geocode.Geocoder
@@ -111,6 +125,7 @@ func Run() error {
 		Queue:       queueClient,
 		FaceVision:  faceVision,
 		Geocoder:    geocoder,
+		Fingerprint: fingerprintClient,
 		// The report editor and the PDF renderer are WordCraft's (docs/facial-reports-plan.md).
 		ReportRenderer:  reportRenderer(),
 		WordcraftWebDir: os.Getenv("WORDCRAFT_WEB_DIR"),

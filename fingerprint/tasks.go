@@ -246,7 +246,7 @@ func ExtractForIdentityFeature(ctx context.Context, sqlDB *sql.DB, store *storag
 }
 
 func extractAndStore(ctx context.Context, q *db.Queries, client *Client, biometricFeatureID int64, image []byte) error {
-	template, err := client.Extract(ctx, image)
+	template, err := client.Extract(ctx, image, DefaultDPI)
 	if err != nil {
 		if errors.Is(err, ErrUnusableImage) {
 			return fmt.Errorf("%w: %w", asynq.SkipRetry, err)

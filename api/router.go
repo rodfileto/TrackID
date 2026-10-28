@@ -8,6 +8,7 @@ import (
 
 	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/cases"
+	"github.com/rodfileto/trackid/fingerprint"
 	"github.com/rodfileto/trackid/geocode"
 	"github.com/rodfileto/trackid/reports"
 	"github.com/rodfileto/trackid/storage"
@@ -30,6 +31,9 @@ type Dependencies struct {
 	// comparison. Nil means detect-faces returns 503, and comparisons only
 	// work between codifications that already have stored embeddings.
 	FaceVision cases.FaceVision
+	// Fingerprint scores the image lab's renders with SourceAFIS. Nil means the lab renders but
+	// does not compare.
+	Fingerprint *fingerprint.Client
 	// Geocoder backs the occurrence form's address search and map-click addresses. Nil means
 	// those endpoints return 503; occurrences can still be placed on the map.
 	Geocoder geocode.Geocoder
@@ -88,6 +92,14 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	coordination.POST("cases/:caseId/requests", CreateCaseRequestHandler(deps.DB))
 	coordination.POST("cases/:caseId/requests/:requestId/files", AttachRequestFilesHandler(deps.DB))
 	coordination.POST("cases/:caseId/requests/:requestId/material", ReceiveMaterialHandler(deps.DB, deps.Storage, deps.Queue))
+	// The image lab: fingerprint processing tried on any image, nothing stored
+	// (docs/fingerprint-image-processing-plan.md). Every signed-in user may use it.
+	lab := NewImageLab(deps.Fingerprint)
+	protected.GET("imageproc", lab.InfoHandler())
+	protected.POST("imageproc/sources", lab.UploadHandler())
+	protected.POST("imageproc/estimate", lab.EstimateHandler())
+	protected.POST("imageproc/render", lab.RenderHandler())
+	protected.POST("imageproc/compare", lab.CompareHandler())
 	protected.GET("cases", ListCasesHandler(deps.DB))
 	protected.POST("cases", CreateCaseHandler(deps.DB))
 	protected.GET("cases/years", ListCaseYearsHandler(deps.DB))

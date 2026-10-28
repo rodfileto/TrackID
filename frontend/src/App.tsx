@@ -19,6 +19,7 @@ import MyAnalyses from "./pages/MyAnalyses";
 import Distribution from "./pages/Distribution";
 import Requests from "./pages/Requests";
 import RegisterRequest from "./pages/RegisterRequest";
+import ImageLab from "./pages/ImageLab";
 import Users from "./pages/Users";
 // A lazy page whose code fails to load -- the tab predates a new build or a dev-server
 // restart, so the chunk it asks for no longer exists -- reloads once to fetch the current
@@ -65,6 +66,7 @@ export default function App() {
               <Route path="/cases/:caseId" element={<CaseDetailPage />} />
               <Route path="/cases/:caseId/analyses/:analysisId" element={<AnalysisWorkspace />} />
               <Route path="/analyses" element={<MyAnalyses />} />
+              <Route path="/image-lab" element={<ImageLab />} />
               <Route element={<RequireCapability need="coordinator" />}>
                 <Route path="/admin/distribution" element={<Distribution />} />
                 <Route path="/requests" element={<Requests />} />
