@@ -395,7 +395,7 @@ func Build(ctx context.Context, q *db.Queries, analysisID int64, images Images, 
 		if m, ok := traceByFeature[id]; ok {
 			name, hash := evidence(m)
 			ref := ReferenceInfo{FeatureID: id, Kind: "SENT_IN", Label: traceLabel(m), Evidence: name, EvidenceSHA256: hash}
-			if t.Type == analyses.FacialComparison {
+			if t.Type.Comparison() {
 				ref.ImageSHA256 = loadImage(id)
 			}
 			labels[id] = ref.Label
@@ -408,7 +408,7 @@ func Build(ctx context.Context, q *db.Queries, analysisID int64, images Images, 
 		}
 		ref := ReferenceInfo{FeatureID: id, Kind: "ENROLLED", Label: "Registro " + e.RegisterNumber, Name: e.Name,
 			Document: e.DocumentType + " " + e.DocumentNumber, Register: e.RegisterNumber, EnrolledOn: e.EnrolledAt.Format("2006-01-02")}
-		if t.Type == analyses.FacialComparison {
+		if t.Type.Comparison() {
 			ref.ImageSHA256 = loadImage(id)
 		}
 		labels[id] = ref.Label + " (" + e.Name + ")"
@@ -440,7 +440,7 @@ func Build(ctx context.Context, q *db.Queries, analysisID int64, images Images, 
 
 	// Earlier leads on this comparison's pairs.
 	var leads map[examination.Pair]string
-	if t.Type == analyses.FacialComparison {
+	if t.Type.Comparison() {
 		if leads, err = reviewLeads(ctx, q, records); err != nil {
 			return Data{}, nil, err
 		}

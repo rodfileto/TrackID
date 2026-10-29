@@ -145,6 +145,7 @@ func TestAgreementAndComparison(t *testing.T) {
 	}
 
 	// A review where both examiners agree: no third examiner.
+	openTask(t, sqlDB, "C1", analyses.FacialReview)
 	list, err := analyses.List(ctx, sqlDB, "C1")
 	if err != nil || len(list) != 1 {
 		t.Fatalf("C1 analyses = %+v, %v; want its review", list, err)
@@ -237,4 +238,85 @@ func levelFor(ctx context.Context, sqlDB *sql.DB, analysisID int64, decision str
 	}
 	return map[string]cluster.Conclusion{"POSITIVE": cluster.ConclusionStrongSupport, "INCONCLUSIVE": cluster.ConclusionInconclusive,
 		"NEGATIVE": cluster.ConclusionExclusion}[decision]
+}
+
+// openTask opens an analysis of type typ on caseID, as routing a request to that task does
+// (analyses.OpenIn), with no request or coordinator.
+func openTask(t *testing.T, sqlDB *sql.DB, caseID string, typ analyses.Type) int64 {
+	t.Helper()
+	var id int64
+	var modality string
+	if err := sqlDB.QueryRow(`SELECT id, modality FROM biometric_cases WHERE case_id = $1`, caseID).Scan(&id, &modality); err != nil {
+		t.Fatal(err)
+	}
+	aid, err := analyses.OpenIn(context.Background(), db.New(sqlDB), id, modality, typ, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return aid
+}
+
+// TestFingerprintComparison: a fingerprint comparison (confronto papiloscópico) opens empty, takes
+// the pairs the coordinator adds while at examination, and its decisions are positive, negative or
+// inconclusive, with no conclusion level; only a fingerprint examiner works it.
+func TestFingerprintComparison(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	repo := auth.NewRepository(sqlDB)
+	user := func(username string, fingerprint, facial bool) auth.UserProfile {
+		t.Helper()
+		u, err := repo.Create(ctx, auth.NewUser{FirstName: username, LastName: "Test", StaffNumber: username, JobTitle: "Perito",
+			Username: username, Password: "password-1",
+			Access: auth.Access{AccountRole: auth.AccountRoleUser, ExaminesFingerprint: fingerprint, ExaminesFacial: facial, IsActive: true}}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	}
+	chief := user("chief", false, false)
+	papi := user("papi", true, false)
+	face := user("face", false, true)
+
+	ev := cases.EvidenceInput{Sequence: 1, Traces: []cases.TraceInput{{Sequence: 1, TraceType: "FINGERPRINT_LIFT"}, {Sequence: 2, TraceType: "FINGERPRINT_LIFT"}}}
+	c, err := cases.Ingest(ctx, sqlDB, cases.CaseInput{CaseID: "P1", CaseType: cases.CaseTypeCriminal, Modality: "FINGERPRINT", Description: "lifts",
+		Evidences: []cases.EvidenceInput{ev}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l1 := graph.QuestionedFeatureID(c.Evidences[0].Traces[0].TraceID)
+	l2 := graph.QuestionedFeatureID(c.Evidences[0].Traces[1].TraceID)
+	cmp := openTask(t, sqlDB, "P1", analyses.FingerprintComparison)
+	if ws, err := examination.GetWorksheet(ctx, sqlDB, chief, cmp); err != nil || len(ws.Pairs) != 0 {
+		t.Fatalf("the new comparison's worksheet: %+v, %v; want no pairs", ws, err)
+	}
+	if err := analyses.AddPairs(ctx, sqlDB, "P1", cmp, []analyses.Pair{{FeatureA: l1, FeatureB: l2}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := distribution.Assign(ctx, sqlDB, cmp, &face.ID, chief.ID); err == nil {
+		t.Fatal("a facial examiner was given a fingerprint comparison")
+	}
+	if err := distribution.Assign(ctx, sqlDB, cmp, &papi.ID, chief.ID); err != nil {
+		t.Fatal(err)
+	}
+	p := examination.Pair{FeatureA: l1, FeatureB: l2}
+	if p.FeatureA > p.FeatureB {
+		p.FeatureA, p.FeatureB = p.FeatureB, p.FeatureA
+	}
+	if err := examination.SaveDraft(ctx, sqlDB, papi, cmp, p, "POSITIVE", "", cluster.ConclusionIdentification); !errors.Is(err, examination.ErrNoConclusion) {
+		t.Fatalf("a draft with a level: %v; want ErrNoConclusion", err)
+	}
+	if err := examination.SaveDraft(ctx, sqlDB, papi, cmp, p, "POSITIVE", "doze pontos característicos coincidentes", ""); err != nil {
+		t.Fatal(err)
+	}
+	res, err := examination.Submit(ctx, sqlDB, papi, cmp)
+	if err != nil || res.Decisions != 1 || res.Stage != analyses.StageVerification {
+		t.Fatalf("submit = %+v, %v; want one decision and VERIFICATION", res, err)
+	}
+	if err := analyses.AddPairs(ctx, sqlDB, "P1", cmp, []analyses.Pair{{FeatureA: l2, FeatureB: l1}}); !errors.Is(err, analyses.ErrPairsClosed) {
+		t.Fatalf("adding pairs after the examination: %v; want ErrPairsClosed", err)
+	}
+	var modality string
+	if err := sqlDB.QueryRow(`SELECT modality FROM biometric_decisions WHERE case_analysis_id = $1`, cmp).Scan(&modality); err != nil || modality != "FINGERPRINT" {
+		t.Fatalf("the decision's modality: %q, %v", modality, err)
+	}
 }

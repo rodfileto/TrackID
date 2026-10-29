@@ -5126,7 +5126,9 @@ SELECT r.id, r.authority, r.document_reference, r.received_on, r.due_on, r.cited
        (SELECT COUNT(*) FROM case_analyses ca WHERE ca.case_request_id = r.id AND ca.status = 'OPEN')::bigint AS open_analyses,
        COALESCE((SELECT array_agg(bc.case_id ORDER BY bc.case_id)
                  FROM case_request_cases rc JOIN biometric_cases bc ON bc.id = rc.biometric_case_id
-                 WHERE rc.case_request_id = r.id), '{}')::text[] AS case_ids
+                 WHERE rc.case_request_id = r.id), '{}')::text[] AS case_ids,
+       COALESCE((SELECT array_agg(ca.analysis_type ORDER BY ca.id)
+                 FROM case_analyses ca WHERE ca.case_request_id = r.id), '{}')::text[] AS tasks
 FROM case_requests r
 LEFT JOIN occurrences o ON o.id = r.occurrence_id
 ORDER BY r.due_on NULLS LAST, r.received_on DESC, r.id DESC
@@ -5146,6 +5148,7 @@ type ListRequestsRow struct {
 	OccurrenceNumber  sql.NullString `db:"occurrence_number" json:"occurrence_number"`
 	OpenAnalyses      int64          `db:"open_analyses" json:"open_analyses"`
 	CaseIds           []string       `db:"case_ids" json:"case_ids"`
+	Tasks             []string       `db:"tasks" json:"tasks"`
 }
 
 // Every request, overdue and soonest due first: what the coordinator has to answer. open counts
@@ -5172,6 +5175,7 @@ func (q *Queries) ListRequests(ctx context.Context, rowLimit int32) ([]ListReque
 			&i.OccurrenceNumber,
 			&i.OpenAnalyses,
 			pq.Array(&i.CaseIds),
+			pq.Array(&i.Tasks),
 		); err != nil {
 			return nil, err
 		}

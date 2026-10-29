@@ -2,6 +2,7 @@ package reports
 
 import (
 	"fmt"
+	"github.com/rodfileto/trackid/auth"
 	"strings"
 )
 
@@ -65,7 +66,11 @@ func Summarize(d Data) Summary {
 			parts = append(parts, fmt.Sprintf("%d %s", counts[k], strings.ToLower(suitabilityText[k])))
 		}
 	}
-	s.MaterialLine = fmt.Sprintf("%d face(s) questionada(s)", len(d.Questioned))
+	unit := "face(s) questionada(s)"
+	if d.AnalysisType.Modality() == auth.ModalityFingerprint {
+		unit = "fragmento(s) papilar(es) questionado(s)"
+	}
+	s.MaterialLine = fmt.Sprintf("%d %s", len(d.Questioned), unit)
 	if len(parts) > 0 {
 		s.MaterialLine += ": " + strings.Join(parts, ", ")
 	}

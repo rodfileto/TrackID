@@ -76,8 +76,9 @@ var effectText = map[string]string{
 }
 
 var reportTypeText = map[string]string{
-	"FACIAL_REVIEW_REPORT":     "Relatório de Indicação Investigativa",
-	"FACIAL_COMPARISON_REPORT": "Laudo de Comparação Facial",
+	"FACIAL_REVIEW_REPORT":          "Relatório de Indicação Investigativa",
+	"FACIAL_COMPARISON_REPORT":      "Laudo de Comparação Facial",
+	"FINGERPRINT_COMPARISON_REPORT": "Laudo de Confronto Papiloscópico",
 }
 
 // leadNotice is the fixed notice every lead report carries.
@@ -148,7 +149,7 @@ func answerRegion(i int) string { return fmt.Sprintf("answer.%d", i+1) }
 
 // requiredRegions are the regions a laudo cannot be issued with empty.
 func (d Data) requiredRegions() []string {
-	if d.AnalysisType != analyses.FacialComparison {
+	if !d.AnalysisType.Comparison() {
 		return nil
 	}
 	var out []string
@@ -189,7 +190,7 @@ func layout(out *doc, d Data, imgs map[string]Image) {
 	}
 	summary(out, d)
 	out.pageBreak()
-	if d.AnalysisType == analyses.FacialComparison {
+	if d.AnalysisType.Comparison() {
 		laudo(out, d, imgs)
 	} else {
 		leadReport(out, d, imgs)
@@ -223,7 +224,7 @@ func summary(out *doc, d Data) {
 	out.table([]int{2400, 6671}, nil, rows)
 
 	out.heading(2, "Resultados")
-	if d.AnalysisType == analyses.FacialComparison {
+	if d.AnalysisType.Comparison() {
 		var r [][]string
 		for _, p := range s.Results {
 			r = append(r, []string{p.Questioned, p.Counterpart, p.Level, p.Result, p.Lead})
@@ -342,8 +343,15 @@ func receivedFiles(out *doc, d Data) {
 	out.table([]int{3000, 6071}, []string{"Arquivo", "SHA-256"}, rows)
 }
 
-// laudo writes the sections of a FACIAL_COMPARISON_REPORT.
+// laudo writes the sections of a comparison's report: a FACIAL_COMPARISON_REPORT, on the graded
+// conclusion scale, or a FINGERPRINT_COMPARISON_REPORT (confronto papiloscópico), concluding
+// positive, negative or inconclusive.
 func laudo(out *doc, d Data, imgs map[string]Image) {
+	fingerprint := d.AnalysisType == analyses.FingerprintComparison
+	exam := "exame de comparação facial"
+	if fingerprint {
+		exam = "confronto papiloscópico"
+	}
 	preamble(out, d, 1)
 	history(out, d, 2)
 
@@ -352,7 +360,7 @@ func laudo(out *doc, d Data, imgs map[string]Image) {
 	for _, p := range d.Pairs {
 		pairs = append(pairs, p.Questioned+" × "+p.Counterpart)
 	}
-	out.region(regionObjective, "Realizar exame de comparação facial entre "+strings.Join(pairs, "; ")+", em resposta aos quesitos formulados.")
+	out.region(regionObjective, "Realizar "+exam+" entre "+strings.Join(pairs, "; ")+", em resposta aos quesitos formulados.")
 
 	out.heading(1, "4. Material")
 	out.heading(2, "4.1 Material questionado")
@@ -377,18 +385,32 @@ func laudo(out *doc, d Data, imgs map[string]Image) {
 	out.region(regionMaterial, "")
 
 	out.heading(1, "5. Método")
-	out.para("O exame seguiu a metodologia ACE-V (Análise, Comparação, Avaliação e Verificação), com análise morfológica " +
-		"das características faciais conforme as diretrizes do FISWG (Facial Identification Scientific Working Group). " +
-		"Cada par foi examinado pelo perito examinador e, de forma independente e cega, por um perito verificador; " +
-		"divergências foram dirimidas por um terceiro perito. Sistemas de reconhecimento facial automatizado servem apenas " +
-		"para localizar candidatos e não fundamentam as conclusões deste laudo.")
-	out.para("Escala de conclusões:")
-	var scale [][]string
-	for _, c := range cluster.Conclusions {
-		scale = append(scale, []string{conclusionText[c], conclusionMeaning[c]})
+	if fingerprint {
+		out.para("O exame seguiu a metodologia ACE-V (Análise, Comparação, Avaliação e Verificação), com análise das " +
+			"cristas papilares em seus três níveis de detalhe: o desenho geral, os pontos característicos (minúcias) e os " +
+			"detalhes das cristas. Cada par foi examinado pelo perito examinador e, de forma independente e cega, por um " +
+			"perito verificador; divergências foram dirimidas por um terceiro perito. Sistemas automatizados de identificação " +
+			"papiloscópica servem apenas para localizar candidatos e não fundamentam as conclusões deste laudo.")
+		out.para("Conclusões possíveis:")
+		out.table([]int{2600, 6471}, []string{"Conclusão", "Significado"}, [][]string{
+			{decisionText["POSITIVE"], "Os fragmentos procedem do mesmo dedo (identificação)."},
+			{decisionText["NEGATIVE"], "Os fragmentos não procedem do mesmo dedo (exclusão)."},
+			{decisionText["INCONCLUSIVE"], "Os elementos disponíveis não permitem concluir pela identificação nem pela exclusão."},
+		})
+	} else {
+		out.para("O exame seguiu a metodologia ACE-V (Análise, Comparação, Avaliação e Verificação), com análise morfológica " +
+			"das características faciais conforme as diretrizes do FISWG (Facial Identification Scientific Working Group). " +
+			"Cada par foi examinado pelo perito examinador e, de forma independente e cega, por um perito verificador; " +
+			"divergências foram dirimidas por um terceiro perito. Sistemas de reconhecimento facial automatizado servem apenas " +
+			"para localizar candidatos e não fundamentam as conclusões deste laudo.")
+		out.para("Escala de conclusões:")
+		var scale [][]string
+		for _, c := range cluster.Conclusions {
+			scale = append(scale, []string{conclusionText[c], conclusionMeaning[c]})
+		}
+		out.table([]int{2600, 6471}, []string{"Conclusão", "Significado"}, scale)
+		out.para("Nível mínimo para identificação: " + conclusionText[d.Identification] + ".")
 	}
-	out.table([]int{2600, 6471}, []string{"Conclusão", "Significado"}, scale)
-	out.para("Nível mínimo para identificação: " + conclusionText[d.Identification] + ".")
 	out.italic("Observações sobre o método (opcional):")
 	out.region(regionMethodNotes, "")
 
@@ -397,7 +419,11 @@ func laudo(out *doc, d Data, imgs map[string]Image) {
 		out.heading(2, fmt.Sprintf("6.%d %s × %s", i+1, p.Questioned, p.Counterpart))
 		l, r := faceImage(imgs, p.QuestionedID), faceImage(imgs, p.CounterpartID)
 		out.imagePair(l, r, p.Questioned, p.Counterpart)
-		out.italic("Análise do par: qualidade e limitações das imagens, características comparadas, concordâncias, discordâncias e sua explicação.")
+		if fingerprint {
+			out.italic("Análise do par: qualidade dos fragmentos, desenho, pontos característicos confrontados, concordâncias, discordâncias e sua explicação.")
+		} else {
+			out.italic("Análise do par: qualidade e limitações das imagens, características comparadas, concordâncias, discordâncias e sua explicação.")
+		}
 		out.region(examRegion(i), "")
 	}
 
@@ -530,7 +556,7 @@ func closing(out *doc, d Data, n int) {
 	out.para(fmt.Sprintf("Nada mais havendo a consignar, encerra-se o presente %s nº %s, emitido em %s.", strings.ToLower(reportTypeText[d.ReportType]),
 		d.number(), d.issueDate()))
 	out.para("\n\n______________________________________\n" + personLine(d.Examiners.Examiner) + "\nPerito examinador")
-	if d.AnalysisType == analyses.FacialComparison && d.Examiners.Verifier != nil {
+	if d.AnalysisType.Comparison() && d.Examiners.Verifier != nil {
 		out.para("\n______________________________________\n" + personLine(d.Examiners.Verifier) + "\nPerito verificador")
 	}
 	out.italic("A integridade deste documento é verificável pelo SHA-256 do arquivo PDF registrado no TrackID.")

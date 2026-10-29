@@ -26,6 +26,8 @@ import {
   type PairView,
   type Suitability,
   type Worksheet,
+  taskModality,
+  traceKey,
 } from "../services/analyses";
 import { listCaseMaterial, type MaterialTrace } from "../services/requests";
 import type { TraceLink } from "../services/cases";
@@ -34,11 +36,11 @@ function pairKey(p: { featureA: string; featureB: string }): string {
   return `${p.featureA}|${p.featureB}`;
 }
 
-function describe(face: TraceLink, t: (key: string, opts?: Record<string, unknown>) => string): string {
+function describe(face: TraceLink, t: (key: string, opts?: Record<string, unknown>) => string, modality?: string): string {
   if (face.kind === "KNOWN") {
     return t("analyses.enrolled", { name: face.name ?? "?", personId: face.personId ?? "?" });
   }
-  return t("analyses.caseFace", { traceId: face.traceId ?? "?", caseId: face.caseId ?? "?" });
+  return t(traceKey(modality), { traceId: face.traceId ?? "?", caseId: face.caseId ?? "?" });
 }
 
 /** One pair: the two faces side by side, what the matcher said, the decisions the viewer may see,
@@ -53,6 +55,7 @@ function PairCard({
   editable,
   blind,
   comparison,
+  modality,
   material,
   canAssess,
   onDecide,
@@ -64,8 +67,11 @@ function PairCard({
   index: number;
   editable: boolean;
   blind: boolean;
-  /** A comparison decides on the conclusion scale; a review on POSITIVE/NEGATIVE/INCONCLUSIVE. */
+  /** A facial comparison decides on the conclusion scale; a review or a fingerprint comparison on
+   * POSITIVE/NEGATIVE/INCONCLUSIVE. */
   comparison: boolean;
+  /** FACIAL or FINGERPRINT: how the case's traces are named. */
+  modality: string;
   /** The questioned face's role and suitability, when the viewer may see them. */
   material?: MaterialTrace;
   canAssess: boolean;
@@ -131,13 +137,13 @@ function PairCard({
           caseId={caseId}
           analysisId={analysisId}
           face={pair.questioned}
-          label={blind ? t("analyses.blindQuestioned") : describe(pair.questioned, t)}
+          label={blind ? t("analyses.blindQuestioned") : describe(pair.questioned, t, modality)}
         />
         <FaceImage
           caseId={caseId}
           analysisId={analysisId}
           face={pair.counterpart}
-          label={blind ? t("analyses.blindReference") : describe(pair.counterpart, t)}
+          label={blind ? t("analyses.blindReference") : describe(pair.counterpart, t, modality)}
         />
       </div>
 
@@ -396,6 +402,7 @@ export default function AnalysisWorkspace() {
                 editable={editable}
                 blind={blind}
                 comparison={worksheet.type === "FACIAL_COMPARISON"}
+                modality={taskModality(worksheet.type)}
                 material={materialByFeature.get(pair.questioned.featureId ?? "")}
                 canAssess={canAssess}
                 onDecide={onDecide}

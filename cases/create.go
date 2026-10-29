@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/db"
 )
 
@@ -70,8 +69,8 @@ func createNumbered(ctx context.Context, sqlDB *sql.DB, input CreateInput) (Case
 }
 
 // CreateWith is Create on q, inside the caller's transaction (registering a request opens its
-// cases this way): it validates input, numbers the case after the year's highest and opens its
-// automatic analyses. It returns the case and its row id. A concurrent create can take the same
+// cases this way): it validates input and numbers the case after the year's highest; the request
+// opens its analyses. It returns the case and its row id. A concurrent create can take the same
 // number; the caller retries its whole transaction when IsDuplicateNumber.
 func CreateWith(ctx context.Context, q *db.Queries, input CreateInput) (Case, int64, error) {
 	caseType := strings.ToUpper(strings.TrimSpace(input.CaseType))
@@ -105,9 +104,6 @@ func CreateWith(ctx context.Context, q *db.Queries, input CreateInput) (Case, in
 	})
 	if err != nil {
 		return Case{}, 0, fmt.Errorf("cases: create biometric case: %w", err)
-	}
-	if _, err := analyses.OpenAutomatic(ctx, q, row.ID, row.Modality); err != nil {
-		return Case{}, 0, fmt.Errorf("cases: open the case's automatic analyses: %w", err)
 	}
 	return Case{CaseID: row.CaseID, CaseType: row.CaseType, Modality: row.Modality, Description: row.Description}, row.ID, nil
 }

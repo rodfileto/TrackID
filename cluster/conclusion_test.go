@@ -42,6 +42,12 @@ func TestReviewedLink(t *testing.T) {
 			{Role: RoleReviewer, Decision: r.Decision(), Conclusion: r, Analysis: 2, AnalysisType: comparisonType},
 		}
 	}
+	confronto := func(v, r Decision) []ChainEntry {
+		return []ChainEntry{
+			{Role: RoleVerificator, Decision: v, Analysis: 3, AnalysisType: fingerprintComparisonType},
+			{Role: RoleReviewer, Decision: r, Analysis: 3, AnalysisType: fingerprintComparisonType},
+		}
+	}
 	join := func(parts ...[]ChainEntry) []ChainEntry {
 		var out []ChainEntry
 		for _, p := range parts {
@@ -71,6 +77,10 @@ func TestReviewedLink(t *testing.T) {
 		{"a third examiner's level settles a disputed laudo", join(review(DecisionPositive), laudo(ConclusionStrongSupport, ConclusionModerateSupport),
 			[]ChainEntry{{Role: RoleInconsistence, Decision: DecisionPositive, Conclusion: ConclusionIdentification, Analysis: 2, AnalysisType: comparisonType}}),
 			Link{Basis: LinkLaudo, Conclusion: ConclusionIdentification, Identified: true}, true},
+		{"a positive fingerprint comparison is a laudo that identifies", join([]ChainEntry{sys}, confronto(DecisionPositive, DecisionPositive)),
+			Link{Basis: LinkLaudo, Identified: true}, true},
+		{"a negative fingerprint comparison rejects the pair", join([]ChainEntry{sys}, confronto(DecisionNegative, DecisionNegative)), Link{}, false},
+		{"a fingerprint comparison still pending is no link", join([]ChainEntry{sys}, confronto(DecisionPositive, DecisionPositive)[:1]), Link{}, false},
 	}
 	for _, tt := range tests {
 		got, ok := ReviewedLink(tt.chain, ConclusionStrongSupport)

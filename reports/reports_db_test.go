@@ -132,9 +132,9 @@ func TestLaudoFlow(t *testing.T) {
 	t1, t2 := c.Evidences[0].Traces[0].TraceID, c.Evidences[1].Traces[0].TraceID
 	f1, f2 := graph.QuestionedFeatureID(t1), graph.QuestionedFeatureID(t2)
 
-	// The request: unknown cited number, two questions.
+	// The request: unknown cited number, two questions, asking a facial comparison.
 	r, err := requests.Create(ctx, sqlDB, "L1", requests.Input{Authority: "37ª DP", DocumentReference: "Ofício 456/2026", ReceivedOn: "2026-10-20",
-		DueOn: "2026-10-30", CitedReference: "IP 999/2026", Questions: []string{"Mesma pessoa?", " ", "Há disfarce?"}}, chief.ID)
+		DueOn: "2026-10-30", CitedReference: "IP 999/2026", Questions: []string{"Mesma pessoa?", " ", "Há disfarce?"}, Task: "FACIAL_COMPARISON"}, chief.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,19 +145,21 @@ func TestLaudoFlow(t *testing.T) {
 		t.Fatal("a due date before receipt was accepted")
 	}
 	list, err := analyses.List(ctx, sqlDB, "L1")
-	if err != nil || len(list) != 1 || list[0].RequestID != r.ID {
-		t.Fatalf("the automatic review should answer the first request: %+v, %v", list, err)
+	if err != nil || len(list) != 1 || list[0].Type != analyses.FacialComparison || list[0].RequestID != r.ID || len(list[0].Pairs) != 0 {
+		t.Fatalf("the request's comparison should be open, empty, answering it: %+v, %v", list, err)
 	}
+	cmp := list[0].ID
 
-	// The second face is a reference sent in.
+	// The second face is a reference sent in; the coordinator adds the pair to the comparison.
 	check("reference", cases.SetTraceRole(ctx, sqlDB, "L1", t2, cases.RoleReference), nil)
 	if err := cases.SetTraceRole(ctx, sqlDB, "L1", t2, "SUSPECT"); err == nil {
 		t.Fatal("an unknown role was accepted")
 	}
-
-	cmp, err := analyses.Open(ctx, sqlDB, "L1", analyses.FacialComparison, []analyses.Pair{{FeatureA: f1, FeatureB: f2}}, chief.ID)
-	if err != nil {
-		t.Fatal(err)
+	check("a pair of one face", analyses.AddPairs(ctx, sqlDB, "L1", cmp, []analyses.Pair{{FeatureA: f1, FeatureB: f1}}), analyses.ErrInvalidPair)
+	check("add the pair", analyses.AddPairs(ctx, sqlDB, "L1", cmp, []analyses.Pair{{FeatureA: f1, FeatureB: f2}}), nil)
+	check("add it again", analyses.AddPairs(ctx, sqlDB, "L1", cmp, []analyses.Pair{{FeatureA: f2, FeatureB: f1}}), nil)
+	if list, err := analyses.List(ctx, sqlDB, "L1"); err != nil || len(list[0].Pairs) != 1 {
+		t.Fatalf("pairs after adding: %+v, %v; want one", list, err)
 	}
 	check("ana takes it", distribution.Assign(ctx, sqlDB, cmp, &ana.ID, chief.ID), nil)
 	check("assess the reference", examination.AssessTrace(ctx, sqlDB, ana, cmp, t2, examination.Suitable, ""), examination.ErrNotQuestioned)
@@ -259,7 +261,7 @@ func TestLaudoFlow(t *testing.T) {
 	if o, err := svc.Get(ctx, cmp); err != nil || len(o.Deliveries) != 1 || o.Deliveries[0].RecordedBy != "ana" {
 		t.Fatalf("deliveries = %+v, %v", o.Deliveries, err)
 	}
-	if a, err := analyses.List(ctx, sqlDB, "L1"); err != nil || a[1].Status != analyses.StatusClosed || a[1].RequestID != r.ID {
+	if a, err := analyses.List(ctx, sqlDB, "L1"); err != nil || a[0].Status != analyses.StatusClosed || a[0].RequestID != r.ID {
 		t.Fatalf("the comparison should be closed and answer the request: %+v, %v", a, err)
 	}
 
@@ -269,7 +271,7 @@ func TestLaudoFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a, err := analyses.List(ctx, sqlDB, "L1"); err != nil || a[2].ID != cmp2 || a[2].Report.Complements != "2026.0001" {
+	if a, err := analyses.List(ctx, sqlDB, "L1"); err != nil || a[1].ID != cmp2 || a[1].Report.Complements != "2026.0001" {
 		t.Fatalf("the complement should name the report it complements: %+v, %v", a, err)
 	}
 	if _, err := analyses.OpenWith(ctx, sqlDB, "L1", analyses.FacialComparison, []analyses.Pair{{FeatureA: f1, FeatureB: f2}}, chief.ID,

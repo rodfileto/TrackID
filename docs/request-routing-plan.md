@@ -34,20 +34,27 @@ a specific task.
    |---|---|---|---|---|
    | `FACIAL_REVIEW` | Análise facial (revisão) | FACIAL | lead report | as now |
    | `FACIAL_COMPARISON` | Comparação facial | FACIAL | laudo | as now |
-   | `FINGERPRINT_LAB_EXAMINATION` | Exame laboratorial | FINGERPRINT | laudo de exame laboratorial | phase 3 |
-   | `FINGERPRINT_COMPARISON` | Confronto papiloscópico | FINGERPRINT | laudo de confronto papiloscópico | phase 2 |
-   | `CRIME_SCENE_EXAMINATION` | Exame de local | FINGERPRINT | laudo de exame de local | later: reserved, not offered |
+   | `FINGERPRINT_COMPARISON` | Confronto papiloscópico | FINGERPRINT | laudo de confronto papiloscópico | phase 1 |
+   | `FINGERPRINT_LAB_EXAMINATION` | Exame laboratorial | FINGERPRINT | laudo de exame laboratorial | coming soon: reserved, not offered |
+   | `CRIME_SCENE_EXAMINATION` | Exame de local | FINGERPRINT | laudo de exame de local | coming soon: reserved, not offered |
 
-   The scene examination is out of scope for now. The type is reserved so the database and the
-   reports leave room for it.
+   *Decided 2026-10-28:* the laboratory and scene examinations are out of scope for now. Each has a
+   "coming soon" page, and routing lists them disabled. Their types are reserved so the database and
+   the reports leave room for them.
 4. **Tasks can follow one another on a case.** Each task is a request's own: a later request for
    a comparison joins the case and adds its analysis, answering that request. A laboratory
    examination that develops latents is followed by a comparison asked by the same request or
    another.
-5. **A facial comparison can open without pairs.** Routing opens it from the request: the
-   questioned traces are the case's, and the reference images come with the request (reference
-   traces). Its pairs are then chosen within the analysis, by the coordinator or the examiner,
-   instead of being required at opening.
+5. **A comparison can open without pairs; the coordinator chooses them.** Routing opens it from
+   the request, facial or fingerprint. *Decided 2026-10-28:* the coordinator then adds its pairs
+   from what the request sent, questioned traces and reference traces, and from the matcher's
+   candidates on the case page (enrolled persons). Pairs can be added while the comparison is at
+   its examination stage, before the first examiner submits.
+6. **Fingerprint conclusions are positive, negative or inconclusive** (*decided 2026-10-28*):
+   the decision itself, with no graded scale like the facial laudo's. In a laudo, a positive
+   settled by the comparison's rounds is an identification.
+7. **In the sim, requests send only the questioned evidence.** References come up on the case page
+   through matching, and the coordinator adds the pairs from there.
 
 ## Changes
 
@@ -61,9 +68,19 @@ plan moves to 014.
 
 **`analyses`.**
 - New `Type` values, with their `Modality` and `ReportType`.
-- `Offered(t)` says which types routing may open: everything but `CRIME_SCENE_EXAMINATION`.
+- `Offered()` says which types routing may open: the two facial types and the fingerprint
+  comparison.
+- `Comparison()` names the types whose pairs a coordinator lists (both comparisons).
+  `GradedConclusion()` names the facial comparison only.
 - `Open` accepts every offered type. Pairs are required for none: a comparison may start empty.
+- `AddPairs` adds pairs to a comparison at its examination stage.
 - `OpenAutomatic` goes; `cases.Create` and `cases.Ingest` stop calling it.
+
+**Examination and reports.**
+- A fingerprint comparison uses the same worksheet, decision rounds and blind verification as
+  a facial one. Its decisions carry no conclusion level.
+- Its laudo is "Laudo de Confronto Papiloscópico": the facial laudo's structure, with the
+  ACE-V method for friction ridges and the decision table in place of the graded scale.
 
 **`requests`.**
 - `CaseInput` gains `Task` (an analysis type) and loses `Modality`, which the task now
@@ -90,18 +107,15 @@ trackid, and `plant` works on those reviews).
 
 ## Phases
 
-1. **Routing with tasks.**
+1. **Routing with tasks, and the fingerprint comparison** (built 2026-10-28).
    - The types, migration 013, routing in `requests`, and the screens.
    - `OpenAutomatic` removed.
-   - Facial comparison opening without pairs.
+   - Comparisons opening without pairs, and pairs added by the coordinator.
+   - The fingerprint comparison: worksheet, rounds and laudo.
+   - "Coming soon" pages for the laboratory and scene examinations.
    - The sim's requests naming their tasks.
-   - Fingerprint analyses can be opened and assigned, but have no worksheet yet.
-2. **Fingerprint comparison (confronto papiloscópico).**
-   - The analysis worksheet: the matcher's candidates (SourceAFIS), the pairs, the trace's
-     suitability.
-   - The decision rounds tied to the analysis, as for faces (examination, verification,
-     inconsistency).
-   - Its conclusion scale and its laudo template.
+2. **Fingerprint comparison, further.** Suitability of fingerprint traces in the worksheet, and
+   the image lab's processed images as the compared images (`docs/fingerprint-image-processing-plan.md`).
 3. **Laboratory examination (exame laboratorial).**
    - The objects sent in.
    - The development methods applied to each (powders, ninhydrin, cyanoacrylate and others).
@@ -111,9 +125,43 @@ trackid, and `plant` works on those reviews).
 
 ## Open
 
-- **Conclusion scale for fingerprint comparisons:** identification, exclusion, inconclusive, or
-  a graded scale like the facial laudo's. The institute's practice decides.
 - **What a laboratory examination records per object and method,** and in what words for the
   laudo.
-- **Who may choose a comparison's pairs:** the coordinator only, or also the examiner within
-  their own analysis.
+
+## Status (2026-10-28)
+
+Phase 1 is built:
+
+- **Backend:**
+  - the task types and migration 013;
+  - routing in `requests.Register` and `requests.Create`, with `Task`;
+  - `analyses.OpenIn` and `AddPairs`, and the coordinator's `POST
+    /api/admin/cases/:caseId/analyses/:analysisId/pairs`;
+  - `OpenAutomatic` removed.
+- **Fingerprint comparison:**
+  - the same worksheet and rounds as faces, with no conclusion level;
+  - a positive settled in its rounds counts as a laudo identification (`cluster.ReviewedLink`);
+  - its laudo is "Laudo de Confronto Papiloscópico".
+- **Screens:**
+  - a task per case when registering a request, and on a follow-up request (laboratory and
+    scene listed, disabled);
+  - the tasks each request asked, on the case page and in the requests list;
+  - the comparison modal adds pairs to the open comparison, or opens a new one;
+  - the case's matcher candidates show on fingerprint cases too, each with "Add to comparison";
+  - the "coming soon" pages, under "Fingerprint examinations" in the sidebar.
+- **trackid-sim:** `load` asks a facial review of every facial case and a fingerprint
+  comparison of every fingerprint case.
+
+Checked:
+
+- **Tests:**
+  - routing (tasks named, offered, of the case's modality);
+  - the request's empty comparison and `AddPairs`;
+  - a fingerprint comparison's drafts and rounds;
+  - the fingerprint laudo's text;
+  - `ReviewedLink` for fingerprint comparisons;
+  - migration 013 down and up.
+- **A scratch load of trackid-sim's world:**
+  - 189 facial reviews and 64 fingerprint comparisons, each answering its request;
+  - on SIM-2021-00025, the lift's candidate (SourceAFIS 134.6) added to the comparison and shown
+    in its worksheet beside the enrolled ten-print.

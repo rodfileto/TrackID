@@ -122,3 +122,39 @@ func TestLeadReport(t *testing.T) {
 		t.Errorf("summary = %+v", s)
 	}
 }
+
+// TestFingerprintLaudo renders a fingerprint comparison's report (confronto papiloscópico): its
+// own title, method and conclusions (positive, negative, inconclusive, with no graded scale), and a
+// decision instead of a level in each pair's result.
+func TestFingerprintLaudo(t *testing.T) {
+	d, imgs := sampleLaudo()
+	d.AnalysisType, d.ReportType = analyses.FingerprintComparison, "FINGERPRINT_COMPARISON_REPORT"
+	for i := range d.Pairs {
+		d.Pairs[i].Conclusion = ""
+		for j := range d.Pairs[i].Steps {
+			d.Pairs[i].Steps[j].Conclusion = ""
+		}
+	}
+	b, err := reports.RenderForTest(d, imgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked, regions, err := reports.ParseForTest(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(regions) != 8 || !strings.HasPrefix(regions[0], "Realizar confronto papiloscópico entre") {
+		t.Fatalf("regions = %q", regions)
+	}
+	for _, want := range []string{"LAUDO DE CONFRONTO PAPILOSCÓPICO", "cristas papilares", "Conclusões possíveis", "procedem do mesmo dedo",
+		"fragmento(s) papilar(es) questionado(s)", "Positivo", "Inconclusivo"} {
+		if !strings.Contains(locked, want) {
+			t.Errorf("the fingerprint laudo lacks %q", want)
+		}
+	}
+	for _, unwanted := range []string{"Escala de conclusões", "Nível mínimo para identificação", "comparação facial", "FISWG"} {
+		if strings.Contains(locked, unwanted) {
+			t.Errorf("the fingerprint laudo carries the facial %q", unwanted)
+		}
+	}
+}

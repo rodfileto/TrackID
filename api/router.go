@@ -90,6 +90,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	coordination.GET("distribution", DistributionStatusHandler(deps.DB))
 	coordination.POST("distribution", DistributeHandler(deps.DB))
 	coordination.POST("cases/:caseId/analyses", OpenAnalysisHandler(deps.DB))
+	coordination.POST("cases/:caseId/analyses/:analysisId/pairs", AddPairsHandler(deps.DB))
 	coordination.PUT("analyses/:analysisId/assignment", AssignAnalysisHandler(deps.DB))
 	coordination.GET("analyses/:analysisId/prior-deciders", PriorDecidersHandler(deps.DB))
 	coordination.GET("requests", ListRequestsHandler(deps.DB))

@@ -95,6 +95,7 @@ func TestDecisionFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	openTask(t, sqlDB, "F1", analyses.FacialReview)
 	trace1 := graph.QuestionedFeatureID(f1.Evidences[0].Traces[0].TraceID)
 	trace2 := graph.QuestionedFeatureID(f1.Evidences[0].Traces[1].TraceID)
 	pair := func(a, b string) examination.Pair {
@@ -317,15 +318,20 @@ func assertBlind(t *testing.T, who string, ws examination.Worksheet) {
 func mustReview(t *testing.T, sqlDB *sql.DB, caseID string) int64 {
 	t.Helper()
 	list, err := analyses.List(context.Background(), sqlDB, caseID)
+	if err == nil && len(list) == 0 {
+		openTask(t, sqlDB, caseID, analyses.FacialReview) // as the case's request would ask
+		list, err = analyses.List(context.Background(), sqlDB, caseID)
+	}
 	if err != nil || len(list) == 0 || list[0].Type != analyses.FacialReview {
 		t.Fatalf("%s analyses = %+v, %v", caseID, list, err)
 	}
 	return list[0].ID
 }
 
-// TestAutomaticReviewAndAccess: a FACIAL case gets one review however often it is ingested, a
-// FINGERPRINT case none; admins open every case and examiners only those they hold a step of.
-func TestAutomaticReviewAndAccess(t *testing.T) {
+// TestTasksAndAccess: ingesting a case opens nothing, however often (the coordinator routes each
+// request to its task); a fingerprint comparison opens on a FINGERPRINT case, empty; coordinators
+// open every case and examiners only those they hold a step of.
+func TestTasksAndAccess(t *testing.T) {
 	ctx := context.Background()
 	sqlDB := testDB(t)
 	repo := auth.NewRepository(sqlDB)
@@ -348,11 +354,25 @@ func TestAutomaticReviewAndAccess(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if list, err := analyses.List(ctx, sqlDB, "F1"); err != nil || len(list) != 1 {
-		t.Fatalf("F1 analyses = %+v, %v; want one review", list, err)
+	for _, id := range []string{"F1", "P1"} {
+		if list, err := analyses.List(ctx, sqlDB, id); err != nil || len(list) != 0 {
+			t.Fatalf("%s analyses = %+v, %v; want none before a task is routed", id, list, err)
+		}
 	}
-	if list, err := analyses.List(ctx, sqlDB, "P1"); err != nil || len(list) != 0 {
-		t.Fatalf("P1 analyses = %+v, %v; want none", list, err)
+	openTask(t, sqlDB, "F1", analyses.FacialReview)
+	openTask(t, sqlDB, "P1", analyses.FingerprintComparison)
+	if list, err := analyses.List(ctx, sqlDB, "P1"); err != nil || len(list) != 1 || list[0].Type != analyses.FingerprintComparison || len(list[0].Pairs) != 0 {
+		t.Fatalf("P1 analyses = %+v, %v; want an empty fingerprint comparison", list, err)
+	}
+	var p1 int64
+	if err := sqlDB.QueryRow(`SELECT id FROM biometric_cases WHERE case_id = 'P1'`).Scan(&p1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := analyses.OpenIn(ctx, db.New(sqlDB), p1, "FINGERPRINT", analyses.FacialReview, 0, 0); !errors.Is(err, analyses.ErrWrongModality) {
+		t.Fatalf("a facial review on a fingerprint case: %v; want ErrWrongModality", err)
+	}
+	if _, err := analyses.OpenIn(ctx, db.New(sqlDB), p1, "FINGERPRINT", analyses.FingerprintLabExamination, 0, 0); !errors.Is(err, analyses.ErrNotOffered) {
+		t.Fatalf("a laboratory examination: %v; want ErrNotOffered", err)
 	}
 	// The account role gives no access to cases (docs/access-profiles-plan.md); coordination does.
 	if err := distribution.CanOpen(ctx, sqlDB, chief, "P1"); !errors.Is(err, distribution.ErrNotAssigned) {
@@ -381,7 +401,7 @@ func TestAutomaticReviewAndAccess(t *testing.T) {
 // that maps onto decision (strong support, inconclusive or exclusion).
 func levelFor(ctx context.Context, sqlDB *sql.DB, analysisID int64, decision string) cluster.Conclusion {
 	t, err := analyses.GetTarget(ctx, db.New(sqlDB), analysisID)
-	if err != nil || t.Type != analyses.FacialComparison {
+	if err != nil || !t.Type.GradedConclusion() {
 		return ""
 	}
 	return map[string]cluster.Conclusion{"POSITIVE": cluster.ConclusionStrongSupport, "INCONCLUSIVE": cluster.ConclusionInconclusive,
@@ -392,4 +412,20 @@ func levelFor(ctx context.Context, sqlDB *sql.DB, analysisID int64, decision str
 // files.
 func noDocs(context.Context, *db.Queries, analyses.Target, analyses.Report) (analyses.Issued, error) {
 	return analyses.Issued{Snapshot: []byte(`{}`)}, nil
+}
+
+// openTask opens an analysis of type typ on caseID, as routing a request to that task does
+// (analyses.OpenIn), with no request or coordinator.
+func openTask(t *testing.T, sqlDB *sql.DB, caseID string, typ analyses.Type) int64 {
+	t.Helper()
+	var id int64
+	var modality string
+	if err := sqlDB.QueryRow(`SELECT id, modality FROM biometric_cases WHERE case_id = $1`, caseID).Scan(&id, &modality); err != nil {
+		t.Fatal(err)
+	}
+	aid, err := analyses.OpenIn(context.Background(), db.New(sqlDB), id, modality, typ, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return aid
 }

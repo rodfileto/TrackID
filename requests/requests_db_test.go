@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,8 +77,8 @@ func TestRegister(t *testing.T) {
 		Input: requests.Input{Authority: "37ª DP", DocumentReference: "Ofício 123/2026", ReceivedOn: "2026-10-27", DueOn: "2026-11-26",
 			CitedReference: "037-01234/2026", Questions: []string{"A pessoa da imagem é o suspeito?"}},
 		Occurrence: occurrence,
-		Cases: []requests.CaseInput{{Modality: "FACIAL", Description: "Câmeras do local"},
-			{Modality: "FINGERPRINT", Description: "Fragmentos no veículo"}},
+		Cases: []requests.CaseInput{{Task: "FACIAL_REVIEW", Description: "Câmeras do local"},
+			{Task: "FINGERPRINT_COMPARISON", Description: "Fragmentos no veículo"}},
 	}
 	r, err := requests.Register(ctx, sqlDB, in, 0, now)
 	if err != nil {
@@ -155,10 +156,34 @@ func TestRegister(t *testing.T) {
 		t.Errorf("duplicate occurrence: %v, want a validation error", err)
 	}
 
-	// A later ofício on the facial case: found by its number, numbered 2 on that case.
+	// The fingerprint case's task: a fingerprint comparison, opened empty, answering the request.
+	var fpType string
+	var fpRequest sql.NullInt64
+	var fpPairs int
+	if err := sqlDB.QueryRow(`SELECT ca.analysis_type, ca.case_request_id, (SELECT count(*) FROM case_analysis_pairs p WHERE p.case_analysis_id = ca.id)
+		FROM case_analyses ca JOIN biometric_cases bc ON bc.id = ca.biometric_case_id WHERE bc.case_id = $1`, r.Cases[1].CaseID).Scan(&fpType, &fpRequest, &fpPairs); err != nil {
+		t.Fatal(err)
+	}
+	if fpType != "FINGERPRINT_COMPARISON" || fpRequest.Int64 != r.RequestID || fpPairs != 0 {
+		t.Errorf("fingerprint case's analysis: %s answering %v with %d pairs", fpType, fpRequest, fpPairs)
+	}
+
+	// A task must be named, offered, and of the case's modality.
+	for task, want := range map[string]string{"": "needs its task", "FINGERPRINT_LAB_EXAMINATION": "not available yet", "FINGERPRINT_COMPARISON": "modality"} {
+		_, err := requests.Register(ctx, sqlDB, requests.RegisterInput{
+			Input: requests.Input{Authority: "MPRJ", DocumentReference: "Ofício 8/2026", ReceivedOn: "2026-10-28", CitedReference: "037-01234/2026"},
+			Cases: []requests.CaseInput{{CaseID: facial, Task: task}},
+		}, 0, now)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("task %q on the facial case: %v; want %q", task, err, want)
+		}
+	}
+
+	// A later ofício on the facial case asks for a comparison: found by its number, numbered 2 on
+	// that case, its comparison answering it.
 	later, err := requests.Register(ctx, sqlDB, requests.RegisterInput{
 		Input: requests.Input{Authority: "MPRJ", DocumentReference: "Ofício 9/2026", ReceivedOn: "2026-10-28", CitedReference: "037-01234/2026"},
-		Cases: []requests.CaseInput{{CaseID: facial}},
+		Cases: []requests.CaseInput{{CaseID: facial, Task: "FACIAL_COMPARISON"}},
 	}, 0, now)
 	if err != nil {
 		t.Fatal(err)
@@ -173,17 +198,21 @@ func TestRegister(t *testing.T) {
 	if len(list) != 2 || list[1].ID != later.RequestID || list[1].Sequence != 2 {
 		t.Errorf("facial case requests: %+v", list)
 	}
+	if fmt.Sprint(list[0].Tasks) != "[FACIAL_REVIEW]" || fmt.Sprint(list[1].Tasks) != "[FACIAL_COMPARISON]" {
+		t.Errorf("tasks on the facial case: %v, %v", list[0].Tasks, list[1].Tasks)
+	}
 	all, err := requests.ListAll(ctx, sqlDB, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(all) != 2 || all[0].ID != r.RequestID || len(all[0].CaseIDs) != 2 || all[0].OpenAnalyses != 1 {
+	if len(all) != 2 || all[0].ID != r.RequestID || len(all[0].CaseIDs) != 2 || all[0].OpenAnalyses != 2 ||
+		fmt.Sprint(all[0].Tasks) != "[FACIAL_REVIEW FINGERPRINT_COMPARISON]" {
 		t.Errorf("all requests: %+v", all)
 	}
 
 	// A civil request with no occurrence needs its cases' nature.
 	civil := requests.RegisterInput{Input: requests.Input{Authority: "Vara de Família", DocumentReference: "Ofício 1/2026", ReceivedOn: "2026-10-27"},
-		Cases: []requests.CaseInput{{Modality: "FACIAL", Description: "Pessoa desaparecida"}}}
+		Cases: []requests.CaseInput{{Task: "FACIAL_REVIEW", Description: "Pessoa desaparecida"}}}
 	if _, err := requests.Register(ctx, sqlDB, civil, 0, now); err == nil {
 		t.Error("registered a case with no nature")
 	}

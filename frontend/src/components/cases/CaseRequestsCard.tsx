@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import TaskSelect from "../analyses/TaskSelect";
+import { typeKey } from "../analyses/labels";
+import type { AnalysisType } from "../../services/analyses";
 import { Link } from "react-router";
 import ComponentCard from "../common/ComponentCard";
 import Badge from "../ui/badge/Badge";
@@ -34,12 +37,14 @@ function dateBR(iso?: string): string {
  * and which of the case's evidence files it sent in. */
 function RegisterRequestModal({
   caseId,
+  modality,
   evidences,
   isOpen,
   onClose,
   onDone,
 }: {
   caseId: string;
+  modality: string;
   evidences: Evidence[];
   isOpen: boolean;
   onClose: () => void;
@@ -49,6 +54,7 @@ function RegisterRequestModal({
   const empty = { authority: "", documentReference: "", documentDate: "", receivedOn: new Date().toISOString().slice(0, 10), dueOn: "",
     citedReference: "", notes: "", questions: "" };
   const [form, setForm] = useState(empty);
+  const [task, setTask] = useState("");
   const [files, setFiles] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [material, setMaterial] = useState<{ id: number; filename: string }[]>([]);
@@ -56,6 +62,7 @@ function RegisterRequestModal({
   useEffect(() => {
     if (!isOpen) return;
     setForm(empty);
+    setTask("");
     listCaseVideos(caseId)
       .catch(() => [])
       .then((videos) => {
@@ -81,6 +88,7 @@ function RegisterRequestModal({
         authority: form.authority, documentReference: form.documentReference, documentDate: form.documentDate || undefined,
         receivedOn: form.receivedOn, dueOn: form.dueOn || undefined, citedReference: form.citedReference || undefined,
         notes: form.notes || undefined, questions: form.questions.split("\n").map((q) => q.trim()).filter(Boolean), fileIds: [...files],
+        task,
       };
       await createCaseRequest(caseId, input);
       toast.success(t("requests.saved"));
@@ -104,6 +112,10 @@ function RegisterRequestModal({
           {field("receivedOn", "date", true)}
           {field("dueOn", "date")}
           {field("citedReference")}
+          <div>
+            <label className={labelClass}>{t("requests.task")}</label>
+            <TaskSelect className={inputClass} value={task} modality={modality} onChange={setTask} />
+          </div>
         </div>
         <div>
           <label className={labelClass}>{t("requests.questions")}</label>
@@ -156,11 +168,13 @@ function RegisterRequestModal({
  * questioned material, or a reference sent in for comparison. */
 export default function CaseRequestsCard({
   caseId,
+  modality,
   evidences,
   refreshKey = 0,
   onChanged,
 }: {
   caseId: string;
+  modality: string;
   evidences: Evidence[];
   refreshKey?: number;
   onChanged?: () => void;
@@ -250,6 +264,11 @@ export default function CaseRequestsCard({
                   ))}
               </p>
             )}
+            {r.tasks.length > 0 && (
+              <p className="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">
+                {t("requests.tasksAsked")}: {r.tasks.map((task) => t(typeKey(task as AnalysisType))).join(", ")}
+              </p>
+            )}
             {r.questions.length > 0 && (
               <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-sm text-gray-700 dark:text-gray-300">
                 {r.questions.map((q, i) => (
@@ -309,7 +328,7 @@ export default function CaseRequestsCard({
           </ul>
         </div>
       )}
-      <RegisterRequestModal caseId={caseId} evidences={evidences} isOpen={registering} onClose={() => setRegistering(false)} onDone={load} />
+      <RegisterRequestModal caseId={caseId} modality={modality} evidences={evidences} isOpen={registering} onClose={() => setRegistering(false)} onDone={load} />
     </ComponentCard>
   );
 }

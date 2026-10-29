@@ -1061,7 +1061,7 @@ export default function FacialCaseWorkspace({
         </div>
       </ComponentCard>
 
-      <CaseIdentityDecisions caseId={caseId} faces={faces} refreshKey={refreshKey} />
+      <CaseIdentityDecisions caseId={caseId} faces={faces} refreshKey={refreshKey} onPairAdded={onAnalysisOpened} />
 
       <CaseClusters
         caseId={caseId}

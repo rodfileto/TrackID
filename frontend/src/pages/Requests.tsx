@@ -6,6 +6,8 @@ import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import ComponentCard from "../components/common/ComponentCard";
 import Badge from "../components/ui/badge/Badge";
 import { listRequests, type RequestSummary } from "../services/requests";
+import { typeKey } from "../components/analyses/labels";
+import type { AnalysisType } from "../services/analyses";
 
 function dateBR(iso?: string): string {
   if (!iso) return "";
@@ -45,7 +47,7 @@ export default function Requests() {
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-gray-200 text-theme-xs uppercase text-gray-500 dark:border-gray-800 dark:text-gray-400">
                 <tr>
-                  {(["document", "authority", "received", "due", "occurrence", "cases", "open"] as const).map((c) => (
+                  {(["document", "authority", "received", "due", "occurrence", "cases", "tasks", "open"] as const).map((c) => (
                     <th key={c} className="px-3 py-2 font-medium">
                       {t(`requests.columns.${c}`)}
                     </th>
@@ -77,6 +79,7 @@ export default function Requests() {
                         </span>
                       ))}
                     </td>
+                    <td className="px-3 py-2">{r.tasks.map((task) => t(typeKey(task as AnalysisType))).join(", ") || "—"}</td>
                     <td className="px-3 py-2">{r.openAnalyses}</td>
                   </tr>
                 ))}

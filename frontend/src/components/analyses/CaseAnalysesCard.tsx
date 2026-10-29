@@ -18,7 +18,10 @@ import {
   getWorksheet,
   listCaseAnalyses,
   openAnalysis,
+  addAnalysisPairs,
+  traceKey,
   type Analysis,
+  type AnalysisType,
   type DistributionExaminer,
   type FeaturePair,
   type PairView,
@@ -92,12 +95,14 @@ function ordered(a: string, b: string): FeaturePair {
   return a < b ? { featureA: a, featureB: b } : { featureA: b, featureB: a };
 }
 
-/** Coordinator: open a FACIAL_COMPARISON on pairs picked from the case's review, or between a
- * questioned face and a reference sent in; for one of the case's requests, and optionally as a
- * laudo complementar of an issued laudo. A questioned face not assessed as suitable for comparison
- * is flagged: the comparison may not be able to conclude. */
+/** Coordinator: choose a comparison's pairs -- from the case's review (faces), or between a
+ * questioned trace and a reference sent in -- and add them to the comparison open at its
+ * examination stage (the one the request opened), or open a new one for one of the case's requests,
+ * optionally as a laudo complementar of an issued laudo. A questioned trace not assessed as suitable
+ * for comparison is flagged: the comparison may not be able to conclude. */
 function OpenComparisonModal({
   caseId,
+  modality,
   review,
   analyses,
   requests,
@@ -106,6 +111,7 @@ function OpenComparisonModal({
   onDone,
 }: {
   caseId: string;
+  modality: string;
   review: Analysis | undefined;
   analyses: Analysis[];
   requests: CaseRequest[];
@@ -119,9 +125,13 @@ function OpenComparisonModal({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [requestId, setRequestId] = useState<string>("");
   const [complements, setComplements] = useState<string>("");
+  const type: AnalysisType = modality === "FINGERPRINT" ? "FINGERPRINT_COMPARISON" : "FACIAL_COMPARISON";
+  const target = [...analyses].reverse().find((a) => a.type === type && a.status === "OPEN" && a.stage === "EXAMINATION");
+  const [into, setInto] = useState<string>("new");
 
   useEffect(() => {
     if (!isOpen) return;
+    setInto(target ? String(target.id) : "new");
     setSelected(new Set());
     setRequestId(requests.length ? String(requests[requests.length - 1].id) : "");
     setComplements("");
@@ -130,13 +140,14 @@ function OpenComparisonModal({
     getWorksheet(caseId, review.id)
       .then((ws) => setPairs(ws.pairs))
       .catch(() => setPairs([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, caseId, review, requests]);
 
   const byFeature = new Map(material.map((m) => [m.featureId, m]));
   const questioned = material.filter((m) => m.role === "QUESTIONED");
   const references = material.filter((m) => m.role === "REFERENCE");
   const local = questioned.flatMap((q) => references.map((r) => ({ ...ordered(q.featureId, r.featureId), q, r })));
-  const issuedLaudos = analyses.filter((a) => a.type === "FACIAL_COMPARISON" && a.report.status === "ISSUED");
+  const issuedLaudos = analyses.filter((a) => a.type === type && a.report.status === "ISSUED");
   const unsuitable = (featureId?: string) => {
     const m = featureId ? byFeature.get(featureId) : undefined;
     return !!m && m.role === "QUESTIONED" && m.suitability !== "SUITABLE";
@@ -155,11 +166,16 @@ function OpenComparisonModal({
     try {
       const chosen = [...pairs, ...local].filter((p) => selected.has(`${p.featureA}|${p.featureB}`));
       const unique = [...new Map(chosen.map((p) => [`${p.featureA}|${p.featureB}`, { featureA: p.featureA, featureB: p.featureB }])).values()];
-      await openAnalysis(caseId, "FACIAL_COMPARISON", unique, {
-        requestId: requestId ? Number(requestId) : undefined,
-        complements: complements ? Number(complements) : undefined,
-      });
-      toast.success(t("analyses.comparisonOpened"));
+      if (into !== "new") {
+        await addAnalysisPairs(caseId, Number(into), unique);
+        toast.success(t("analyses.pairsAdded", { count: unique.length }));
+      } else {
+        await openAnalysis(caseId, type, unique, {
+          requestId: requestId ? Number(requestId) : undefined,
+          complements: complements ? Number(complements) : undefined,
+        });
+        toast.success(t("analyses.comparisonOpened"));
+      }
       onClose();
       onDone();
     } catch (err) {
@@ -172,7 +188,13 @@ function OpenComparisonModal({
       <div className="p-6">
         <h3 className="mb-1 text-lg font-semibold text-gray-800 dark:text-white/90">{t("analyses.openComparison")}</h3>
         <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">{t("analyses.openComparisonDesc")}</p>
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {target && (
+          <select value={into} onChange={(e) => setInto(e.target.value)} className={`${selectClass} mb-3`}>
+            <option value={target.id}>{t("analyses.addTo", { type: t(typeKey(target.type)), sequence: target.sequence })}</option>
+            <option value="new">{t("analyses.newComparison")}</option>
+          </select>
+        )}
+        <div className={`mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 ${into !== "new" ? "hidden" : ""}`}>
           {requests.length > 0 && (
             <select value={requestId} onChange={(e) => setRequestId(e.target.value)} className={selectClass}>
               {requests.map((r) => (
@@ -227,10 +249,10 @@ function OpenComparisonModal({
                   <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-800">
                     <input type="checkbox" checked={selected.has(key)} onChange={() => toggle(key)} />
                     <span className="text-gray-700 dark:text-gray-300">
-                      {t("analyses.caseFace", { traceId: p.questioned.traceId, caseId })} ×{" "}
+                      {t(traceKey(modality), { traceId: p.questioned.traceId, caseId })} ×{" "}
                       {other.kind === "KNOWN"
                         ? t("analyses.enrolled", { name: other.name, personId: other.personId })
-                        : t("analyses.caseFace", { traceId: other.traceId, caseId: other.caseId })}
+                        : t(traceKey(modality), { traceId: other.traceId, caseId: other.caseId })}
                     </span>
                     {unsuitable(p.questioned.featureId) && (
                       <Badge size="sm" color="warning">
@@ -249,7 +271,9 @@ function OpenComparisonModal({
             {t("common.cancel")}
           </Button>
           <Button size="sm" onClick={() => void create()} disabled={selected.size === 0}>
-            {t("analyses.openComparisonButton", { count: selected.size })}
+            {into !== "new"
+              ? t("analyses.addPairsButton", { count: selected.size })
+              : t("analyses.openComparisonButton", { count: selected.size })}
           </Button>
         </div>
       </div>
@@ -260,7 +284,7 @@ function OpenComparisonModal({
 /** A case's analyses: each one's stage, examiners and report, a link to work on it, and, for
  * coordinators, assigning its current step and opening a comparison. refreshKey reloads the list when
  * an analysis is opened elsewhere on the page (e.g. from the case's clusters). */
-export default function CaseAnalysesCard({ caseId, refreshKey = 0 }: { caseId: string; refreshKey?: number }) {
+export default function CaseAnalysesCard({ caseId, modality, refreshKey = 0 }: { caseId: string; modality: string; refreshKey?: number }) {
   const { t } = useTranslation();
   const { isCoordinator } = useCurrentUser();
   const [list, setList] = useState<Analysis[] | null>(null);
@@ -371,15 +395,16 @@ export default function CaseAnalysesCard({ caseId, refreshKey = 0 }: { caseId: s
           </Table>
         </div>
       )}
-      {isCoordinator && list && list.length > 0 && (
+      {isCoordinator && list && (
         <div className="mt-4">
           <Button size="sm" variant="outline" onClick={() => setComparing(true)}>
-            {t("analyses.openComparison")}
+            {t("analyses.choosePairs")}
           </Button>
         </div>
       )}
       <OpenComparisonModal
         caseId={caseId}
+        modality={modality}
         review={review}
         analyses={list ?? []}
         requests={requests}

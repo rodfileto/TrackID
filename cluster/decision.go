@@ -265,8 +265,17 @@ const (
 	LinkLaudo LinkBasis = "LAUDO"
 )
 
-// comparisonType is analyses.FacialComparison (this package cannot import analyses).
-const comparisonType = "FACIAL_COMPARISON"
+// The comparison types, as analyses names them (this package cannot import analyses). A facial
+// comparison's laudo concludes on the graded scale; a fingerprint comparison's (confronto
+// papiloscópico) positive, negative or inconclusive, a positive being an identification.
+const (
+	comparisonType            = "FACIAL_COMPARISON"
+	fingerprintComparisonType = "FINGERPRINT_COMPARISON"
+)
+
+func isComparison(analysisType string) bool {
+	return analysisType == comparisonType || analysisType == fingerprintComparisonType
+}
 
 // Link is how strong a reviewed pair is, from the round that settled it (DecidingRound): a lead,
 // or a laudo at its conclusion level. Identified is every lead, and a laudo at or above the
@@ -294,9 +303,12 @@ func ReviewedLink(chain []ChainEntry, minimum Conclusion) (link Link, ok bool) {
 			rounds[e.Analysis] = e.AnalysisType
 		}
 	}
-	if rounds[round] == comparisonType {
+	switch rounds[round] {
+	case comparisonType:
 		level := roundConclusion(chain, round)
 		link = Link{Basis: LinkLaudo, Conclusion: level, Identified: level.AtLeast(minimum)}
+	case fingerprintComparisonType:
+		link = Link{Basis: LinkLaudo, Identified: true} // a confirmed positive
 	}
 	later := make([]int64, 0, len(rounds))
 	for r := range rounds {
@@ -304,7 +316,7 @@ func ReviewedLink(chain []ChainEntry, minimum Conclusion) (link Link, ok bool) {
 	}
 	slices.Sort(later) // the latest unsettled comparison is the one shown
 	for _, r := range later {
-		if r <= round || rounds[r] != comparisonType {
+		if r <= round || !isComparison(rounds[r]) {
 			continue
 		}
 		var roundChain []ChainEntry

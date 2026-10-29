@@ -22,6 +22,8 @@ export interface CaseRequest {
   files: { id: number; filename: string; sha256: string; contentType?: string; sizeBytes: number; addedAt: string }[];
   /** Every case the request opened or joined, this one included. */
   cases: { caseId: string; modality: string }[];
+  /** The analyses it asked of this case, by type. */
+  tasks: string[];
 }
 
 /** A request in the list of every request. */
@@ -36,12 +38,14 @@ export interface RequestSummary {
   citedReference?: string;
   occurrenceNumber?: string;
   caseIds: string[];
+  /** The analyses it asked, by type, across its cases. */
+  tasks: string[];
 }
 
-/** One case a request opens (modality and description) or joins (caseId). */
+/** One case a request opens (description) or joins (caseId), and the task it asks of it. */
 export interface RequestCaseInput {
   caseId?: string;
-  modality?: string;
+  task: string;
   description?: string;
 }
 
@@ -69,6 +73,8 @@ export interface CaseRequestInput {
   notes?: string;
   questions: string[];
   fileIds: number[];
+  /** The task the request asks of the case (createCaseRequest only). */
+  task?: string;
 }
 
 /** One face of a case with its role and the examiner's value determination. */

@@ -45,7 +45,10 @@
     "distribution": "Distribution",
     "users": "Users",
     "requests": "Requests",
-    "imageLab": "Image lab"
+    "imageLab": "Image lab",
+    "examinations": "Fingerprint examinations",
+    "labExamination": "Laboratory examination",
+    "crimeSceneExamination": "Crime scene examination"
   },
   "userMenu": {
     "editProfile": "Edit profile",
@@ -280,7 +283,11 @@
       "EXCLUDED": "Excluded",
       "INCONCLUSIVE": "Inconclusive",
       "DISPUTED": "Disputed"
-    }
+    },
+    "fragment": "Fragment {{id}}",
+    "matcherScore": "Matcher score {{score}}",
+    "addToComparison": "Add to comparison",
+    "descFingerprint": "Every enrolled identity a fragment of this case reached at or above the review threshold, and its decision in this case."
   },
   "markTraces": {
     "loadError": "Could not load evidence",
@@ -614,7 +621,10 @@
     "metaDescription": "Facial review and comparison work",
     "type": {
       "FACIAL_REVIEW": "Facial review",
-      "FACIAL_COMPARISON": "Facial comparison"
+      "FACIAL_COMPARISON": "Facial comparison",
+      "FINGERPRINT_COMPARISON": "Fingerprint comparison",
+      "FINGERPRINT_LAB_EXAMINATION": "Laboratory examination",
+      "CRIME_SCENE_EXAMINATION": "Crime scene examination"
     },
     "stage": {
       "EXAMINATION": "Examination",
@@ -634,7 +644,10 @@
     },
     "reportType": {
       "FACIAL_REVIEW_REPORT": "Facial review report",
-      "FACIAL_COMPARISON_REPORT": "Forensic report (facial comparison)"
+      "FACIAL_COMPARISON_REPORT": "Forensic report (facial comparison)",
+      "FINGERPRINT_COMPARISON_REPORT": "Fingerprint comparison report",
+      "FINGERPRINT_LAB_EXAMINATION_REPORT": "Laboratory examination report",
+      "CRIME_SCENE_EXAMINATION_REPORT": "Crime scene examination report"
     },
     "columns": {
       "case": "Case",
@@ -647,7 +660,7 @@
     "closed": "Closed",
     "pending": "Waiting for distribution",
     "unassigned": "Unassigned",
-    "automatic": "Opened with the case",
+    "automatic": "Opened by its request",
     "requestedBy": "Requested by {{name}}",
     "pairsCount_one": "{{count}} pair",
     "pairsCount_other": "{{count}} pairs",
@@ -719,7 +732,15 @@
     "suitabilityLabel": "Image quality",
     "suitabilitySaved": "Quality recorded",
     "answersRequest": "Answers request #{{sequence}}",
-    "complements": "Complements report {{number}}"
+    "complements": "Complements report {{number}}",
+    "caseTrace": "Fragment {{traceId}} of case {{caseId}}",
+    "pairsAdded_one": "{{count}} pair added to the comparison",
+    "pairsAdded_other": "{{count}} pairs added to the comparison",
+    "addTo": "Add to {{type}} #{{sequence}}",
+    "newComparison": "A new comparison",
+    "addPairsButton_one": "Add {{count}} pair",
+    "addPairsButton_other": "Add {{count}} pairs",
+    "choosePairs": "Choose comparison pairs"
   },
   "distribution": {
     "title": "Distribution",
@@ -858,7 +879,8 @@
       "due": "Due",
       "occurrence": "Occurrence",
       "cases": "Cases",
-      "open": "Open analyses"
+      "open": "Open analyses",
+      "tasks": "Tasks"
     },
     "requestCard": "The request",
     "requestCardDesc": "Who asks, by which document, by when, and what.",
@@ -884,7 +906,10 @@
     "materialError": "Request registered, but {{file}} could not be received: {{error}}",
     "registered": "Request registered: {{cases}}",
     "alsoIn": "Also in",
-    "receive": "Receive files"
+    "receive": "Receive files",
+    "task": "Task",
+    "chooseTask": "Choose the examination asked",
+    "tasksAsked": "Asked"
   },
   "reports": {
     "title": "Report",
@@ -1091,6 +1116,18 @@
       "submit": "Change password",
       "mismatch": "The new passwords do not match.",
       "changed": "Password changed"
+    }
+  },
+  "comingSoon": {
+    "label": "coming soon",
+    "note": "Requests cannot ask for it yet: it is listed, disabled, among the tasks a request can be routed to.",
+    "laboratory": {
+      "title": "Laboratory examination",
+      "desc": "Examination of objects sent in to develop latent fingerprints (powders, ninhydrin, cyanoacrylate and other methods), recording each object, the methods applied and the latents developed, which become the case's evidence for a fingerprint comparison."
+    },
+    "crimeScene": {
+      "title": "Crime scene examination",
+      "desc": "Examination at the scene to search for and collect fingerprint fragments, recording where each was found and how it was lifted; the fragments become the case's evidence for a fingerprint comparison."
     }
   }
 }

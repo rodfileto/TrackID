@@ -8,7 +8,7 @@ import Button from "../ui/button/Button";
 import CaseTraceThumbnail from "./CaseTraceThumbnail";
 import IdentityFileThumbnail from "../persons/IdentityFileThumbnail";
 import { useCurrentUser } from "../../context/CurrentUserContext";
-import { openAnalysis } from "../../services/analyses";
+import { addToComparison } from "../../services/analyses";
 import type { CaseCluster, PathStep, TraceLink } from "../../services/cases";
 import type { CodificationThumbnail } from "../../hooks/useCodificationThumbnails";
 import { codificationLabel } from "../../hooks/useCodificationThumbnails";
@@ -68,8 +68,9 @@ function DecisionBadge({ link }: { link: TraceLink }) {
   );
 }
 
-/** Admin, on an indirect link to an enrolled person: open a FACIAL_COMPARISON of the case's face
- * the path starts from against that person, so the link can be confirmed directly. A comparison
+/** Coordinator, on an indirect link to an enrolled person: add the case's face the path starts
+ * from against that person to the case's comparison (or open one), so the link can be confirmed
+ * directly. A comparison
  * with another case's face cannot be opened yet (pairs across cases are not distributed). */
 function RequestComparison({
   caseId,
@@ -94,10 +95,10 @@ function RequestComparison({
   async function request() {
     setBusy(true);
     try {
-      await openAnalysis(caseId, "FACIAL_COMPARISON", [
+      const { added } = await addToComparison(caseId, "FACIAL", [
         { featureA: link.fromFeatureId!, featureB: link.featureId! },
       ]);
-      toast.success(t("caseClusters.comparisonOpened"));
+      toast.success(added ? t("analyses.pairsAdded", { count: 1 }) : t("caseClusters.comparisonOpened"));
       onOpened?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("caseClusters.comparisonError"));

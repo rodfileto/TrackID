@@ -139,6 +139,7 @@ export default function Distribution() {
               <option value="">{t("distribution.allTypes")}</option>
               <option value="FACIAL_REVIEW">{t(typeKey("FACIAL_REVIEW"))}</option>
               <option value="FACIAL_COMPARISON">{t(typeKey("FACIAL_COMPARISON"))}</option>
+              <option value="FINGERPRINT_COMPARISON">{t(typeKey("FINGERPRINT_COMPARISON"))}</option>
             </select>
           </label>
           <Button size="sm" variant="outline" onClick={() => void run(true)} disabled={busy}>

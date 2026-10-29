@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/cases"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/occurrences"
@@ -44,6 +45,7 @@ type Input struct {
 	Notes             string   `json:"notes"`
 	Questions         []string `json:"questions"` // the quesitos, in order
 	FileIDs           []int64  `json:"fileIds"`   // evidence files of the case it sent in (Create only)
+	Task              string   `json:"task"`      // the task it asks of the case, an analysis type (Create only)
 }
 
 // RegisterInput is a request as it arrives, with what it opens: the occurrence it cites, when
@@ -59,10 +61,12 @@ type RegisterInput struct {
 	Cases    []CaseInput
 }
 
-// CaseInput is one case a request opens (Modality and Description) or joins (CaseID).
+// CaseInput is one case a request opens (Description) or joins (CaseID), and the task it asks of
+// it: an analysis type (analyses.Type), chosen by the coordinator. A new case takes the task's
+// modality; an existing one must be of it.
 type CaseInput struct {
 	CaseID      string `json:"caseId"`
-	Modality    string `json:"modality"`
+	Task        string `json:"task"`
 	Description string `json:"description"`
 }
 
@@ -91,6 +95,7 @@ type Summary struct {
 	CitedReference    string   `json:"citedReference,omitempty"`
 	OccurrenceNumber  string   `json:"occurrenceNumber,omitempty"` // TrackID's, else the agency's
 	CaseIDs           []string `json:"caseIds"`
+	Tasks             []string `json:"tasks"` // the analyses it asked, by type, across its cases
 }
 
 // Request is a registered request.
@@ -111,6 +116,7 @@ type Request struct {
 	Questions         []string    `json:"questions"`
 	Files             []File      `json:"files"`
 	Cases             []CaseRef   `json:"cases"` // every case it opened or joined, this one included
+	Tasks             []string    `json:"tasks"` // the analyses it asked of this case, by type
 }
 
 // Occurrence is the occurrence a request was linked to, by its numbers.
@@ -242,13 +248,18 @@ func register(ctx context.Context, sqlDB *sql.DB, in RegisterInput, f fields, re
 	}
 
 	type opened struct {
-		id int64
-		c  cases.Case
+		id   int64
+		c    cases.Case
+		task analyses.Type
 	}
 	var list []opened
 	seen := map[string]bool{}
 	for _, ci := range in.Cases {
-		var o opened
+		task, err := taskOf(ci.Task)
+		if err != nil {
+			return Registered{}, err
+		}
+		o := opened{task: task}
 		if id := strings.TrimSpace(ci.CaseID); id != "" {
 			row, err := q.GetCaseForRequest(ctx, id)
 			if errors.Is(err, sql.ErrNoRows) {
@@ -257,12 +268,15 @@ func register(ctx context.Context, sqlDB *sql.DB, in RegisterInput, f fields, re
 			if err != nil {
 				return Registered{}, err
 			}
-			o = opened{id: row.ID, c: cases.Case{CaseID: row.CaseID, CaseType: row.CaseType, Modality: row.Modality, Description: row.Description}}
+			o.id, o.c = row.ID, cases.Case{CaseID: row.CaseID, CaseType: row.CaseType, Modality: row.Modality, Description: row.Description}
+			if o.c.Modality != string(task.Modality()) {
+				return Registered{}, ValidationError("case " + id + " is not of the task's modality")
+			}
 		} else {
 			if nature == "" {
 				return Registered{}, ValidationError("caseType is required for a new case when the request has no occurrence")
 			}
-			c, id, err := cases.CreateWith(ctx, q, cases.CreateInput{CaseType: nature, Modality: ci.Modality, Description: ci.Description})
+			c, id, err := cases.CreateWith(ctx, q, cases.CreateInput{CaseType: nature, Modality: string(task.Modality()), Description: ci.Description})
 			var vErr cases.ValidationError
 			if errors.As(err, &vErr) {
 				return Registered{}, ValidationError(vErr.Error())
@@ -270,7 +284,7 @@ func register(ctx context.Context, sqlDB *sql.DB, in RegisterInput, f fields, re
 			if err != nil {
 				return Registered{}, err
 			}
-			o = opened{id: id, c: c}
+			o.id, o.c = id, c
 		}
 		if seen[o.c.CaseID] {
 			return Registered{}, ValidationError("case " + o.c.CaseID + " is listed twice")
@@ -286,6 +300,9 @@ func register(ctx context.Context, sqlDB *sql.DB, in RegisterInput, f fields, re
 	out := Registered{RequestID: requestID, Cases: []cases.Case{}}
 	for _, o := range list {
 		if err := joinCase(ctx, q, requestID, o.id, o.c.CaseType, occurrence); err != nil {
+			return Registered{}, err
+		}
+		if _, err := analyses.OpenIn(ctx, q, o.id, o.c.Modality, o.task, requestID, registeredBy); err != nil {
 			return Registered{}, err
 		}
 		out.Cases = append(out.Cases, o.c)
@@ -361,6 +378,20 @@ func insertRequest(ctx context.Context, q *db.Queries, in Input, f fields, occur
 	return id, nil
 }
 
+// taskOf reads a task a coordinator chose: an analysis type that can be opened now.
+func taskOf(task string) (analyses.Type, error) {
+	t := analyses.Type(strings.ToUpper(strings.TrimSpace(task)))
+	switch {
+	case t == "":
+		return "", ValidationError("each case needs its task: the examination the request asks")
+	case !t.Valid():
+		return "", ValidationError("unknown task " + task)
+	case !t.Offered():
+		return "", ValidationError("the " + task + " examination is not available yet")
+	}
+	return t, nil
+}
+
 // joinCase makes the request the case's next one. The case's first request is what its analyses
 // opened before it answer, and a case with no occurrence takes the request's when their nature
 // agrees (otherwise only the request keeps the link).
@@ -392,10 +423,15 @@ func joinCase(ctx context.Context, q *db.Queries, requestID, caseID int64, caseT
 }
 
 // Create registers a later request on a case already open: its questions, the evidence files of
-// the case it sent in, and the occurrence it cites, found as Register finds it (never created).
+// the case it sent in, the occurrence it cites, found as Register finds it (never created), and
+// the task it asks (in.Task), opened as an analysis answering it.
 // registeredBy is the coordinator; checking that they are one is the caller's job.
 func Create(ctx context.Context, sqlDB *sql.DB, caseID string, in Input, registeredBy int64) (Request, error) {
 	f, err := check(in)
+	if err != nil {
+		return Request{}, err
+	}
+	task, err := taskOf(in.Task)
 	if err != nil {
 		return Request{}, err
 	}
@@ -428,6 +464,12 @@ func Create(ctx context.Context, sqlDB *sql.DB, caseID string, in Input, registe
 		return Request{}, err
 	}
 	if err := joinCase(ctx, q, requestID, c.ID, c.CaseType, occurrence); err != nil {
+		return Request{}, err
+	}
+	if c.Modality != string(task.Modality()) {
+		return Request{}, ValidationError("the case is not of the task's modality")
+	}
+	if _, err := analyses.OpenIn(ctx, q, c.ID, c.Modality, task, requestID, registeredBy); err != nil {
 		return Request{}, err
 	}
 	if len(in.FileIDs) > 0 {
@@ -466,9 +508,12 @@ func ListAll(ctx context.Context, sqlDB *sql.DB, limit int) ([]Summary, error) {
 	for i, r := range rows {
 		s := Summary{ID: r.ID, Authority: r.Authority, DocumentReference: r.DocumentReference,
 			ReceivedOn: r.ReceivedOn.Format(dateLayout), OpenAnalyses: r.OpenAnalyses,
-			CitedReference: r.CitedReference.String, CaseIDs: r.CaseIds}
+			CitedReference: r.CitedReference.String, CaseIDs: r.CaseIds, Tasks: r.Tasks}
 		if s.CaseIDs == nil {
 			s.CaseIDs = []string{}
+		}
+		if s.Tasks == nil {
+			s.Tasks = []string{}
 		}
 		if r.DueOn.Valid {
 			s.DueOn = r.DueOn.Time.Format(dateLayout)
@@ -567,7 +612,12 @@ func ListWith(ctx context.Context, q *db.Queries, caseID string) ([]Request, err
 	for i, r := range rows {
 		req := Request{ID: r.ID, Sequence: r.Sequence, Authority: r.Authority, DocumentReference: r.DocumentReference,
 			ReceivedOn: r.ReceivedOn.Format(dateLayout), CitedReference: r.CitedReference.String, Notes: r.Notes.String,
-			RegisteredBy: r.RegisteredBy.String, CreatedAt: r.CreatedAt, Questions: []string{}, Files: []File{}, Cases: []CaseRef{}}
+			RegisteredBy: r.RegisteredBy.String, CreatedAt: r.CreatedAt, Questions: []string{}, Files: []File{}, Cases: []CaseRef{}, Tasks: []string{}}
+		for _, a := range analysisRows {
+			if a.CaseRequestID.Valid && a.CaseRequestID.Int64 == r.ID {
+				req.Tasks = append(req.Tasks, a.AnalysisType)
+			}
+		}
 		for _, cr := range caseRows {
 			if cr.CaseRequestID == r.ID {
 				req.Cases = append(req.Cases, CaseRef{CaseID: cr.CaseID, Modality: cr.Modality})

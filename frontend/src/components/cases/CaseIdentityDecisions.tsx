@@ -12,12 +12,50 @@ import {
 import type { CodificationThumbnail } from "../../hooks/useCodificationThumbnails";
 import { codificationLabel } from "../../hooks/useCodificationThumbnails";
 import LinkBadge from "../analyses/LinkBadge";
+import Button from "../ui/button/Button";
+import { toast } from "sonner";
+import { useCurrentUser } from "../../context/CurrentUserContext";
+import { addToComparison } from "../../services/analyses";
 
 interface CaseIdentityDecisionsProps {
   caseId: string;
+  /** FACIAL or FINGERPRINT: how traces are named and scores shown. */
+  modality?: string;
   faces: CodificationThumbnail[];
   /** Bumped when the case's faces change, to reload. */
   refreshKey: number;
+  /** Called after the coordinator adds a candidate to a comparison. */
+  onPairAdded?: () => void;
+}
+
+/** Coordinator: add a candidate the matcher proposed (an enrolled person) to the case's
+ * comparison -- the one its request opened, or a new one. */
+function AddToComparison({ caseId, modality, traceId, featureId, onAdded }: {
+  caseId: string;
+  modality: string;
+  traceId: number;
+  featureId: string;
+  onAdded?: () => void;
+}) {
+  const { t } = useTranslation();
+  const [busy, setBusy] = useState(false);
+  async function add() {
+    setBusy(true);
+    try {
+      const { added } = await addToComparison(caseId, modality, [{ featureA: `TRACE:${traceId}#feature`, featureB: featureId }]);
+      toast.success(added ? t("analyses.pairsAdded", { count: 1 }) : t("analyses.comparisonOpened"));
+      onAdded?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("analyses.saveError"));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Button size="sm" variant="outline" className="mt-1.5" disabled={busy} onClick={() => void add()}>
+      {t("caseIdentities.addToComparison")}
+    </Button>
+  );
 }
 
 const statusColor: Record<IdentityDecision["status"], "success" | "error" | "warning" | "light" | "info"> = {
@@ -54,13 +92,21 @@ function StatusBadge({ decision }: { decision: IdentityDecision }) {
 }
 
 function FaceIdentities({
+  caseId,
+  modality,
   face,
   thumbnail,
+  onPairAdded,
 }: {
+  caseId: string;
+  modality: string;
   face: CaseFaceIdentities;
   thumbnail?: CodificationThumbnail;
+  onPairAdded?: () => void;
 }) {
   const { t } = useTranslation();
+  const { isCoordinator } = useCurrentUser();
+  const fingerprint = modality === "FINGERPRINT";
   return (
     <div className="rounded-xl border border-gray-200 p-4 dark:border-white/[0.05]">
       <div className="mb-3 flex items-center gap-2">
@@ -72,9 +118,11 @@ function FaceIdentities({
           />
         )}
         <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-          {thumbnail
-            ? t("caseIdentities.face", { label: codificationLabel(thumbnail.codification) })
-            : t("caseIdentities.faceTrace", { id: face.traceId })}
+          {fingerprint
+            ? t("caseIdentities.fragment", { id: face.traceId })
+            : thumbnail
+              ? t("caseIdentities.face", { label: codificationLabel(thumbnail.codification) })
+              : t("caseIdentities.faceTrace", { id: face.traceId })}
         </p>
         {face.role === "REFERENCE" && (
           <Badge size="sm" color="info">
@@ -105,12 +153,17 @@ function FaceIdentities({
                 </Link>
                 {d.score !== undefined && (
                   <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    {t("caseIdentities.score", { score: (d.score * 100).toFixed(1) })}
+                    {fingerprint
+                      ? t("caseIdentities.matcherScore", { score: d.score.toFixed(1) })
+                      : t("caseIdentities.score", { score: (d.score * 100).toFixed(1) })}
                   </p>
                 )}
               </div>
-              <div className="shrink-0">
+              <div className="flex shrink-0 flex-col items-end">
                 <StatusBadge decision={d} />
+                {isCoordinator && face.role !== "REFERENCE" && (d.status === "PENDING" || d.status === "INCONCLUSIVE") && (
+                  <AddToComparison caseId={caseId} modality={modality} traceId={face.traceId} featureId={d.featureId} onAdded={onPairAdded} />
+                )}
               </div>
             </li>
           ))}
@@ -126,7 +179,7 @@ function FaceIdentities({
  * inconclusive or disputed (see cases.ListCaseIdentityDecisions). Unlike CaseClusters, which shows
  * only reviewed links, this is the review's own record. Nothing shows to the case's blind
  * verifier, nor for a case with no codified face. */
-export default function CaseIdentityDecisions({ caseId, faces, refreshKey }: CaseIdentityDecisionsProps) {
+export default function CaseIdentityDecisions({ caseId, modality = "FACIAL", faces, refreshKey, onPairAdded }: CaseIdentityDecisionsProps) {
   const { t } = useTranslation();
   const [data, setData] = useState<CaseFaceIdentities[] | null>(null);
   const [error, setError] = useState("");
@@ -149,7 +202,11 @@ export default function CaseIdentityDecisions({ caseId, faces, refreshKey }: Cas
   if (!error && (!data || data.length === 0)) return null;
 
   return (
-    <ComponentCard title={t("caseIdentities.title")} desc={t("caseIdentities.desc")} collapsible>
+    <ComponentCard
+      title={t("caseIdentities.title")}
+      desc={t(modality === "FINGERPRINT" ? "caseIdentities.descFingerprint" : "caseIdentities.desc")}
+      collapsible
+    >
       {error ? (
         <p className="py-8 text-center text-sm text-error-500">{error}</p>
       ) : (
@@ -157,6 +214,9 @@ export default function CaseIdentityDecisions({ caseId, faces, refreshKey }: Cas
           {data!.map((face) => (
             <FaceIdentities
               key={face.traceId}
+              caseId={caseId}
+              modality={modality}
+              onPairAdded={onPairAdded}
               face={face}
               thumbnail={faces.find((f) => f.codification.traceId === face.traceId)}
             />

@@ -2,7 +2,27 @@ import { apiBaseUrl, requestApi } from "./api";
 import { getToken } from "./auth";
 import type { TraceLink } from "./cases";
 
-export type AnalysisType = "FACIAL_REVIEW" | "FACIAL_COMPARISON";
+/** The tasks a request routes a case to (docs/request-routing-plan.md). The laboratory and scene
+ * examinations are reserved: shown as "coming soon", not offered. */
+export type AnalysisType =
+  | "FACIAL_REVIEW"
+  | "FACIAL_COMPARISON"
+  | "FINGERPRINT_COMPARISON"
+  | "FINGERPRINT_LAB_EXAMINATION"
+  | "CRIME_SCENE_EXAMINATION";
+
+export const offeredTasks: AnalysisType[] = ["FACIAL_REVIEW", "FACIAL_COMPARISON", "FINGERPRINT_COMPARISON"];
+export const comingSoonTasks: AnalysisType[] = ["FINGERPRINT_LAB_EXAMINATION", "CRIME_SCENE_EXAMINATION"];
+
+/** The modality of a task: what a new case it opens is, and what an existing one must be. */
+export function taskModality(type: AnalysisType): "FACIAL" | "FINGERPRINT" {
+  return type === "FACIAL_REVIEW" || type === "FACIAL_COMPARISON" ? "FACIAL" : "FINGERPRINT";
+}
+
+/** A one-to-one examination whose pairs the coordinator lists, leading to a laudo. */
+export function isComparison(type: AnalysisType): boolean {
+  return type === "FACIAL_COMPARISON" || type === "FINGERPRINT_COMPARISON";
+}
 export type AnalysisStage = "EXAMINATION" | "VERIFICATION" | "INCONSISTENCE" | "REPORT";
 /** An examiner's part in an analysis, named after the decision role it records:
  * VERIFICATOR (first examination), REVIEWER (blind verification), INCONSISTENCE. */
@@ -179,7 +199,7 @@ export async function listCaseAnalyses(caseId: string): Promise<Analysis[]> {
   });
 }
 
-/** Admin: open a FACIAL_COMPARISON on pairs (or another FACIAL_REVIEW, with none). */
+/** Coordinator: open an analysis, a comparison on pairs (or none yet) or a review. */
 export async function openAnalysis(
   caseId: string,
   type: AnalysisType,
@@ -191,6 +211,30 @@ export async function openAnalysis(
     headers: authHeaders(),
     body: JSON.stringify({ type, pairs, ...options }),
   });
+}
+
+/** Coordinator: add pairs to a comparison at its examination stage. */
+export async function addAnalysisPairs(caseId: string, analysisId: number, pairs: FeaturePair[]): Promise<Analysis[]> {
+  return requestApi<Analysis[]>(`/admin/cases/${encodeURIComponent(caseId)}/analyses/${analysisId}/pairs`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ pairs }),
+  });
+}
+
+/** Coordinator: add pairs to the case's comparison of its modality that is open at its examination
+ * stage (the one its request opened), or open one with them when there is none. */
+export async function addToComparison(caseId: string, modality: string, pairs: FeaturePair[]): Promise<{ added: boolean; list: Analysis[] }> {
+  const type: AnalysisType = modality === "FINGERPRINT" ? "FINGERPRINT_COMPARISON" : "FACIAL_COMPARISON";
+  const current = await listCaseAnalyses(caseId);
+  const open = [...current].reverse().find((a) => a.type === type && a.status === "OPEN" && a.stage === "EXAMINATION");
+  if (open) return { added: true, list: await addAnalysisPairs(caseId, open.id, pairs) };
+  return { added: false, list: await openAnalysis(caseId, type, pairs) };
+}
+
+/** The i18n key naming one trace of a case: a face, or a fingerprint fragment. */
+export function traceKey(modality?: string): string {
+  return modality === "FINGERPRINT" ? "analyses.caseTrace" : "analyses.caseFace";
 }
 
 /** One face of the analysis's pairs, by its feature id, as an object URL (the caller revokes it).

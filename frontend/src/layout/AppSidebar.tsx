@@ -15,6 +15,7 @@ import {
   PencilIcon,
   PieChartIcon,
   TableIcon,
+  TaskIcon,
   UserCircleIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
@@ -27,7 +28,7 @@ type NavItem = {
   path?: string;
   /** Shown only to users with this capability (useCurrentUser); "persons" is examiners and analysts. */
   requires?: "admin" | "coordinator" | "intelligence" | "persons";
-  subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
+  subItems?: { name: string; path: string; pro?: boolean; new?: boolean; soon?: boolean }[];
 };
 
 const allNavItems: NavItem[] = [
@@ -85,6 +86,14 @@ const allNavItems: NavItem[] = [
     name: "nav.clusters",
     path: "/clusters",
     requires: "intelligence",
+  },
+  {
+    icon: <TaskIcon />,
+    name: "nav.examinations",
+    subItems: [
+      { name: "nav.labExamination", path: "/examinations/laboratory", soon: true },
+      { name: "nav.crimeSceneExamination", path: "/examinations/crime-scene", soon: true },
+    ],
   },
   {
     icon: <PieChartIcon />,
@@ -270,6 +279,17 @@ const AppSidebar: React.FC = () => {
                             } menu-dropdown-badge`}
                           >
                             {t("nav.new")}
+                          </span>
+                        )}
+                        {subItem.soon && (
+                          <span
+                            className={`ml-auto ${
+                              isActive(subItem.path)
+                                ? "menu-dropdown-badge-active"
+                                : "menu-dropdown-badge-inactive"
+                            } menu-dropdown-badge`}
+                          >
+                            {t("comingSoon.label")}
                           </span>
                         )}
                         {subItem.pro && (

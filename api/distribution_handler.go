@@ -54,8 +54,8 @@ type openAnalysisRequest struct {
 	Complements int64           `json:"complements"` // the analysis whose issued report this one complements
 }
 
-// OpenAnalysisHandler is an admin opening an analysis on a case (analyses.Open): a
-// FACIAL_COMPARISON on the given pairs, or another FACIAL_REVIEW round. It starts pending.
+// OpenAnalysisHandler is a coordinator opening an analysis on a case (analyses.Open): a comparison,
+// on the given pairs or none yet, or a review. It starts pending.
 func OpenAnalysisHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		var request openAnalysisRequest
@@ -69,7 +69,7 @@ func OpenAnalysisHandler(sqlDB *sql.DB) gin.HandlerFunc {
 		switch {
 		case errors.Is(err, analyses.ErrCaseNotFound):
 			context.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		case errors.Is(err, analyses.ErrInvalidType), errors.Is(err, analyses.ErrWrongModality), errors.Is(err, analyses.ErrNeedsPairs),
+		case errors.Is(err, analyses.ErrInvalidType), errors.Is(err, analyses.ErrWrongModality), errors.Is(err, analyses.ErrNotOffered),
 			errors.Is(err, analyses.ErrUnexpectedPairs), errors.Is(err, analyses.ErrInvalidPair),
 			errors.Is(err, analyses.ErrUnknownRequest), errors.Is(err, analyses.ErrBadComplement):
 			context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -77,6 +77,41 @@ func OpenAnalysisHandler(sqlDB *sql.DB) gin.HandlerFunc {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not open analysis"})
 		default:
 			writeCaseAnalyses(context, sqlDB, caseID, http.StatusCreated)
+		}
+	}
+}
+
+type addPairsRequest struct {
+	Pairs []analyses.Pair `json:"pairs" binding:"required,min=1"`
+}
+
+// AddPairsHandler is a coordinator adding pairs to a comparison at its examination stage
+// (analyses.AddPairs): from what the request sent, or from the matcher's candidates on the case.
+func AddPairsHandler(sqlDB *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		var request addPairsRequest
+		if err := context.ShouldBindJSON(&request); err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "at least one pair is required"})
+			return
+		}
+		id, err := strconv.ParseInt(context.Param("analysisId"), 10, 64)
+		if err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid analysis id"})
+			return
+		}
+		caseID := context.Param("caseId")
+		err = analyses.AddPairs(context.Request.Context(), sqlDB, caseID, id, request.Pairs)
+		switch {
+		case errors.Is(err, analyses.ErrAnalysisNotFound):
+			context.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, analyses.ErrNotComparison), errors.Is(err, analyses.ErrInvalidPair):
+			context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, analyses.ErrPairsClosed):
+			context.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case err != nil:
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not add the pairs"})
+		default:
+			writeCaseAnalyses(context, sqlDB, caseID, http.StatusOK)
 		}
 	}
 }

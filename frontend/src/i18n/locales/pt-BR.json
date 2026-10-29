@@ -45,7 +45,10 @@
     "distribution": "Distribuição",
     "users": "Usuários",
     "requests": "Requisições",
-    "imageLab": "Laboratório de imagem"
+    "imageLab": "Laboratório de imagem",
+    "examinations": "Exames papiloscópicos",
+    "labExamination": "Exame laboratorial",
+    "crimeSceneExamination": "Exame de local"
   },
   "userMenu": {
     "editProfile": "Editar perfil",
@@ -280,7 +283,11 @@
       "EXCLUDED": "Excluída",
       "INCONCLUSIVE": "Inconclusiva",
       "DISPUTED": "Divergente"
-    }
+    },
+    "fragment": "Fragmento {{id}}",
+    "matcherScore": "Escore do sistema {{score}}",
+    "addToComparison": "Incluir no exame",
+    "descFingerprint": "Cada identidade cadastrada que um fragmento deste caso alcançou no limiar de revisão ou acima dele, e a decisão sobre ela neste caso."
   },
   "markTraces": {
     "loadError": "Não foi possível carregar a evidência",
@@ -614,7 +621,10 @@
     "metaDescription": "Revisão e comparação facial",
     "type": {
       "FACIAL_REVIEW": "Revisão facial",
-      "FACIAL_COMPARISON": "Comparação facial"
+      "FACIAL_COMPARISON": "Comparação facial",
+      "FINGERPRINT_COMPARISON": "Confronto papiloscópico",
+      "FINGERPRINT_LAB_EXAMINATION": "Exame laboratorial",
+      "CRIME_SCENE_EXAMINATION": "Exame de local"
     },
     "stage": {
       "EXAMINATION": "Exame",
@@ -634,7 +644,10 @@
     },
     "reportType": {
       "FACIAL_REVIEW_REPORT": "Relatório de revisão facial",
-      "FACIAL_COMPARISON_REPORT": "Laudo de comparação facial"
+      "FACIAL_COMPARISON_REPORT": "Laudo de comparação facial",
+      "FINGERPRINT_COMPARISON_REPORT": "Laudo de confronto papiloscópico",
+      "FINGERPRINT_LAB_EXAMINATION_REPORT": "Laudo de exame laboratorial",
+      "CRIME_SCENE_EXAMINATION_REPORT": "Laudo de exame de local"
     },
     "columns": {
       "case": "Caso",
@@ -647,7 +660,7 @@
     "closed": "Encerrada",
     "pending": "Aguardando distribuição",
     "unassigned": "Sem perito",
-    "automatic": "Aberta com o caso",
+    "automatic": "Aberta pela requisição",
     "requestedBy": "Solicitada por {{name}}",
     "pairsCount_one": "{{count}} par",
     "pairsCount_other": "{{count}} pares",
@@ -719,7 +732,15 @@
     "suitabilityLabel": "Qualidade da imagem",
     "suitabilitySaved": "Qualidade registrada",
     "answersRequest": "Responde à requisição nº {{sequence}}",
-    "complements": "Complementa o documento {{number}}"
+    "complements": "Complementa o documento {{number}}",
+    "caseTrace": "Fragmento {{traceId}} do caso {{caseId}}",
+    "pairsAdded_one": "{{count}} par incluído no confronto",
+    "pairsAdded_other": "{{count}} pares incluídos no confronto",
+    "addTo": "Incluir em {{type}} nº {{sequence}}",
+    "newComparison": "Um novo exame",
+    "addPairsButton_one": "Incluir {{count}} par",
+    "addPairsButton_other": "Incluir {{count}} pares",
+    "choosePairs": "Escolher pares para exame"
   },
   "distribution": {
     "title": "Distribuição",
@@ -858,7 +879,8 @@
       "due": "Prazo",
       "occurrence": "Ocorrência",
       "cases": "Casos",
-      "open": "Análises abertas"
+      "open": "Análises abertas",
+      "tasks": "Exames"
     },
     "requestCard": "A requisição",
     "requestCardDesc": "Quem pede, por qual documento, até quando, e o quê.",
@@ -884,7 +906,10 @@
     "materialError": "Requisição registrada, mas {{file}} não pôde ser recebido: {{error}}",
     "registered": "Requisição registrada: {{cases}}",
     "alsoIn": "Também em",
-    "receive": "Receber arquivos"
+    "receive": "Receber arquivos",
+    "task": "Exame solicitado",
+    "chooseTask": "Escolha o exame solicitado",
+    "tasksAsked": "Solicitado"
   },
   "reports": {
     "title": "Documento",
@@ -1091,6 +1116,18 @@
       "submit": "Trocar senha",
       "mismatch": "As novas senhas não conferem.",
       "changed": "Senha alterada"
+    }
+  },
+  "comingSoon": {
+    "label": "em breve",
+    "note": "As requisições ainda não podem solicitá-lo: ele aparece, desabilitado, entre os exames para os quais uma requisição pode ser encaminhada.",
+    "laboratory": {
+      "title": "Exame laboratorial",
+      "desc": "Exame de objetos encaminhados para revelação de impressões latentes (pós, ninidrina, cianoacrilato e outros métodos), registrando cada objeto, os métodos aplicados e as latentes reveladas, que passam a ser os vestígios do caso para o confronto papiloscópico."
+    },
+    "crimeScene": {
+      "title": "Exame de local",
+      "desc": "Exame no local para busca e coleta de fragmentos papilares, registrando onde cada um foi encontrado e como foi levantado; os fragmentos passam a ser os vestígios do caso para o confronto papiloscópico."
     }
   }
 }

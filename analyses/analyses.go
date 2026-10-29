@@ -3,10 +3,15 @@
 // report it leads to; an examiner (see the distribution package); the human decisions made in it
 // (biometric_decisions.case_analysis_id); and one report, a DRAFT until its examiner issues it.
 //
-// For faces, following FISWG: every FACIAL case gets a FACIAL_REVIEW automatically (one-to-many:
-// the facial recognition system's candidates, giving an investigative lead or a negative
-// result), and an admin opens a FACIAL_COMPARISON (one-to-one forensic examination) on the
-// specific pairs that need one. Fingerprint analyses are not modelled yet.
+// Analyses are the tasks requests ask for (docs/request-routing-plan.md): registering a request
+// routes each of its cases to a task, chosen by the coordinator, and opens an analysis of that type
+// answering the request. Nothing opens automatically. For faces, following FISWG, a FACIAL_REVIEW
+// is one-to-many (the facial recognition system's candidates, giving an investigative lead or a
+// negative result) and a FACIAL_COMPARISON one-to-one (a forensic examination, a laudo). For
+// fingerprints, a FINGERPRINT_COMPARISON (confronto papiloscópico) is the one-to-one examination,
+// concluding positive, negative or inconclusive. A comparison's pairs are listed by the
+// coordinator, at opening or afterwards (AddPairs). The laboratory and scene examinations are
+// reserved types, not offered yet.
 package analyses
 
 import (
@@ -27,18 +32,52 @@ import (
 type Type string
 
 const (
-	FacialReview     Type = "FACIAL_REVIEW"
-	FacialComparison Type = "FACIAL_COMPARISON"
+	FacialReview          Type = "FACIAL_REVIEW"
+	FacialComparison      Type = "FACIAL_COMPARISON"
+	FingerprintComparison Type = "FINGERPRINT_COMPARISON"
+	// Reserved, not offered yet: "coming soon" in the screens.
+	FingerprintLabExamination Type = "FINGERPRINT_LAB_EXAMINATION"
+	CrimeSceneExamination     Type = "CRIME_SCENE_EXAMINATION"
 )
+
+// Types lists every analysis type, offered or not.
+var Types = []Type{FacialReview, FacialComparison, FingerprintComparison, FingerprintLabExamination, CrimeSceneExamination}
 
 // Valid reports whether t is an analysis type case_analyses accepts.
 func (t Type) Valid() bool {
-	return t == FacialReview || t == FacialComparison
+	for _, v := range Types {
+		if t == v {
+			return true
+		}
+	}
+	return false
+}
+
+// Offered reports whether an analysis of type t can be opened: the laboratory and scene
+// examinations are reserved for later.
+func (t Type) Offered() bool {
+	return t == FacialReview || t == FacialComparison || t == FingerprintComparison
+}
+
+// Comparison reports whether t is a one-to-one examination whose pairs the coordinator lists, and
+// which leads to a laudo.
+func (t Type) Comparison() bool {
+	return t == FacialComparison || t == FingerprintComparison
+}
+
+// GradedConclusion reports whether the decisions of an analysis of type t carry a level on the
+// laudo's conclusion scale (cluster.Conclusion): a facial comparison's do; a fingerprint
+// comparison concludes positive, negative or inconclusive.
+func (t Type) GradedConclusion() bool {
+	return t == FacialComparison
 }
 
 // Modality is the biometric an analysis of type t examines.
 func (t Type) Modality() auth.Modality {
-	return auth.ModalityFacial
+	if t == FacialReview || t == FacialComparison {
+		return auth.ModalityFacial
+	}
+	return auth.ModalityFingerprint
 }
 
 // DecisionModality is how biometric_decisions.modality names the modality of type t: as
@@ -119,9 +158,11 @@ var (
 	ErrCaseNotFound     = errors.New("case not found")
 	ErrAnalysisNotFound = errors.New("analysis not found")
 	ErrWrongModality    = errors.New("the analysis type does not match the case's modality")
-	ErrNeedsPairs       = errors.New("a comparison needs at least one pair")
+	ErrNotOffered       = errors.New("this kind of examination is not available yet")
 	ErrUnexpectedPairs  = errors.New("only a comparison lists pairs")
-	ErrInvalidPair      = errors.New("each pair needs two different features: a face of this case, and another face of it or an enrolled person")
+	ErrNotComparison    = errors.New("pairs are added to a comparison only")
+	ErrPairsClosed      = errors.New("pairs can be added only while the comparison is open at its examination stage")
+	ErrInvalidPair      = errors.New("each pair needs two different features: a trace of this case, and another trace of it or an enrolled person")
 	ErrCannotDecide     = errors.New("only the examiner of the analysis's current stage, examining its modality, can work on it while it is open")
 	ErrNotReportStage   = errors.New("the report can only be issued once every pair is settled")
 	ErrNotDraft         = errors.New("the report is already issued")
@@ -160,7 +201,7 @@ type Analysis struct {
 	Type        Type              `json:"type"`
 	Status      string            `json:"status"`
 	Stage       Stage             `json:"stage"`
-	RequestedBy string            `json:"requestedBy,omitempty"` // empty: opened automatically with the case
+	RequestedBy string            `json:"requestedBy,omitempty"` // empty: opened with no user (an import's request, or before tasks were routed)
 	Examiners   map[Step]Examiner `json:"examiners"`             // current examiner per step; a missing step is unassigned
 	CreatedAt   time.Time         `json:"createdAt"`
 	ClosedAt    *time.Time        `json:"closedAt,omitempty"`
@@ -171,21 +212,6 @@ type Analysis struct {
 
 func reportNumber(year, number int32) string {
 	return fmt.Sprintf("%04d.%04d", year, number)
-}
-
-// OpenAutomatic opens the analyses every case of its modality starts with -- a FACIAL_REVIEW for
-// a FACIAL case -- unless the case already has one, so re-ingesting a case does not open another.
-// It runs inside the transaction that creates or ingests the case and returns the review's id
-// (0 when nothing was opened).
-func OpenAutomatic(ctx context.Context, q *db.Queries, biometricCaseID int64, modality string) (int64, error) {
-	if modality != string(auth.ModalityFacial) {
-		return 0, nil
-	}
-	n, err := q.CountCaseAnalysesOfType(ctx, db.CountCaseAnalysesOfTypeParams{BiometricCaseID: biometricCaseID, AnalysisType: string(FacialReview)})
-	if err != nil || n > 0 {
-		return 0, err
-	}
-	return insert(ctx, q, biometricCaseID, FacialReview, sql.NullInt64{}, sql.NullInt64{})
 }
 
 // Options are what else an analysis can be opened with.
@@ -212,10 +238,28 @@ func insert(ctx context.Context, q *db.Queries, biometricCaseID int64, t Type, r
 	return row.ID, nil
 }
 
-// Open is an admin opening an analysis on a case: a FACIAL_COMPARISON on the given pairs, or
-// another FACIAL_REVIEW round (no pairs). Each pair needs at least one face (trace) of this case.
-// requestedBy is the admin; checking that they are one is the caller's job. The analysis starts
-// pending, for distribution.
+// OpenIn opens an analysis of type t on the case biometricCaseID (of modality caseModality) inside
+// the caller's transaction, answering requestID: routing a request to its task
+// (requests.Register, requests.Create). requestedBy is the coordinator, 0 for none (an import).
+// A comparison opens without pairs; AddPairs adds them.
+func OpenIn(ctx context.Context, q *db.Queries, biometricCaseID int64, caseModality string, t Type, requestID, requestedBy int64) (int64, error) {
+	if !t.Valid() {
+		return 0, ErrInvalidType
+	}
+	if !t.Offered() {
+		return 0, ErrNotOffered
+	}
+	if caseModality != string(t.Modality()) {
+		return 0, ErrWrongModality
+	}
+	return insert(ctx, q, biometricCaseID, t, sql.NullInt64{Int64: requestedBy, Valid: requestedBy != 0},
+		sql.NullInt64{Int64: requestID, Valid: requestID != 0})
+}
+
+// Open is a coordinator opening an analysis on a case: a comparison, on the given pairs or none
+// yet (AddPairs adds them), or a review (no pairs). Each pair needs at least one trace of this
+// case. requestedBy is the coordinator; checking that they are one is the caller's job. The
+// analysis starts pending, for distribution.
 func Open(ctx context.Context, sqlDB *sql.DB, caseID string, t Type, pairs []Pair, requestedBy int64) (int64, error) {
 	return OpenWith(ctx, sqlDB, caseID, t, pairs, requestedBy, Options{})
 }
@@ -225,10 +269,10 @@ func OpenWith(ctx context.Context, sqlDB *sql.DB, caseID string, t Type, pairs [
 	if !t.Valid() {
 		return 0, ErrInvalidType
 	}
-	if t == FacialComparison && len(pairs) == 0 {
-		return 0, ErrNeedsPairs
+	if !t.Offered() {
+		return 0, ErrNotOffered
 	}
-	if t != FacialComparison && len(pairs) > 0 {
+	if !t.Comparison() && len(pairs) > 0 {
 		return 0, ErrUnexpectedPairs
 	}
 	tx, err := sqlDB.BeginTx(ctx, nil)
@@ -248,30 +292,9 @@ func OpenWith(ctx context.Context, sqlDB *sql.DB, caseID string, t Type, pairs [
 	if c.Modality != string(t.Modality()) {
 		return 0, ErrWrongModality
 	}
-	traceIDs, err := q.ListCaseTraceIDs(ctx, c.ID)
+	ordered, err := validPairs(ctx, q, c.ID, pairs)
 	if err != nil {
 		return 0, err
-	}
-	ofCase := map[string]bool{}
-	for _, id := range traceIDs {
-		ofCase[graph.QuestionedFeatureID(id)] = true
-	}
-	ordered := make([]Pair, 0, len(pairs))
-	seen := map[Pair]bool{}
-	for _, p := range pairs {
-		a, b := p.FeatureA, p.FeatureB
-		if a > b {
-			a, b = b, a
-		}
-		// A face of this case against another face of it or an enrolled person: an examiner holding
-		// the analysis can see both sides (pairs across cases are not distributed yet).
-		if a == b || !(ofCase[a] || ofCase[b]) || !(ofCase[a] || isKnown(a)) || !(ofCase[b] || isKnown(b)) {
-			return 0, fmt.Errorf("%w: %s / %s", ErrInvalidPair, p.FeatureA, p.FeatureB)
-		}
-		if !seen[Pair{a, b}] {
-			seen[Pair{a, b}] = true
-			ordered = append(ordered, Pair{a, b})
-		}
 	}
 
 	requestID := sql.NullInt64{}
@@ -322,6 +345,85 @@ func OpenWith(ctx context.Context, sqlDB *sql.DB, caseID string, t Type, pairs [
 		}
 	}
 	return id, tx.Commit()
+}
+
+// validPairs orders pairs as biometric_decisions keys them, drops repeats, and checks each: a trace
+// of the case against another trace of it or an enrolled person, so an examiner holding the
+// analysis can see both sides (pairs across cases are not distributed yet).
+func validPairs(ctx context.Context, q *db.Queries, biometricCaseID int64, pairs []Pair) ([]Pair, error) {
+	traceIDs, err := q.ListCaseTraceIDs(ctx, biometricCaseID)
+	if err != nil {
+		return nil, err
+	}
+	ofCase := map[string]bool{}
+	for _, id := range traceIDs {
+		ofCase[graph.QuestionedFeatureID(id)] = true
+	}
+	ordered := make([]Pair, 0, len(pairs))
+	seen := map[Pair]bool{}
+	for _, p := range pairs {
+		a, b := p.FeatureA, p.FeatureB
+		if a > b {
+			a, b = b, a
+		}
+		if a == b || !(ofCase[a] || ofCase[b]) || !(ofCase[a] || isKnown(a)) || !(ofCase[b] || isKnown(b)) {
+			return nil, fmt.Errorf("%w: %s / %s", ErrInvalidPair, p.FeatureA, p.FeatureB)
+		}
+		if !seen[Pair{a, b}] {
+			seen[Pair{a, b}] = true
+			ordered = append(ordered, Pair{a, b})
+		}
+	}
+	return ordered, nil
+}
+
+// AddPairs adds pairs to a comparison of caseID that is open at its examination stage: a
+// comparison a request opened empty, or one that needs more. Pairs it already has are kept once.
+// Checking the caller is a coordinator is the caller's job.
+func AddPairs(ctx context.Context, sqlDB *sql.DB, caseID string, analysisID int64, pairs []Pair) error {
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	q := db.New(tx)
+	t, err := GetTarget(ctx, q, analysisID)
+	if errors.Is(err, ErrAnalysisNotFound) || (err == nil && t.CaseID != caseID) {
+		return ErrAnalysisNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if !t.Type.Comparison() {
+		return ErrNotComparison
+	}
+	if t.Status != StatusOpen || t.Stage != StageExamination {
+		return ErrPairsClosed
+	}
+	if _, err := q.LockBiometricCase(ctx, t.BiometricCaseID); err != nil {
+		return err
+	}
+	ordered, err := validPairs(ctx, q, t.BiometricCaseID, pairs)
+	if err != nil {
+		return err
+	}
+	existing, err := q.ListAnalysisPairs(ctx, analysisID)
+	if err != nil {
+		return err
+	}
+	has := map[Pair]bool{}
+	for _, r := range existing {
+		has[Pair{r.FeatureAID, r.FeatureBID}] = true
+	}
+	for _, p := range ordered {
+		if has[p] {
+			continue
+		}
+		if err := q.InsertCaseAnalysisPair(ctx, db.InsertCaseAnalysisPairParams{CaseAnalysisID: analysisID, FeatureAID: p.FeatureA, FeatureBID: p.FeatureB}); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // isKnown reports whether id is a KNOWN feature id: a bare identity_file id.

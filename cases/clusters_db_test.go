@@ -77,9 +77,10 @@ func TestCaseClustersShowOnlyReviewedLinks(t *testing.T) {
 	reviewed(t2, t3)                            // C2 - C3: reviewed, so C3 is reached from C1 through C2
 	reviewed(t3, k)                             // C3 - P1: reviewed, so P1 is reached from C1 through C2 and C3
 	decide(t1, k, "SYSTEM", "INCONCLUSIVE", "") // C1 - P1: a candidate in the review band, not reviewed
+	openTask(t, sqlDB, "C1", analyses.FacialReview)
 	c1Analyses, err := analyses.List(ctx, sqlDB, "C1")
 	if err != nil || len(c1Analyses) == 0 {
-		t.Fatalf("C1's analyses = %v, %v; want its automatic FACIAL_REVIEW", c1Analyses, err)
+		t.Fatalf("C1's analyses = %v, %v; want its FACIAL_REVIEW", c1Analyses, err)
 	}
 	decide(t1, t4, "SYSTEM", "POSITIVE", "")
 	decideIn(c1Analyses[0].ID, t1, t4, "VERIFICATOR", "POSITIVE", "ana") // C1 - C4: a SYSTEM match, its review still pending
@@ -197,4 +198,20 @@ func TestCaseClustersShowOnlyReviewedLinks(t *testing.T) {
 	if c3 := caseClusters("C3"); len(c3) != 1 || c3[0].ClusterID != reviewedID || describe(c3[0]) != "P1 direct by bia (REVIEWER)" {
 		t.Fatalf("C3 after revoking = %+v; want cluster %d with P1", c3, reviewedID)
 	}
+}
+
+// openTask opens an analysis of type typ on caseID, as routing a request to that task does
+// (analyses.OpenIn), with no request or coordinator.
+func openTask(t *testing.T, sqlDB *sql.DB, caseID string, typ analyses.Type) int64 {
+	t.Helper()
+	var id int64
+	var modality string
+	if err := sqlDB.QueryRow(`SELECT id, modality FROM biometric_cases WHERE case_id = $1`, caseID).Scan(&id, &modality); err != nil {
+		t.Fatal(err)
+	}
+	aid, err := analyses.OpenIn(context.Background(), db.New(sqlDB), id, modality, typ, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return aid
 }

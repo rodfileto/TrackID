@@ -21,6 +21,7 @@ import Button from "../components/ui/button/Button";
 import EvidenceDropzone from "../components/cases/EvidenceDropzone";
 import EvidencePreview from "../components/cases/EvidencePreview";
 import FacialCaseWorkspace from "../components/cases/FacialCaseWorkspace";
+import CaseIdentityDecisions from "../components/cases/CaseIdentityDecisions";
 import TraceMarkerModal from "../components/cases/TraceMarkerModal";
 import {
   addEvidence,
@@ -235,12 +236,13 @@ export default function CaseDetailPage() {
 
           <CaseRequestsCard
             caseId={detail.caseId}
+            modality={detail.modality}
             evidences={evidences}
             refreshKey={analysesKey}
             onChanged={() => setAnalysesKey((k) => k + 1)}
           />
 
-          <CaseAnalysesCard caseId={detail.caseId} refreshKey={analysesKey} />
+          <CaseAnalysesCard caseId={detail.caseId} modality={detail.modality} refreshKey={analysesKey} />
 
           {detail.modality === "FACIAL" && <CaseVideosCard caseId={detail.caseId} onEvidenceAdded={load} />}
 
@@ -443,6 +445,16 @@ export default function CaseDetailPage() {
               </ComponentCard>
             </div>
           </div>
+          )}
+
+          {detail.modality === "FINGERPRINT" && (
+            <CaseIdentityDecisions
+              caseId={detail.caseId}
+              modality="FINGERPRINT"
+              faces={[]}
+              refreshKey={analysesKey}
+              onPairAdded={() => setAnalysesKey((k) => k + 1)}
+            />
           )}
         </div>
       )}

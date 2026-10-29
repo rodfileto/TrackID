@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/rodfileto/trackid/db"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -93,6 +94,7 @@ func TestAccessProfiles(t *testing.T) {
 		if _, err := cases.Ingest(ctx, sqlDB, cases.CaseInput{CaseID: caseID, CaseType: cases.CaseTypeCriminal, Modality: "FACIAL", Description: "test"}); err != nil {
 			t.Fatal(err)
 		}
+		openTask(t, sqlDB, caseID, analyses.FacialReview)
 		list, err := analyses.List(ctx, sqlDB, caseID)
 		if err != nil || len(list) == 0 {
 			t.Fatalf("%s analyses: %+v, %v", caseID, list, err)
@@ -289,4 +291,20 @@ func TestSetUserPassword(t *testing.T) {
 	if got := login("super", "password1"); got != http.StatusOK {
 		t.Errorf("super's password changed: %d", got)
 	}
+}
+
+// openTask opens an analysis of type typ on caseID, as routing a request to that task does
+// (analyses.OpenIn), with no request or coordinator.
+func openTask(t *testing.T, sqlDB *sql.DB, caseID string, typ analyses.Type) int64 {
+	t.Helper()
+	var id int64
+	var modality string
+	if err := sqlDB.QueryRow(`SELECT id, modality FROM biometric_cases WHERE case_id = $1`, caseID).Scan(&id, &modality); err != nil {
+		t.Fatal(err)
+	}
+	aid, err := analyses.OpenIn(context.Background(), db.New(sqlDB), id, modality, typ, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return aid
 }

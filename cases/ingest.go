@@ -12,7 +12,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/embedding"
 	"github.com/rodfileto/trackid/graph"
@@ -197,10 +196,6 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput, opts ...Option) (Re
 		}); err != nil {
 			return Result{}, fmt.Errorf("cases: link occurrence: %w", err)
 		}
-	}
-
-	if _, err := analyses.OpenAutomatic(ctx, q, upserted.ID, c.Modality); err != nil {
-		return Result{}, fmt.Errorf("cases: open the case's automatic analyses: %w", err)
 	}
 
 	result := Result{BiometricCaseID: upserted.ID, Inserted: upserted.Inserted}

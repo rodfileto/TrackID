@@ -3,7 +3,8 @@
 // biometric_decisions and moves the analysis to its next stage.
 //
 // The pairs of a FACIAL_REVIEW are the matcher's candidates for the case's faces -- every SYSTEM
-// decision touching one -- and those of a FACIAL_COMPARISON the pairs an admin listed. Either
+// decision touching one -- and those of a comparison (facial or fingerprint) the pairs the
+// coordinator listed. Either
 // way only pairs whose other side is an enrolled person or another face of the same case are
 // examined: pairs across cases are not distributed yet. At the INCONSISTENCE stage the pairs are
 // only those the first two examiners decided differently.
@@ -149,7 +150,7 @@ func scope(ctx context.Context, q *db.Queries, t analyses.Target) ([]candidate, 
 	}
 
 	var out []candidate
-	if t.Type == analyses.FacialComparison {
+	if t.Type.Comparison() {
 		rows, err := q.ListAnalysisPairs(ctx, t.ID)
 		if err != nil {
 			return nil, nil, err
@@ -312,8 +313,8 @@ func imageOnly(l cases.TraceLink) cases.TraceLink {
 }
 
 // SaveDraft records or replaces user's draft decision on one pair of the step they are working. In
-// a comparison the decision comes with a conclusion level that maps onto it (cluster.Conclusion);
-// in a review there is none.
+// a facial comparison the decision comes with a conclusion level that maps onto it
+// (cluster.Conclusion); in a review or a fingerprint comparison there is none.
 func SaveDraft(ctx context.Context, sqlDB *sql.DB, user auth.UserProfile, analysisID int64, pair Pair, decision, notes string, conclusion cluster.Conclusion) error {
 	if decision != Positive && decision != Negative && decision != Inconclusive {
 		return ErrInvalidDecision
@@ -323,7 +324,7 @@ func SaveDraft(ctx context.Context, sqlDB *sql.DB, user auth.UserProfile, analys
 	if err != nil {
 		return err
 	}
-	if t.Type == analyses.FacialComparison {
+	if t.Type.GradedConclusion() {
 		if !conclusion.Valid() || string(conclusion.Decision()) != decision {
 			return ErrNeedsConclusion
 		}

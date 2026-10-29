@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import PageMeta from "../components/common/PageMeta";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import ComponentCard from "../components/common/ComponentCard";
+import TaskSelect from "../components/analyses/TaskSelect";
 import Label from "../components/form/Label";
 import OccurrenceFields from "../components/intelligence/OccurrenceFields";
 import {
@@ -27,12 +28,12 @@ type OccurrenceMode = "lookup" | "create" | "none";
 interface CaseRow {
   existing: boolean;
   caseId: string;
-  modality: string;
+  task: string;
   description: string;
   files: File[];
 }
 
-const newRow = (): CaseRow => ({ existing: false, caseId: "", modality: "FACIAL", description: "", files: [] });
+const newRow = (): CaseRow => ({ existing: false, caseId: "", task: "", description: "", files: [] });
 
 function occurrenceLabel(o: OccurrenceSummary): string {
   return [o.trackidNumber, o.agency && o.number ? `${o.agency} ${o.number}` : o.number].filter(Boolean).join(" · ");
@@ -96,7 +97,7 @@ export default function RegisterRequest() {
 
   const setRow = (i: number, patch: Partial<CaseRow>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
-  const rowsReady = rows.every((r) => (r.existing ? r.caseId.trim() !== "" : r.description.trim() !== ""));
+  const rowsReady = rows.every((r) => r.task !== "" && (r.existing ? r.caseId.trim() !== "" : r.description.trim() !== ""));
   const occurrenceOK = mode === "none" || (mode === "lookup" && chosen !== null) || (mode === "create" && occurrenceReady(draft));
   const ready = form.authority.trim() !== "" && form.documentReference.trim() !== "" && form.receivedOn !== "" && rowsReady && occurrenceOK;
 
@@ -117,7 +118,7 @@ export default function RegisterRequest() {
         occurrenceId: mode === "lookup" ? chosen?.id : undefined,
         occurrence: mode === "create" ? occurrenceInput(draft, types) : undefined,
         caseType: mode === "none" ? caseType : undefined,
-        cases: rows.map((r) => (r.existing ? { caseId: r.caseId.trim() } : { modality: r.modality, description: r.description })),
+        cases: rows.map((r) => (r.existing ? { caseId: r.caseId.trim(), task: r.task } : { task: r.task, description: r.description })),
       };
       const registered = await registerRequest(input);
       toast.success(t("requests.registered", { cases: registered.cases.map((c) => c.caseId).join(", ") }));
@@ -240,27 +241,24 @@ export default function RegisterRequest() {
                   </button>
                 )}
               </div>
-              {row.existing ? (
-                <div className="max-w-xs">
-                  <Label htmlFor={`case-id-${i}`}>{t("requests.caseId")}</Label>
-                  <input id={`case-id-${i}`} className={inputClass} value={row.caseId} onChange={(e) => setRow(i, { caseId: e.target.value })} />
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div>
+                  <Label htmlFor={`case-task-${i}`}>{t("requests.task")}</Label>
+                  <TaskSelect id={`case-task-${i}`} className={inputClass} value={row.task} onChange={(task) => setRow(i, { task })} />
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {row.existing ? (
                   <div>
-                    <Label htmlFor={`case-modality-${i}`}>{t("cases.columns.modality")}</Label>
-                    <select id={`case-modality-${i}`} className={inputClass} value={row.modality} onChange={(e) => setRow(i, { modality: e.target.value })}>
-                      <option value="FACIAL">{t("modality.facial")}</option>
-                      <option value="FINGERPRINT">{t("modality.fingerprint")}</option>
-                    </select>
+                    <Label htmlFor={`case-id-${i}`}>{t("requests.caseId")}</Label>
+                    <input id={`case-id-${i}`} className={inputClass} value={row.caseId} onChange={(e) => setRow(i, { caseId: e.target.value })} />
                   </div>
+                ) : (
                   <div className="md:col-span-2">
                     <Label htmlFor={`case-description-${i}`}>{t("cases.columns.description")}</Label>
                     <input id={`case-description-${i}`} className={inputClass} value={row.description}
                       placeholder={t("createCase.descriptionPlaceholder")} onChange={(e) => setRow(i, { description: e.target.value })} />
                   </div>
-                </div>
-              )}
+                )}
+              </div>
               <div>
                 <Label htmlFor={`case-files-${i}`}>{t("requests.caseMaterial")}</Label>
                 <input id={`case-files-${i}`} type="file" multiple accept="image/*,application/pdf,video/*"
