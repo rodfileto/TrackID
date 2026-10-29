@@ -80,6 +80,12 @@ export interface ClusterGraph {
 }
 
 /** Top biometric clusters as a person -- cluster -- trace graph. */
+/** The home page's illustration: the same graph, anonymous (no labels, names or ids), for every
+ * signed-in user. */
+export async function getOverviewGraph(): Promise<ClusterGraph> {
+  return requestApi<ClusterGraph>("/overview/graph", { headers: authHeaders() });
+}
+
 export async function getClusterGraph(
   limit = 40,
   minMembers = 1,

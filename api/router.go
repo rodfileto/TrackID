@@ -74,6 +74,8 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.DELETE("me/avatar", RemoveMyAvatarHandler(authRepository))
 	protected.GET("users/:userId/avatar", UserAvatarHandler(authRepository))
 	protected.GET("me/analyses", MyAnalysesHandler(deps.DB))
+	// The home page's illustration, anonymous: every signed-in user sees it.
+	protected.GET("overview/graph", OverviewGraphHandler(deps.DB))
 
 	// Account management only (docs/access-profiles-plan.md): an admin sees no case or person
 	// content unless they also hold a capability.

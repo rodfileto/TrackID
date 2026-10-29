@@ -5,11 +5,11 @@ import PageMeta from "../../components/common/PageMeta";
 import ComponentCard from "../../components/common/ComponentCard";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 
-/** The landing page: the identity and trace network for intelligence analysts (the only ones the
- * server shows it to), and for everyone the way to their own work. */
+/** The landing page: the way to the user's own work, and an anonymous illustration of how
+ * identities and case traces connect. */
 export default function Home() {
   const { t } = useTranslation();
-  const { user, isIntelligence, isExaminer, isCoordinator } = useCurrentUser();
+  const { user, isExaminer, isCoordinator } = useCurrentUser();
   const links = [
     isExaminer && { to: "/analyses", label: t("nav.myAnalyses") },
     { to: "/cases", label: t("nav.criminalCases") },
@@ -34,11 +34,9 @@ export default function Home() {
             </div>
           </ComponentCard>
         </div>
-        {isIntelligence && (
-          <div className="col-span-12">
-            <ClusterGraph />
-          </div>
-        )}
+        <div className="col-span-12">
+          <ClusterGraph />
+        </div>
       </div>
     </>
   );

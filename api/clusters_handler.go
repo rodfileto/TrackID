@@ -68,3 +68,21 @@ func ClustersGraphHandler(db *sql.DB) gin.HandlerFunc {
 		context.JSON(http.StatusOK, result)
 	}
 }
+
+// OverviewGraphHandler returns the home page's illustration of how identities, clusters and case
+// traces connect, to every signed-in user: the same graph as ClustersGraphHandler, anonymous
+// (cluster.Anonymous), at a fixed size.
+func OverviewGraphHandler(db *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if db == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		result, err := cluster.BuildGraph(context.Request.Context(), db, 60, 2)
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not build the overview"})
+			return
+		}
+		context.JSON(http.StatusOK, cluster.Anonymous(result))
+	}
+}

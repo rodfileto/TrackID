@@ -154,3 +154,24 @@ func BuildGraph(ctx context.Context, sqlDB *sql.DB, limit, minMembers int) (Grap
 	}
 	return out, nil
 }
+
+// Anonymous is g with nothing that identifies anyone or anything: no labels, no person, case or
+// feature ids, ids renumbered and edges remapped. Only each node's kind and a cluster's size stay,
+// for the home page's illustration, which every signed-in user sees.
+func Anonymous(g GraphResult) GraphResult {
+	ids := make(map[string]string, len(g.Nodes))
+	out := GraphResult{Nodes: make([]GraphNode, 0, len(g.Nodes)), Edges: make([]GraphEdge, 0, len(g.Edges))}
+	for i, n := range g.Nodes {
+		id := fmt.Sprintf("n%d", i+1)
+		ids[n.ID] = id
+		out.Nodes = append(out.Nodes, GraphNode{ID: id, Kind: n.Kind, Size: n.Size})
+	}
+	for _, e := range g.Edges {
+		s, okS := ids[e.Source]
+		t, okT := ids[e.Target]
+		if okS && okT {
+			out.Edges = append(out.Edges, GraphEdge{Source: s, Target: t})
+		}
+	}
+	return out
+}
