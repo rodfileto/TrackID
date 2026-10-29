@@ -1,0 +1,165 @@
+# TrackID architecture
+
+How TrackID is built, for developers and for an organization deploying it. The
+[README](../README.md) says what it does; the plans in this folder record why each part is
+the way it is.
+
+## A reusable core
+
+TrackID is built as a reusable package for intelligence and forensic agencies that manage
+biometric cases, criminal and civil (such as disaster victim identification).
+
+It provides a stable core — the Postgres schema plus all non-import logic —
+and a single, well-defined extension point: **import commands**. An organization builds
+its own distribution on top of this package and contributes only the commands that
+translate its own data formats into the core schema. Nothing organization-specific lives
+in this repository.
+
+## Scope
+
+The package is deliberately split into two halves:
+
+- **Core (this repository):**
+  - the Postgres schema (users, the enrollment and evidence hierarchies, the unified
+    `biometricfeature` table, `biometric_decisions`, and clusters);
+  - the non-import logic: authentication, the `cases` read API, biometric matching and
+    clustering by modality (with stable cluster ids), identified-person linkage, the
+    examination workflow and its reports;
+  - the base frontend (auth + app layout).
+- **Organization layer (built by each agency):** the import commands that read their
+  specific files or systems and write normalized records into the core schema, plus any
+  extra routes or frontend pages they need.
+
+## Data flow
+
+```
+organization import cmd  ──►  Postgres (core schema)
+                                     │
+         core logic commands  ◄──────┘   (read and write the DB only)
+                                     │
+                                     └──►  core API ──► frontend
+```
+
+The database is the boundary between the two halves. Every logic entry point reads from
+Postgres — never from an external file or third-party system — so organizations can
+reuse the full core unchanged regardless of their source formats.
+
+## Structure
+
+The package is split between a **public** surface (the packages downstream
+organizations import to build their import commands) and an **internal** runtime
+(the code that only this repository's own binaries need).
+
+**Public — the reusable core (importable by organizations):**
+
+- `api/` — the HTTP router and every core handler (health, auth, cases), plus the
+  `Dependencies.Register` hook integrations use to attach their own routes
+- `auth/` — user accounts: `UserProfile`, the data-access `Repository`, and JWT
+  issuance (no HTTP handlers; those live in `api/`)
+- `cases/` — the `Case` type and the generic `Ingest` extension contract for the
+  QUESTIONED (evidence) hierarchy (no HTTP handlers)
+- `identity/` — the generic `Ingest` extension contract for the KNOWN (enrollment)
+  hierarchy
+- `cluster/` — decision-status derivation and biometric clustering by modality
+  (persisted, stable ids; extend/merge/split) plus identified-person linkage, all
+  driven by `biometric_decisions`, all in Postgres
+- `graph/` — the feature conventions shared by every package: feature types, how files,
+  traces and modalities map onto them, and the stable feature ids decisions and clusters
+  key on (the name is historical)
+- `biometricmatch/` — ANN similarity search over `feature_embeddings` (`Run`) and
+  matcher scoring over `biometric_templates` (`RunTemplates`), both writing SYSTEM
+  decisions
+- `fingerprint/` — the Go client for `sourceafis-sidecar/` (extract + match a
+  fingerprint template) and the Asynq tasks that extract on codification/enrollment
+  save and store into `biometric_templates`, the fingerprint counterpart of `embedding/`
+- `requests/` — what cases answer: an authority's request with its questions (quesitos) and
+  the material it sent in. Registered first, it finds or creates the occurrence it cites and
+  opens or joins its cases (`docs/facial-reports-plan.md`)
+- `reports/` — an analysis's report (lead report, laudo): the draft generated as a .docx with
+  locked data and editable sections, its versions, the checks on save and issue, the PDF rendered
+  by WordCraft, the executive summary and deliveries
+- `video/` — video sent in as material: tracks of faces through trackid-vision's `videoproc`,
+  and frames taken as evidences that record their time and frame number (needs ffmpeg)
+- `imageproc/` — fingerprint image processing for the image lab: a recipe of steps rendered at
+  500 ppi, the same image every time, and the processing record in Portuguese
+  (`docs/fingerprint-image-processing-plan.md`)
+- `storage/` — MinIO/S3 object-storage client
+- `db/` — sqlc queries and models for the core Postgres schema (`queries.sql`) and the
+  goose migrations (`db/migrations`)
+
+**Internal — this repository's own runtime (not importable downstream):**
+
+- `internal/config/`, `internal/env/`, `internal/database/` — configuration, dotenv
+  loading, and the Postgres connection pool
+- `internal/cmdutil/` — shared bootstrap helpers for the `cmd/` tools (`-commit`
+  dry-run flag, opening the database)
+- `internal/server/` — the composition root: wires the API router and mounts the
+  prototype frontend
+- `internal/web/` — serves the built frontend as a single-page application
+
+**Commands and other:**
+
+- `cmd/` — thin `main()` wrappers: `migrate` (Postgres schema), `trackid` (API server
+  + frontend), `worker` (the task processor), `cluster-biometrics`, and
+  `match-embeddings`, `match-threshold` (the matcher's versioned review/confirm cutoffs),
+  `create-superuser` (the first SUPER_ADMIN account)
+- `frontend/` — React + Vite, based on the [TailAdmin React](https://github.com/TailAdmin/free-react-tailwind-admin-dashboard)
+  template; `npm run build` produces the bundle `internal/web` serves
+- `quarto/` — technical report and ontology documentation
+- `scripts/` — development helpers (start and stop the stack, back up and restore data)
+- `geocode/` — addresses ↔ coordinates for locations, through Nominatim (OpenStreetMap; ODbL,
+  credit "© OpenStreetMap contributors"); the public instance forbids autocomplete, so a
+  search-as-you-type picker needs a self-hosted one (`GEOCODER_URL`)
+- `tools/municipalities/` — writes IBGE municipality boundaries (geobr, MIT; data by IBGE) as
+  GeoJSON for `cmd/load-municipalities`, so a location's municipality comes from its point:
+  `uv run python fetch.py --states RJ`, then
+  `go run ./cmd/load-municipalities -file tools/municipalities/municipalities.geojson -commit`
+- `db/postgres/` — the Postgres image: pgvector plus PostGIS (no official image has both)
+- `docker-compose.yml` — Postgres, Redis, MinIO and `sourceafis-sidecar`
+- `sourceafis-sidecar/` — the Java sidecar `fingerprint/` talks to (SourceAFIS behind a
+  plain HTTP server; see "Models and licences")
+
+## Extension contract
+
+To integrate with this package, an organization:
+
+1. depends on `github.com/rodfileto/trackid`;
+2. writes import commands that read its own formats and write into the core tables —
+   the enrollment hierarchy (`person`, `identity_document`, `identity_register`,
+   `identity_file`), the evidence hierarchy (`biometric_cases`, `case_files`,
+   `case_evidences`, `case_traces`, `case_codifications`), the occurrence layer
+   (`locations`, `occurrences`, `occurrence_classifications`), the unified
+   `biometricfeature`, and the `biometric_decisions` log — via the queries declared in
+   `db/queries.sql`;
+3. optionally registers extra routes through the `api.Dependencies.Register` hook and
+   copies the base frontend to add its own pages.
+
+## Development
+
+```sh
+scripts/start_dev.sh   # starts the stack, migrates, and runs the API + frontend
+```
+
+There is no public sign-up. Create the first account with `cmd/create-superuser` (see its
+package comment); that SUPER_ADMIN then creates the others under `/api/admin/users`.
+
+Reports are edited in [WordCraft](https://github.com/storytold/wordcraft) (MIT or Apache-2.0)
+and rendered by it, so the page the examiner edits is the page issued. Build it beside this repo
+and point `.env` at it: `WORDCRAFT_CLI` (`cargo build --release -p wordcraft-cli`) renders issued
+reports, and `WORDCRAFT_WEB_DIR` (`trunk build --release` in `apps/wordcraft-web`, which writes
+`dist/web`) is served at `/wordcraft/` on the app's own origin, as its host bridge requires.
+Without them reports can be drafted but not edited in the app or issued. Video processing needs
+`ffmpeg`/`ffprobe` on the worker's and the API's `PATH`.
+
+Postgres runs the image built from `db/postgres/` (pgvector + PostGIS); migrations from 011 on
+need PostGIS, so a database for `TRACKID_TEST_DATABASE_URL` must run it too. Switching an
+existing stack over: `docker compose build postgres && docker compose up -d postgres` (the
+data volume is kept).
+
+## Not yet in scope
+
+- Per-organization distribution modules, their import commands, and external-system
+  integrations (built in each organization's own project).
+- Frontend theming beyond the shared template.
+- Person↔person merge — reconciling two civil identities that are the same real
+  individual (a later, auditable step, distinct from cluster merge).
