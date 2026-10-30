@@ -28,6 +28,7 @@ type createOccurrenceRequest struct {
 	Description   string     `json:"description"`
 	Agency        string     `json:"agency"`
 	AgencyNumber  string     `json:"agencyNumber"`
+	InquiryNumber string     `json:"inquiryNumber"`
 	OffenderCount *int16     `json:"offenderCount"`
 	VictimCount   *int16     `json:"victimCount"`
 	CaseID        string     `json:"caseId"` // optional: link this case in the same transaction
@@ -47,7 +48,7 @@ func (r createOccurrenceRequest) input() occurrences.CreateInput {
 	return occurrences.CreateInput{
 		Types: r.Types, Attempted: r.Attempted, OccurredFrom: r.OccurredFrom, OccurredTo: r.OccurredTo,
 		ReportedAt: r.ReportedAt, Status: r.Status, Description: r.Description,
-		Agency: r.Agency, AgencyNumber: r.AgencyNumber, OffenderCount: r.OffenderCount, VictimCount: r.VictimCount,
+		Agency: r.Agency, AgencyNumber: r.AgencyNumber, InquiryNumber: r.InquiryNumber, OffenderCount: r.OffenderCount, VictimCount: r.VictimCount,
 		CaseID: r.CaseID,
 		Place: occurrences.PlaceInput{
 			ExistingID: r.Place.ExistingID, Lon: r.Place.Lon, Lat: r.Place.Lat, Precision: r.Place.Precision,
@@ -103,6 +104,7 @@ type OccurrenceSummary struct {
 	TrackIDNumber string    `json:"trackidNumber,omitempty"`
 	Agency        string    `json:"agency,omitempty"`
 	Number        string    `json:"number,omitempty"`
+	InquiryNumber string    `json:"inquiryNumber,omitempty"`
 	OccurredFrom  time.Time `json:"occurredFrom"`
 	Status        string    `json:"status"`
 	Types         []string  `json:"types"`
@@ -117,16 +119,16 @@ type OccurrenceSummary struct {
 	Lat       *float64 `json:"lat,omitempty"`
 }
 
-func summarize(id int64, year, seq sql.NullInt32, agency, number sql.NullString, from time.Time, status string,
+func summarize(id int64, year, seq sql.NullInt32, agency, number, inquiry sql.NullString, from time.Time, status string,
 	place, neighbourhood sql.NullString, types json.RawMessage) (OccurrenceSummary, error) {
 	s := OccurrenceSummary{
-		ID: id, TrackIDNumber: trackidNumber(year, seq), Agency: agency.String, Number: number.String,
+		ID: id, TrackIDNumber: trackidNumber(year, seq), Agency: agency.String, Number: number.String, InquiryNumber: inquiry.String,
 		OccurredFrom: from, Status: status, PlaceName: place.String, Neighbourhood: neighbourhood.String,
 	}
 	return s, json.Unmarshal(types, &s.Types)
 }
 
-// SearchOccurrencesHandler finds occurrences by TrackID or police number (?q=, at least 2
+// SearchOccurrencesHandler finds occurrences by TrackID, police or inquiry number (?q=, at least 2
 // characters): the case page's link search.
 func SearchOccurrencesHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -146,7 +148,7 @@ func SearchOccurrencesHandler(sqlDB *sql.DB) gin.HandlerFunc {
 		}
 		items := make([]OccurrenceSummary, 0, len(rows))
 		for _, r := range rows {
-			s, err := summarize(r.ID, r.OccurrenceYear, r.OccurrenceSeq, r.Agency, r.OccurrenceNumber, r.OccurredFrom, r.Status, r.PlaceName, r.Neighbourhood, r.Types)
+			s, err := summarize(r.ID, r.OccurrenceYear, r.OccurrenceSeq, r.Agency, r.OccurrenceNumber, r.InquiryNumber, r.OccurredFrom, r.Status, r.PlaceName, r.Neighbourhood, r.Types)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read occurrences"})
 				return
@@ -185,7 +187,7 @@ func CaseOccurrenceHandler(sqlDB *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read occurrence"})
 			return
 		}
-		s, err := summarize(r.ID, r.OccurrenceYear, r.OccurrenceSeq, r.Agency, r.OccurrenceNumber, r.OccurredFrom, r.Status, r.PlaceName, r.Neighbourhood, r.Types)
+		s, err := summarize(r.ID, r.OccurrenceYear, r.OccurrenceSeq, r.Agency, r.OccurrenceNumber, r.InquiryNumber, r.OccurredFrom, r.Status, r.PlaceName, r.Neighbourhood, r.Types)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read occurrence"})
 			return

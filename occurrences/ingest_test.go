@@ -118,3 +118,59 @@ func TestIngestAndLink(t *testing.T) {
 		t.Error("a link to a missing occurrence was accepted")
 	}
 }
+
+// An occurrence with no police report is registered by its inquiry: keyed by the inquiry number,
+// re-ingested in place, and linked to by it. A reported occurrence keeps its inquiry alongside.
+func TestIngestByInquiry(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	when := time.Date(2024, 5, 3, 21, 30, 0, 0, time.UTC)
+	in := occurrences.Input{
+		Inquiry: "SIM-IPL-005-00001/2024",
+		Location: occurrences.LocationInput{
+			LocationID: "SIM-L-1", Lon: -43.1773, Lat: -22.9104, Precision: "EXACT",
+			MunicipalityCode: "3304557", UF: "RJ",
+		},
+		OccurredFrom: when, RegisteredAt: when.Add(time.Hour),
+		Status: "INQUIRY_OPENED", Description: "simulated", Types: []string{"FRAUD"},
+	}
+	first, err := occurrences.Ingest(ctx, sqlDB, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := occurrences.Ingest(ctx, sqlDB, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first.Inserted || again.Inserted || again.OccurrenceID != first.OccurrenceID {
+		t.Errorf("re-ingest: first %+v, again %+v", first, again)
+	}
+
+	// A reported occurrence citing the same inquiry is a different occurrence.
+	reported := in
+	reported.Agency, reported.Number = "DP-005", "SIM-005-00001/2024"
+	other, err := occurrences.Ingest(ctx, sqlDB, reported)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inquiry sql.NullString
+	sqlDB.QueryRow(`SELECT inquiry_number FROM occurrences WHERE id = $1`, other.OccurrenceID).Scan(&inquiry)
+	if other.OccurrenceID == first.OccurrenceID || inquiry.String != in.Inquiry {
+		t.Errorf("reported occurrence %+v with inquiry %v", other, inquiry)
+	}
+
+	if _, err := occurrences.Ingest(ctx, sqlDB, occurrences.Input{Location: in.Location, OccurredFrom: when, RegisteredAt: when,
+		Status: "REGISTERED", Description: "x", Types: []string{"FRAUD"}}); err == nil {
+		t.Error("an occurrence with neither report nor inquiry was accepted")
+	}
+
+	if _, err := cases.Ingest(ctx, sqlDB, cases.CaseInput{CaseID: "C-1", CaseType: "CRIMINAL", Modality: "FACIAL", Description: "c",
+		Occurrence: &cases.OccurrenceRef{Inquiry: in.Inquiry}}); err != nil {
+		t.Fatal(err)
+	}
+	var linked sql.NullInt64
+	sqlDB.QueryRow(`SELECT occurrence_id FROM biometric_cases WHERE case_id = 'C-1'`).Scan(&linked)
+	if linked.Int64 != first.OccurrenceID {
+		t.Errorf("case linked to %v, want the inquiry's occurrence %d", linked, first.OccurrenceID)
+	}
+}

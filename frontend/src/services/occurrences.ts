@@ -94,6 +94,7 @@ export interface OccurrenceSummary {
   trackidNumber?: string;
   agency?: string;
   number?: string;
+  inquiryNumber?: string;
   occurredFrom: string;
   status: string;
   types: string[];
@@ -127,6 +128,7 @@ export interface CreateOccurrenceInput {
   description: string;
   agency?: string;
   agencyNumber?: string;
+  inquiryNumber?: string;
   offenderCount?: number;
   victimCount?: number;
   place: PlaceInput;
@@ -162,7 +164,7 @@ export async function createOccurrence(
   }
 }
 
-/** Occurrences whose TrackID or police number contains q. */
+/** Occurrences whose TrackID, police or inquiry number contains q. */
 export async function searchOccurrences(q: string): Promise<OccurrenceSummary[]> {
   const { items } = await requestApi<{ items: OccurrenceSummary[] }>(
     `/occurrences/search?q=${encodeURIComponent(q)}`,

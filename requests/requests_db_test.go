@@ -225,3 +225,61 @@ func TestRegister(t *testing.T) {
 		t.Errorf("civil request: %+v", got)
 	}
 }
+
+// An inquiry can be the occurrence's only document: a request citing just its IPL creates the
+// occurrence with the inquiry number in its own field, a later request citing the IPL finds it,
+// and cited numbers naming two different occurrences are refused.
+func TestRegisterByInquiry(t *testing.T) {
+	sqlDB := testDB(t)
+	ctx := context.Background()
+	var locationID int64
+	if err := sqlDB.QueryRow(`INSERT INTO locations (location_id, geom, precision, municipality_code, uf)
+		VALUES ('L-1', ST_GeogFromText('POINT(-43.18 -22.91)'), 'EXACT', '3304557', 'RJ') RETURNING id`).Scan(&locationID); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
+	first, err := requests.Register(ctx, sqlDB, requests.RegisterInput{
+		Input: requests.Input{Authority: "DRF", DocumentReference: "Ofício 1/2026", ReceivedOn: "2026-10-27", CitedInquiry: "IPL 912-00045/2026"},
+		Occurrence: &occurrences.CreateInput{Types: []string{"FRAUD"}, OccurredFrom: now.Add(-720 * time.Hour),
+			Description: "Estelionato apurado por portaria", InquiryNumber: "IPL 912-00045/2026", Place: occurrences.PlaceInput{ExistingID: locationID}},
+		Cases: []requests.CaseInput{{Task: "FACIAL_REVIEW", Description: "Imagens do caixa"}},
+	}, 0, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Occurrence == nil || first.Occurrence.InquiryNumber != "IPL 912-00045/2026" || first.Occurrence.OccurrenceNumber != "" {
+		t.Fatalf("registered occurrence %+v, want the inquiry number alone", first.Occurrence)
+	}
+
+	later, err := requests.Register(ctx, sqlDB, requests.RegisterInput{
+		Input: requests.Input{Authority: "DRF", DocumentReference: "Ofício 2/2026", ReceivedOn: "2026-10-28", CitedInquiry: "IPL 912-00045/2026"},
+		Cases: []requests.CaseInput{{CaseID: first.Cases[0].CaseID, Task: "FACIAL_COMPARISON"}},
+	}, 0, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if later.Occurrence == nil || later.Occurrence.ID != first.Occurrence.ID {
+		t.Errorf("later request's occurrence %+v, want %d", later.Occurrence, first.Occurrence.ID)
+	}
+	list, err := requests.List(ctx, sqlDB, first.Cases[0].CaseID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 || list[1].CitedInquiry != "IPL 912-00045/2026" || list[1].CitedReference != "" {
+		t.Errorf("requests: %+v", list)
+	}
+
+	other, err := occurrences.Create(ctx, sqlDB, occurrences.CreateInput{Types: []string{"FRAUD"}, OccurredFrom: now.Add(-24 * time.Hour),
+		Description: "Outro estelionato", Agency: "12ª DP", AgencyNumber: "012-00999/2026", Place: occurrences.PlaceInput{ExistingID: locationID}}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = requests.Register(ctx, sqlDB, requests.RegisterInput{
+		Input: requests.Input{Authority: "DRF", DocumentReference: "Ofício 3/2026", ReceivedOn: "2026-10-28",
+			CitedReference: "012-00999/2026", CitedInquiry: "IPL 912-00045/2026"},
+		Cases: []requests.CaseInput{{CaseID: first.Cases[0].CaseID, Task: "FACIAL_COMPARISON"}},
+	}, 0, now)
+	if err == nil || !strings.Contains(err.Error(), "different occurrences") {
+		t.Errorf("numbers naming occurrences %d and %d: %v", other.ID, first.Occurrence.ID, err)
+	}
+}

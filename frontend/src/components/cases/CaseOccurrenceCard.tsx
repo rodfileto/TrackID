@@ -14,7 +14,7 @@ import {
 
 function label(o: OccurrenceSummary): string {
   const police = o.agency && o.number ? `${o.agency} · ${o.number}` : "";
-  return [o.trackidNumber, police].filter(Boolean).join(" — ");
+  return [o.trackidNumber, police, o.inquiryNumber && `IPL ${o.inquiryNumber}`].filter(Boolean).join(" — ");
 }
 
 // The occurrence a case investigates: shown with its point on a small map and a link to it on

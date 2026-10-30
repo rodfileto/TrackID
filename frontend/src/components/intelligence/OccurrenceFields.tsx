@@ -146,6 +146,11 @@ export default function OccurrenceFields({
                 onChange={(e) => set({ agencyNumber: e.target.value })} />
             </div>
             <div>
+              <Label htmlFor="inquiry-number">{t("occurrenceForm.inquiryNumber")}</Label>
+              <input id="inquiry-number" className={inputClass} value={value.inquiryNumber} placeholder="IPL 005-00123/2026"
+                onChange={(e) => set({ inquiryNumber: e.target.value })} />
+            </div>
+            <div>
               <Label htmlFor="status">{t("occurrenceForm.status")}</Label>
               <select id="status" className={inputClass} value={value.status} onChange={(e) => set({ status: e.target.value })}>
                 {STATUSES.map((s) => (

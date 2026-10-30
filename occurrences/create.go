@@ -40,7 +40,9 @@ type PlaceInput struct {
 }
 
 // CreateInput is an occurrence registered by a user. TrackID numbers it; Agency and AgencyNumber
-// are the police agency's own report number, optional, both or neither.
+// are the police agency's own report number, optional, both or neither. InquiryNumber is the
+// inquiry's (IPL), optional and apart from the report's: the inquiry may itself be the document
+// that registers the occurrence.
 type CreateInput struct {
 	Types         []string
 	Attempted     *bool
@@ -51,6 +53,7 @@ type CreateInput struct {
 	Description   string
 	Agency        string
 	AgencyNumber  string
+	InquiryNumber string
 	OffenderCount *int16
 	VictimCount   *int16
 	Place         PlaceInput
@@ -169,6 +172,7 @@ func normalize(ctx context.Context, q *db.Queries, in *CreateInput, now time.Tim
 	if (in.Agency == "") != (in.AgencyNumber == "") {
 		return ValidationError("the agency and its report number go together: give both or neither")
 	}
+	in.InquiryNumber = strings.TrimSpace(in.InquiryNumber)
 	for _, n := range []*int16{in.OffenderCount, in.VictimCount} {
 		if n != nil && *n < 0 {
 			return ValidationError("counts cannot be negative")
@@ -230,7 +234,7 @@ func CreateWith(ctx context.Context, q *db.Queries, in CreateInput, now time.Tim
 	row, err := q.CreateOccurrence(ctx, db.CreateOccurrenceParams{
 		OccurrenceYear: sql.NullInt32{Int32: int32(year), Valid: true},
 		OccurrenceSeq:  sql.NullInt32{Int32: seq, Valid: true},
-		Agency:         nullString(in.Agency), OccurrenceNumber: nullString(in.AgencyNumber),
+		Agency:         nullString(in.Agency), OccurrenceNumber: nullString(in.AgencyNumber), InquiryNumber: nullString(in.InquiryNumber),
 		LocationID: locationID, OccurredFrom: in.OccurredFrom, OccurredTo: nullTime(in.OccurredTo),
 		ReportedAt: nullTime(in.ReportedAt), Attempted: nullBool(in.Attempted),
 		OffenderCount: nullInt16(in.OffenderCount), VictimCount: nullInt16(in.VictimCount),

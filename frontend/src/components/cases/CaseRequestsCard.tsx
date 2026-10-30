@@ -13,6 +13,7 @@ import { useCurrentUser } from "../../context/CurrentUserContext";
 import type { Evidence } from "../../services/cases";
 import { listCaseVideos } from "../../services/videos";
 import {
+  citedNumbers,
   createCaseRequest,
   listCaseMaterial,
   receiveMaterial,
@@ -52,7 +53,7 @@ function RegisterRequestModal({
 }) {
   const { t } = useTranslation();
   const empty = { authority: "", documentReference: "", documentDate: "", receivedOn: new Date().toISOString().slice(0, 10), dueOn: "",
-    citedReference: "", notes: "", questions: "" };
+    citedReference: "", citedInquiryNumber: "", notes: "", questions: "" };
   const [form, setForm] = useState(empty);
   const [task, setTask] = useState("");
   const [files, setFiles] = useState<Set<number>>(new Set());
@@ -87,7 +88,7 @@ function RegisterRequestModal({
       const input: CaseRequestInput = {
         authority: form.authority, documentReference: form.documentReference, documentDate: form.documentDate || undefined,
         receivedOn: form.receivedOn, dueOn: form.dueOn || undefined, citedReference: form.citedReference || undefined,
-        notes: form.notes || undefined, questions: form.questions.split("\n").map((q) => q.trim()).filter(Boolean), fileIds: [...files],
+        citedInquiryNumber: form.citedInquiryNumber || undefined, notes: form.notes || undefined, questions: form.questions.split("\n").map((q) => q.trim()).filter(Boolean), fileIds: [...files],
         task,
       };
       await createCaseRequest(caseId, input);
@@ -112,6 +113,7 @@ function RegisterRequestModal({
           {field("receivedOn", "date", true)}
           {field("dueOn", "date")}
           {field("citedReference")}
+          {field("citedInquiryNumber")}
           <div>
             <label className={labelClass}>{t("requests.task")}</label>
             <TaskSelect className={inputClass} value={task} modality={modality} onChange={setTask} />
@@ -243,8 +245,8 @@ export default function CaseRequestsCard({
               {" · "}
               {r.occurrence
                 ? t("requests.occurrenceLinked", { number: r.occurrence.number ?? r.occurrence.occurrenceNumber })
-                : r.citedReference
-                  ? t("requests.occurrenceUnlinked", { reference: r.citedReference })
+                : r.citedReference || r.citedInquiryNumber
+                  ? t("requests.occurrenceUnlinked", { reference: citedNumbers(r) })
                   : ""}
               {r.registeredBy && ` · ${t("requests.registeredBy", { user: r.registeredBy })}`}
             </p>

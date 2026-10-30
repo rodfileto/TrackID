@@ -36,7 +36,9 @@ interface CaseRow {
 const newRow = (): CaseRow => ({ existing: false, caseId: "", task: "", description: "", files: [] });
 
 function occurrenceLabel(o: OccurrenceSummary): string {
-  return [o.trackidNumber, o.agency && o.number ? `${o.agency} ${o.number}` : o.number].filter(Boolean).join(" · ");
+  return [o.trackidNumber, o.agency && o.number ? `${o.agency} ${o.number}` : o.number, o.inquiryNumber && `IPL ${o.inquiryNumber}`]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 // Register a request as it arrives (docs/facial-reports-plan.md, "Request first"): the ofício,
@@ -53,6 +55,7 @@ export default function RegisterRequest() {
     receivedOn: new Date().toISOString().slice(0, 10),
     dueOn: "",
     citedReference: "",
+    citedInquiryNumber: "",
     notes: "",
     questions: "",
   });
@@ -79,10 +82,13 @@ export default function RegisterRequest() {
     </div>
   );
 
+  // Look up by the cited occurrence number, else by the inquiry's.
+  const citedQuery = form.citedReference.trim() || form.citedInquiryNumber.trim();
+
   async function lookUp() {
     setChosen(null);
     try {
-      setMatches(await searchOccurrences(form.citedReference.trim()));
+      setMatches(await searchOccurrences(citedQuery));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -91,8 +97,13 @@ export default function RegisterRequest() {
   function startCreating() {
     setMode("create");
     setChosen(null);
-    // The cited number is usually the police report's: carry it over.
-    if (!draft.agencyNumber && form.citedReference) setDraft({ ...draft, agencyNumber: form.citedReference.trim() });
+    // Carry the cited numbers over, each to its own field: the inquiry may be the occurrence's
+    // only document.
+    setDraft({
+      ...draft,
+      agencyNumber: draft.agencyNumber || form.citedReference.trim(),
+      inquiryNumber: draft.inquiryNumber || form.citedInquiryNumber.trim(),
+    });
   }
 
   const setRow = (i: number, patch: Partial<CaseRow>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -113,6 +124,7 @@ export default function RegisterRequest() {
         receivedOn: form.receivedOn,
         dueOn: form.dueOn || undefined,
         citedReference: form.citedReference || undefined,
+        citedInquiryNumber: form.citedInquiryNumber || undefined,
         notes: form.notes || undefined,
         questions: form.questions.split("\n").map((q) => q.trim()).filter(Boolean),
         occurrenceId: mode === "lookup" ? chosen?.id : undefined,
@@ -174,7 +186,12 @@ export default function RegisterRequest() {
               <input id="request-cited" className={inputClass} value={form.citedReference} placeholder="005-01234/2026"
                 onChange={(e) => setForm({ ...form, citedReference: e.target.value })} />
             </div>
-            <button type="button" className={buttonClass} disabled={form.citedReference.trim().length < 2}
+            <div className="min-w-64 flex-1">
+              <Label htmlFor="request-cited-inquiry">{t("requests.citedInquiryNumber")}</Label>
+              <input id="request-cited-inquiry" className={inputClass} value={form.citedInquiryNumber} placeholder="IPL 005-00123/2026"
+                onChange={(e) => setForm({ ...form, citedInquiryNumber: e.target.value })} />
+            </div>
+            <button type="button" className={buttonClass} disabled={citedQuery.length < 2}
               onClick={() => { setMode("lookup"); void lookUp(); }}>
               {t("requests.lookUp")}
             </button>

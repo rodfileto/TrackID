@@ -3,9 +3,9 @@
 // it sent in. A request comes first: Register records it, finds or creates the occurrence it cites
 // and opens or joins its cases (case_request_cases, 011_request_cases.sql), one per exam asked.
 // Create adds a later request to a case already open. A request is not the occurrence: it cites
-// one, by the police agency's number or TrackID's. Every analysis answers a request
-// (case_analyses.case_request_id); the laudo answers that request's questions. See
-// docs/facial-reports-plan.md, "Request first".
+// one, by the police agency's number or TrackID's, and its inquiry (IPL) by the inquiry's number
+// (014_inquiry_numbers.sql). Every analysis answers a request (case_analyses.case_request_id);
+// the laudo answers that request's questions. See docs/facial-reports-plan.md, "Request first".
 package requests
 
 import (
@@ -35,13 +35,14 @@ const dateLayout = "2006-01-02"
 
 // Input is a request as it is registered.
 type Input struct {
-	Authority         string   `json:"authority"`         // who asks, e.g. "37ª Delegacia de Polícia"
-	DocumentReference string   `json:"documentReference"` // the request's own document, e.g. "Ofício nº 123/2026"
-	DocumentDate      string   `json:"documentDate"`      // YYYY-MM-DD, optional
-	ReceivedOn        string   `json:"receivedOn"`        // YYYY-MM-DD
-	DueOn             string   `json:"dueOn"`             // YYYY-MM-DD, optional
-	CitedReference    string   `json:"citedReference"`    // the occurrence or inquiry number it cites, optional
-	OccurrenceID      *int64   `json:"occurrenceId"`      // the occurrence, when the caller already resolved it
+	Authority         string   `json:"authority"`          // who asks, e.g. "37ª Delegacia de Polícia"
+	DocumentReference string   `json:"documentReference"`  // the request's own document, e.g. "Ofício nº 123/2026"
+	DocumentDate      string   `json:"documentDate"`       // YYYY-MM-DD, optional
+	ReceivedOn        string   `json:"receivedOn"`         // YYYY-MM-DD
+	DueOn             string   `json:"dueOn"`              // YYYY-MM-DD, optional
+	CitedReference    string   `json:"citedReference"`     // the occurrence number it cites (TrackID's or the police report's), optional
+	CitedInquiry      string   `json:"citedInquiryNumber"` // the inquiry (IPL) number it cites, optional
+	OccurrenceID      *int64   `json:"occurrenceId"`       // the occurrence, when the caller already resolved it
 	Notes             string   `json:"notes"`
 	Questions         []string `json:"questions"` // the quesitos, in order
 	FileIDs           []int64  `json:"fileIds"`   // evidence files of the case it sent in (Create only)
@@ -53,7 +54,8 @@ type Input struct {
 type RegisterInput struct {
 	Input
 	// Occurrence is the occurrence to create when the request cites one TrackID does not have
-	// (Input.OccurrenceID and Input.CitedReference find existing ones). Its CaseID is ignored.
+	// (Input.OccurrenceID, Input.CitedReference and Input.CitedInquiry find existing ones). Its
+	// CaseID is ignored.
 	Occurrence *occurrences.CreateInput
 	// CaseType is the nature of new cases when there is no occurrence (a civil request may have
 	// none); with an occurrence, its nature is theirs.
@@ -93,6 +95,7 @@ type Summary struct {
 	OpenAnalyses      int64    `json:"openAnalyses"`
 	Overdue           bool     `json:"overdue"`
 	CitedReference    string   `json:"citedReference,omitempty"`
+	CitedInquiry      string   `json:"citedInquiryNumber,omitempty"`
 	OccurrenceNumber  string   `json:"occurrenceNumber,omitempty"` // TrackID's, else the agency's
 	CaseIDs           []string `json:"caseIds"`
 	Tasks             []string `json:"tasks"` // the analyses it asked, by type, across its cases
@@ -109,6 +112,7 @@ type Request struct {
 	DueOn             string      `json:"dueOn,omitempty"`
 	Overdue           bool        `json:"overdue"` // past its due date with an analysis still open
 	CitedReference    string      `json:"citedReference,omitempty"`
+	CitedInquiry      string      `json:"citedInquiryNumber,omitempty"`
 	Occurrence        *Occurrence `json:"occurrence,omitempty"`
 	Notes             string      `json:"notes,omitempty"`
 	RegisteredBy      string      `json:"registeredBy,omitempty"`
@@ -125,6 +129,7 @@ type Occurrence struct {
 	Number           string `json:"number,omitempty"` // TrackID's "<year>.<seq>"
 	Agency           string `json:"agency,omitempty"`
 	OccurrenceNumber string `json:"occurrenceNumber,omitempty"`
+	InquiryNumber    string `json:"inquiryNumber,omitempty"`
 }
 
 // File is one evidence file a request sent in, with its SHA-256.
@@ -199,11 +204,11 @@ func check(in Input) (fields, error) {
 
 // Register records a request as it arrives and what it opens, in one transaction: the occurrence
 // it cites -- in.OccurrenceID, else the one in.CitedReference names exactly (TrackID's number or
-// the police number), else in.Occurrence created now; an unknown cited number with no occurrence
-// to create is kept as cited, unlinked -- and its cases, new ones numbered and opened with their
-// automatic analyses (which answer this request), existing ones joined. A case with no occurrence
-// is linked to the request's when their nature agrees. registeredBy is the coordinator; checking
-// that they are one is the caller's job.
+// the police number) or in.CitedInquiry does (the inquiry number), else in.Occurrence created
+// now; an unknown cited number with no occurrence to create is kept as cited, unlinked -- and its
+// cases, new ones numbered and opened with their automatic analyses (which answer this request),
+// existing ones joined. A case with no occurrence is linked to the request's when their nature
+// agrees. registeredBy is the coordinator; checking that they are one is the caller's job.
 func Register(ctx context.Context, sqlDB *sql.DB, in RegisterInput, registeredBy int64, now time.Time) (Registered, error) {
 	f, err := check(in.Input)
 	if err != nil {
@@ -323,14 +328,25 @@ func resolveOccurrence(ctx context.Context, q *db.Queries, in RegisterInput, now
 	if in.OccurrenceID != nil {
 		return sql.NullInt64{Int64: *in.OccurrenceID, Valid: true}, nil
 	}
+	var byNumber, byInquiry []int64
+	var err error
 	if cited := strings.TrimSpace(in.CitedReference); cited != "" {
-		ids, err := q.FindOccurrenceByReference(ctx, cited)
-		if err != nil {
+		if byNumber, err = q.FindOccurrenceByReference(ctx, cited); err != nil {
 			return sql.NullInt64{}, err
 		}
-		if len(ids) == 1 {
-			return sql.NullInt64{Int64: ids[0], Valid: true}, nil
+	}
+	if cited := strings.TrimSpace(in.CitedInquiry); cited != "" {
+		if byInquiry, err = q.FindOccurrenceByInquiryNumber(ctx, cited); err != nil {
+			return sql.NullInt64{}, err
 		}
+	}
+	switch {
+	case len(byNumber) == 1 && len(byInquiry) == 1 && byNumber[0] != byInquiry[0]:
+		return sql.NullInt64{}, ValidationError("the cited occurrence number and inquiry number name different occurrences")
+	case len(byNumber) == 1:
+		return sql.NullInt64{Int64: byNumber[0], Valid: true}, nil
+	case len(byInquiry) == 1:
+		return sql.NullInt64{Int64: byInquiry[0], Valid: true}, nil
 	}
 	if in.Occurrence == nil {
 		return sql.NullInt64{}, nil
@@ -353,7 +369,7 @@ func occurrenceRef(ctx context.Context, q *db.Queries, id int64) (*Occurrence, e
 	if err != nil {
 		return nil, err
 	}
-	ref := &Occurrence{ID: id, Agency: o.Agency.String, OccurrenceNumber: o.OccurrenceNumber.String}
+	ref := &Occurrence{ID: id, Agency: o.Agency.String, OccurrenceNumber: o.OccurrenceNumber.String, InquiryNumber: o.InquiryNumber.String}
 	if o.OccurrenceYear.Valid && o.OccurrenceSeq.Valid {
 		ref.Number = fmt.Sprintf("%04d.%04d", o.OccurrenceYear.Int32, o.OccurrenceSeq.Int32)
 	}
@@ -364,7 +380,8 @@ func insertRequest(ctx context.Context, q *db.Queries, in Input, f fields, occur
 	cited := strings.TrimSpace(in.CitedReference)
 	id, err := q.InsertCaseRequest(ctx, db.InsertCaseRequestParams{
 		Authority: f.authority, DocumentReference: f.document, DocumentDate: f.documentDate,
-		ReceivedOn: f.received.Time, DueOn: f.due, CitedReference: nullString(cited), OccurrenceID: occurrence,
+		ReceivedOn: f.received.Time, DueOn: f.due, CitedReference: nullString(cited),
+		CitedInquiryNumber: nullString(in.CitedInquiry), OccurrenceID: occurrence,
 		Notes: nullString(in.Notes), RegisteredBy: sql.NullInt64{Int64: registeredBy, Valid: registeredBy != 0},
 	})
 	if err != nil {
@@ -508,7 +525,7 @@ func ListAll(ctx context.Context, sqlDB *sql.DB, limit int) ([]Summary, error) {
 	for i, r := range rows {
 		s := Summary{ID: r.ID, Authority: r.Authority, DocumentReference: r.DocumentReference,
 			ReceivedOn: r.ReceivedOn.Format(dateLayout), OpenAnalyses: r.OpenAnalyses,
-			CitedReference: r.CitedReference.String, CaseIDs: r.CaseIds, Tasks: r.Tasks}
+			CitedReference: r.CitedReference.String, CitedInquiry: r.CitedInquiryNumber.String, CaseIDs: r.CaseIds, Tasks: r.Tasks}
 		if s.CaseIDs == nil {
 			s.CaseIDs = []string{}
 		}
@@ -611,7 +628,8 @@ func ListWith(ctx context.Context, q *db.Queries, caseID string) ([]Request, err
 	out := make([]Request, len(rows))
 	for i, r := range rows {
 		req := Request{ID: r.ID, Sequence: r.Sequence, Authority: r.Authority, DocumentReference: r.DocumentReference,
-			ReceivedOn: r.ReceivedOn.Format(dateLayout), CitedReference: r.CitedReference.String, Notes: r.Notes.String,
+			ReceivedOn: r.ReceivedOn.Format(dateLayout), CitedReference: r.CitedReference.String,
+			CitedInquiry: r.CitedInquiryNumber.String, Notes: r.Notes.String,
 			RegisteredBy: r.RegisteredBy.String, CreatedAt: r.CreatedAt, Questions: []string{}, Files: []File{}, Cases: []CaseRef{}, Tasks: []string{}}
 		for _, a := range analysisRows {
 			if a.CaseRequestID.Valid && a.CaseRequestID.Int64 == r.ID {
@@ -631,7 +649,8 @@ func ListWith(ctx context.Context, q *db.Queries, caseID string) ([]Request, err
 			req.Overdue = open[r.ID] && today.After(r.DueOn.Time.AddDate(0, 0, 1))
 		}
 		if r.OccurrenceID.Valid {
-			o := &Occurrence{ID: r.OccurrenceID.Int64, Agency: r.Agency.String, OccurrenceNumber: r.OccurrenceNumber.String}
+			o := &Occurrence{ID: r.OccurrenceID.Int64, Agency: r.Agency.String, OccurrenceNumber: r.OccurrenceNumber.String,
+				InquiryNumber: r.InquiryNumber.String}
 			if r.OccurrenceYear.Valid && r.OccurrenceSeq.Valid {
 				o.Number = fmt.Sprintf("%04d.%04d", r.OccurrenceYear.Int32, r.OccurrenceSeq.Int32)
 			}

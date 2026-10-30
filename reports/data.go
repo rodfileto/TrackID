@@ -61,6 +61,7 @@ type RequestInfo struct {
 	ReceivedOn        string     `json:"receivedOn"`
 	DueOn             string     `json:"dueOn,omitempty"`
 	CitedReference    string     `json:"citedReference,omitempty"`
+	CitedInquiry      string     `json:"citedInquiryNumber,omitempty"`
 	Questions         []string   `json:"questions"`
 	Files             []FileInfo `json:"files"`
 }
@@ -250,7 +251,7 @@ func Build(ctx context.Context, q *db.Queries, analysisID int64, images Images, 
 			}
 			info := &RequestInfo{Sequence: r.Sequence, Authority: r.Authority, DocumentReference: r.DocumentReference,
 				DocumentDate: r.DocumentDate, ReceivedOn: r.ReceivedOn, DueOn: r.DueOn, CitedReference: r.CitedReference,
-				Questions: r.Questions, Files: []FileInfo{}}
+				CitedInquiry: r.CitedInquiry, Questions: r.Questions, Files: []FileInfo{}}
 			for _, f := range r.Files {
 				info.Files = append(info.Files, FileInfo{Filename: f.Filename, SHA256: f.SHA256})
 			}

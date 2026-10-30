@@ -292,6 +292,9 @@ func history(out *doc, d Data, n int) {
 		}
 		out.labelled("Documentos anteriores do caso", strings.Join(lines, "; "))
 	}
+	if d.Request != nil && d.Request.CitedInquiry != "" {
+		out.labelled("Inquérito citado na requisição", d.Request.CitedInquiry)
+	}
 }
 
 func questionedTable(out *doc, d Data) {

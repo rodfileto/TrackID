@@ -416,10 +416,10 @@ func (q *Queries) CreateCodificationPoint(ctx context.Context, arg CreateCodific
 
 const createOccurrence = `-- name: CreateOccurrence :one
 INSERT INTO occurrences (
-    occurrence_year, occurrence_seq, agency, occurrence_number, location_id, occurred_from, occurred_to,
+    occurrence_year, occurrence_seq, agency, occurrence_number, inquiry_number, location_id, occurred_from, occurred_to,
     reported_at, registered_at, attempted, offender_count, victim_count, status, description
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11, $12, $13, $14)
 RETURNING id, registered_at
 `
 
@@ -428,6 +428,7 @@ type CreateOccurrenceParams struct {
 	OccurrenceSeq    sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
 	Agency           sql.NullString `db:"agency" json:"agency"`
 	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
+	InquiryNumber    sql.NullString `db:"inquiry_number" json:"inquiry_number"`
 	LocationID       int64          `db:"location_id" json:"location_id"`
 	OccurredFrom     time.Time      `db:"occurred_from" json:"occurred_from"`
 	OccurredTo       sql.NullTime   `db:"occurred_to" json:"occurred_to"`
@@ -445,13 +446,14 @@ type CreateOccurrenceRow struct {
 }
 
 // An occurrence registered in TrackID: numbered by occurrences.Create, the police agency's own
-// number optional.
+// number and the inquiry number optional.
 func (q *Queries) CreateOccurrence(ctx context.Context, arg CreateOccurrenceParams) (CreateOccurrenceRow, error) {
 	row := q.db.QueryRowContext(ctx, createOccurrence,
 		arg.OccurrenceYear,
 		arg.OccurrenceSeq,
 		arg.Agency,
 		arg.OccurrenceNumber,
+		arg.InquiryNumber,
 		arg.LocationID,
 		arg.OccurredFrom,
 		arg.OccurredTo,
@@ -872,6 +874,39 @@ func (q *Queries) FindNearestPersonsByFaceEmbedding(ctx context.Context, arg Fin
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const findOccurrenceByInquiryNumber = `-- name: FindOccurrenceByInquiryNumber :many
+SELECT o.id
+FROM occurrences o
+WHERE o.inquiry_number = $1::text
+ORDER BY o.id
+LIMIT 2
+`
+
+// Occurrences a request's cited inquiry number names exactly. More than one row is ambiguous (an
+// inquiry can gather several occurrences).
+func (q *Queries) FindOccurrenceByInquiryNumber(ctx context.Context, inquiryNumber string) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, findOccurrenceByInquiryNumber, inquiryNumber)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -1650,6 +1685,19 @@ func (q *Queries) GetMunicipalityAt(ctx context.Context, arg GetMunicipalityAtPa
 	return i, err
 }
 
+const getOccurrenceIDByInquiry = `-- name: GetOccurrenceIDByInquiry :one
+SELECT id FROM occurrences
+WHERE inquiry_number = $1 AND occurrence_number IS NULL AND occurrence_seq IS NULL
+`
+
+// An imported occurrence registered by its inquiry alone (UpsertOccurrenceByInquiry).
+func (q *Queries) GetOccurrenceIDByInquiry(ctx context.Context, inquiryNumber sql.NullString) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getOccurrenceIDByInquiry, inquiryNumber)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getOccurrenceIDByNumber = `-- name: GetOccurrenceIDByNumber :one
 SELECT id FROM occurrences WHERE agency = $1 AND occurrence_number = $2
 `
@@ -1667,12 +1715,13 @@ func (q *Queries) GetOccurrenceIDByNumber(ctx context.Context, arg GetOccurrence
 }
 
 const getOccurrenceNumbers = `-- name: GetOccurrenceNumbers :one
-SELECT agency, occurrence_number, occurrence_year, occurrence_seq FROM occurrences WHERE id = $1
+SELECT agency, occurrence_number, inquiry_number, occurrence_year, occurrence_seq FROM occurrences WHERE id = $1
 `
 
 type GetOccurrenceNumbersRow struct {
 	Agency           sql.NullString `db:"agency" json:"agency"`
 	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
+	InquiryNumber    sql.NullString `db:"inquiry_number" json:"inquiry_number"`
 	OccurrenceYear   sql.NullInt32  `db:"occurrence_year" json:"occurrence_year"`
 	OccurrenceSeq    sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
 }
@@ -1683,6 +1732,7 @@ func (q *Queries) GetOccurrenceNumbers(ctx context.Context, id int64) (GetOccurr
 	err := row.Scan(
 		&i.Agency,
 		&i.OccurrenceNumber,
+		&i.InquiryNumber,
 		&i.OccurrenceYear,
 		&i.OccurrenceSeq,
 	)
@@ -1690,7 +1740,7 @@ func (q *Queries) GetOccurrenceNumbers(ctx context.Context, id int64) (GetOccurr
 }
 
 const getOccurrenceSummary = `-- name: GetOccurrenceSummary :one
-SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.occurred_from, o.status,
+SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.inquiry_number, o.occurred_from, o.status,
     l.name AS place_name, l.neighbourhood, l.address, l.precision,
     ST_X(l.geom::geometry)::float8 AS lon,
     ST_Y(l.geom::geometry)::float8 AS lat,
@@ -1707,6 +1757,7 @@ type GetOccurrenceSummaryRow struct {
 	OccurrenceSeq    sql.NullInt32   `db:"occurrence_seq" json:"occurrence_seq"`
 	Agency           sql.NullString  `db:"agency" json:"agency"`
 	OccurrenceNumber sql.NullString  `db:"occurrence_number" json:"occurrence_number"`
+	InquiryNumber    sql.NullString  `db:"inquiry_number" json:"inquiry_number"`
 	OccurredFrom     time.Time       `db:"occurred_from" json:"occurred_from"`
 	Status           string          `db:"status" json:"status"`
 	PlaceName        sql.NullString  `db:"place_name" json:"place_name"`
@@ -1728,6 +1779,7 @@ func (q *Queries) GetOccurrenceSummary(ctx context.Context, id int64) (GetOccurr
 		&i.OccurrenceSeq,
 		&i.Agency,
 		&i.OccurrenceNumber,
+		&i.InquiryNumber,
 		&i.OccurredFrom,
 		&i.Status,
 		&i.PlaceName,
@@ -2223,23 +2275,25 @@ func (q *Queries) InsertCaseDecision(ctx context.Context, arg InsertCaseDecision
 const insertCaseRequest = `-- name: InsertCaseRequest :one
 
 INSERT INTO case_requests (authority, document_reference, document_date, received_on, due_on,
-    cited_reference, occurrence_id, notes, registered_by)
+    cited_reference, cited_inquiry_number, occurrence_id, notes, registered_by)
 VALUES ($1::text, $2::text, $3::date, $4::date,
-        $5::date, $6::text, $7::bigint,
-        $8::text, $9::bigint)
+        $5::date, $6::text, $7::text,
+        $8::bigint,
+        $9::text, $10::bigint)
 RETURNING id
 `
 
 type InsertCaseRequestParams struct {
-	Authority         string         `db:"authority" json:"authority"`
-	DocumentReference string         `db:"document_reference" json:"document_reference"`
-	DocumentDate      sql.NullTime   `db:"document_date" json:"document_date"`
-	ReceivedOn        time.Time      `db:"received_on" json:"received_on"`
-	DueOn             sql.NullTime   `db:"due_on" json:"due_on"`
-	CitedReference    sql.NullString `db:"cited_reference" json:"cited_reference"`
-	OccurrenceID      sql.NullInt64  `db:"occurrence_id" json:"occurrence_id"`
-	Notes             sql.NullString `db:"notes" json:"notes"`
-	RegisteredBy      sql.NullInt64  `db:"registered_by" json:"registered_by"`
+	Authority          string         `db:"authority" json:"authority"`
+	DocumentReference  string         `db:"document_reference" json:"document_reference"`
+	DocumentDate       sql.NullTime   `db:"document_date" json:"document_date"`
+	ReceivedOn         time.Time      `db:"received_on" json:"received_on"`
+	DueOn              sql.NullTime   `db:"due_on" json:"due_on"`
+	CitedReference     sql.NullString `db:"cited_reference" json:"cited_reference"`
+	CitedInquiryNumber sql.NullString `db:"cited_inquiry_number" json:"cited_inquiry_number"`
+	OccurrenceID       sql.NullInt64  `db:"occurrence_id" json:"occurrence_id"`
+	Notes              sql.NullString `db:"notes" json:"notes"`
+	RegisteredBy       sql.NullInt64  `db:"registered_by" json:"registered_by"`
 }
 
 // Requests and received material (docs/facial-reports-plan.md, phase 1).
@@ -2251,6 +2305,7 @@ func (q *Queries) InsertCaseRequest(ctx context.Context, arg InsertCaseRequestPa
 		arg.ReceivedOn,
 		arg.DueOn,
 		arg.CitedReference,
+		arg.CitedInquiryNumber,
 		arg.OccurrenceID,
 		arg.Notes,
 		arg.RegisteredBy,
@@ -3476,7 +3531,8 @@ func (q *Queries) ListCaseRequestQuestions(ctx context.Context, caseID string) (
 
 const listCaseRequests = `-- name: ListCaseRequests :many
 SELECT r.id, rc.sequence, r.authority, r.document_reference, r.document_date, r.received_on, r.due_on, r.cited_reference,
-       r.occurrence_id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
+       r.cited_inquiry_number, r.occurrence_id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
+       o.inquiry_number,
        r.notes, u.username AS registered_by, r.created_at
 FROM case_requests r
 JOIN case_request_cases rc ON rc.case_request_id = r.id
@@ -3488,22 +3544,24 @@ ORDER BY rc.sequence
 `
 
 type ListCaseRequestsRow struct {
-	ID                int64          `db:"id" json:"id"`
-	Sequence          int16          `db:"sequence" json:"sequence"`
-	Authority         string         `db:"authority" json:"authority"`
-	DocumentReference string         `db:"document_reference" json:"document_reference"`
-	DocumentDate      sql.NullTime   `db:"document_date" json:"document_date"`
-	ReceivedOn        time.Time      `db:"received_on" json:"received_on"`
-	DueOn             sql.NullTime   `db:"due_on" json:"due_on"`
-	CitedReference    sql.NullString `db:"cited_reference" json:"cited_reference"`
-	OccurrenceID      sql.NullInt64  `db:"occurrence_id" json:"occurrence_id"`
-	OccurrenceYear    sql.NullInt32  `db:"occurrence_year" json:"occurrence_year"`
-	OccurrenceSeq     sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
-	Agency            sql.NullString `db:"agency" json:"agency"`
-	OccurrenceNumber  sql.NullString `db:"occurrence_number" json:"occurrence_number"`
-	Notes             sql.NullString `db:"notes" json:"notes"`
-	RegisteredBy      sql.NullString `db:"registered_by" json:"registered_by"`
-	CreatedAt         time.Time      `db:"created_at" json:"created_at"`
+	ID                 int64          `db:"id" json:"id"`
+	Sequence           int16          `db:"sequence" json:"sequence"`
+	Authority          string         `db:"authority" json:"authority"`
+	DocumentReference  string         `db:"document_reference" json:"document_reference"`
+	DocumentDate       sql.NullTime   `db:"document_date" json:"document_date"`
+	ReceivedOn         time.Time      `db:"received_on" json:"received_on"`
+	DueOn              sql.NullTime   `db:"due_on" json:"due_on"`
+	CitedReference     sql.NullString `db:"cited_reference" json:"cited_reference"`
+	CitedInquiryNumber sql.NullString `db:"cited_inquiry_number" json:"cited_inquiry_number"`
+	OccurrenceID       sql.NullInt64  `db:"occurrence_id" json:"occurrence_id"`
+	OccurrenceYear     sql.NullInt32  `db:"occurrence_year" json:"occurrence_year"`
+	OccurrenceSeq      sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
+	Agency             sql.NullString `db:"agency" json:"agency"`
+	OccurrenceNumber   sql.NullString `db:"occurrence_number" json:"occurrence_number"`
+	InquiryNumber      sql.NullString `db:"inquiry_number" json:"inquiry_number"`
+	Notes              sql.NullString `db:"notes" json:"notes"`
+	RegisteredBy       sql.NullString `db:"registered_by" json:"registered_by"`
+	CreatedAt          time.Time      `db:"created_at" json:"created_at"`
 }
 
 // A case's requests in order, with the occurrence each was linked to and who registered it.
@@ -3525,11 +3583,13 @@ func (q *Queries) ListCaseRequests(ctx context.Context, caseID string) ([]ListCa
 			&i.ReceivedOn,
 			&i.DueOn,
 			&i.CitedReference,
+			&i.CitedInquiryNumber,
 			&i.OccurrenceID,
 			&i.OccurrenceYear,
 			&i.OccurrenceSeq,
 			&i.Agency,
 			&i.OccurrenceNumber,
+			&i.InquiryNumber,
 			&i.Notes,
 			&i.RegisteredBy,
 			&i.CreatedAt,
@@ -5121,7 +5181,7 @@ func (q *Queries) ListRequestFiles(ctx context.Context, caseID string) ([]ListRe
 }
 
 const listRequests = `-- name: ListRequests :many
-SELECT r.id, r.authority, r.document_reference, r.received_on, r.due_on, r.cited_reference,
+SELECT r.id, r.authority, r.document_reference, r.received_on, r.due_on, r.cited_reference, r.cited_inquiry_number,
        o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
        (SELECT COUNT(*) FROM case_analyses ca WHERE ca.case_request_id = r.id AND ca.status = 'OPEN')::bigint AS open_analyses,
        COALESCE((SELECT array_agg(bc.case_id ORDER BY bc.case_id)
@@ -5136,19 +5196,20 @@ LIMIT $1::int
 `
 
 type ListRequestsRow struct {
-	ID                int64          `db:"id" json:"id"`
-	Authority         string         `db:"authority" json:"authority"`
-	DocumentReference string         `db:"document_reference" json:"document_reference"`
-	ReceivedOn        time.Time      `db:"received_on" json:"received_on"`
-	DueOn             sql.NullTime   `db:"due_on" json:"due_on"`
-	CitedReference    sql.NullString `db:"cited_reference" json:"cited_reference"`
-	OccurrenceYear    sql.NullInt32  `db:"occurrence_year" json:"occurrence_year"`
-	OccurrenceSeq     sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
-	Agency            sql.NullString `db:"agency" json:"agency"`
-	OccurrenceNumber  sql.NullString `db:"occurrence_number" json:"occurrence_number"`
-	OpenAnalyses      int64          `db:"open_analyses" json:"open_analyses"`
-	CaseIds           []string       `db:"case_ids" json:"case_ids"`
-	Tasks             []string       `db:"tasks" json:"tasks"`
+	ID                 int64          `db:"id" json:"id"`
+	Authority          string         `db:"authority" json:"authority"`
+	DocumentReference  string         `db:"document_reference" json:"document_reference"`
+	ReceivedOn         time.Time      `db:"received_on" json:"received_on"`
+	DueOn              sql.NullTime   `db:"due_on" json:"due_on"`
+	CitedReference     sql.NullString `db:"cited_reference" json:"cited_reference"`
+	CitedInquiryNumber sql.NullString `db:"cited_inquiry_number" json:"cited_inquiry_number"`
+	OccurrenceYear     sql.NullInt32  `db:"occurrence_year" json:"occurrence_year"`
+	OccurrenceSeq      sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
+	Agency             sql.NullString `db:"agency" json:"agency"`
+	OccurrenceNumber   sql.NullString `db:"occurrence_number" json:"occurrence_number"`
+	OpenAnalyses       int64          `db:"open_analyses" json:"open_analyses"`
+	CaseIds            []string       `db:"case_ids" json:"case_ids"`
+	Tasks              []string       `db:"tasks" json:"tasks"`
 }
 
 // Every request, overdue and soonest due first: what the coordinator has to answer. open counts
@@ -5169,6 +5230,7 @@ func (q *Queries) ListRequests(ctx context.Context, rowLimit int32) ([]ListReque
 			&i.ReceivedOn,
 			&i.DueOn,
 			&i.CitedReference,
+			&i.CitedInquiryNumber,
 			&i.OccurrenceYear,
 			&i.OccurrenceSeq,
 			&i.Agency,
@@ -5502,7 +5564,7 @@ func (q *Queries) MaxReportNumber(ctx context.Context, arg MaxReportNumberParams
 }
 
 const searchOccurrences = `-- name: SearchOccurrences :many
-SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.occurred_from, o.status,
+SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.inquiry_number, o.occurred_from, o.status,
     l.name AS place_name, l.neighbourhood,
     COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
@@ -5510,6 +5572,7 @@ FROM occurrences o
 JOIN locations l ON l.id = o.location_id
 WHERE (o.occurrence_year::text || '.' || lpad(o.occurrence_seq::text, 4, '0')) ILIKE '%' || $1::text || '%'
    OR o.occurrence_number ILIKE '%' || $1::text || '%'
+   OR o.inquiry_number ILIKE '%' || $1::text || '%'
    OR o.agency ILIKE '%' || $1::text || '%'
 ORDER BY o.occurred_from DESC, o.id DESC
 LIMIT 20
@@ -5521,6 +5584,7 @@ type SearchOccurrencesRow struct {
 	OccurrenceSeq    sql.NullInt32   `db:"occurrence_seq" json:"occurrence_seq"`
 	Agency           sql.NullString  `db:"agency" json:"agency"`
 	OccurrenceNumber sql.NullString  `db:"occurrence_number" json:"occurrence_number"`
+	InquiryNumber    sql.NullString  `db:"inquiry_number" json:"inquiry_number"`
 	OccurredFrom     time.Time       `db:"occurred_from" json:"occurred_from"`
 	Status           string          `db:"status" json:"status"`
 	PlaceName        sql.NullString  `db:"place_name" json:"place_name"`
@@ -5528,8 +5592,8 @@ type SearchOccurrencesRow struct {
 	Types            json.RawMessage `db:"types" json:"types"`
 }
 
-// Occurrences whose TrackID number ("2026.0001") or police number contains q, newest first: the
-// case page's link search.
+// Occurrences whose TrackID number ("2026.0001"), police number or inquiry number contains q,
+// newest first: the case page's link search.
 func (q *Queries) SearchOccurrences(ctx context.Context, q_ string) ([]SearchOccurrencesRow, error) {
 	rows, err := q.db.QueryContext(ctx, searchOccurrences, q_)
 	if err != nil {
@@ -5545,6 +5609,7 @@ func (q *Queries) SearchOccurrences(ctx context.Context, q_ string) ([]SearchOcc
 			&i.OccurrenceSeq,
 			&i.Agency,
 			&i.OccurrenceNumber,
+			&i.InquiryNumber,
 			&i.OccurredFrom,
 			&i.Status,
 			&i.PlaceName,
@@ -6539,11 +6604,12 @@ func (q *Queries) UpsertMunicipality(ctx context.Context, arg UpsertMunicipality
 
 const upsertOccurrence = `-- name: UpsertOccurrence :one
 INSERT INTO occurrences (
-    agency, occurrence_number, location_id, occurred_from, occurred_to, reported_at,
+    agency, occurrence_number, inquiry_number, location_id, occurred_from, occurred_to, reported_at,
     registered_at, attempted, offender_count, victim_count, status, description
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (agency, occurrence_number) DO UPDATE SET
+    inquiry_number = EXCLUDED.inquiry_number,
     location_id = EXCLUDED.location_id,
     occurred_from = EXCLUDED.occurred_from,
     occurred_to = EXCLUDED.occurred_to,
@@ -6561,6 +6627,7 @@ RETURNING id, (xmax = 0) AS inserted
 type UpsertOccurrenceParams struct {
 	Agency           sql.NullString `db:"agency" json:"agency"`
 	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
+	InquiryNumber    sql.NullString `db:"inquiry_number" json:"inquiry_number"`
 	LocationID       int64          `db:"location_id" json:"location_id"`
 	OccurredFrom     time.Time      `db:"occurred_from" json:"occurred_from"`
 	OccurredTo       sql.NullTime   `db:"occurred_to" json:"occurred_to"`
@@ -6582,6 +6649,7 @@ func (q *Queries) UpsertOccurrence(ctx context.Context, arg UpsertOccurrencePara
 	row := q.db.QueryRowContext(ctx, upsertOccurrence,
 		arg.Agency,
 		arg.OccurrenceNumber,
+		arg.InquiryNumber,
 		arg.LocationID,
 		arg.OccurredFrom,
 		arg.OccurredTo,
@@ -6594,6 +6662,67 @@ func (q *Queries) UpsertOccurrence(ctx context.Context, arg UpsertOccurrencePara
 		arg.Description,
 	)
 	var i UpsertOccurrenceRow
+	err := row.Scan(&i.ID, &i.Inserted)
+	return i, err
+}
+
+const upsertOccurrenceByInquiry = `-- name: UpsertOccurrenceByInquiry :one
+INSERT INTO occurrences (
+    inquiry_number, location_id, occurred_from, occurred_to, reported_at,
+    registered_at, attempted, offender_count, victim_count, status, description
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+ON CONFLICT (inquiry_number) WHERE occurrence_number IS NULL AND occurrence_seq IS NULL DO UPDATE SET
+    location_id = EXCLUDED.location_id,
+    occurred_from = EXCLUDED.occurred_from,
+    occurred_to = EXCLUDED.occurred_to,
+    reported_at = EXCLUDED.reported_at,
+    registered_at = EXCLUDED.registered_at,
+    attempted = EXCLUDED.attempted,
+    offender_count = EXCLUDED.offender_count,
+    victim_count = EXCLUDED.victim_count,
+    status = EXCLUDED.status,
+    description = EXCLUDED.description,
+    updated_at = NOW()
+RETURNING id, (xmax = 0) AS inserted
+`
+
+type UpsertOccurrenceByInquiryParams struct {
+	InquiryNumber sql.NullString `db:"inquiry_number" json:"inquiry_number"`
+	LocationID    int64          `db:"location_id" json:"location_id"`
+	OccurredFrom  time.Time      `db:"occurred_from" json:"occurred_from"`
+	OccurredTo    sql.NullTime   `db:"occurred_to" json:"occurred_to"`
+	ReportedAt    sql.NullTime   `db:"reported_at" json:"reported_at"`
+	RegisteredAt  time.Time      `db:"registered_at" json:"registered_at"`
+	Attempted     sql.NullBool   `db:"attempted" json:"attempted"`
+	OffenderCount sql.NullInt16  `db:"offender_count" json:"offender_count"`
+	VictimCount   sql.NullInt16  `db:"victim_count" json:"victim_count"`
+	Status        string         `db:"status" json:"status"`
+	Description   string         `db:"description" json:"description"`
+}
+
+type UpsertOccurrenceByInquiryRow struct {
+	ID       int64 `db:"id" json:"id"`
+	Inserted bool  `db:"inserted" json:"inserted"`
+}
+
+// An imported occurrence with no police report, registered by its inquiry (IPL): keyed by the
+// inquiry number (occurrences_inquiry_registered_key).
+func (q *Queries) UpsertOccurrenceByInquiry(ctx context.Context, arg UpsertOccurrenceByInquiryParams) (UpsertOccurrenceByInquiryRow, error) {
+	row := q.db.QueryRowContext(ctx, upsertOccurrenceByInquiry,
+		arg.InquiryNumber,
+		arg.LocationID,
+		arg.OccurredFrom,
+		arg.OccurredTo,
+		arg.ReportedAt,
+		arg.RegisteredAt,
+		arg.Attempted,
+		arg.OffenderCount,
+		arg.VictimCount,
+		arg.Status,
+		arg.Description,
+	)
+	var i UpsertOccurrenceByInquiryRow
 	err := row.Scan(&i.ID, &i.Inserted)
 	return i, err
 }

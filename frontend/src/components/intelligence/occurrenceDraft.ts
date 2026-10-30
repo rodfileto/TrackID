@@ -12,13 +12,14 @@ export interface OccurrenceDraft {
   status: string;
   agency: string;
   agencyNumber: string;
+  inquiryNumber: string;
   description: string;
   place: CreateOccurrenceInput["place"];
 }
 
 export const emptyOccurrence: OccurrenceDraft = {
   chosen: [], occurredFrom: "", foundLater: false, occurredTo: "", attempted: false, offenderCount: "", victimCount: "",
-  status: "REGISTERED", agency: "", agencyNumber: "", description: "", place: {},
+  status: "REGISTERED", agency: "", agencyNumber: "", inquiryNumber: "", description: "", place: {},
 };
 
 /** A datetime-local value (the user's local time) as an ISO instant. */
@@ -48,6 +49,7 @@ export function occurrenceInput(d: OccurrenceDraft, types: OccurrenceType[]): Cr
     description: d.description,
     agency: d.agency || undefined,
     agencyNumber: d.agencyNumber || undefined,
+    inquiryNumber: d.inquiryNumber || undefined,
     offenderCount: civil ? undefined : optionalInt(d.offenderCount),
     victimCount: optionalInt(d.victimCount),
     place: d.place,

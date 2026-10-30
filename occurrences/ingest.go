@@ -27,12 +27,14 @@ type LocationInput struct {
 	PlaceType        string // optional: PUBLIC_ROAD, RESIDENCE, COMMERCE, BANK, TRANSPORT, RURAL, OTHER
 }
 
-// Input is one registered occurrence, keyed by (Agency, Number). Pointer fields are optional;
-// the crime-only ones (Attempted, OffenderCount) stay empty on a civil
-// occurrence.
+// Input is one registered occurrence, keyed by (Agency, Number), its police report; or, when it
+// has no report (Agency and Number empty), by Inquiry, the inquiry (IPL) that registers it.
+// Inquiry is optional on a reported occurrence. Pointer fields are optional; the crime-only ones
+// (Attempted, OffenderCount) stay empty on a civil occurrence.
 type Input struct {
 	Agency       string
 	Number       string
+	Inquiry      string
 	Location     LocationInput
 	OccurredFrom time.Time
 	OccurredTo   *time.Time
@@ -52,13 +54,21 @@ type Input struct {
 type Result struct {
 	OccurrenceID int64
 	LocationID   int64
-	Inserted     bool // false when (Agency, Number) already existed and was updated
+	Inserted     bool // false when its key, (Agency, Number) or Inquiry, already existed and was updated
 }
 
 // Ingest upserts in.Location, the occurrence and its types in one transaction.
 func Ingest(ctx context.Context, sqlDB *sql.DB, in Input) (Result, error) {
-	if in.Agency == "" || in.Number == "" {
-		return Result{}, fmt.Errorf("occurrences: Agency and Number are required")
+	reported := in.Agency != "" || in.Number != ""
+	if reported && (in.Agency == "" || in.Number == "") {
+		return Result{}, fmt.Errorf("occurrences: Agency and Number go together")
+	}
+	if !reported && in.Inquiry == "" {
+		return Result{}, fmt.Errorf("occurrences: Agency and Number, or Inquiry, are required")
+	}
+	key := in.Agency + "/" + in.Number
+	if !reported {
+		key = in.Inquiry
 	}
 	if in.Location.LocationID == "" {
 		return Result{}, fmt.Errorf("occurrences: Location.LocationID is required")
@@ -83,28 +93,51 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, in Input) (Result, error) {
 		return Result{}, fmt.Errorf("occurrences: location %s: %w", l.LocationID, err)
 	}
 
-	occ, err := q.UpsertOccurrence(ctx, db.UpsertOccurrenceParams{
-		Agency: nullString(in.Agency), OccurrenceNumber: nullString(in.Number), LocationID: loc.ID,
-		OccurredFrom: in.OccurredFrom, OccurredTo: nullTime(in.OccurredTo), ReportedAt: nullTime(in.ReportedAt),
-		RegisteredAt: in.RegisteredAt, Attempted: nullBool(in.Attempted),
-		OffenderCount: nullInt16(in.OffenderCount), VictimCount: nullInt16(in.VictimCount),
-		Status: in.Status, Description: in.Description,
-	})
-	if err != nil {
-		return Result{}, fmt.Errorf("occurrences: %s/%s: %w", in.Agency, in.Number, err)
+	var id int64
+	var inserted bool
+	if reported {
+		occ, err := q.UpsertOccurrence(ctx, db.UpsertOccurrenceParams{
+			Agency: nullString(in.Agency), OccurrenceNumber: nullString(in.Number), InquiryNumber: nullString(in.Inquiry),
+			LocationID: loc.ID, OccurredFrom: in.OccurredFrom, OccurredTo: nullTime(in.OccurredTo), ReportedAt: nullTime(in.ReportedAt),
+			RegisteredAt: in.RegisteredAt, Attempted: nullBool(in.Attempted),
+			OffenderCount: nullInt16(in.OffenderCount), VictimCount: nullInt16(in.VictimCount),
+			Status: in.Status, Description: in.Description,
+		})
+		id, inserted = occ.ID, occ.Inserted
+		err = wrap(err, key)
+	} else {
+		occ, err := q.UpsertOccurrenceByInquiry(ctx, db.UpsertOccurrenceByInquiryParams{
+			InquiryNumber: nullString(in.Inquiry),
+			LocationID:    loc.ID, OccurredFrom: in.OccurredFrom, OccurredTo: nullTime(in.OccurredTo), ReportedAt: nullTime(in.ReportedAt),
+			RegisteredAt: in.RegisteredAt, Attempted: nullBool(in.Attempted),
+			OffenderCount: nullInt16(in.OffenderCount), VictimCount: nullInt16(in.VictimCount),
+			Status: in.Status, Description: in.Description,
+		})
+		id, inserted = occ.ID, occ.Inserted
+		err = wrap(err, key)
 	}
-	if err := q.DeleteOccurrenceClassifications(ctx, occ.ID); err != nil {
-		return Result{}, fmt.Errorf("occurrences: %s/%s: types: %w", in.Agency, in.Number, err)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := q.DeleteOccurrenceClassifications(ctx, id); err != nil {
+		return Result{}, fmt.Errorf("occurrences: %s: types: %w", key, err)
 	}
 	for _, t := range in.Types {
-		if err := q.AddOccurrenceClassification(ctx, db.AddOccurrenceClassificationParams{OccurrenceID: occ.ID, TypeCode: t}); err != nil {
-			return Result{}, fmt.Errorf("occurrences: %s/%s: type %s: %w", in.Agency, in.Number, t, err)
+		if err := q.AddOccurrenceClassification(ctx, db.AddOccurrenceClassificationParams{OccurrenceID: id, TypeCode: t}); err != nil {
+			return Result{}, fmt.Errorf("occurrences: %s: type %s: %w", key, t, err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
 		return Result{}, err
 	}
-	return Result{OccurrenceID: occ.ID, LocationID: loc.ID, Inserted: occ.Inserted}, nil
+	return Result{OccurrenceID: id, LocationID: loc.ID, Inserted: inserted}, nil
+}
+
+func wrap(err error, key string) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("occurrences: %s: %w", key, err)
 }
 
 func nullString(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }

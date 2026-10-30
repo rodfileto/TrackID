@@ -88,10 +88,12 @@ type CaseInput struct {
 	Evidences  []EvidenceInput
 }
 
-// OccurrenceRef names an occurrence by its business key.
+// OccurrenceRef names an occurrence by its business key: its police report (Agency, Number), or,
+// for one with no report, the inquiry that registers it (Inquiry), as occurrences.Ingest keys it.
 type OccurrenceRef struct {
-	Agency string
-	Number string
+	Agency  string
+	Number  string
+	Inquiry string
 }
 
 // CodificationResult is one case_codifications row Ingest wrote.
@@ -185,11 +187,17 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput, opts ...Option) (Re
 	}
 
 	if ref := c.Occurrence; ref != nil {
-		occurrenceID, err := q.GetOccurrenceIDByNumber(ctx, db.GetOccurrenceIDByNumberParams{
-			Agency: sql.NullString{String: ref.Agency, Valid: true}, OccurrenceNumber: sql.NullString{String: ref.Number, Valid: true},
-		})
+		var occurrenceID int64
+		var err error
+		if ref.Number == "" && ref.Inquiry != "" {
+			occurrenceID, err = q.GetOccurrenceIDByInquiry(ctx, sql.NullString{String: ref.Inquiry, Valid: true})
+		} else {
+			occurrenceID, err = q.GetOccurrenceIDByNumber(ctx, db.GetOccurrenceIDByNumberParams{
+				Agency: sql.NullString{String: ref.Agency, Valid: true}, OccurrenceNumber: sql.NullString{String: ref.Number, Valid: true},
+			})
+		}
 		if err != nil {
-			return Result{}, fmt.Errorf("cases: occurrence %s/%s: %w", ref.Agency, ref.Number, err)
+			return Result{}, fmt.Errorf("cases: occurrence %+v: %w", *ref, err)
 		}
 		if _, err := q.SetBiometricCaseOccurrence(ctx, db.SetBiometricCaseOccurrenceParams{
 			OccurrenceID: sql.NullInt64{Int64: occurrenceID, Valid: true}, CaseID: c.CaseID,

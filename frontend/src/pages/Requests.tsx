@@ -5,7 +5,7 @@ import PageMeta from "../components/common/PageMeta";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import ComponentCard from "../components/common/ComponentCard";
 import Badge from "../components/ui/badge/Badge";
-import { listRequests, type RequestSummary } from "../services/requests";
+import { citedNumbers, listRequests, type RequestSummary } from "../services/requests";
 import { typeKey } from "../components/analyses/labels";
 import type { AnalysisType } from "../services/analyses";
 
@@ -68,7 +68,7 @@ export default function Requests() {
                         </Badge>
                       )}
                     </td>
-                    <td className="px-3 py-2">{r.occurrenceNumber ?? (r.citedReference ? t("requests.occurrenceUnlinked", { reference: r.citedReference }) : "—")}</td>
+                    <td className="px-3 py-2">{r.occurrenceNumber ?? (r.citedReference || r.citedInquiryNumber ? t("requests.occurrenceUnlinked", { reference: citedNumbers(r) }) : "—")}</td>
                     <td className="px-3 py-2">
                       {r.caseIds.map((id, i) => (
                         <span key={id}>

@@ -14,7 +14,8 @@ export interface CaseRequest {
   dueOn?: string;
   overdue: boolean;
   citedReference?: string;
-  occurrence?: { id: number; number?: string; agency?: string; occurrenceNumber?: string };
+  citedInquiryNumber?: string;
+  occurrence?: { id: number; number?: string; agency?: string; occurrenceNumber?: string; inquiryNumber?: string };
   notes?: string;
   registeredBy?: string;
   createdAt: string;
@@ -36,6 +37,7 @@ export interface RequestSummary {
   openAnalyses: number;
   overdue: boolean;
   citedReference?: string;
+  citedInquiryNumber?: string;
   occurrenceNumber?: string;
   caseIds: string[];
   /** The analyses it asked, by type, across its cases. */
@@ -70,6 +72,7 @@ export interface CaseRequestInput {
   receivedOn: string;
   dueOn?: string;
   citedReference?: string;
+  citedInquiryNumber?: string;
   notes?: string;
   questions: string[];
   fileIds: number[];
@@ -90,6 +93,11 @@ export interface MaterialTrace {
   suitabilityNotes?: string;
   suitabilityBy?: string;
   suitabilityAt?: string;
+}
+
+/** The occurrence and inquiry numbers a request cites, for display. */
+export function citedNumbers(r: { citedReference?: string; citedInquiryNumber?: string }): string {
+  return [r.citedReference, r.citedInquiryNumber && `IPL ${r.citedInquiryNumber}`].filter(Boolean).join(" · ");
 }
 
 function authHeaders(): Record<string, string> {

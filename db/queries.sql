@@ -807,11 +807,34 @@ WHERE location_id = $1;
 
 -- name: UpsertOccurrence :one
 INSERT INTO occurrences (
-    agency, occurrence_number, location_id, occurred_from, occurred_to, reported_at,
+    agency, occurrence_number, inquiry_number, location_id, occurred_from, occurred_to, reported_at,
     registered_at, attempted, offender_count, victim_count, status, description
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (agency, occurrence_number) DO UPDATE SET
+    inquiry_number = EXCLUDED.inquiry_number,
+    location_id = EXCLUDED.location_id,
+    occurred_from = EXCLUDED.occurred_from,
+    occurred_to = EXCLUDED.occurred_to,
+    reported_at = EXCLUDED.reported_at,
+    registered_at = EXCLUDED.registered_at,
+    attempted = EXCLUDED.attempted,
+    offender_count = EXCLUDED.offender_count,
+    victim_count = EXCLUDED.victim_count,
+    status = EXCLUDED.status,
+    description = EXCLUDED.description,
+    updated_at = NOW()
+RETURNING id, (xmax = 0) AS inserted;
+
+-- name: UpsertOccurrenceByInquiry :one
+-- An imported occurrence with no police report, registered by its inquiry (IPL): keyed by the
+-- inquiry number (occurrences_inquiry_registered_key).
+INSERT INTO occurrences (
+    inquiry_number, location_id, occurred_from, occurred_to, reported_at,
+    registered_at, attempted, offender_count, victim_count, status, description
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+ON CONFLICT (inquiry_number) WHERE occurrence_number IS NULL AND occurrence_seq IS NULL DO UPDATE SET
     location_id = EXCLUDED.location_id,
     occurred_from = EXCLUDED.occurred_from,
     occurred_to = EXCLUDED.occurred_to,
@@ -861,6 +884,11 @@ ORDER BY distance_m, o.id;
 -- name: GetOccurrenceIDByNumber :one
 SELECT id FROM occurrences WHERE agency = $1 AND occurrence_number = $2;
 
+-- name: GetOccurrenceIDByInquiry :one
+-- An imported occurrence registered by its inquiry alone (UpsertOccurrenceByInquiry).
+SELECT id FROM occurrences
+WHERE inquiry_number = $1 AND occurrence_number IS NULL AND occurrence_seq IS NULL;
+
 -- name: ListOccurrencesForMap :many
 -- Occurrences with their point, types and linked cases, for the occurrence map. NULL bounds are
 -- open. types is a JSON array of occurrence_types codes; cases a JSON array of
@@ -895,12 +923,12 @@ WHERE occurrence_year = sqlc.arg(occurrence_year)::int4;
 
 -- name: CreateOccurrence :one
 -- An occurrence registered in TrackID: numbered by occurrences.Create, the police agency's own
--- number optional.
+-- number and the inquiry number optional.
 INSERT INTO occurrences (
-    occurrence_year, occurrence_seq, agency, occurrence_number, location_id, occurred_from, occurred_to,
+    occurrence_year, occurrence_seq, agency, occurrence_number, inquiry_number, location_id, occurred_from, occurred_to,
     reported_at, registered_at, attempted, offender_count, victim_count, status, description
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11, $12, $13, $14)
 RETURNING id, registered_at;
 
 -- name: GetLocationByID :one
@@ -920,9 +948,9 @@ ORDER BY distance_m, l.id
 LIMIT 10;
 
 -- name: SearchOccurrences :many
--- Occurrences whose TrackID number ("2026.0001") or police number contains q, newest first: the
--- case page's link search.
-SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.occurred_from, o.status,
+-- Occurrences whose TrackID number ("2026.0001"), police number or inquiry number contains q,
+-- newest first: the case page's link search.
+SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.inquiry_number, o.occurred_from, o.status,
     l.name AS place_name, l.neighbourhood,
     COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
@@ -930,13 +958,14 @@ FROM occurrences o
 JOIN locations l ON l.id = o.location_id
 WHERE (o.occurrence_year::text || '.' || lpad(o.occurrence_seq::text, 4, '0')) ILIKE '%' || sqlc.arg(q)::text || '%'
    OR o.occurrence_number ILIKE '%' || sqlc.arg(q)::text || '%'
+   OR o.inquiry_number ILIKE '%' || sqlc.arg(q)::text || '%'
    OR o.agency ILIKE '%' || sqlc.arg(q)::text || '%'
 ORDER BY o.occurred_from DESC, o.id DESC
 LIMIT 20;
 
 -- name: GetOccurrenceSummary :one
 -- One occurrence as a case page shows it, with its location's point for the card's map.
-SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.occurred_from, o.status,
+SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.inquiry_number, o.occurred_from, o.status,
     l.name AS place_name, l.neighbourhood, l.address, l.precision,
     ST_X(l.geom::geometry)::float8 AS lon,
     ST_Y(l.geom::geometry)::float8 AS lat,
@@ -1213,9 +1242,10 @@ INSERT INTO access_log (user_id, username, kind, subject, route) VALUES ($1, $2,
 
 -- name: InsertCaseRequest :one
 INSERT INTO case_requests (authority, document_reference, document_date, received_on, due_on,
-    cited_reference, occurrence_id, notes, registered_by)
+    cited_reference, cited_inquiry_number, occurrence_id, notes, registered_by)
 VALUES (@authority::text, @document_reference::text, sqlc.narg('document_date')::date, @received_on::date,
-        sqlc.narg('due_on')::date, sqlc.narg('cited_reference')::text, sqlc.narg('occurrence_id')::bigint,
+        sqlc.narg('due_on')::date, sqlc.narg('cited_reference')::text, sqlc.narg('cited_inquiry_number')::text,
+        sqlc.narg('occurrence_id')::bigint,
         sqlc.narg('notes')::text, sqlc.narg('registered_by')::bigint)
 RETURNING id;
 
@@ -1234,7 +1264,8 @@ INSERT INTO case_request_questions (case_request_id, sequence, question) VALUES 
 -- name: ListCaseRequests :many
 -- A case's requests in order, with the occurrence each was linked to and who registered it.
 SELECT r.id, rc.sequence, r.authority, r.document_reference, r.document_date, r.received_on, r.due_on, r.cited_reference,
-       r.occurrence_id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
+       r.cited_inquiry_number, r.occurrence_id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
+       o.inquiry_number,
        r.notes, u.username AS registered_by, r.created_at
 FROM case_requests r
 JOIN case_request_cases rc ON rc.case_request_id = r.id
@@ -1258,7 +1289,7 @@ ORDER BY rc.case_request_id, obc.case_id;
 -- name: ListRequests :many
 -- Every request, overdue and soonest due first: what the coordinator has to answer. open counts
 -- the analyses still open that answer it.
-SELECT r.id, r.authority, r.document_reference, r.received_on, r.due_on, r.cited_reference,
+SELECT r.id, r.authority, r.document_reference, r.received_on, r.due_on, r.cited_reference, r.cited_inquiry_number,
        o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
        (SELECT COUNT(*) FROM case_analyses ca WHERE ca.case_request_id = r.id AND ca.status = 'OPEN')::bigint AS open_analyses,
        COALESCE((SELECT array_agg(bc.case_id ORDER BY bc.case_id)
@@ -1296,7 +1327,7 @@ ORDER BY f.id;
 SELECT id, case_id, case_type, modality, description FROM biometric_cases WHERE case_id = $1;
 
 -- name: GetOccurrenceNumbers :one
-SELECT agency, occurrence_number, occurrence_year, occurrence_seq FROM occurrences WHERE id = $1;
+SELECT agency, occurrence_number, inquiry_number, occurrence_year, occurrence_seq FROM occurrences WHERE id = $1;
 
 -- name: SetBiometricCaseOccurrenceIfNone :execrows
 UPDATE biometric_cases SET occurrence_id = $2, updated_at = NOW() WHERE id = $1 AND occurrence_id IS NULL;
@@ -1308,6 +1339,15 @@ SELECT o.id
 FROM occurrences o
 WHERE (o.occurrence_year::text || '.' || lpad(o.occurrence_seq::text, 4, '0')) = @reference::text
    OR o.occurrence_number = @reference::text
+ORDER BY o.id
+LIMIT 2;
+
+-- name: FindOccurrenceByInquiryNumber :many
+-- Occurrences a request's cited inquiry number names exactly. More than one row is ambiguous (an
+-- inquiry can gather several occurrences).
+SELECT o.id
+FROM occurrences o
+WHERE o.inquiry_number = @inquiry_number::text
 ORDER BY o.id
 LIMIT 2;
 

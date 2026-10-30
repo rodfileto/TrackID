@@ -227,17 +227,18 @@ type CaseFile struct {
 }
 
 type CaseRequest struct {
-	ID                int64          `db:"id" json:"id"`
-	Authority         string         `db:"authority" json:"authority"`
-	DocumentReference string         `db:"document_reference" json:"document_reference"`
-	DocumentDate      sql.NullTime   `db:"document_date" json:"document_date"`
-	ReceivedOn        time.Time      `db:"received_on" json:"received_on"`
-	DueOn             sql.NullTime   `db:"due_on" json:"due_on"`
-	CitedReference    sql.NullString `db:"cited_reference" json:"cited_reference"`
-	OccurrenceID      sql.NullInt64  `db:"occurrence_id" json:"occurrence_id"`
-	Notes             sql.NullString `db:"notes" json:"notes"`
-	RegisteredBy      sql.NullInt64  `db:"registered_by" json:"registered_by"`
-	CreatedAt         time.Time      `db:"created_at" json:"created_at"`
+	ID                 int64          `db:"id" json:"id"`
+	Authority          string         `db:"authority" json:"authority"`
+	DocumentReference  string         `db:"document_reference" json:"document_reference"`
+	DocumentDate       sql.NullTime   `db:"document_date" json:"document_date"`
+	ReceivedOn         time.Time      `db:"received_on" json:"received_on"`
+	DueOn              sql.NullTime   `db:"due_on" json:"due_on"`
+	CitedReference     sql.NullString `db:"cited_reference" json:"cited_reference"`
+	OccurrenceID       sql.NullInt64  `db:"occurrence_id" json:"occurrence_id"`
+	Notes              sql.NullString `db:"notes" json:"notes"`
+	RegisteredBy       sql.NullInt64  `db:"registered_by" json:"registered_by"`
+	CreatedAt          time.Time      `db:"created_at" json:"created_at"`
+	CitedInquiryNumber sql.NullString `db:"cited_inquiry_number" json:"cited_inquiry_number"`
 }
 
 type CaseRequestCase struct {
@@ -433,6 +434,7 @@ type Occurrence struct {
 	Description      string         `db:"description" json:"description"`
 	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
 	UpdatedAt        time.Time      `db:"updated_at" json:"updated_at"`
+	InquiryNumber    sql.NullString `db:"inquiry_number" json:"inquiry_number"`
 }
 
 type OccurrenceClassification struct {
