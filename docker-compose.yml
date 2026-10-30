@@ -1,3 +1,5 @@
+# Host ports default to the development stack's; a second stack (e.g. trackid-sim's stress
+# test, its own compose project) sets them to others so both run side by side.
 services:
   postgres:
     build: ./db/postgres
@@ -7,7 +9,7 @@ services:
       POSTGRES_USER: trackid
       POSTGRES_PASSWORD: trackid_dev
     ports:
-      - "55432:5432"
+      - "${POSTGRES_PORT:-55432}:5432"
     volumes:
       - trackid-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -19,7 +21,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "56379:6379"
+      - "${REDIS_PORT:-56379}:6379"
     volumes:
       - trackid-redis:/data
 
@@ -30,8 +32,8 @@ services:
       MINIO_ROOT_USER: trackid
       MINIO_ROOT_PASSWORD: trackid_dev_storage
     ports:
-      - "59000:9000"
-      - "59001:9001"
+      - "${MINIO_PORT:-59000}:9000"
+      - "${MINIO_CONSOLE_PORT:-59001}:9001"
     volumes:
       - trackid-minio:/data
 
@@ -40,7 +42,7 @@ services:
   sourceafis-sidecar:
     build: ./sourceafis-sidecar
     ports:
-      - "58090:8090"
+      - "${SIDECAR_PORT:-58090}:8090"
 
 volumes:
   trackid-postgres:
