@@ -303,10 +303,21 @@ func enqueueSync(queue Enqueuer) {
 	}
 }
 
-// HandleSync returns the asynq.Handler for TaskTypeSync.
-func HandleSync(sqlDB *sql.DB, client *Client) func(context.Context, *asynq.Task) error {
+// HandleSync returns the asynq.Handler for TaskTypeSync. One sync runs at a time
+// (cluster.LockFingerprintSync): a sync that finds another running leaves the work to
+// it and schedules one more, a debounce later, so whatever arrives after that run's
+// last pass is still matched.
+func HandleSync(sqlDB *sql.DB, client *Client, queue Enqueuer) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, t *asynq.Task) error {
-		return RunSync(ctx, sqlDB, client)
+		ran, err := cluster.TryExclusive(ctx, sqlDB, cluster.LockFingerprintSync, func(ctx context.Context) error {
+			return RunSync(ctx, sqlDB, client)
+		})
+		if err == nil && !ran && queue != nil {
+			if _, err := queue.Enqueue(NewSyncTask(), asynq.ProcessIn(syncDebounce), asynq.Unique(syncDebounce)); err != nil && !errors.Is(err, asynq.ErrDuplicateTask) {
+				log.Printf("fingerprint: enqueue %s: %v", TaskTypeSync, err)
+			}
+		}
+		return err
 	}
 }
 

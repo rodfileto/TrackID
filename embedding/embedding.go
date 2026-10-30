@@ -355,10 +355,20 @@ func enqueueSyncFace(queue Enqueuer) {
 }
 
 // HandleSyncFace returns the asynq.Handler cmd/worker registers for
-// TaskTypeSyncFace.
-func HandleSyncFace(sqlDB *sql.DB) func(context.Context, *asynq.Task) error {
+// TaskTypeSyncFace. One face sync runs at a time (cluster.LockFaceSync): a sync that
+// finds another running leaves the work to it and schedules one more, a debounce
+// later, so whatever arrives after that run's last pass is still matched.
+func HandleSyncFace(sqlDB *sql.DB, queue Enqueuer) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, t *asynq.Task) error {
-		return SyncFace(ctx, sqlDB)
+		ran, err := cluster.TryExclusive(ctx, sqlDB, cluster.LockFaceSync, func(ctx context.Context) error {
+			return SyncFace(ctx, sqlDB)
+		})
+		if err == nil && !ran && queue != nil {
+			if _, err := queue.Enqueue(NewSyncFaceTask(), asynq.ProcessIn(syncFaceDebounce), asynq.Unique(syncFaceDebounce)); err != nil && !errors.Is(err, asynq.ErrDuplicateTask) {
+				log.Printf("embedding: enqueue %s: %v", TaskTypeSyncFace, err)
+			}
+		}
+		return err
 	}
 }
 

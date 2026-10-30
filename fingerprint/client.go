@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net/http"
 	"strings"
@@ -81,10 +82,99 @@ func (c *Client) Extract(ctx context.Context, image []byte, dpi float64) ([]byte
 // Match scores probe against each candidate template, returning one
 // SourceAFIS similarity score per candidate in order. Scores are unbounded
 // above; SourceAFIS's documented match threshold is 40.
+//
+// It goes through the sidecar's gallery (/match-cached): templates are sent by
+// key, the hash of their bytes, and the sidecar keeps them deserialised, so each
+// is sent and rebuilt once rather than for every probe; the sidecar also spreads
+// the candidates over its cores. Templates the gallery lacks (the first time, or
+// after a sidecar restart) are sent and the match retried. A sidecar without the
+// gallery gets the plain /match.
 func (c *Client) Match(ctx context.Context, probe []byte, candidates [][]byte) ([]float64, error) {
 	if len(candidates) == 0 {
 		return nil, nil
 	}
+	byKey := map[string][]byte{}
+	key := func(t []byte) string {
+		h := fnv.New64a()
+		h.Write(t)
+		k := fmt.Sprintf("%016x-%d", h.Sum64(), len(t))
+		byKey[k] = t
+		return k
+	}
+	probeKey := key(probe)
+	keys := make([]string, len(candidates))
+	for i, t := range candidates {
+		keys[i] = key(t)
+	}
+	payload, err := json.Marshal(struct {
+		Probe      string   `json:"probe"`
+		Candidates []string `json:"candidates"`
+	}{probeKey, keys})
+	if err != nil {
+		return nil, err
+	}
+	for attempt := 0; ; attempt++ {
+		body, status, err := c.post(ctx, "/match-cached", "application/json", payload)
+		if err != nil {
+			return nil, err
+		}
+		switch {
+		case status == http.StatusOK:
+			return decodeScores(body, len(candidates))
+		case status == http.StatusNotFound:
+			return c.matchPlain(ctx, probe, candidates)
+		case status == http.StatusConflict && attempt == 0:
+			var out struct {
+				Missing []string `json:"missing"`
+			}
+			if err := json.Unmarshal(body, &out); err != nil {
+				return nil, fmt.Errorf("fingerprint: match: decode missing templates: %w", err)
+			}
+			if err := c.addToGallery(ctx, out.Missing, byKey); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("fingerprint: match: %d: %s", status, strings.TrimSpace(string(body)))
+		}
+	}
+}
+
+// galleryBatch caps how many templates go to the sidecar's gallery in one request.
+const galleryBatch = 2000
+
+func (c *Client) addToGallery(ctx context.Context, keys []string, byKey map[string][]byte) error {
+	type item struct {
+		Key      string `json:"key"`
+		Template []byte `json:"template"` // base64, as the sidecar reads it
+	}
+	for start := 0; start < len(keys); start += galleryBatch {
+		var items []item
+		for _, k := range keys[start:min(start+galleryBatch, len(keys))] {
+			t, ok := byKey[k]
+			if !ok {
+				return fmt.Errorf("fingerprint: gallery asked for template %s, not one sent", k)
+			}
+			items = append(items, item{k, t})
+		}
+		payload, err := json.Marshal(struct {
+			Templates []item `json:"templates"`
+		}{items})
+		if err != nil {
+			return err
+		}
+		body, status, err := c.post(ctx, "/gallery", "application/json", payload)
+		if err != nil {
+			return err
+		}
+		if status != http.StatusOK {
+			return fmt.Errorf("fingerprint: gallery: %d: %s", status, strings.TrimSpace(string(body)))
+		}
+	}
+	return nil
+}
+
+// matchPlain sends the templates themselves, for a sidecar without the gallery.
+func (c *Client) matchPlain(ctx context.Context, probe []byte, candidates [][]byte) ([]float64, error) {
 	// encoding/json writes []byte as base64, which is what the sidecar reads.
 	payload, err := json.Marshal(struct {
 		Probe      []byte   `json:"probe"`
@@ -100,14 +190,18 @@ func (c *Client) Match(ctx context.Context, probe []byte, candidates [][]byte) (
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("fingerprint: match: %d: %s", status, strings.TrimSpace(string(body)))
 	}
+	return decodeScores(body, len(candidates))
+}
+
+func decodeScores(body []byte, n int) ([]float64, error) {
 	var out struct {
 		Scores []float64 `json:"scores"`
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, fmt.Errorf("fingerprint: match: decode response: %w", err)
 	}
-	if len(out.Scores) != len(candidates) {
-		return nil, fmt.Errorf("fingerprint: match: %d scores for %d candidates", len(out.Scores), len(candidates))
+	if len(out.Scores) != n {
+		return nil, fmt.Errorf("fingerprint: match: %d scores for %d candidates", len(out.Scores), n)
 	}
 	return out.Scores, nil
 }

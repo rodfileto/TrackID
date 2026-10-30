@@ -20,6 +20,21 @@ run it during the image build.
   template>", ...]}`. Returns `{"scores": [<float>, ...]}`, one SourceAFIS
   similarity score per candidate, in order. Scores are unbounded above; SourceAFIS's
   documented match threshold is 40 (a false match rate of 0.01%).
+- `POST /gallery` -- body: `{"templates": [{"key": "<key>", "template": "<base64
+  template>"}, ...]}`. Keeps the templates deserialised in memory under their keys;
+  `GET /gallery` returns `{"size": n}`, `DELETE /gallery` empties it.
+- `POST /match-cached` -- body: `{"probe": "<key>", "candidates": ["<key>", ...]}`.
+  Returns the scores as `/match` does, matching the candidates on every core; 409
+  `{"missing": ["<key>", ...]}` when the gallery lacks any, which the caller sends
+  and retries. trackid's client keys a template by a hash of its bytes, so a changed
+  template is a new key.
+
+  Why: rebuilding a template from its bytes costs more than comparing it (129 vs 90 µs
+  on trackid-sim's prints), and `/match` rebuilds every candidate for every probe.
+  Through the Go client, 360 templates matched each against all ran at 270 µs per
+  comparison with `/match` and 42 µs with the gallery on 8 cores. The gallery is in
+  memory only and unbounded, about 26 KB of heap per template (synthetic prints; real
+  ten-print cards with more minutiae take more), and a restart empties it.
 - `GET /healthz` -- 200 `ok`.
 
 ## Running it

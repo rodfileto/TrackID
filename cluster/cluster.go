@@ -52,7 +52,17 @@ type Stats struct {
 // Run reconciles the confirmed decisions against the persisted clusters of
 // both layers and writes the result.
 func Run(ctx context.Context, sqlDB *sql.DB) (Stats, error) {
-	return run(ctx, sqlDB, true)
+	if sqlDB == nil {
+		return Stats{}, fmt.Errorf("database is not configured")
+	}
+	// One rewrite at a time: a face sync and a fingerprint sync can both end here at once.
+	var out Stats
+	err := exclusive(ctx, sqlDB, lockClusterRun, func(ctx context.Context) error {
+		var err error
+		out, err = run(ctx, sqlDB, true)
+		return err
+	})
+	return out, err
 }
 
 // Plan returns the counts a Run would produce, without writing anything.

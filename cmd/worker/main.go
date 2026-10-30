@@ -15,6 +15,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -96,7 +97,7 @@ func main() {
 		}
 	}
 
-	mux.HandleFunc(embedding.TaskTypeSyncFace, embedding.HandleSyncFace(sqlDB))
+	mux.HandleFunc(embedding.TaskTypeSyncFace, embedding.HandleSyncFace(sqlDB, queueClient))
 	log.Printf("registered handler for %s", embedding.TaskTypeSyncFace)
 
 	// Fingerprint doesn't need Vision: the sidecar extracts and matches.
@@ -111,20 +112,30 @@ func main() {
 		} else {
 			mux.HandleFunc(fingerprint.TaskTypeExtractCodification, fingerprint.HandleExtractCodification(sqlDB, store, fp, queueClient))
 			mux.HandleFunc(fingerprint.TaskTypeExtractIdentityFeature, fingerprint.HandleExtractIdentityFeature(sqlDB, store, fp, queueClient))
-			mux.HandleFunc(fingerprint.TaskTypeSync, fingerprint.HandleSync(sqlDB, fp))
+			mux.HandleFunc(fingerprint.TaskTypeSync, fingerprint.HandleSync(sqlDB, fp, queueClient))
 			log.Printf("registered handlers for %s, %s, %s",
 				fingerprint.TaskTypeExtractCodification, fingerprint.TaskTypeExtractIdentityFeature, fingerprint.TaskTypeSync)
 		}
 	}
 
+	// WORKER_CONCURRENCY sets how many tasks run at once (default 10); the stress test
+	// varies it against the GPU and the fingerprint sidecar.
+	concurrency := 10
+	if v := os.Getenv("WORKER_CONCURRENCY"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			log.Fatalf("WORKER_CONCURRENCY must be a positive integer, got %q", v)
+		}
+		concurrency = n
+	}
 	srv, err := queue.OpenServer(redisURL, asynq.Config{
-		Concurrency: 10,
+		Concurrency: concurrency,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Println("trackid worker starting")
+	log.Printf("trackid worker starting (concurrency %d)", concurrency)
 	if err := srv.Run(mux); err != nil {
 		log.Fatal(err)
 	}

@@ -1,10 +1,15 @@
 package fingerprint_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -104,4 +109,74 @@ func TestExtractUnusableImage(t *testing.T) {
 	if !errors.Is(err, fingerprint.ErrUnusableImage) {
 		t.Fatalf("err = %v, want ErrUnusableImage", err)
 	}
+}
+
+// TestMatchGallery checks the gallery path against the plain one: Match (through
+// /match-cached, candidates scored in parallel) gives the scores /match gives, before
+// and after the gallery is emptied, as a sidecar restart would.
+func TestMatchGallery(t *testing.T) {
+	client := sidecar(t)
+	ctx := context.Background()
+	var templates [][]byte
+	for _, name := range []string{"f000_r0.png", "f000_r1.png", "f000_l0.png", "f001_r0.png"} {
+		tpl, err := client.Extract(ctx, testdata(t, name), fingerprint.DefaultDPI)
+		if err != nil {
+			t.Fatalf("extract %s: %v", name, err)
+		}
+		templates = append(templates, tpl)
+	}
+	// Enough candidates for the sidecar to split them over its threads.
+	var candidates [][]byte
+	for range 50 {
+		candidates = append(candidates, templates[1:]...)
+	}
+	plain := plainMatch(t, templates[0], candidates)
+
+	for _, emptied := range []bool{false, true} {
+		if emptied {
+			sidecarRequest(t, http.MethodDelete, "/gallery", nil)
+		}
+		scores, err := client.Match(ctx, templates[0], candidates)
+		if err != nil {
+			t.Fatalf("match (gallery emptied %v): %v", emptied, err)
+		}
+		for i := range plain {
+			if scores[i] != plain[i] {
+				t.Fatalf("candidate %d (gallery emptied %v): gallery score %v, plain %v", i, emptied, scores[i], plain[i])
+			}
+		}
+	}
+}
+
+func plainMatch(t *testing.T, probe []byte, candidates [][]byte) []float64 {
+	t.Helper()
+	payload, _ := json.Marshal(struct {
+		Probe      []byte   `json:"probe"`
+		Candidates [][]byte `json:"candidates"`
+	}{probe, candidates})
+	var out struct {
+		Scores []float64 `json:"scores"`
+	}
+	if err := json.Unmarshal(sidecarRequest(t, http.MethodPost, "/match", payload), &out); err != nil {
+		t.Fatal(err)
+	}
+	return out.Scores
+}
+
+func sidecarRequest(t *testing.T, method, path string, body []byte) []byte {
+	t.Helper()
+	req, err := http.NewRequest(method, strings.TrimRight(os.Getenv("FINGERPRINT_SIDECAR_URL"), "/")+path, bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	out, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("%s %s: %d %s", method, path, resp.StatusCode, out)
+	}
+	return out
 }

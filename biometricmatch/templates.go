@@ -18,8 +18,10 @@ type TemplateMatcher interface {
 }
 
 // templateBatch caps how many candidate templates go to the matcher in one
-// call.
-const templateBatch = 256
+// call. The sidecar's gallery makes a call carry keys, not templates, and it
+// spreads a call's candidates over its cores, so larger calls mean fewer round
+// trips and more work per core.
+const templateBatch = 2048
 
 // RunTemplates is RunTemplatesBand with a single cutoff (no review band) and
 // no threshold version.

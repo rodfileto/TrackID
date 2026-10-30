@@ -14,9 +14,12 @@ const MaxSettlePasses = 5
 
 // Settle runs pass until nothing it reads changed while it ran: no human decision newer than the
 // one before the pass, and no feature left unmatched (unmatched counts them). A sync task is
-// enqueued with asynq.Unique, and asynq rejects a duplicate while one is queued *or running*, so
-// an examiner's submit or a new embedding landing during a pass enqueues nothing; without a
-// further pass its decisions would wait for some later, unrelated sync to reach the clusters.
+// enqueued with asynq.Unique, and asynq rejects a duplicate while one is queued or running --
+// within the debounce TTL only; past it a new sync starts and finds the sync lock taken
+// (LockFaceSync, LockFingerprintSync), so it leaves the work to this one and schedules a later
+// sync. Either way an examiner's submit or a new embedding landing during a pass starts no other
+// matching; without a further pass its decisions would wait for some later, unrelated sync to
+// reach the clusters.
 //
 // What Settle cannot see is a change in the instant between its last check and asynq releasing
 // the task's lock.
