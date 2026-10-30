@@ -6,6 +6,7 @@ import {
   BoxCubeIcon,
   ChevronDownIcon,
   DocsIcon,
+  EyeIcon,
   FolderIcon,
   GridIcon,
   GroupIcon,
@@ -56,6 +57,11 @@ const allNavItems: NavItem[] = [
     icon: <PencilIcon />,
     name: "nav.imageLab",
     path: "/image-lab",
+  },
+  {
+    icon: <EyeIcon />,
+    name: "nav.faceLab",
+    path: "/face-lab",
   },
   {
     icon: <DocsIcon />,

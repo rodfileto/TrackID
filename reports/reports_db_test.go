@@ -172,13 +172,13 @@ func TestLaudoFlow(t *testing.T) {
 		p.FeatureA, p.FeatureB = p.FeatureB, p.FeatureA
 	}
 	check("no level", examination.SaveDraft(ctx, sqlDB, ana, cmp, p, "POSITIVE", "", ""), examination.ErrNeedsConclusion)
-	check("a level of the other side", examination.SaveDraft(ctx, sqlDB, ana, cmp, p, "POSITIVE", "", cluster.ConclusionExclusion), examination.ErrNeedsConclusion)
-	check("ana", examination.SaveDraft(ctx, sqlDB, ana, cmp, p, "POSITIVE", "", cluster.ConclusionStrongSupport), nil)
+	check("a level of the other side", examination.SaveDraft(ctx, sqlDB, ana, cmp, p, "POSITIVE", "", cluster.ConclusionStrongSupportDifferent), examination.ErrNeedsConclusion)
+	check("ana", examination.SaveDraft(ctx, sqlDB, ana, cmp, p, "POSITIVE", "", cluster.ConclusionStrongSupportCommon), nil)
 	if _, err := examination.Submit(ctx, sqlDB, ana, cmp); err != nil {
 		t.Fatal(err)
 	}
 	check("caio verifies", distribution.Assign(ctx, sqlDB, cmp, &caio.ID, chief.ID), nil)
-	check("caio", examination.SaveDraft(ctx, sqlDB, caio, cmp, p, "POSITIVE", "", cluster.ConclusionStrongSupport), nil)
+	check("caio", examination.SaveDraft(ctx, sqlDB, caio, cmp, p, "POSITIVE", "", cluster.ConclusionStrongSupportCommon), nil)
 	if res, err := examination.Submit(ctx, sqlDB, caio, cmp); err != nil || res.Stage != analyses.StageReport {
 		t.Fatalf("caio's submit = %+v, %v; want REPORT", res, err)
 	}

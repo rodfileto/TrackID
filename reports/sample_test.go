@@ -33,7 +33,7 @@ func sampleLaudo() (reports.Data, map[string]reports.Image) {
 	verifier := &reports.Person{Username: "caio", Name: "Caio Lima", StaffNumber: "0002", JobTitle: "Perito"}
 	third := &reports.Person{Username: "bia", Name: "Bia Reis", StaffNumber: "0003", JobTitle: "Perita"}
 	d := reports.Data{AnalysisID: 7, AnalysisType: analyses.FacialComparison, ReportType: "FACIAL_COMPARISON_REPORT",
-		Identification: cluster.ConclusionStrongSupport, GeneratedAt: time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC),
+		Identification: cluster.ConclusionStrongSupportCommon, GeneratedAt: time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC),
 		Case: reports.CaseInfo{CaseID: "2026.0007", CaseType: "CRIMINAL", Description: "Roubo a agência bancária", Occurrence: "2026.0003 (37ª DP 1234/2026)", OccurrenceTypes: "ROUBO"},
 		Request: &reports.RequestInfo{Sequence: 2, Authority: "37ª Delegacia de Polícia", DocumentReference: "Ofício nº 456/2026", ReceivedOn: "2026-10-20",
 			DueOn: "2026-11-20", Questions: []string{"As imagens retratam a mesma pessoa?", "Há elementos que indiquem disfarce?"},
@@ -43,11 +43,11 @@ func sampleLaudo() (reports.Data, map[string]reports.Image) {
 			{FeatureID: "101", Kind: "ENROLLED", Label: "Registro SIM-RG-1", Name: "João da Silva", Document: "RG SIM-RG-1", Register: "SIM-RG-1", EnrolledOn: "2019-05-02"}},
 		Pairs: []reports.PairInfo{
 			{Questioned: "Vestígio 1.1", Counterpart: "Padrão 2.1", QuestionedID: "TRACE:1#feature", CounterpartID: "TRACE:2#feature",
-				Steps: []reports.StepDecision{{Step: analyses.StepVerificator, Examiner: "Ana Souza", Decision: "POSITIVE", Conclusion: cluster.ConclusionStrongSupport},
-					{Step: analyses.StepReviewer, Examiner: "Caio Lima", Decision: "POSITIVE", Conclusion: cluster.ConclusionStrongSupport}},
-				Decision: "POSITIVE", Conclusion: cluster.ConclusionStrongSupport, Result: reports.ResultIdentified, Lead: "POSITIVE", Effect: "CONFIRMS"},
+				Steps: []reports.StepDecision{{Step: analyses.StepVerificator, Examiner: "Ana Souza", Decision: "POSITIVE", Conclusion: cluster.ConclusionStrongSupportCommon},
+					{Step: analyses.StepReviewer, Examiner: "Caio Lima", Decision: "POSITIVE", Conclusion: cluster.ConclusionStrongSupportCommon}},
+				Decision: "POSITIVE", Conclusion: cluster.ConclusionStrongSupportCommon, Result: reports.ResultIdentified, Lead: "POSITIVE", Effect: "CONFIRMS"},
 			{Questioned: "Vestígio 1.1", Counterpart: "Registro SIM-RG-1 (João da Silva)", QuestionedID: "TRACE:1#feature", CounterpartID: "101", Disputed: true,
-				Steps: []reports.StepDecision{{Step: analyses.StepVerificator, Examiner: "Ana Souza", Decision: "POSITIVE", Conclusion: cluster.ConclusionModerateSupport},
+				Steps: []reports.StepDecision{{Step: analyses.StepVerificator, Examiner: "Ana Souza", Decision: "POSITIVE", Conclusion: cluster.ConclusionSupportCommon},
 					{Step: analyses.StepReviewer, Examiner: "Caio Lima", Decision: "INCONCLUSIVE", Conclusion: cluster.ConclusionInconclusive},
 					{Step: analyses.StepInconsistence, Examiner: "Bia Reis", Decision: "INCONCLUSIVE", Conclusion: cluster.ConclusionInconclusive, Notes: "Resolução insuficiente na região dos olhos."}},
 				Decision: "INCONCLUSIVE", Conclusion: cluster.ConclusionInconclusive, Result: reports.ResultInconclusive, Effect: "NEW"},
@@ -77,10 +77,16 @@ func TestRenderAndParse(t *testing.T) {
 	if len(regions) != 8 || !strings.HasPrefix(regions[0], "Realizar exame de comparação facial") || regions[3] != "" {
 		t.Fatalf("regions = %q", regions)
 	}
-	for _, want := range []string{"Sumário executivo", "Suporte forte à mesma origem", "Ofício nº 456/2026", "(número atribuído na emissão)",
+	for _, want := range []string{"Sumário executivo", "Suporte forte à origem comum", "OSAC 2022-S-0001", "Origem comum favorecida", "Ofício nº 456/2026", "(número atribuído na emissão)",
 		"Resolução insuficiente na região dos olhos.", "As imagens retratam a mesma pessoa?", "[img:"} {
 		if !strings.Contains(locked, want) {
 			t.Errorf("the locked text lacks %q", want)
+		}
+	}
+	// FISWG and OSAC rule out "identification" and "exclusion" in a facial opinion.
+	for _, ruled := range []string{"Exclusão", "Identificado", "Excluído", "Nível mínimo para identificação"} {
+		if strings.Contains(locked, ruled) {
+			t.Errorf("the facial laudo says %q", ruled)
 		}
 	}
 	if strings.Contains(locked, "Realizar exame de comparação facial entre") {
@@ -92,7 +98,7 @@ func TestRenderAndParse(t *testing.T) {
 // a frame taken from a video named with its time, and only the optional observations editable.
 func TestLeadReport(t *testing.T) {
 	frame := int64(175)
-	d := reports.Data{AnalysisType: analyses.FacialReview, ReportType: "FACIAL_REVIEW_REPORT", Identification: cluster.ConclusionStrongSupport,
+	d := reports.Data{AnalysisType: analyses.FacialReview, ReportType: "FACIAL_REVIEW_REPORT", Identification: cluster.ConclusionStrongSupportCommon,
 		Case: reports.CaseInfo{CaseID: "2026.0009", CaseType: "CRIMINAL"},
 		Questioned: []reports.TraceInfo{{FeatureID: "TRACE:5#feature", Label: "Vestígio 3.1", Evidence: "cftv @ 00-00-07.000.png", Suitability: "LEAD_ONLY",
 			Source: &cases.VideoSource{Video: "cftv.mp4", TimestampMs: 7000, Frame: &frame}}},

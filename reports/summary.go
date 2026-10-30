@@ -124,7 +124,7 @@ func Summarize(d Data) Summary {
 			lead = effectText[p.Effect]
 		}
 		s.Results = append(s.Results, ResultLine{Questioned: p.Questioned, Counterpart: p.Counterpart, Level: levelOrDecision(p.Conclusion, p.Decision),
-			Result: resultText[p.Result], ResultCode: p.Result, Lead: lead})
+			Result: resultLabel(d.AnalysisType, p.Result), ResultCode: p.Result, Lead: lead})
 	}
 	for _, f := range d.Faces {
 		s.Faces = append(s.Faces, FaceLine{Face: f.Face, Suitability: suitabilityText[f.Suitability], Result: resultText[f.Result], ResultCode: f.Result,

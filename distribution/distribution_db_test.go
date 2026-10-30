@@ -404,8 +404,8 @@ func levelFor(ctx context.Context, sqlDB *sql.DB, analysisID int64, decision str
 	if err != nil || !t.Type.GradedConclusion() {
 		return ""
 	}
-	return map[string]cluster.Conclusion{"POSITIVE": cluster.ConclusionStrongSupport, "INCONCLUSIVE": cluster.ConclusionInconclusive,
-		"NEGATIVE": cluster.ConclusionExclusion}[decision]
+	return map[string]cluster.Conclusion{"POSITIVE": cluster.ConclusionStrongSupportCommon, "INCONCLUSIVE": cluster.ConclusionInconclusive,
+		"NEGATIVE": cluster.ConclusionStrongSupportDifferent}[decision]
 }
 
 // noDocs stands in for the reports package when a test issues a report: an empty snapshot, no

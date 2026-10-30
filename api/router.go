@@ -108,6 +108,17 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.POST("imageproc/estimate", lab.EstimateHandler())
 	protected.POST("imageproc/render", lab.RenderHandler())
 	protected.POST("imageproc/compare", lab.CompareHandler())
+	// The face lab: a one-to-one facial comparison after FISWG on any two images, nothing stored
+	// (docs/facial-comparison-tool-plan.md).
+	faceLab := NewFaceLab(deps.FaceVision)
+	protected.GET("facelab", faceLab.FaceInfoHandler())
+	protected.POST("facelab/sources", faceLab.FaceUploadHandler())
+	protected.GET("facelab/sources/:id", faceLab.FaceSourceHandler())
+	protected.POST("facelab/render", faceLab.FaceRenderHandler())
+	protected.POST("facelab/quality", faceLab.FaceQualityHandler())
+	protected.POST("facelab/align", faceLab.FaceAlignHandler())
+	protected.POST("facelab/check", faceLab.FaceCheckHandler())
+	protected.POST("facelab/sheet", faceLab.FaceSheetHandler())
 	protected.GET("cases", ListCasesHandler(deps.DB))
 	protected.POST("cases", CreateCaseHandler(deps.DB))
 	protected.GET("cases/years", ListCaseYearsHandler(deps.DB))

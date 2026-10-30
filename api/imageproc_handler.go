@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,70 +18,16 @@ import (
 // tries the fingerprint processing steps on it, with the record they produce. Nothing is stored:
 // originals are kept in memory for a while so each preview need not upload them again.
 
-const (
-	imageLabMaxBytes   = 40 << 20
-	imageLabMaxSources = 6
-	imageLabSourceTTL  = time.Hour
-)
-
-type labSource struct {
-	original imageproc.Original
-	filename string
-	used     time.Time
-}
-
 // ImageLab holds the lab's uploaded originals. Fingerprint, when set, compares renders with
 // SourceAFIS.
 type ImageLab struct {
-	mu          sync.Mutex
-	sources     map[string]*labSource
+	*labStore
 	Fingerprint *fingerprint.Client
 }
 
 // NewImageLab returns an empty lab; fp may be nil (no comparison).
 func NewImageLab(fp *fingerprint.Client) *ImageLab {
-	return &ImageLab{sources: map[string]*labSource{}, Fingerprint: fp}
-}
-
-func (lab *ImageLab) put(o imageproc.Original, filename string) {
-	lab.mu.Lock()
-	defer lab.mu.Unlock()
-	now := time.Now()
-	for id, s := range lab.sources {
-		if now.Sub(s.used) > imageLabSourceTTL {
-			delete(lab.sources, id)
-		}
-	}
-	for len(lab.sources) >= imageLabMaxSources {
-		var oldest string
-		for id, s := range lab.sources {
-			if oldest == "" || s.used.Before(lab.sources[oldest].used) {
-				oldest = id
-			}
-		}
-		delete(lab.sources, oldest)
-	}
-	lab.sources[o.SHA256] = &labSource{original: o, filename: filename, used: now}
-}
-
-func (lab *ImageLab) get(id string) (*labSource, bool) {
-	lab.mu.Lock()
-	defer lab.mu.Unlock()
-	s, ok := lab.sources[id]
-	if ok {
-		s.used = time.Now()
-	}
-	return s, ok
-}
-
-// source finds the request's original, answering 410 when it has expired so the page uploads
-// it again.
-func (lab *ImageLab) source(c *gin.Context, id string) (*labSource, bool) {
-	s, ok := lab.get(id)
-	if !ok {
-		c.JSON(http.StatusGone, gin.H{"error": "the image is no longer in memory; send it again", "code": "source_expired"})
-	}
-	return s, ok
+	return &ImageLab{labStore: newLabStore(), Fingerprint: fp}
 }
 
 type labSourceInfo struct {
@@ -114,24 +58,8 @@ func (lab *ImageLab) InfoHandler() gin.HandlerFunc {
 // UploadHandler takes an original (multipart "file") and keeps it for the lab's other calls.
 func (lab *ImageLab) UploadHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		file, err := c.FormFile("file")
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"})
-			return
-		}
-		if file.Size > imageLabMaxBytes {
-			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "the image is larger than 40 MB"})
-			return
-		}
-		opened, err := file.Open()
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "could not read the file"})
-			return
-		}
-		defer opened.Close()
-		data, err := io.ReadAll(opened)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "could not read the file"})
+		data, filename, ok := readUpload(c)
+		if !ok {
 			return
 		}
 		o, err := imageproc.Decode(data)
@@ -139,9 +67,9 @@ func (lab *ImageLab) UploadHandler() gin.HandlerFunc {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "not an image this lab reads (JPEG, PNG, BMP, TIFF)"})
 			return
 		}
-		lab.put(o, file.Filename)
+		lab.put(&labSource{original: o, filename: filename})
 		c.JSON(http.StatusOK, labSourceInfo{
-			ID: o.SHA256, Filename: file.Filename, Format: o.Format, Width: o.Width, Height: o.Height,
+			ID: o.SHA256, Filename: filename, Format: o.Format, Width: o.Width, Height: o.Height,
 			SHA256: o.SHA256, Orientation: o.Orientation, FilePPI: o.FilePPI,
 		})
 	}

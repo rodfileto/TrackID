@@ -7,6 +7,7 @@ import (
 
 	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/cluster"
+	"github.com/rodfileto/trackid/facecompare"
 )
 
 // The reports are written in Portuguese (docs/facial-reports-plan.md, decision 15); the code
@@ -22,25 +23,15 @@ const (
 	datePlaceholder   = "(data da emissão)"
 )
 
-var conclusionText = map[cluster.Conclusion]string{
-	cluster.ConclusionIdentification:   "Identificação",
-	cluster.ConclusionStrongSupport:    "Suporte forte à mesma origem",
-	cluster.ConclusionModerateSupport:  "Suporte moderado à mesma origem",
-	cluster.ConclusionLimitedSupport:   "Suporte limitado à mesma origem",
-	cluster.ConclusionInconclusive:     "Inconclusivo",
-	cluster.ConclusionLimitedExclusion: "Suporte limitado a origens distintas",
-	cluster.ConclusionExclusion:        "Exclusão",
-}
-
-var conclusionMeaning = map[cluster.Conclusion]string{
-	cluster.ConclusionIdentification:   "as características observadas são concordantes e suficientes para afirmar que as imagens retratam a mesma pessoa.",
-	cluster.ConclusionStrongSupport:    "as observações são muito mais prováveis se as imagens retratarem a mesma pessoa do que pessoas distintas.",
-	cluster.ConclusionModerateSupport:  "as observações são mais prováveis se as imagens retratarem a mesma pessoa do que pessoas distintas.",
-	cluster.ConclusionLimitedSupport:   "as observações favorecem, de forma limitada, a hipótese de mesma pessoa.",
-	cluster.ConclusionInconclusive:     "as observações não permitem favorecer nenhuma das hipóteses, em geral por limitação de qualidade das imagens.",
-	cluster.ConclusionLimitedExclusion: "as observações favorecem, de forma limitada, a hipótese de pessoas distintas.",
-	cluster.ConclusionExclusion:        "as diferenças observadas são incompatíveis com a hipótese de mesma pessoa.",
-}
+// The facial comparison's scale (cluster.Conclusion) as facecompare words it: the opinion
+// categories of OSAC 2022-S-0001, to which FISWG refers.
+var conclusionText, conclusionMeaning = func() (map[cluster.Conclusion]string, map[cluster.Conclusion]string) {
+	text, meaning := map[cluster.Conclusion]string{}, map[cluster.Conclusion]string{}
+	for _, l := range facecompare.Scale {
+		text[l.Code], meaning[l.Code] = l.PT, l.MeaningPT
+	}
+	return text, meaning
+}()
 
 var resultText = map[string]string{
 	ResultIdentified:   "Identificado",
@@ -51,6 +42,24 @@ var resultText = map[string]string{
 	ResultNoLead:       "Sem indicação",
 	ResultUnsuitable:   "Imagem sem qualidade",
 	ResultUnsettled:    "Não concluído",
+}
+
+// facialResultText words a facial comparison's results on the opinion scale: OSAC and FISWG rule
+// out "identification" and "exclusion" for it. The fingerprint comparison keeps resultText.
+var facialResultText = map[string]string{
+	ResultIdentified:   "Origem comum favorecida",
+	ResultSupported:    "Origem comum favorecida, abaixo do nível mínimo de vínculo",
+	ResultInconclusive: "Inconclusivo",
+	ResultExcluded:     "Origens distintas favorecidas",
+	ResultUnsettled:    "Não concluído",
+}
+
+// resultLabel is a pair's result as the report of analysis type t words it.
+func resultLabel(t analyses.Type, result string) string {
+	if t == analyses.FacialComparison {
+		return facialResultText[result]
+	}
+	return resultText[result]
 }
 
 var suitabilityText = map[string]string{
@@ -283,6 +292,9 @@ func history(out *doc, d Data, n int) {
 	if d.Request != nil && d.Request.CitedReference != "" {
 		out.labelled("Referência citada na requisição", d.Request.CitedReference)
 	}
+	if d.Request != nil && d.Request.CitedInquiry != "" {
+		out.labelled("Inquérito citado na requisição", d.Request.CitedInquiry)
+	}
 	if len(d.Previous) == 0 {
 		out.labelled("Documentos anteriores do caso", "nenhum")
 	} else {
@@ -291,9 +303,6 @@ func history(out *doc, d Data, n int) {
 			lines = append(lines, fmt.Sprintf("%s nº %s (%s)", reportTypeText[p.Type], p.Number, p.IssuedAt.In(saoPaulo).Format("02/01/2006")))
 		}
 		out.labelled("Documentos anteriores do caso", strings.Join(lines, "; "))
-	}
-	if d.Request != nil && d.Request.CitedInquiry != "" {
-		out.labelled("Inquérito citado na requisição", d.Request.CitedInquiry)
 	}
 }
 
@@ -412,7 +421,11 @@ func laudo(out *doc, d Data, imgs map[string]Image) {
 			scale = append(scale, []string{conclusionText[c], conclusionMeaning[c]})
 		}
 		out.table([]int{2600, 6471}, []string{"Conclusão", "Significado"}, scale)
-		out.para("Nível mínimo para identificação: " + conclusionText[d.Identification] + ".")
+		out.para("A escala segue as categorias de opinião da norma OSAC 2022-S-0001 (Standard Guide for Image Comparison " +
+			"Opinions), adotada conforme a orientação do FISWG para exames um-para-um (Guideline for the Use of ACE-V " +
+			"Methodology in One-to-One Examinations, v1.0, §5.3.2). Exprime a força com que as observações sustentam uma das " +
+			"hipóteses — mesma pessoa ou pessoas distintas — e não uma certeza absoluta.")
+		out.para("Nível mínimo para registro do vínculo no sistema: " + conclusionText[d.Identification] + ".")
 	}
 	out.italic("Observações sobre o método (opcional):")
 	out.region(regionMethodNotes, "")
@@ -464,7 +477,7 @@ func laudo(out *doc, d Data, imgs map[string]Image) {
 		if p.Lead != "" || p.Effect != "" {
 			lead = effectText[p.Effect]
 		}
-		concl = append(concl, []string{p.Questioned + " × " + p.Counterpart, levelOrDecision(p.Conclusion, p.Decision), resultText[p.Result], lead})
+		concl = append(concl, []string{p.Questioned + " × " + p.Counterpart, levelOrDecision(p.Conclusion, p.Decision), resultLabel(d.AnalysisType, p.Result), lead})
 	}
 	if len(concl) == 0 {
 		concl = [][]string{{"—", "—", "—", "—"}}

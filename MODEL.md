@@ -135,7 +135,7 @@ view* of it, rebuilt by `cluster.Run`.
 | `modality` | `FACIAL` \| `FINGERPRINT`, as in `biometric_cases` |
 | `role` | `SYSTEM` (automatic), `VERIFICATOR`, `REVIEWER`, `INCONSISTENCE` |
 | `decision` | `POSITIVE` \| `NEGATIVE` \| `INCONCLUSIVE` |
-| `conclusion` | a comparison's level on the laudo scale (`cluster.Conclusion`): `IDENTIFICATION`, `STRONG_SUPPORT`, `MODERATE_SUPPORT`, `LIMITED_SUPPORT`, `INCONCLUSIVE`, `LIMITED_EXCLUSION`, `EXCLUSION`; it maps onto `decision` (the database's `conclusion_decision`), NULL outside a `FACIAL_COMPARISON` |
+| `conclusion` | a comparison's opinion (`cluster.Conclusion`), on the five categories of OSAC 2022-S-0001 that FISWG refers to: `STRONG_SUPPORT_COMMON`, `SUPPORT_COMMON`, `INCONCLUSIVE`, `SUPPORT_DIFFERENT`, `STRONG_SUPPORT_DIFFERENT` (migration 015; the earlier seven-level scale is mapped onto them); it maps onto `decision` (the database's `conclusion_decision`), NULL outside a `FACIAL_COMPARISON` |
 | `system_source` / `username` | who/what decided (exactly one set, per role) |
 | `confidence`, `threshold` | score and the cutoff it was classified against (SYSTEM only) |
 | `notes` | examiner rationale (esp. on INCONSISTENCE) |
@@ -304,7 +304,7 @@ Clusters come in two layers (`clusters.basis`), reconciled the same way by
   the pair's only human round; a comparison that concludes replaces it, one still pending or
   ending inconclusive leaves it standing (shown beside it), and an exclusion takes the pair out of
   the layer. A laudo identifies at or above the identification level (`identification_levels`, as
-  data; `STRONG_SUPPORT` by default) and only supports the link below it. The case page, the
+  data; `STRONG_SUPPORT_COMMON` by default) and only supports the link below it. The case page, the
   person profile and the sim's `eval` carry it; a cluster can
   hold links of both bases, so it is per link, never per cluster.
 

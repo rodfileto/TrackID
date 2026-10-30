@@ -8,31 +8,35 @@ import (
 	"github.com/rodfileto/trackid/db"
 )
 
-// Conclusion is a laudo's conclusion on a pair (biometric_decisions.conclusion), on a graded scale
-// after FISWG's: what a FACIAL_COMPARISON decides, where a FACIAL_REVIEW decides only POSITIVE,
-// NEGATIVE or INCONCLUSIVE. Every level maps onto a Decision (Decision), so the rounds logic
-// (DecidingRound) reads the decision alone.
+// Conclusion is a laudo's conclusion on a pair (biometric_decisions.conclusion): what a
+// FACIAL_COMPARISON decides, where a FACIAL_REVIEW decides only POSITIVE, NEGATIVE or
+// INCONCLUSIVE. The scale is the five opinion categories of OSAC 2022-S-0001 (Standard Guide for
+// Image Comparison Opinions), which FISWG's ACE-V guideline for one-to-one examinations (v1.0,
+// §5.3.2) and its quality management draft (v1.0, §14.7.1) point to: the strength of support the
+// observations give to a common source against different sources. OSAC subdivides the support
+// categories only where research shows examiners apply finer ones reliably, and rules out
+// "identification" and "exclusion" in the scale's wording. Every level maps onto a Decision
+// (Decision), so the rounds logic (DecidingRound) reads the decision alone.
 type Conclusion string
 
 const (
-	ConclusionIdentification   Conclusion = "IDENTIFICATION"
-	ConclusionStrongSupport    Conclusion = "STRONG_SUPPORT"
-	ConclusionModerateSupport  Conclusion = "MODERATE_SUPPORT"
-	ConclusionLimitedSupport   Conclusion = "LIMITED_SUPPORT"
-	ConclusionInconclusive     Conclusion = "INCONCLUSIVE"
-	ConclusionLimitedExclusion Conclusion = "LIMITED_EXCLUSION"
-	ConclusionExclusion        Conclusion = "EXCLUSION"
+	ConclusionStrongSupportCommon    Conclusion = "STRONG_SUPPORT_COMMON"
+	ConclusionSupportCommon          Conclusion = "SUPPORT_COMMON"
+	ConclusionInconclusive           Conclusion = "INCONCLUSIVE"
+	ConclusionSupportDifferent       Conclusion = "SUPPORT_DIFFERENT"
+	ConclusionStrongSupportDifferent Conclusion = "STRONG_SUPPORT_DIFFERENT"
 )
 
-// Conclusions lists the scale from the strongest support to the strongest exclusion.
+// Conclusions lists the scale from the strongest support for a common source to the strongest
+// support for different sources.
 var Conclusions = []Conclusion{
-	ConclusionIdentification, ConclusionStrongSupport, ConclusionModerateSupport, ConclusionLimitedSupport,
-	ConclusionInconclusive, ConclusionLimitedExclusion, ConclusionExclusion,
+	ConclusionStrongSupportCommon, ConclusionSupportCommon, ConclusionInconclusive,
+	ConclusionSupportDifferent, ConclusionStrongSupportDifferent,
 }
 
-// DefaultIdentificationLevel is the lowest conclusion that counts as an identification while
-// identification_levels holds no version.
-const DefaultIdentificationLevel = ConclusionStrongSupport
+// DefaultIdentificationLevel is the lowest conclusion whose link counts as identified in TrackID
+// (the person profile, the badges) while identification_levels holds no version.
+const DefaultIdentificationLevel = ConclusionStrongSupportCommon
 
 // Valid reports whether c is a level of the scale.
 func (c Conclusion) Valid() bool {
@@ -49,19 +53,19 @@ func (c Conclusion) rank() int {
 	return -1
 }
 
-// Decision is the decision c maps onto: the support levels POSITIVE, INCONCLUSIVE itself, the
-// exclusions NEGATIVE (the database's conclusion_decision).
+// Decision is the decision c maps onto: support for a common source POSITIVE, INCONCLUSIVE
+// itself, support for different sources NEGATIVE (the database's conclusion_decision).
 func (c Conclusion) Decision() Decision {
 	switch c {
-	case ConclusionIdentification, ConclusionStrongSupport, ConclusionModerateSupport, ConclusionLimitedSupport:
+	case ConclusionStrongSupportCommon, ConclusionSupportCommon:
 		return DecisionPositive
-	case ConclusionLimitedExclusion, ConclusionExclusion:
+	case ConclusionSupportDifferent, ConclusionStrongSupportDifferent:
 		return DecisionNegative
 	}
 	return DecisionInconclusive
 }
 
-// AtLeast reports whether c is a support level at or above minimum.
+// AtLeast reports whether c supports a common source at or above minimum.
 func (c Conclusion) AtLeast(minimum Conclusion) bool {
 	return c.Decision() == DecisionPositive && c.rank() >= minimum.rank()
 }

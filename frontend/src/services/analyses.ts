@@ -28,30 +28,28 @@ export type AnalysisStage = "EXAMINATION" | "VERIFICATION" | "INCONSISTENCE" | "
  * VERIFICATOR (first examination), REVIEWER (blind verification), INCONSISTENCE. */
 export type AnalysisStep = "VERIFICATOR" | "REVIEWER" | "INCONSISTENCE";
 export type DecisionValue = "POSITIVE" | "NEGATIVE" | "INCONCLUSIVE";
-/** A comparison's (laudo's) graded conclusion on a pair, strongest support first. */
+/** A comparison's (laudo's) conclusion on a pair: the opinion categories of OSAC 2022-S-0001,
+ * which FISWG refers to, from the strongest support for a common source to the strongest support
+ * for different sources (cluster.Conclusion). */
 export type Conclusion =
-  | "IDENTIFICATION"
-  | "STRONG_SUPPORT"
-  | "MODERATE_SUPPORT"
-  | "LIMITED_SUPPORT"
+  | "STRONG_SUPPORT_COMMON"
+  | "SUPPORT_COMMON"
   | "INCONCLUSIVE"
-  | "LIMITED_EXCLUSION"
-  | "EXCLUSION";
+  | "SUPPORT_DIFFERENT"
+  | "STRONG_SUPPORT_DIFFERENT";
 
 export const conclusions: Conclusion[] = [
-  "IDENTIFICATION",
-  "STRONG_SUPPORT",
-  "MODERATE_SUPPORT",
-  "LIMITED_SUPPORT",
+  "STRONG_SUPPORT_COMMON",
+  "SUPPORT_COMMON",
   "INCONCLUSIVE",
-  "LIMITED_EXCLUSION",
-  "EXCLUSION",
+  "SUPPORT_DIFFERENT",
+  "STRONG_SUPPORT_DIFFERENT",
 ];
 
 /** The decision a conclusion maps onto, as the server's conclusion_decision. */
 export function conclusionDecision(c: Conclusion): DecisionValue {
   if (c === "INCONCLUSIVE") return "INCONCLUSIVE";
-  if (c === "LIMITED_EXCLUSION" || c === "EXCLUSION") return "NEGATIVE";
+  if (c === "SUPPORT_DIFFERENT" || c === "STRONG_SUPPORT_DIFFERENT") return "NEGATIVE";
   return "POSITIVE";
 }
 

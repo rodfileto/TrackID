@@ -236,8 +236,8 @@ func levelFor(ctx context.Context, sqlDB *sql.DB, analysisID int64, decision str
 	if err != nil || t.Type != analyses.FacialComparison {
 		return ""
 	}
-	return map[string]cluster.Conclusion{"POSITIVE": cluster.ConclusionStrongSupport, "INCONCLUSIVE": cluster.ConclusionInconclusive,
-		"NEGATIVE": cluster.ConclusionExclusion}[decision]
+	return map[string]cluster.Conclusion{"POSITIVE": cluster.ConclusionStrongSupportCommon, "INCONCLUSIVE": cluster.ConclusionInconclusive,
+		"NEGATIVE": cluster.ConclusionStrongSupportDifferent}[decision]
 }
 
 // openTask opens an analysis of type typ on caseID, as routing a request to that task does
@@ -302,7 +302,7 @@ func TestFingerprintComparison(t *testing.T) {
 	if p.FeatureA > p.FeatureB {
 		p.FeatureA, p.FeatureB = p.FeatureB, p.FeatureA
 	}
-	if err := examination.SaveDraft(ctx, sqlDB, papi, cmp, p, "POSITIVE", "", cluster.ConclusionIdentification); !errors.Is(err, examination.ErrNoConclusion) {
+	if err := examination.SaveDraft(ctx, sqlDB, papi, cmp, p, "POSITIVE", "", cluster.ConclusionStrongSupportCommon); !errors.Is(err, examination.ErrNoConclusion) {
 		t.Fatalf("a draft with a level: %v; want ErrNoConclusion", err)
 	}
 	if err := examination.SaveDraft(ctx, sqlDB, papi, cmp, p, "POSITIVE", "doze pontos característicos coincidentes", ""); err != nil {

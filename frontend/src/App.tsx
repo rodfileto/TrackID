@@ -20,6 +20,7 @@ import Distribution from "./pages/Distribution";
 import Requests from "./pages/Requests";
 import RegisterRequest from "./pages/RegisterRequest";
 import ImageLab from "./pages/ImageLab";
+import FaceLab from "./pages/FaceLab";
 import ComingSoon from "./pages/ComingSoon";
 import Users from "./pages/Users";
 // A lazy page whose code fails to load -- the tab predates a new build or a dev-server
@@ -68,6 +69,7 @@ export default function App() {
               <Route path="/cases/:caseId/analyses/:analysisId" element={<AnalysisWorkspace />} />
               <Route path="/analyses" element={<MyAnalyses />} />
               <Route path="/image-lab" element={<ImageLab />} />
+              <Route path="/face-lab" element={<FaceLab />} />
               <Route path="/examinations/laboratory" element={<ComingSoon kind="laboratory" />} />
               <Route path="/examinations/crime-scene" element={<ComingSoon kind="crimeScene" />} />
               <Route element={<RequireCapability need="coordinator" />}>

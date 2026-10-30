@@ -37,6 +37,9 @@ are left for later. Documents are in Portuguese; code, identifiers and the UI st
      Every level maps onto `decision` (support levels and identification → POSITIVE, inconclusive
      → INCONCLUSIVE, exclusions → NEGATIVE), so `cluster.DecidingRound` and the rounds logic keep
      working unchanged. Required on decisions of a FACIAL_COMPARISON, forbidden elsewhere.
+     *Replaced 2026-10-30* by the five opinion categories of OSAC 2022-S-0001, which FISWG refers
+     to and whose wording rules out "identification" and "exclusion" (`docs/facial-comparison-tool-plan.md`,
+     migration 015).
 7. **Two cluster layers stay; each human link carries its basis.** *Re-evaluated 2026-10-26:*
    when a pair's only human round is a review, the person profile keeps it as identified, so a
    lead must stay in the layer the person views read. A separate EXAMINED layer is therefore not

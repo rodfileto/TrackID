@@ -30,15 +30,20 @@ type geometry struct {
 }
 
 func newGeometry(r Recipe, width, height int) geometry {
+	return affineGeometry(r.Crop, r.Rotate, r.Mirror, OutputPPI/r.Source.PPI, width, height)
+}
+
+// affineGeometry is the crop (the whole image when nil), clockwise rotation in degrees, mirror and
+// scale as one transform.
+func affineGeometry(cropRect *Rect, rotate float64, mirror bool, scale float64, width, height int) geometry {
 	crop := Rect{0, 0, float64(width), float64(height)}
-	if r.Crop != nil {
-		crop = *r.Crop
+	if cropRect != nil {
+		crop = *cropRect
 	}
-	scale := OutputPPI / r.Source.PPI
-	theta := r.Rotate * math.Pi / 180
+	theta := rotate * math.Pi / 180
 	cos, sin := math.Cos(theta), math.Sin(theta)
 	mx := 1.0
-	if r.Mirror {
+	if mirror {
 		mx = -1 // after the rotation: a horizontal flip of the image as rendered
 	}
 	// Linear part: scale * Mirror * Rotation (clockwise on screen, y pointing down).

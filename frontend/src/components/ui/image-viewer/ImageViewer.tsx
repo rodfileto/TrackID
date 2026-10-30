@@ -10,6 +10,8 @@
  *  - Optional brightness/contrast/saturation + bicubic/bilinear/nearest-
  *    neighbor interpolation toggle (`showFilters`)
  *  - `extraLayers` prop for annotation layers (see TraceEditor)
+ *  - Optionally a controlled view (`view` + `onViewChange`), so several viewers can share one
+ *    (the face lab links its two panels this way)
  *
  * Usage:
  *   <ImageViewer src={objectUrl} className="w-full h-64" />
@@ -24,7 +26,7 @@ import React, {
   useImperativeHandle,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { Stage, Layer, Image as KonvaImage } from "react-konva";
+import { Stage, Layer, Group, Image as KonvaImage } from "react-konva";
 import Konva from "konva";
 import {
   ZoomInIcon,
@@ -79,6 +81,22 @@ const INTERPOLATION_OPTIONS: Array<{
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** The stage's zoom and offset: image pixels to screen, as scale * p + (x, y). */
+export interface ViewerView {
+  scale: number;
+  x: number;
+  y: number;
+}
+
+/** Konva position, rotation (degrees) and scale for the base image within the stage. */
+export interface ViewerImageTransform {
+  x: number;
+  y: number;
+  rotation: number;
+  scaleX: number;
+  scaleY: number;
+}
+
 export interface ImageViewerProps {
   /** Remote URL or object URL of the image to display. */
   src: string;
@@ -114,6 +132,18 @@ export interface ImageViewerProps {
   onStageMouseDown?: (e: Konva.KonvaEventObject<MouseEvent>) => void;
   onStageMouseMove?: (e: Konva.KonvaEventObject<MouseEvent>) => void;
   onStageMouseUp?: (e: Konva.KonvaEventObject<MouseEvent>) => void;
+  /**
+   * Controlled view. When `onViewChange` is given, the viewer shows `view` and reports every zoom,
+   * pan and fit through it instead of keeping its own; a null `view` asks it to fit the image.
+   * Two viewers given the same view move together.
+   */
+  view?: ViewerView | null;
+  onViewChange?: (view: ViewerView) => void;
+  /** Places the base image in the stage (e.g. an image aligned into another's frame); fitting
+   * fits its transformed bounds. Use without the rotate button. */
+  imageTransform?: ViewerImageTransform;
+  /** Overrides the stage's cursor (grab/grabbing when draggable, otherwise default). */
+  cursor?: string;
 }
 
 /** Imperative handle for exporting the current image, independent of the
@@ -204,6 +234,10 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
       onStageMouseDown,
       onStageMouseMove,
       onStageMouseUp,
+      view: viewProp,
+      onViewChange,
+      imageTransform,
+      cursor,
     },
     ref,
   ) {
@@ -225,8 +259,23 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [natural, setNatural] = useState({ w: 1, h: 1 });
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const [scale, setScale] = useState(1);
+  const [ownPos, setOwnPos] = useState({ x: 0, y: 0 });
+  const [ownScale, setOwnScale] = useState(1);
+  // Controlled: the caller holds the view (viewProp) and is told of every change.
+  const controlled = onViewChange !== undefined;
+  const scale = controlled ? (viewProp?.scale ?? 1) : ownScale;
+  const pos = controlled ? { x: viewProp?.x ?? 0, y: viewProp?.y ?? 0 } : ownPos;
+  const setView = useCallback(
+    (s: number, p: { x: number; y: number }) => {
+      if (onViewChange) {
+        onViewChange({ scale: s, x: p.x, y: p.y });
+      } else {
+        setOwnScale(s);
+        setOwnPos(p);
+      }
+    },
+    [onViewChange],
+  );
   const [rotation, setRotation] = useState(0); // 0 | 90 | 180 | 270
   const [isDragging, setIsDragging] = useState(false);
   const [brightness, setBrightness] = useState(0);
@@ -284,29 +333,49 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
   // Rotates image around its center (offsetX/Y = w/2, h/2).
   // Image center in layer coords is always (iw/2, ih/2).
   // Visual effective size after rotation: 90/270 swaps w↔h.
+  // With imageTransform, the bounds of the transformed image are fitted instead.
   const fitTo = useCallback(
     (sw: number, sh: number, iw: number, ih: number, rot: number) => {
       if (!sw || !sh || !iw || !ih) return;
+      if (imageTransform) {
+        const t = imageTransform;
+        const a = (t.rotation * Math.PI) / 180;
+        const xs: number[] = [];
+        const ys: number[] = [];
+        for (const [px, py] of [[0, 0], [iw, 0], [0, ih], [iw, ih]]) {
+          const x = px * t.scaleX, y = py * t.scaleY;
+          xs.push(t.x + x * Math.cos(a) - y * Math.sin(a));
+          ys.push(t.y + x * Math.sin(a) + y * Math.cos(a));
+        }
+        const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+        const s = Math.min(sw / (x1 - x0), sh / (y1 - y0)) * 0.92;
+        setView(s, { x: sw / 2 - ((x0 + x1) / 2) * s, y: sh / 2 - ((y0 + y1) / 2) * s });
+        return;
+      }
       const ew = rot % 180 === 0 ? iw : ih;
       const eh = rot % 180 === 0 ? ih : iw;
       const s = Math.min(sw / ew, sh / eh) * 0.92;
-      setScale(s);
       // Center the image center in the stage
-      setPos({ x: sw / 2 - (iw / 2) * s, y: sh / 2 - (ih / 2) * s });
+      setView(s, { x: sw / 2 - (iw / 2) * s, y: sh / 2 - (ih / 2) * s });
     },
-    [],
+    [imageTransform, setView],
   );
 
   // Auto-fit when image or stage size becomes available. With keepView, a new image of the
-  // same size keeps the view: natural only changes (and so re-fits) when the size does.
+  // same size keeps the view: natural only changes (and so re-fits) when the size does. A
+  // controlled viewer fits when its view is null or its image changes (in size, with keepView),
+  // and otherwise leaves the view to the caller, even when its stage is resized.
   const fitKey = keepView ? natural : image;
+  const wantsFit = controlled && viewProp == null;
+  const fittedKey = useRef<unknown>(null);
   useEffect(() => {
-    if (image && stageSize.width > 0 && stageSize.height > 0) {
-      fitTo(stageSize.width, stageSize.height, natural.w, natural.h, 0);
-    }
+    if (!image || stageSize.width <= 0 || stageSize.height <= 0) return;
+    if (controlled && !wantsFit && fittedKey.current === fitKey) return;
+    fittedKey.current = fitKey;
+    fitTo(stageSize.width, stageSize.height, natural.w, natural.h, 0);
     // Only re-fit when image or stage size changes, not on rotation
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitKey, image === null, stageSize.width, stageSize.height]);
+  }, [fitKey, image === null, stageSize.width, stageSize.height, wantsFit]);
 
   // Konva filters need a cached (rasterized) node to run against. Caching is
   // keyed on the loaded image, not on the filter values themselves --
@@ -349,19 +418,31 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
         Math.max(minScale, scale * (dir > 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR)),
       );
       const ratio = newScale / scale;
-      setScale(newScale);
-      setPos((prev) => ({
-        x: pointer.x - (pointer.x - prev.x) * ratio,
-        y: pointer.y - (pointer.y - prev.y) * ratio,
-      }));
+      setView(newScale, {
+        x: pointer.x - (pointer.x - pos.x) * ratio,
+        y: pointer.y - (pointer.y - pos.y) * ratio,
+      });
     },
-    [scale, minScale, maxScale],
+    [scale, pos.x, pos.y, minScale, maxScale, setView],
   );
 
-  const handleDragEnd = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
-    setPos({ x: e.target.x(), y: e.target.y() });
-    setIsDragging(false);
-  }, []);
+  // Drag events bubble from draggable shapes in extraLayers; only the stage's own drag pans.
+  const handleDragMove = useCallback(
+    (e: Konva.KonvaEventObject<DragEvent>) => {
+      // A controlled view reports while panning, so linked viewers follow along.
+      if (controlled && e.target === stageRef.current) setView(scale, { x: e.target.x(), y: e.target.y() });
+    },
+    [controlled, scale, setView],
+  );
+
+  const handleDragEnd = useCallback(
+    (e: Konva.KonvaEventObject<DragEvent>) => {
+      if (e.target !== stageRef.current) return;
+      setView(scale, { x: e.target.x(), y: e.target.y() });
+      setIsDragging(false);
+    },
+    [scale, setView],
+  );
 
   // ── Toolbar actions ───────────────────────────────────────────────────────
   const zoomBy = (factor: number) => {
@@ -369,11 +450,10 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
     const ratio = newScale / scale;
     const cx = stageSize.width / 2;
     const cy = stageSize.height / 2;
-    setScale(newScale);
-    setPos((prev) => ({
-      x: cx - (cx - prev.x) * ratio,
-      y: cy - (cy - prev.y) * ratio,
-    }));
+    setView(newScale, {
+      x: cx - (cx - pos.x) * ratio,
+      y: cy - (cy - pos.y) * ratio,
+    });
   };
 
   const handleFit = () =>
@@ -497,15 +577,17 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
           y={pos.y}
           draggable={draggable}
           onWheel={showToolbar ? handleWheel : undefined}
-          onDragStart={() => setIsDragging(true)}
+          onDragStart={(e) => e.target === stageRef.current && setIsDragging(true)}
+          onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onMouseDown={onStageMouseDown}
           onMouseMove={onStageMouseMove}
           onMouseUp={onStageMouseUp}
-          style={{ cursor: draggable ? (isDragging ? "grabbing" : "grab") : "default" }}
+          style={{ cursor: cursor ?? (draggable ? (isDragging ? "grabbing" : "grab") : "default") }}
         >
           <Layer ref={layerRef} imageSmoothingEnabled={interpolation !== "nearest"}>
             {image && (
+              <Group {...imageTransform}>
               <KonvaImage
                 ref={imageNodeRef}
                 image={image}
@@ -528,6 +610,7 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(
                 hue={0}
                 value={0}
               />
+              </Group>
             )}
           </Layer>
           {extraLayers}
