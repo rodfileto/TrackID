@@ -53,8 +53,11 @@ jobs:
           done
           docker compose logs sourceafis-sidecar
           exit 1
+      # The video tests make clips and extract frames with ffmpeg, as the API and the worker do.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: go vet ./...
-      - name: Test (no skipped database or sidecar tests)
+      - name: Test (no skipped database, sidecar or ffmpeg tests)
         run: |
           go test -v ./... 2>&1 | tee test.log
           status=${PIPESTATUS[0]}
