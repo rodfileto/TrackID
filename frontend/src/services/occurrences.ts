@@ -158,7 +158,9 @@ export async function createOccurrence(
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === "TimeoutError") {
-      throw new Error("The server did not answer in time; check whether the occurrence was registered before trying again.");
+      throw new Error("The server did not answer in time; check whether the occurrence was registered before trying again.", {
+        cause: err,
+      });
     }
     throw err;
   }
