@@ -1,0 +1,24 @@
+# Roteiro da aula {#sec-roteiro}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+O passo a passo para quem conduz e para quem participa: preparar o ambiente, criar os usuários,
+distribuir o trabalho, examinar, verificar às cegas, resolver inconsistências e emitir os documentos,
+com uma captura de tela para cada passo.
+:::
+
+## Seções previstas
+
+- Preparação: o ambiente e os usuários
+- O administrador: distribuição e acompanhamento
+- O examinador: exame de uma revisão facial
+- O verificador: verificação cega
+- Inconsistências e emissão do documento
+- Comparação facial sob demanda
+
+::: {.callout-tip appearance="simple"}
+## No TrackID
+
+comando `trackid-sim users`; telas do TrackID.
+:::

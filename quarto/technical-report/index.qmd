@@ -1,0 +1,31 @@
+---
+title: "Inteligência e identificação de pessoas"
+subtitle: "Diagnóstico e perspectivas"
+author: Rodrigo Fileto Cuerci Maciel
+author-email: rodrigo.rfcm@pf.gov.br
+lang: pt-BR
+---
+
+# Sumário Executivo
+
+**Objetivo**: Buscar compreender e analisar a gestão da informação e conhecimento no âmbito dos Núcleos de Identificação da Polícia Federal de modo a delinear estratégias para a construção de conhecimento de inteligência.
+
+**Diagnóstico**: No âmbito dos núcleos de identificação e do Instituto Nacional de Identificação observa-se, salvo melhor juízo, a existência de silos de dados que dificultam a integração e o compartilhamento de informações. Dados sobre análises de impressões digitais e identificação facial estão fragmentados em duas lógicas de trabalhos desconexas. Bem como a informação sobre indivíduos está dispersa em diferentes sistemas, dificultando a construção de um perfil unificado.
+
+**Perspectivas**: A integração dos diferentes sistemas de informação e a construção de um perfil unificado para cada indivíduo podem potencializar a capacidade de inteligência dos Núcleos de Identificação. Estratégias para a centralização e compartilhamento de dados, bem como a adoção de tecnologias de análise avançada, são fundamentais para superar os silos existentes e melhorar a eficiência na identificação de pessoas.
+
+** Solução Delineada **: Propõe-se a criação de um sistema orquestrador capaz de integrar as diferentes fontes de informação, facilitando a colaboração entre os núcleos de identificação e os consumidores de inteligência, bem como a construção e divulgação de perfis unificados de indivíduos.
+
+**Resultados**: Seguindo princípios da *Design Science Research* (DSR), foi desenvolvido um sistema piloto que visa integrar as diferentes fontes de informação e facilitar a construção de perfis unificados de indivíduos, sejam eles identificados ou desconhecidos.
+
+#   Diagnóstico
+
+Arquitetura sugerida: Não considerar o MBIS como motor de orquestração central. Por ser programas proprietários, o MBIS apresenta limitações de customização. Recomenda-se a adoção de um sistema orquestrador aberto e flexível baseado em ferramentas de código aberto.
+
+Também não considerar o Sistema Nacional de Informações Criminais como motor de orquestração central. Inteligência lida com incerteza e complexidade, muita das vezes lidando com alvos desconhecidos e/ou difícil identificação. O SINIC possui casos de uso específicos para o fornecimento de informações para o processo judicial.
+
+Infobio
+
+# Resultados
+
+# Conclusão

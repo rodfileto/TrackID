@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request supersedes a run still in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      # The database-backed tests create and drop a throwaway database per test on this server,
+      # and skip when it is unset; the fingerprint tests need the real sidecar.
+      TRACKID_TEST_DATABASE_URL: postgres://trackid:trackid_dev@localhost:55432/trackid?sslmode=disable
+      FINGERPRINT_SIDECAR_URL: http://localhost:58090
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l $(git ls-files '*.go'))
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            echo "run gofmt -w on the files above"
+            exit 1
+          fi
+      # db/*.sql.go must be what sqlc generates from db/queries/ and the migrations; the
+      # version matches the header of the generated files.
+      - uses: sqlc-dev/setup-sqlc@v5
+        with:
+          sqlc-version: '1.31.1'
+      - name: sqlc diff
+        run: sqlc diff
+      # Postgres from db/postgres (pgvector + PostGIS) and sourceafis-sidecar, as in development.
+      - name: Start Postgres and the fingerprint sidecar
+        run: |
+          docker compose up -d --build --wait postgres
+          docker compose up -d --build sourceafis-sidecar
+          for i in $(seq 60); do
+            curl -fsS "$FINGERPRINT_SIDECAR_URL/healthz" && exit 0
+            sleep 2
+          done
+          docker compose logs sourceafis-sidecar
+          exit 1
+      - run: go vet ./...
+      - name: Test (no skipped database or sidecar tests)
+        run: |
+          go test -v ./... 2>&1 | tee test.log
+          status=${PIPESTATUS[0]}
+          if grep -q -- '--- SKIP' test.log; then
+            grep -- '--- SKIP' test.log
+            echo "tests were skipped; CI must run them all"
+            exit 1
+          fi
+          exit $status
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # Errors fail the job; warnings are reported only.
+      - run: npm run lint
+      # tsc -b, then vite build.
+      - run: npm run build
+
+  # Vulnerability scan of the Go module against Go's vulnerability database, using the call
+  # graph so it reports only the vulnerable functions this code actually reaches.
+  govulncheck:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-file: go.mod

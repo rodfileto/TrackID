@@ -1,0 +1,15 @@
+# Glossário {.unnumbered}
+
+Os termos do livro em português, seu equivalente em inglês e, quando houver, o nome usado no
+TrackID.
+
+| Português | Inglês | No TrackID |
+|---|---|---|
+| exame | examination | etapa EXAMINATION, papel VERIFICATOR |
+| verificação (cega) | (blind) verification | etapa VERIFICATION, papel REVIEWER |
+| inconsistência | conflict resolution | etapa e papel INCONSISTENCE |
+| revisão facial | facial review | análise FACIAL_REVIEW |
+| comparação facial | facial comparison | análise FACIAL_COMPARISON |
+| característica biométrica | biometric feature | `biometricfeature` |
+| padrão / questionado | known / questioned | KNOWN / QUESTIONED |
+| *A completar.* | | |

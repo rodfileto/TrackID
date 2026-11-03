@@ -1,0 +1,25 @@
+# Inteligência coletiva {#sec-inteligencia-coletiva}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+Quando muitos julgamentos falíveis valem mais que um só: independência, diversidade e uma regra
+de agregação. O capítulo apresenta a inteligência coletiva, seus limites (o pensamento de grupo, a
+cascata) e as evidências vindas da própria comparação de faces, onde a combinação de examinadores,
+super-reconhecedores e algoritmos supera cada um deles. Conclui com o que isso exige de um fluxo de
+trabalho: decisões independentes, desacordo registrado e uma regra para resolvê-lo.
+:::
+
+## Seções previstas
+
+- Sabedoria das multidões: independência, diversidade, agregação
+- Quando a multidão falha: dependência, pensamento de grupo, cascatas
+- Inteligência coletiva em organizações
+- Evidência forense: examinadores, super-reconhecedores, algoritmos e sua fusão
+- Exigências para um fluxo de trabalho: independência, registro do desacordo, regra de decisão
+
+::: {.callout-warning appearance="simple"}
+## Fontes candidatas
+
+A conferir com o original antes de citar: [@surowiecki2004; @hong2004; @woolley2010; @malone2015; @phillips2018; @white2014].
+:::

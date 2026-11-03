@@ -1,0 +1,17 @@
+# Convenções {#sec-convencoes .unnumbered}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+Os termos, as notações e os avisos usados ao longo do livro: como um par de características é
+escrito, como as etapas do ACE-V se relacionam com os nomes dos papéis no sistema, como o código e as
+tabelas do TrackID são referidos sem precisar ser lidos.
+:::
+
+## Seções previstas
+
+- Termos: português primeiro, termo em inglês na primeira ocorrência e no glossário
+- Pares, decisões e papéis: VERIFICATOR, REVIEWER e INCONSISTENCE no banco de dados; exame, verificação e inconsistência nas telas e no texto
+- Referências ao código e às tabelas, a uma versão marcada do repositório
+- Os avisos do livro: *Na prática*, *No TrackID*, *Limite*
+- Figuras: fluxos, capturas de tela de um mundo sintético, mapas -- nunca dados reais

@@ -1,0 +1,14 @@
+# Discussão e próximos passos {#sec-discussao}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+O que o exercício mostra e o que não pode mostrar, e os problemas em aberto: análises de impressão
+digital, pares entre casos, calibração dos escores.
+:::
+
+## Seções previstas
+
+- O que a turma mostrou
+- O que o exercício não pode mostrar
+- Problemas em aberto
