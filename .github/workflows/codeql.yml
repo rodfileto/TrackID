@@ -33,7 +33,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
       # Go: autobuild resolves the module. JS: the app lives in frontend/, so install
@@ -41,7 +41,7 @@ jobs:
       # has no build file, so fetch its pinned jars and compile Sidecar.java directly.
       - name: Autobuild (Go)
         if: matrix.language == 'go'
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
       - name: Install dependencies (JS)
         if: matrix.language == 'javascript-typescript'
         working-directory: frontend
@@ -53,4 +53,4 @@ jobs:
           ./fetch-deps.sh
           javac -cp 'lib/*' -d classes Sidecar.java
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
