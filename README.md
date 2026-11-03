@@ -79,7 +79,8 @@ needs [WordCraft](https://github.com/storytold/wordcraft) built beside this repo
   [access profiles](docs/access-profiles-plan.md),
   [reviewed clusters](docs/reviewed-clusters-plan.md),
   [request routing](docs/request-routing-plan.md),
-  [fingerprint image processing](docs/fingerprint-image-processing-plan.md).
+  [fingerprint image processing](docs/fingerprint-image-processing-plan.md),
+  [large gallery](docs/large-gallery-plan.md).
 
 ## Licence
 
