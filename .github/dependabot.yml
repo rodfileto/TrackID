@@ -1,4 +1,6 @@
 version: 2
+# Minor and patch updates come grouped, one PR per ecosystem; a major version comes as its own PR,
+# since it can break the build and needs its own migration.
 updates:
   - package-ecosystem: "gomod"
     directory: "/"
@@ -9,6 +11,9 @@ updates:
       go:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "npm"
     directory: "/frontend"
@@ -19,6 +24,9 @@ updates:
       npm:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "github-actions"
     directory: "/"
