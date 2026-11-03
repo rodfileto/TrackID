@@ -14,6 +14,7 @@ import CaseDetailPage from "./pages/CaseDetail";
 import PersonLookup from "./pages/PersonLookup";
 import PersonProfilePage from "./pages/PersonProfile";
 import Clusters from "./pages/Clusters";
+import ClusterDetailPage from "./pages/ClusterDetail";
 import AnalysisWorkspace from "./pages/AnalysisWorkspace";
 import MyAnalyses from "./pages/MyAnalyses";
 import Distribution from "./pages/Distribution";
@@ -90,6 +91,7 @@ export default function App() {
               </Route>
               <Route element={<RequireCapability need="intelligence" />}>
                 <Route path="/clusters" element={<Clusters />} />
+                <Route path="/clusters/:clusterId" element={<ClusterDetailPage />} />
                 <Route
                   path="/intelligence/map"
                   element={

@@ -109,6 +109,97 @@
     },
     "emptyShort": "Ainda não há clusters biométricos."
   },
+  "clusterDetail": {
+    "title": "Cluster #{{id}}",
+    "metaDescription": "Um cluster biométrico em detalhe: membros, decisões e estrutura",
+    "back": "Voltar aos clusters",
+    "loadError": "Não foi possível carregar o cluster",
+    "created": "Criado em {{date}}",
+    "thisCluster": "este cluster",
+    "basis": {
+      "AUTOMATIC": "Camada automática",
+      "REVIEWED": "Camada revisada"
+    },
+    "basisHint": {
+      "AUTOMATIC": "Camada automática: todo par confirmado liga suas amostras, inclusive correspondências que nenhum perito revisou (SYSTEM). Uma visão de inteligência.",
+      "REVIEWED": "Camada revisada: só pares confirmados por peritos ligam suas amostras. É a camada que as páginas de caso e de pessoa leem."
+    },
+    "stats": {
+      "members": "Membros",
+      "known": "Cadastros",
+      "questioned": "Vestígios",
+      "cases": "Casos",
+      "persons": "Pessoas",
+      "edges": "Arestas (revisadas)",
+      "bridges": "Pontes",
+      "weakest": "Aresta mais fraca"
+    },
+    "edgesNote": "Uma aresta é um par cujas decisões ligam suas duas amostras nesta camada. Uma ponte é uma aresta que sozinha mantém duas partes do cluster juntas: se estiver errada, o cluster se divide.",
+    "flags": {
+      "components_one": "As arestas do próprio cluster não unem mais seus membros ({{count}} grupo): as decisões mudaram desde a última clusterização.",
+      "components_other": "As arestas do próprio cluster não unem mais seus membros ({{count}} grupos): as decisões mudaram desde a última clusterização.",
+      "persons_one": "Resolve para {{count}} pessoa cadastrada: {{names}}.",
+      "persons_other": "Resolve para {{count}} pessoas cadastradas: {{names}}. Cadastros de pessoas diferentes corresponderam entre si: um registro duplicado ou de impostor, ou uma falsa correspondência.",
+      "elsewhere": "{{names}}: amostras de cadastro em outros clusters ({{clusters}}). As amostras dessa pessoa não corresponderam entre si: verifique se um registro carrega a biometria de outra pessoa.",
+      "bridges_one": "{{count}} ponte: uma única ligação mantém parte do cluster. Verifique-a primeiro.",
+      "bridges_other": "{{count}} pontes: ligações únicas mantêm partes do cluster. Verifique-as primeiro."
+    },
+    "persons": "Pessoas identificadas",
+    "personsHint": "Cada pessoa a que pertence um cadastro membro, com todas as amostras de cadastro desta modalidade e o cluster em que cada uma está.",
+    "noPersons": "Não resolvido para nenhuma pessoa cadastrada.",
+    "samplesElsewhere": "Amostras em outros clusters",
+    "structure": "Estrutura",
+    "structureHint": "Membros unidos pelas arestas do cluster. Clique num membro para filtrar os pares; um anel vermelho marca um membro cuja remoção dividiria o cluster.",
+    "legendKnown": "Cadastro",
+    "legendQuestioned": "Vestígio",
+    "legendBridge": "Ponte",
+    "members": "Membros",
+    "membersHint": "O grau é quantas arestas tocam um membro: um membro preso por uma só aresta depende de uma única decisão.",
+    "known": "Cadastro",
+    "questioned": "Vestígio",
+    "cutVertex": "Vértice de corte",
+    "showPairs": "Ver pares",
+    "clearFilter": "Limpar filtro",
+    "pairs": "Decisões",
+    "pairsHint": "Todo par decidido que toca o cluster, do escore mais fraco ao mais forte. Clique num par para ver a cadeia de decisões completa.",
+    "filter": {
+      "edges": "Arestas",
+      "insideOther": "Internos, sem ligar",
+      "boundary": "Para amostras de fora",
+      "all": "Todos",
+      "bridges": "Só pontes"
+    },
+    "outside": "fora, em",
+    "bridge": "Ponte",
+    "reviewed": "Revisado",
+    "noPairs": "Nenhum par corresponde.",
+    "showMore": "Mostrar mais ({{count}} restantes)",
+    "status": {
+      "PENDING_REVIEW": "Aguardando revisão",
+      "CONFIRMED": "Confirmado",
+      "DISPUTED": "Em disputa",
+      "REJECTED": "Rejeitado"
+    },
+    "columns": {
+      "sample": "Amostra",
+      "kind": "Tipo",
+      "degree": "Grau",
+      "otherLayer": "{{layer}}",
+      "sampleA": "Amostra A",
+      "sampleB": "Amostra B",
+      "score": "Escore / limiar",
+      "status": "Situação",
+      "settledBy": "Decidido por",
+      "role": "Papel",
+      "decision": "Decisão",
+      "decidedBy": "Decidido por",
+      "analysis": "Análise",
+      "conclusion": "Conclusão",
+      "decidedAt": "Decidido em"
+    },
+    "merges": "Histórico de fusões",
+    "mergesHint": "Clusters fundidos neste, ou este em outro, conforme decisões os uniram."
+  },
   "caseDetail": {
     "title": "Caso {{caseId}}",
     "metaDescription": "Detalhe do caso",

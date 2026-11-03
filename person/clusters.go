@@ -21,6 +21,9 @@ import (
 // matched to them.
 type ClusterMember struct {
 	Kind string `json:"kind"`
+	// FeatureID is the member's cluster_members.feature_id (graph.KnownFeatureID /
+	// graph.QuestionedFeatureID).
+	FeatureID string `json:"featureId"`
 
 	// KNOWN fields -- an enrollment photo.
 	PersonID       string `json:"personId,omitempty"`
@@ -96,6 +99,28 @@ func ListClusters(ctx context.Context, sqlDB *sql.DB, personID string) ([]Cluste
 	return buildClusters(ctx, q, clusterRows, memberRows)
 }
 
+// ClusterByID returns one cluster, of either layer, with its members resolved as ListClusters
+// resolves them. ok is false when no cluster has the id.
+func ClusterByID(ctx context.Context, sqlDB *sql.DB, clusterID int64) (c Cluster, ok bool, err error) {
+	if sqlDB == nil {
+		return Cluster{}, false, fmt.Errorf("person: nil db")
+	}
+	q := db.New(sqlDB)
+	clusterRows, err := q.ListClustersByIDs(ctx, []int64{clusterID})
+	if err != nil || len(clusterRows) == 0 {
+		return Cluster{}, false, err
+	}
+	memberRows, err := q.ListClusterMembersByClusterIDs(ctx, []int64{clusterID})
+	if err != nil {
+		return Cluster{}, false, err
+	}
+	clusters, err := buildClusters(ctx, q, clusterRows, memberRows)
+	if err != nil || len(clusters) == 0 {
+		return Cluster{}, false, err
+	}
+	return clusters[0], true, nil
+}
+
 // buildClusters assembles the Cluster list -- each with its resolved member
 // details -- from an already-loaded set of cluster rows and their combined
 // membership. The reusable core both ListClusters and GetProfile build on.
@@ -153,6 +178,7 @@ func buildClusters(ctx context.Context, q *db.Queries, clusterRows []db.ListClus
 			}
 			member := ClusterMember{
 				Kind:        "QUESTIONED",
+				FeatureID:   m.FeatureID,
 				CaseID:      d.CaseID,
 				Modality:    d.Modality,
 				Description: d.Description,
@@ -184,6 +210,7 @@ func buildClusters(ctx context.Context, q *db.Queries, clusterRows []db.ListClus
 		}
 		membersByCluster[m.ClusterID] = append(membersByCluster[m.ClusterID], ClusterMember{
 			Kind:           "KNOWN",
+			FeatureID:      m.FeatureID,
 			PersonID:       d.PersonID,
 			Name:           d.Name,
 			RegisterNumber: d.RegisterNumber,

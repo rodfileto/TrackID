@@ -109,6 +109,97 @@
     },
     "emptyShort": "No biometric clusters yet."
   },
+  "clusterDetail": {
+    "title": "Cluster #{{id}}",
+    "metaDescription": "One biometric cluster in depth: members, decisions and structure",
+    "back": "Back to clusters",
+    "loadError": "Could not load the cluster",
+    "created": "Created {{date}}",
+    "thisCluster": "this cluster",
+    "basis": {
+      "AUTOMATIC": "Automatic layer",
+      "REVIEWED": "Reviewed layer"
+    },
+    "basisHint": {
+      "AUTOMATIC": "Automatic layer: every confirmed pair links its samples, matches no examiner has reviewed (SYSTEM) included. An intelligence view.",
+      "REVIEWED": "Reviewed layer: only pairs examiners confirmed link its samples. The layer case and person pages read."
+    },
+    "stats": {
+      "members": "Members",
+      "known": "Enrollments",
+      "questioned": "Case traces",
+      "cases": "Cases",
+      "persons": "Persons",
+      "edges": "Edges (reviewed)",
+      "bridges": "Bridges",
+      "weakest": "Weakest edge"
+    },
+    "edgesNote": "An edge is a pair whose decisions link its two samples in this layer. A bridge is an edge that alone holds two parts of the cluster together: if it is wrong, the cluster splits.",
+    "flags": {
+      "components_one": "The cluster's own edges no longer join its members ({{count}} group): decisions changed since clustering last ran.",
+      "components_other": "The cluster's own edges no longer join its members ({{count}} groups): decisions changed since clustering last ran.",
+      "persons_one": "Resolves to {{count}} enrolled person: {{names}}.",
+      "persons_other": "Resolves to {{count}} enrolled persons: {{names}}. Enrollments of different persons matched each other: a duplicate or impostor record, or a false match.",
+      "elsewhere": "{{names}}: enrollment samples in other clusters ({{clusters}}). That person's own samples did not match each other: check whether one record carries someone else's biometrics.",
+      "bridges_one": "{{count}} bridge: one link alone holds part of the cluster. Check it first.",
+      "bridges_other": "{{count}} bridges: single links hold parts of the cluster. Check them first."
+    },
+    "persons": "Identified persons",
+    "personsHint": "Each person a member enrollment belongs to, with every enrollment sample of this modality and the cluster it is in.",
+    "noPersons": "Not resolved to any enrolled person.",
+    "samplesElsewhere": "Samples in other clusters",
+    "structure": "Structure",
+    "structureHint": "Members joined by the cluster's edges. Click a member to filter the pairs; a red ring marks a member whose removal would split the cluster.",
+    "legendKnown": "Enrollment",
+    "legendQuestioned": "Case trace",
+    "legendBridge": "Bridge",
+    "members": "Members",
+    "membersHint": "Degree is how many edges touch a member: a member held by one edge hangs on a single decision.",
+    "known": "Enrollment",
+    "questioned": "Case trace",
+    "cutVertex": "Cut vertex",
+    "showPairs": "Show pairs",
+    "clearFilter": "Clear filter",
+    "pairs": "Decisions",
+    "pairsHint": "Every decided pair touching the cluster, weakest score first. Click a pair for its full decision chain.",
+    "filter": {
+      "edges": "Edges",
+      "insideOther": "Inside, not linking",
+      "boundary": "To outside samples",
+      "all": "All",
+      "bridges": "Bridges only"
+    },
+    "outside": "outside, in",
+    "bridge": "Bridge",
+    "reviewed": "Reviewed",
+    "noPairs": "No pairs match.",
+    "showMore": "Show more ({{count}} left)",
+    "status": {
+      "PENDING_REVIEW": "Pending review",
+      "CONFIRMED": "Confirmed",
+      "DISPUTED": "Disputed",
+      "REJECTED": "Rejected"
+    },
+    "columns": {
+      "sample": "Sample",
+      "kind": "Kind",
+      "degree": "Degree",
+      "otherLayer": "{{layer}}",
+      "sampleA": "Sample A",
+      "sampleB": "Sample B",
+      "score": "Score / threshold",
+      "status": "Status",
+      "settledBy": "Settled by",
+      "role": "Role",
+      "decision": "Decision",
+      "decidedBy": "Decided by",
+      "analysis": "Analysis",
+      "conclusion": "Conclusion",
+      "decidedAt": "Decided at"
+    },
+    "merges": "Merge history",
+    "mergesHint": "Clusters merged into this one, or this one into another, as decisions joined them."
+  },
   "caseDetail": {
     "title": "Case {{caseId}}",
     "metaDescription": "Case detail",

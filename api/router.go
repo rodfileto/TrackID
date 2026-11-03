@@ -233,6 +233,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 
 	intelligence.GET("clusters", ListClustersHandler(deps.DB))
 	intelligence.GET("clusters/graph", ClustersGraphHandler(deps.DB))
+	intelligence.GET("clusters/:clusterId", GetClusterHandler(deps.DB))
 
 	// What the occurrence form needs: a coordinator registering a request creates the occurrence
 	// it cites (docs/facial-reports-plan.md, "Request first"); the map and the rest stay

@@ -52,6 +52,8 @@ export interface PersonIdentity {
  * thumbnailBox for QUESTIONED (see person.ClusterMember). */
 export interface PersonClusterMember {
   kind: "KNOWN" | "QUESTIONED";
+  /** The member's cluster_members.feature_id: the identity file id, or TRACE:<id>#feature. */
+  featureId: string;
 
   personId?: string;
   name?: string;

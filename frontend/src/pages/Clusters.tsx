@@ -209,7 +209,12 @@ export default function Clusters() {
                 {items.map((cluster) => (
                   <TableRow key={cluster.clusterId}>
                     <TableCell className="px-5 py-4 sm:px-6 text-start font-medium text-gray-800 dark:text-white/90">
-                      #{cluster.clusterId}
+                      <Link
+                        to={`/clusters/${cluster.clusterId}`}
+                        className="text-brand-500 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300"
+                      >
+                        #{cluster.clusterId}
+                      </Link>
                     </TableCell>
                     <TableCell className="px-4 py-3 text-start text-theme-sm">
                       <Badge size="sm" color={modalityColor(cluster.modality)}>

@@ -2,11 +2,14 @@ package api
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/rodfileto/trackid/cluster"
+	"github.com/rodfileto/trackid/person"
 )
 
 // ListClustersResponse is ListClustersHandler's paginated response.
@@ -84,5 +87,50 @@ func OverviewGraphHandler(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		context.JSON(http.StatusOK, cluster.Anonymous(result))
+	}
+}
+
+// ClusterDetailResponse is GetClusterHandler's response: the cluster's structure and decisions
+// (cluster.Detail) and its members resolved for display (person.ClusterMember: an enrollment's
+// person and register, a trace's case and thumbnail).
+type ClusterDetailResponse struct {
+	cluster.Detail
+	ResolvedMembers []person.ClusterMember `json:"resolvedMembers"`
+}
+
+// GetClusterHandler returns one cluster, of either layer, in depth (cluster.GetDetail): every
+// decision touching it, what holds it together, its merges and the persons it resolves to, with
+// their samples in other clusters. An intelligence view, like the clusters listing.
+func GetClusterHandler(sqlDB *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if sqlDB == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		clusterID, err := strconv.ParseInt(context.Param("clusterId"), 10, 64)
+		if err != nil || clusterID <= 0 {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid cluster id"})
+			return
+		}
+		ctx := context.Request.Context()
+		detail, err := cluster.GetDetail(ctx, sqlDB, clusterID)
+		if errors.Is(err, cluster.ErrClusterNotFound) {
+			context.JSON(http.StatusNotFound, gin.H{"error": "cluster not found"})
+			return
+		}
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load the cluster"})
+			return
+		}
+		resolved, _, err := person.ClusterByID(ctx, sqlDB, clusterID)
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load the cluster"})
+			return
+		}
+		members := resolved.Members
+		if members == nil {
+			members = []person.ClusterMember{}
+		}
+		context.JSON(http.StatusOK, ClusterDetailResponse{Detail: detail, ResolvedMembers: members})
 	}
 }

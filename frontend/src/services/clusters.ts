@@ -1,5 +1,6 @@
 import { requestApi } from "./api";
 import { getToken } from "./auth";
+import type { PersonClusterMember } from "./persons";
 
 /** One enrolled person a cluster has resolved to -- see cluster.SummaryPerson. */
 export interface ClusterPerson {
@@ -93,4 +94,91 @@ export async function getClusterGraph(
   return requestApi<ClusterGraph>(`/clusters/graph?limit=${limit}&min_members=${minMembers}`, {
     headers: authHeaders(),
   });
+}
+
+export type ClusterBasis = "AUTOMATIC" | "REVIEWED";
+export type EdgeStatus = "PENDING_REVIEW" | "CONFIRMED" | "DISPUTED" | "REJECTED";
+
+/** One member's place in its cluster's structure -- see cluster.DetailMember. */
+export interface ClusterDetailMember {
+  featureId: string;
+  /** How many of the cluster's edges touch it. */
+  degree: number;
+  /** Removing it would split the cluster. */
+  cutVertex: boolean;
+  /** Its cluster in the other layer, when it has one. */
+  otherClusterId?: number;
+}
+
+/** One biometric_decisions row of a pair's chain -- see cluster.DetailDecision. */
+export interface ClusterDecision {
+  role: "SYSTEM" | "VERIFICATOR" | "REVIEWER" | "INCONSISTENCE";
+  decision: "POSITIVE" | "NEGATIVE" | "INCONCLUSIVE";
+  decidedBy: string;
+  confidence?: number;
+  threshold?: number;
+  analysisId?: number;
+  analysisType?: string;
+  conclusion?: string;
+  decidedAt: string;
+}
+
+/** One decided pair touching the cluster -- see cluster.DetailPair. inside: both features are
+ * members; edge: the pair links them in the cluster's layer; bridge: an edge whose removal
+ * would split the cluster. */
+export interface ClusterPair {
+  featureA: string;
+  featureB: string;
+  inside: boolean;
+  /** For a boundary pair: the outside sample's cluster in the same layer. */
+  outsideClusterId?: number;
+  status: EdgeStatus;
+  settledBy?: string;
+  reviewed: boolean;
+  edge: boolean;
+  bridge: boolean;
+  score?: number;
+  threshold?: number;
+  chain: ClusterDecision[];
+}
+
+export interface ClusterMerge {
+  fromClusterId: number;
+  toClusterId: number;
+  mergedAt: string;
+  reason?: string;
+}
+
+/** One enrollment sample of a person the cluster resolves to, with its cluster in the same
+ * layer -- see cluster.PersonSample. */
+export interface ClusterPersonSample {
+  personId: string;
+  name: string;
+  registerNumber: string;
+  identityFileId: number;
+  fileType: string;
+  contentType?: string;
+  featureId: string;
+  clusterId?: number;
+}
+
+/** One cluster in depth -- see api.ClusterDetailResponse. */
+export interface ClusterDetail {
+  clusterId: number;
+  modality: string;
+  basis: ClusterBasis;
+  createdAt: string;
+  updatedAt: string;
+  members: ClusterDetailMember[];
+  pairs: ClusterPair[];
+  components: number;
+  merges: ClusterMerge[];
+  personSamples: ClusterPersonSample[];
+  resolvedMembers: PersonClusterMember[];
+}
+
+/** One cluster, of either layer, in depth: its members, every decision touching it, what holds it
+ * together, its merges and the persons it resolves to. */
+export async function getCluster(clusterId: number): Promise<ClusterDetail> {
+  return requestApi<ClusterDetail>(`/clusters/${clusterId}`, { headers: authHeaders() });
 }
