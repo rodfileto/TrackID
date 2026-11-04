@@ -573,6 +573,33 @@ func TestPersonTemplate(t *testing.T) {
 		t.Errorf("counts for an unknown person: %v", err)
 	}
 
+	// So do the profile's cases: every case, most certain first, each with what links it.
+	links, err := articles.PersonCaseLinks(ctx, sqlDB, w.personA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(links) != 3 {
+		t.Fatalf("case links: %+v", links)
+	}
+	if l := links[0]; l.CaseID != w.caseID || l.Certainty != "confirmed" || len(l.ReviewedClusterIDs) != 1 ||
+		l.ReviewedClusterIDs[0] != cluster || l.Description != "robbery faces" || l.Modality != "FACIAL" {
+		t.Errorf("confirmed case link: %+v", l)
+	}
+	byCase := map[string]articles.CaseLink{}
+	for _, l := range links[1:] {
+		byCase[l.CaseID] = l
+	}
+	if l := byCase["2026.0060"]; l.Certainty != "unreviewed" || l.Score == nil || *l.Score != 0.83 ||
+		l.Description != "pending robbery" || len(l.ReviewedClusterIDs) != 0 {
+		t.Errorf("pending case link: %+v", l)
+	}
+	if l := byCase["2026.0061"]; l.Certainty != "unreviewed" || l.AutomaticClusterID != automaticOfA || l.Description != "indirect theft" {
+		t.Errorf("automatic case link: %+v", l)
+	}
+	if _, err := articles.PersonCaseLinks(ctx, sqlDB, "NOBODY"); !errors.Is(err, articles.ErrSubjectNotFound) {
+		t.Errorf("case links for an unknown person: %v", err)
+	}
+
 	english, err := articles.GenerateTemplate(ctx, sqlDB, subject, "en", w.alice)
 	if err != nil {
 		t.Fatal(err)

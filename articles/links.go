@@ -74,7 +74,8 @@ func gatherPersonLinks(ctx context.Context, sqlDB *sql.DB, personID string) (*pe
 		return l
 	}
 	for _, c := range profile.Cases {
-		link(c.CaseID).reviewed = true
+		l := link(c.CaseID)
+		l.reviewed, l.modality, l.description = true, c.Modality, c.Description
 	}
 	decisions, err := cases.ListPersonTraceDecisions(ctx, sqlDB, known)
 	if err != nil {
@@ -82,6 +83,9 @@ func gatherPersonLinks(ctx context.Context, sqlDB *sql.DB, personID string) (*pe
 	}
 	for _, dec := range decisions {
 		l := link(dec.CaseID)
+		if l.modality == "" {
+			l.modality = dec.Modality
+		}
 		l.decisions = append(l.decisions, dec)
 		l.statuses[dec.Status] = true
 	}
@@ -129,8 +133,12 @@ func gatherPersonLinks(ctx context.Context, sqlDB *sql.DB, personID string) (*pe
 				return nil, err
 			}
 			for _, r := range rows {
-				if l := link(r.CaseID); l.automatic == 0 {
+				l := link(r.CaseID)
+				if l.automatic == 0 {
 					l.automatic = traceCluster[r.CaseTraceID]
+				}
+				if l.modality == "" {
+					l.modality, l.description = r.Modality, r.Description
 				}
 			}
 		}
@@ -256,6 +264,74 @@ func PersonLinkCounts(ctx context.Context, sqlDB *sql.DB, personID string) (Link
 			out.Associates.Confirmed++
 		} else {
 			out.Associates.Unreviewed++
+		}
+	}
+	return out, nil
+}
+
+// CaseLink is one case the records link to a person, at any certainty: what the person's profile
+// lists for intelligence, beside the reviewed cases alone (person.RelatedCase).
+type CaseLink struct {
+	CaseID      string `json:"caseId"`
+	Modality    string `json:"modality"`
+	Description string `json:"description"`
+	// Certainty is the link's tier: confirmed, unreviewed, uncertain or excluded (caseLink.tier).
+	Certainty string `json:"certainty"`
+	// ReviewedClusterIDs are the person's REVIEWED clusters holding the case's traces;
+	// AutomaticClusterID is the AUTOMATIC cluster linking them (0 for none).
+	ReviewedClusterIDs []int64 `json:"reviewedClusterIds"`
+	AutomaticClusterID int64   `json:"automaticClusterId,omitempty"`
+	// Score is the best SYSTEM score of a direct pair between the person and the case's traces.
+	Score *float64 `json:"score,omitempty"`
+}
+
+// PersonCaseLinks lists every case linked to a person (personLinks), most certain first.
+func PersonCaseLinks(ctx context.Context, sqlDB *sql.DB, personID string) ([]CaseLink, error) {
+	pl, err := gatherPersonLinks(ctx, sqlDB, personID)
+	if err != nil {
+		return nil, err
+	}
+	reviewed := map[string][]int64{}
+	for _, c := range pl.profile.Cases {
+		reviewed[c.CaseID] = c.ClusterIDs
+	}
+
+	// A case reached only through a direct pair has no description yet: read it from its traces.
+	var traceIDs []int64
+	for _, l := range pl.cases {
+		if l.description == "" {
+			for _, d := range l.decisions {
+				traceIDs = append(traceIDs, d.TraceID)
+			}
+		}
+	}
+	if len(traceIDs) > 0 {
+		rows, err := db.New(sqlDB).ListCasesByCaseTraceIDs(ctx, traceIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			if l := pl.cases[r.CaseID]; l != nil && l.description == "" {
+				l.description = r.Description
+			}
+		}
+	}
+
+	out := []CaseLink{}
+	for _, tier := range tierOrder {
+		for _, l := range pl.byTier[tier] {
+			c := CaseLink{CaseID: l.caseID, Modality: l.modality, Description: l.description, Certainty: tier,
+				ReviewedClusterIDs: reviewed[l.caseID], AutomaticClusterID: l.automatic}
+			if c.ReviewedClusterIDs == nil {
+				c.ReviewedClusterIDs = []int64{}
+			}
+			for _, d := range l.decisions {
+				if d.Score != nil {
+					c.Score = d.Score
+					break
+				}
+			}
+			out = append(out, c)
 		}
 	}
 	return out, nil

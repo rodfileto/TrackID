@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -36,10 +37,26 @@ type Detail struct {
 	// Run has just written is 1 (a singleton included); more means decisions changed since.
 	Components int           `json:"components"`
 	Merges     []DetailMerge `json:"merges"`
-	// PersonSamples are every enrollment sample, of the cluster's modality, of every person a
-	// KNOWN member resolves to, with the cluster of this layer each one is in: a person whose
-	// samples sit in different clusters holds biometrics that did not match each other.
+	// PersonSamples are every enrollment sample, of any modality, of every person a KNOWN member
+	// resolves to, with the cluster of this layer each one is in: a person whose samples of the
+	// cluster's modality sit in different clusters holds biometrics that did not match each other.
 	PersonSamples []PersonSample `json:"personSamples"`
+	// LinkedClusters are the clusters of this layer, of another modality, holding those persons'
+	// samples. They are linked by enrollment (one register holds both samples), not by a
+	// comparison, so nothing here joins them: each modality's cluster stands on its own decisions.
+	LinkedClusters []LinkedCluster `json:"linkedClusters"`
+}
+
+// LinkedCluster is a cluster of another modality that holds an enrollment sample of a person the
+// cluster resolves to.
+type LinkedCluster struct {
+	ClusterID int64  `json:"clusterId"`
+	Modality  string `json:"modality"`
+	// MemberCount and QuestionedCount are its members, and those of them from case evidence.
+	MemberCount     int `json:"memberCount"`
+	QuestionedCount int `json:"questionedCount"`
+	// PersonIDs are the persons whose samples link it.
+	PersonIDs []string `json:"personIds"`
 }
 
 // DetailMember is one member's place in its cluster's structure.
@@ -106,6 +123,7 @@ type PersonSample struct {
 	RegisterNumber string `json:"registerNumber"`
 	IdentityFileID int64  `json:"identityFileId"`
 	FileType       string `json:"fileType"`
+	Modality       string `json:"modality"`
 	ContentType    string `json:"contentType,omitempty"`
 	FeatureID      string `json:"featureId"`
 	// ClusterID is the sample's cluster in the same layer (0 when it has none).
@@ -169,7 +187,10 @@ func GetDetail(ctx context.Context, sqlDB *sql.DB, clusterID int64) (Detail, err
 	if d.Merges, err = loadMerges(ctx, sqlDB, clusterID, d.Basis); err != nil {
 		return Detail{}, err
 	}
-	if d.PersonSamples, err = loadPersonSamples(ctx, sqlDB, clusterID, d.Basis, d.Modality); err != nil {
+	if d.PersonSamples, err = loadPersonSamples(ctx, sqlDB, clusterID, d.Basis); err != nil {
+		return Detail{}, err
+	}
+	if d.LinkedClusters, err = loadLinkedClusters(ctx, sqlDB, d.Modality, d.PersonSamples); err != nil {
 		return Detail{}, err
 	}
 	return d, nil
@@ -404,9 +425,9 @@ func loadMerges(ctx context.Context, sqlDB *sql.DB, clusterID int64, basis Basis
 	return out, rows.Err()
 }
 
-// loadPersonSamples lists every enrollment sample, of the cluster's modality, of the persons its
-// KNOWN members resolve to, with each sample's cluster in the same layer.
-func loadPersonSamples(ctx context.Context, sqlDB *sql.DB, clusterID int64, basis Basis, modality string) ([]PersonSample, error) {
+// loadPersonSamples lists every enrollment sample, of any modality, of the persons its KNOWN
+// members resolve to, with each sample's cluster in the same layer.
+func loadPersonSamples(ctx context.Context, sqlDB *sql.DB, clusterID int64, basis Basis) ([]PersonSample, error) {
 	rows, err := sqlDB.QueryContext(ctx, `
 		WITH persons_in AS (
 			SELECT DISTINCT d.person_id
@@ -438,11 +459,59 @@ func loadPersonSamples(ctx context.Context, sqlDB *sql.DB, clusterID int64, basi
 			&s.ContentType, &featureType, &s.ClusterID); err != nil {
 			return nil, err
 		}
-		if m, ok := graph.ModalityForFeatureType(featureType); !ok || !strings.EqualFold(m, modality) {
+		m, ok := graph.ModalityForFeatureType(featureType)
+		if !ok {
 			continue
 		}
+		s.Modality = m
 		s.FeatureID = graph.KnownFeatureID(s.IdentityFileID)
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// loadLinkedClusters gathers, from the person samples, the clusters of a modality other than the
+// cluster's (LinkedCluster), with their member counts.
+func loadLinkedClusters(ctx context.Context, sqlDB *sql.DB, modality string, samples []PersonSample) ([]LinkedCluster, error) {
+	out := []LinkedCluster{}
+	index := map[int64]int{}
+	var ids []int64
+	for _, s := range samples {
+		if s.ClusterID == 0 || strings.EqualFold(s.Modality, modality) {
+			continue
+		}
+		i, ok := index[s.ClusterID]
+		if !ok {
+			i = len(out)
+			index[s.ClusterID] = i
+			ids = append(ids, s.ClusterID)
+			out = append(out, LinkedCluster{ClusterID: s.ClusterID, Modality: s.Modality})
+		}
+		if !slices.Contains(out[i].PersonIDs, s.PersonID) {
+			out[i].PersonIDs = append(out[i].PersonIDs, s.PersonID)
+		}
+	}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := sqlDB.QueryContext(ctx, `
+		SELECT cluster_id, COUNT(*), COUNT(*) FILTER (WHERE feature_id LIKE 'TRACE:%')
+		FROM cluster_members WHERE cluster_id = ANY($1::bigint[]) GROUP BY cluster_id`, pq.Array(ids))
+	if err != nil {
+		return nil, fmt.Errorf("cluster: load linked clusters: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var members, questioned int
+		if err := rows.Scan(&id, &members, &questioned); err != nil {
+			return nil, err
+		}
+		out[index[id]].MemberCount, out[index[id]].QuestionedCount = members, questioned
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ClusterID < out[j].ClusterID })
+	return out, nil
 }

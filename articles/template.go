@@ -231,6 +231,7 @@ var tierOrder = []string{tierConfirmed, tierUnreviewed, tierUncertain, tierExclu
 // caseLink is everything the records say about the person and one case.
 type caseLink struct {
 	caseID      string
+	modality    string
 	description string
 	reviewed    bool                        // in one of the person's REVIEWED clusters
 	automatic   int64                       // the AUTOMATIC cluster that links them, 0 for none

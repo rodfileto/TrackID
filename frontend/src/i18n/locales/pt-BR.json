@@ -145,7 +145,7 @@
       "bridges_other": "{{count}} pontes: ligações únicas mantêm partes do cluster. Verifique-as primeiro."
     },
     "persons": "Pessoas identificadas",
-    "personsHint": "Cada pessoa a que pertence um cadastro membro, com todas as amostras de cadastro desta modalidade e o cluster em que cada uma está.",
+    "personsHint": "Cada pessoa a que pertence um cadastro membro, com todas as amostras de cadastro, de qualquer modalidade, e o cluster desta camada em que cada uma está.",
     "noPersons": "Não resolvido para nenhuma pessoa cadastrada.",
     "samplesElsewhere": "Amostras em outros clusters",
     "structure": "Estrutura",
@@ -198,7 +198,16 @@
       "decidedAt": "Decidido em"
     },
     "merges": "Histórico de fusões",
-    "mergesHint": "Clusters fundidos neste, ou este em outro, conforme decisões os uniram."
+    "mergesHint": "Clusters fundidos neste, ou este em outro, conforme decisões os uniram.",
+    "otherModalities": "Outras modalidades",
+    "otherModalitiesHint": "Clusters de outra modalidade que contêm amostras de cadastro das mesmas pessoas. A ligação é pelo cadastro (um mesmo registro contém as duas amostras), não por um confronto: cada cluster se sustenta nas próprias decisões.",
+    "linkedCluster": {
+      "members_one": "{{count}} membro",
+      "members_other": "{{count}} membros",
+      "traces_one": "{{count}} de evidência de caso",
+      "traces_other": "{{count}} de evidência de caso",
+      "via": "por {{names}}"
+    }
   },
   "caseDetail": {
     "title": "Caso {{caseId}}",
@@ -303,8 +312,13 @@
       "caseId": "ID do caso",
       "type": "Tipo",
       "description": "Descrição",
-      "linkedVia": "Vinculado por"
-    }
+      "linkedVia": "Vinculado por",
+      "certainty": "Certeza"
+    },
+    "casesAll_one": "{{count}} caso vinculado, em qualquer grau de certeza: confirmado por peritos, ou ligação do comparador ainda não revisada, incerta ou excluída",
+    "casesAll_other": "{{count}} casos vinculados, em qualquer grau de certeza: confirmados por peritos, ou ligações do comparador ainda não revisadas, incertas ou excluídas",
+    "automaticCluster": "automático",
+    "score": "escore {{score}}"
   },
   "graph": {
     "title": "Rede de identidades e vestígios",

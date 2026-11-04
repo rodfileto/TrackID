@@ -145,9 +145,9 @@ function Flag({ tone, children }: { tone: "warning" | "error" | "info"; children
   );
 }
 
-/** The persons the cluster resolves to, each with every enrollment sample of the cluster's
- * modality and the cluster each one is in: a person whose samples sit in different clusters holds
- * biometrics that did not match each other. */
+/** The persons the cluster resolves to, each with every enrollment sample, of any modality, and
+ * the cluster each one is in: a person whose samples of the cluster's modality sit in different
+ * clusters holds biometrics that did not match each other. */
 function PersonsCard({ detail }: { detail: ClusterDetail }) {
   const { t } = useTranslation();
   const byPerson = useMemo(() => {
@@ -165,7 +165,9 @@ function PersonsCard({ detail }: { detail: ClusterDetail }) {
       ) : (
         <div className="space-y-4">
           {byPerson.map(([personId, samples]) => {
-            const elsewhere = samples.some((s) => s.clusterId !== detail.clusterId);
+            const elsewhere = samples.some(
+              (s) => s.modality === detail.modality && s.clusterId !== detail.clusterId,
+            );
             return (
               <div key={personId} className="rounded-xl border border-gray-200 p-4 dark:border-white/[0.05]">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -194,7 +196,8 @@ function PersonsCard({ detail }: { detail: ClusterDetail }) {
                       <div className="text-xs">
                         <p className="text-gray-700 dark:text-gray-300">{s.registerNumber}</p>
                         <p className="mt-0.5 text-gray-500 dark:text-gray-400">
-                          {s.fileType} · <ClusterLink id={s.clusterId} current={detail.clusterId} />
+                          {s.fileType} · {t(modalityLabelKey(s.modality))} ·{" "}
+                          <ClusterLink id={s.clusterId} current={detail.clusterId} />
                         </p>
                       </div>
                     </li>
@@ -205,6 +208,39 @@ function PersonsCard({ detail }: { detail: ClusterDetail }) {
           })}
         </div>
       )}
+    </ComponentCard>
+  );
+}
+
+/** The other modality's clusters holding the same persons' enrollment samples: a reference, not a
+ * merge -- the link is the enrollment, and each cluster stands on its own decisions. */
+function OtherModalitiesCard({ detail }: { detail: ClusterDetail }) {
+  const { t } = useTranslation();
+  const names = useMemo(
+    () => new Map(detail.personSamples.map((s) => [s.personId, s.name])),
+    [detail.personSamples],
+  );
+  if (detail.linkedClusters.length === 0) return null;
+  return (
+    <ComponentCard title={t("clusterDetail.otherModalities")} desc={t("clusterDetail.otherModalitiesHint")}>
+      <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+        {detail.linkedClusters.map((c) => (
+          <li key={c.clusterId} className="flex flex-wrap items-center gap-2">
+            <ClusterLink id={c.clusterId} />
+            <Badge size="sm" color={c.modality === "FACIAL" ? "info" : "warning"}>
+              {t(modalityLabelKey(c.modality))}
+            </Badge>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {t("clusterDetail.linkedCluster.members", { count: c.memberCount })}
+              {c.questionedCount > 0 && ` · ${t("clusterDetail.linkedCluster.traces", { count: c.questionedCount })}`}
+              {" · "}
+              {t("clusterDetail.linkedCluster.via", {
+                names: c.personIds.map((id) => names.get(id) ?? id).join(", "),
+              })}
+            </span>
+          </li>
+        ))}
+      </ul>
     </ComponentCard>
   );
 }
@@ -697,7 +733,9 @@ export default function ClusterDetailPage() {
   const bridges = edges.filter((p) => p.bridge).length;
   const scores = edges.map((p) => p.score).filter((s): s is number => s !== undefined);
   const weakest = scores.length ? Math.min(...scores) : undefined;
-  const elsewhere = detail.personSamples.filter((s) => s.clusterId !== detail.clusterId);
+  const elsewhere = detail.personSamples.filter(
+    (s) => s.modality === detail.modality && s.clusterId !== detail.clusterId,
+  );
   const reviewedEdges = edges.filter((p) => p.reviewed).length;
 
   return (
@@ -760,6 +798,7 @@ export default function ClusterDetailPage() {
         )}
 
         <PersonsCard detail={detail} />
+        <OtherModalitiesCard detail={detail} />
         {detail.members.length > 1 && (
           <StructureGraph detail={detail} resolved={resolved} selected={selected} onSelect={setSelected} />
         )}

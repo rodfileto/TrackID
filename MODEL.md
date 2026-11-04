@@ -275,6 +275,9 @@ case -- trace vs trace across cases, enrollment vs enrollment -- are not in any 
 - A cluster **splits** when a decision is revoked (the component containing the smallest
   feature id keeps the id; the rest get new ids).
 - A singleton (one feature, no match) is still an unknown-subject cluster.
+- A cluster never mixes modalities. A person enrolled with a face and a ten-print links their
+  facial and fingerprint clusters by enrollment, not by a comparison: the cluster page lists the
+  other modality's clusters (`cluster.LinkedCluster`) as a reference, and nothing merges them.
 
 ### 4.1 Two layers: automatic and reviewed
 

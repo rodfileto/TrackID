@@ -149,17 +149,28 @@ export interface ClusterMerge {
   reason?: string;
 }
 
-/** One enrollment sample of a person the cluster resolves to, with its cluster in the same
- * layer -- see cluster.PersonSample. */
+/** One enrollment sample, of any modality, of a person the cluster resolves to, with its cluster
+ * in the same layer -- see cluster.PersonSample. */
 export interface ClusterPersonSample {
   personId: string;
   name: string;
   registerNumber: string;
   identityFileId: number;
   fileType: string;
+  modality: string;
   contentType?: string;
   featureId: string;
   clusterId?: number;
+}
+
+/** A cluster of another modality holding an enrollment sample of a person the cluster resolves
+ * to: linked by enrollment, not by a comparison -- see cluster.LinkedCluster. */
+export interface LinkedCluster {
+  clusterId: number;
+  modality: string;
+  memberCount: number;
+  questionedCount: number;
+  personIds: string[];
 }
 
 /** One cluster in depth -- see api.ClusterDetailResponse. */
@@ -174,6 +185,7 @@ export interface ClusterDetail {
   components: number;
   merges: ClusterMerge[];
   personSamples: ClusterPersonSample[];
+  linkedClusters: LinkedCluster[];
   resolvedMembers: PersonClusterMember[];
 }
 

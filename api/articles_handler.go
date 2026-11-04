@@ -128,6 +128,19 @@ func GetPersonLinkCountsHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// ListPersonCaseLinksHandler lists every case the records link to a person, with its certainty
+// (articles.PersonCaseLinks): the person profile's cases for intelligence, not only the confirmed.
+func ListPersonCaseLinksHandler(sqlDB *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		links, err := articles.PersonCaseLinks(c.Request.Context(), sqlDB, c.Param("personId"))
+		if err != nil {
+			articleError(c, err, "could not list the cases")
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"cases": links})
+	}
+}
+
 // GetPersonArticleHistoryHandler lists a person's article revisions, newest first, without text.
 func GetPersonArticleHistoryHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {

@@ -20,6 +20,9 @@ import PersonArticle from "../components/articles/PersonArticle";
 import {
   getPersonIdentity,
   getPersonProfile,
+  listPersonCaseLinks,
+  type CaseCertainty,
+  type PersonCaseLink,
   type PersonProfile,
   type PersonIdentityDocument,
   type PersonCluster,
@@ -32,6 +35,19 @@ function modalityLabelKey(modality: string): string {
 
 function modalityColor(modality: string): "info" | "warning" {
   return modality === "FACIAL" ? "info" : "warning";
+}
+
+function certaintyColor(certainty: CaseCertainty): "success" | "light" | "warning" | "error" {
+  switch (certainty) {
+    case "confirmed":
+      return "success";
+    case "uncertain":
+      return "warning";
+    case "excluded":
+      return "error";
+    default:
+      return "light";
+  }
 }
 
 function formatDate(iso: string, locale: string): string {
@@ -159,6 +175,8 @@ export default function PersonProfilePage() {
   const { personId } = useParams<{ personId: string }>();
   const { isIntelligence } = useCurrentUser();
   const [profile, setProfile] = useState<PersonProfile | null>(null);
+  // Every case, at every certainty (not only the reviewed profile.cases): intelligence only.
+  const [caseLinks, setCaseLinks] = useState<PersonCaseLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   // Analysts see the article first (docs/person-article-plan.md §1); the data is a tab away.
@@ -176,10 +194,13 @@ export default function PersonProfilePage() {
       setError("");
       try {
         // Anyone else may see who the person is, not where they have been.
-        const result = isIntelligence
-          ? await getPersonProfile(personId!)
-          : { identity: await getPersonIdentity(personId!), clusters: [], cases: [] };
-        if (!cancelled) setProfile(result);
+        const [result, links] = isIntelligence
+          ? await Promise.all([getPersonProfile(personId!), listPersonCaseLinks(personId!)])
+          : [{ identity: await getPersonIdentity(personId!), clusters: [], cases: [] }, []];
+        if (!cancelled) {
+          setProfile(result);
+          setCaseLinks(links);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -199,7 +220,7 @@ export default function PersonProfilePage() {
 
   const documents = profile?.identity.documents ?? [];
   const clusters = profile?.clusters ?? [];
-  const cases = profile?.cases ?? [];
+  const cases = caseLinks;
 
   return (
     <>
@@ -382,7 +403,7 @@ export default function PersonProfilePage() {
 
               <ComponentCard
                 title={t("personProfile.relatedCases")}
-                desc={t("personProfile.casesLinked", { count: cases.length })}
+                desc={t("personProfile.casesAll", { count: cases.length })}
               >
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
                   <div className="max-w-full overflow-x-auto">
@@ -406,6 +427,12 @@ export default function PersonProfilePage() {
                             className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                           >
                             {t("personProfile.columns.description")}
+                          </TableCell>
+                          <TableCell
+                            isHeader
+                            className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                          >
+                            {t("personProfile.columns.certainty")}
                           </TableCell>
                           <TableCell
                             isHeader
@@ -438,12 +465,31 @@ export default function PersonProfilePage() {
                               {relatedCase.description || "—"}
                             </TableCell>
                             <TableCell className="px-4 py-3 text-start text-theme-sm">
-                              <div className="flex flex-wrap gap-1.5">
-                                {relatedCase.clusterIds.map((clusterId) => (
-                                  <Badge key={clusterId} size="sm" color="light">
-                                    #{clusterId}
-                                  </Badge>
+                              <Badge size="sm" color={certaintyColor(relatedCase.certainty)}>
+                                {t(`articles.certainty.${relatedCase.certainty}`)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="px-4 py-3 text-start text-theme-sm">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {relatedCase.reviewedClusterIds.map((clusterId) => (
+                                  <Link key={clusterId} to={`/clusters/${clusterId}`}>
+                                    <Badge size="sm" color="success">
+                                      #{clusterId}
+                                    </Badge>
+                                  </Link>
                                 ))}
+                                {relatedCase.automaticClusterId && (
+                                  <Link to={`/clusters/${relatedCase.automaticClusterId}`}>
+                                    <Badge size="sm" color="light">
+                                      #{relatedCase.automaticClusterId} · {t("personProfile.automaticCluster")}
+                                    </Badge>
+                                  </Link>
+                                )}
+                                {relatedCase.score !== undefined && (
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    {t("personProfile.score", { score: relatedCase.score.toFixed(2) })}
+                                  </span>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>

@@ -145,7 +145,7 @@
       "bridges_other": "{{count}} bridges: single links hold parts of the cluster. Check them first."
     },
     "persons": "Identified persons",
-    "personsHint": "Each person a member enrollment belongs to, with every enrollment sample of this modality and the cluster it is in.",
+    "personsHint": "Each person a member enrollment belongs to, with every enrollment sample, of any modality, and the cluster of this layer it is in.",
     "noPersons": "Not resolved to any enrolled person.",
     "samplesElsewhere": "Samples in other clusters",
     "structure": "Structure",
@@ -198,7 +198,16 @@
       "decidedAt": "Decided at"
     },
     "merges": "Merge history",
-    "mergesHint": "Clusters merged into this one, or this one into another, as decisions joined them."
+    "mergesHint": "Clusters merged into this one, or this one into another, as decisions joined them.",
+    "otherModalities": "Other modalities",
+    "otherModalitiesHint": "Clusters of another modality holding the same persons' enrollment samples. They are linked by enrollment (one register holds both samples), not by a comparison: each cluster stands on its own decisions.",
+    "linkedCluster": {
+      "members_one": "{{count}} member",
+      "members_other": "{{count}} members",
+      "traces_one": "{{count}} from case evidence",
+      "traces_other": "{{count}} from case evidence",
+      "via": "via {{names}}"
+    }
   },
   "caseDetail": {
     "title": "Case {{caseId}}",
@@ -303,8 +312,13 @@
       "caseId": "Case ID",
       "type": "Type",
       "description": "Description",
-      "linkedVia": "Linked via"
-    }
+      "linkedVia": "Linked via",
+      "certainty": "Certainty"
+    },
+    "casesAll_one": "{{count}} case linked, at every certainty: confirmed by examiners, or the matcher's links not yet reviewed, uncertain or excluded",
+    "casesAll_other": "{{count}} cases linked, at every certainty: confirmed by examiners, or the matcher's links not yet reviewed, uncertain or excluded",
+    "automaticCluster": "automatic",
+    "score": "score {{score}}"
   },
   "graph": {
     "title": "Identity & trace network",

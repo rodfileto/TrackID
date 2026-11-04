@@ -267,6 +267,33 @@ export async function listPersonClusters(
   return clusters;
 }
 
+/** How certain a person's link to a case is (articles.CaseLink.certainty), most certain first. */
+export type CaseCertainty = "confirmed" | "unreviewed" | "uncertain" | "excluded";
+
+/** One case linked to a person at any certainty -- see articles.CaseLink. reviewedClusterIds are
+ * the person's REVIEWED clusters holding its traces; automaticClusterId the AUTOMATIC cluster
+ * linking them; score the best SYSTEM score of a direct pair. */
+export interface PersonCaseLink {
+  caseId: string;
+  modality: string;
+  description: string;
+  certainty: CaseCertainty;
+  reviewedClusterIds: number[];
+  automaticClusterId?: number;
+  score?: number;
+}
+
+/** Every case the records link to a person, confirmed or not: intelligence only. */
+export async function listPersonCaseLinks(
+  personId: string,
+): Promise<PersonCaseLink[]> {
+  const { cases } = await requestApi<{ cases: PersonCaseLink[] }>(
+    `/persons/${encodeURIComponent(personId)}/case-links`,
+    { headers: authHeaders() },
+  );
+  return cases;
+}
+
 export async function listPersonCases(
   personId: string,
 ): Promise<PersonRelatedCase[]> {

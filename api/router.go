@@ -216,6 +216,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	intelligence.GET("persons/:personId", LogAccess(deps.DB, accessPerson, "personId"), GetPersonProfileHandler(deps.DB))
 	intelligence.GET("persons/:personId/clusters", LogAccess(deps.DB, accessPerson, "personId"), ListPersonClustersHandler(deps.DB))
 	intelligence.GET("persons/:personId/cases", LogAccess(deps.DB, accessPerson, "personId"), ListPersonCasesHandler(deps.DB))
+	intelligence.GET("persons/:personId/case-links", LogAccess(deps.DB, accessPerson, "personId"), ListPersonCaseLinksHandler(deps.DB))
 
 	// Person articles (docs/person-article-plan.md): reading one is reading the person; a save
 	// is recorded by its revision.

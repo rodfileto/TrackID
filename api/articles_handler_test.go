@@ -145,6 +145,13 @@ func TestPersonArticleRoutes(t *testing.T) {
 	if code, _ := call(http.MethodGet, "/api/persons/NOBODY/link-counts", nil); code != http.StatusNotFound {
 		t.Errorf("link counts for an unknown person: %d", code)
 	}
+	code, body = call(http.MethodGet, "/api/persons/P-A/case-links", nil)
+	if cases, ok := body["cases"].([]any); code != http.StatusOK || !ok || len(cases) != 0 {
+		t.Errorf("case links: %d %v", code, body)
+	}
+	if code, _ := call(http.MethodGet, "/api/persons/NOBODY/case-links", nil); code != http.StatusNotFound {
+		t.Errorf("case links for an unknown person: %d", code)
+	}
 
 	code, body = call(http.MethodGet, "/api/persons/P-A/article/history", nil)
 	if revisions, _ := body["revisions"].([]any); code != http.StatusOK || len(revisions) != 2 {
