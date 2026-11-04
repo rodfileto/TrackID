@@ -1165,7 +1165,8 @@
       "luminance": "Luminance",
       "red": "Red",
       "green": "Green",
-      "blue": "Blue"
+      "blue": "Blue",
+      "color": "Keep colour"
     },
     "flatten": "Lighting correction",
     "flattenSigma": "Blur",
@@ -1204,7 +1205,8 @@
       "score": "Score {{score}}",
       "above": "— at or above the threshold",
       "below": "— below the threshold"
-    }
+    },
+    "colorOnly": "Colour is kept: the image is only cropped, rotated, mirrored and resampled to 500 ppi. Lighting correction, levels, CLAHE, Gabor and inversion need a grey channel."
   },
   "faceLab": {
     "title": "Face lab",

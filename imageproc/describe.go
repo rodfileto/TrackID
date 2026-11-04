@@ -79,7 +79,11 @@ func Describe(rec Record) string {
 		n++
 		line("3.%d %s", n, fmt.Sprintf(format, args...))
 	}
-	step("Conversão para tons de cinza: %s.", channelText(r.Channel))
+	if r.Channel == ChannelColor {
+		step("Cores mantidas, sem conversão para tons de cinza.")
+	} else {
+		step("Conversão para tons de cinza: %s.", channelText(r.Channel))
+	}
 	geometryFirst := n + 1
 	if r.Crop != nil {
 		c := r.Crop
@@ -104,7 +108,9 @@ func Describe(rec Record) string {
 	if n > geometryFirst {
 		line("As operações 3.%d a 3.%d foram executadas numa única transformação geométrica, com uma única interpolação.", geometryFirst, n)
 	}
-	if r.Rotate != 0 {
+	if r.Rotate != 0 && r.Channel == ChannelColor {
+		line("Os cantos sem dados após a rotação foram preenchidos, em cada canal de cor, com o tom médio da região nesse canal.")
+	} else if r.Rotate != 0 {
 		line("Os cantos sem dados após a rotação foram preenchidos com o tom médio da região (%s).", num(res.Fill, 0))
 	}
 	if r.Flatten != nil {
@@ -132,7 +138,11 @@ func Describe(rec Record) string {
 	line("")
 
 	line("4. Imagem resultante")
-	line("PNG (compressão sem perdas), tons de cinza de 8 bits, %d × %d pixels, %d ppi (registrado no arquivo).", res.Width, res.Height, OutputPPI)
+	depth := "tons de cinza de 8 bits"
+	if r.Channel == ChannelColor {
+		depth = "cores RGB de 8 bits por canal"
+	}
+	line("PNG (compressão sem perdas), %s, %d × %d pixels, %d ppi (registrado no arquivo).", depth, res.Width, res.Height, OutputPPI)
 	line("SHA-256: %s.", res.SHA256)
 	line("")
 

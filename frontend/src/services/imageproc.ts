@@ -5,7 +5,9 @@ import { getToken } from "./auth";
 // nothing stored. The recipe mirrors imageproc.Recipe.
 
 export type PpiMethod = "CALIBRATED" | "FILE" | "ESTIMATED" | "ASSUMED";
-export type Channel = "luminance" | "red" | "green" | "blue";
+/** How colour becomes grey; "color" keeps it, and the render is only the geometry and the
+ * resampling to 500 ppi (imageproc.ChannelColor). */
+export type Channel = "luminance" | "red" | "green" | "blue" | "color";
 export type Interpolation = "nearest" | "bilinear" | "bicubic";
 
 export interface Rect {

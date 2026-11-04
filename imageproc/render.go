@@ -11,7 +11,8 @@ import (
 
 // Result is a render and what its record needs.
 type Result struct {
-	Image  *image.Gray
+	Image  *image.Gray  // nil for a colour render
+	Color  *image.NRGBA // set for a colour render (ChannelColor) only
 	PNG    []byte
 	SHA256 string // of PNG
 	Width  int
@@ -24,14 +25,14 @@ type Result struct {
 	// What the steps computed, for the record.
 	Scale          float64 // OutputPPI / source ppi
 	AntialiasSigma float64 // source pixels; 0 when not applied
-	Fill           float64 // grey given to pixels outside the original after rotation
+	Fill           float64 // grey given to pixels outside the original after rotation; 0 for colour
 	FlattenSigmaPX float64
 	GaborPeriodPX  float64 // ridge period the Gabor filters were tuned to, at OutputPPI
 	GaborEstimated bool    // false when no clear period was found and the default was used
 }
 
 // Render applies r to o. r must have been normalised against o (Recipe.Normalize). The order
-// is fixed: channel; crop, rotation, mirror and resampling to OutputPPI in one transform (one
+// is fixed: channel (ChannelColor keeps the colour and stops after the resampling); crop, rotation, mirror and resampling to OutputPPI in one transform (one
 // interpolation); lighting correction; levels; CLAHE; Gabor; inversion. Steps that depend on
 // distances (lighting correction, Gabor) run at OutputPPI, where those distances are known.
 func Render(o Original, r Recipe) (Result, error) {
@@ -44,22 +45,45 @@ func Render(o Original, r Recipe) (Result, error) {
 		int(math.Ceil(g.crop.X2))+margin, int(math.Ceil(g.crop.Y2))+margin,
 	).Intersect(image.Rect(0, 0, o.Width, o.Height))
 	sub := subImage(o.Image, region)
-	src := grey(sub, r.Channel)
 	shifted := r
 	crop := Rect{g.crop.X1 - float64(region.Min.X), g.crop.Y1 - float64(region.Min.Y), g.crop.X2 - float64(region.Min.X), g.crop.Y2 - float64(region.Min.Y)}
 	shifted.Crop = &crop
-	local := newGeometry(shifted, src.w, src.h)
+	local := newGeometry(shifted, region.Dx(), region.Dy())
 
+	res := Result{Scale: g.scale, AntialiasSigma: sigma}
+	f := local.forward
+	ox, oy := float64(region.Min.X), float64(region.Min.Y)
+	res.Transform = Affine{f.A, f.B, f.C - f.A*ox - f.B*oy, f.D, f.E, f.F - f.D*ox - f.E*oy}
+
+	if r.Channel == ChannelColor {
+		// Each plane through the same transform, its corners filled with its own mean.
+		planes := make([]*plane, 3)
+		for i, pl := range rgbPlanes(sub) {
+			fill := float32(cropMean(pl, crop))
+			if sigma > 0 {
+				pl = gaussianBlur(pl, sigma)
+			}
+			planes[i], _ = warp(pl, local, r.Interpolation, fill)
+		}
+		res.LevelsHistogram = luminanceHistogram(planes)
+		res.Width, res.Height = planes[0].w, planes[0].h
+		res.Color = image.NewNRGBA(image.Rect(0, 0, res.Width, res.Height))
+		for i := range planes[0].p {
+			for c := 0; c < 3; c++ {
+				res.Color.Pix[4*i+c] = uint8(clamp(math.Round(float64(planes[c].p[i])), 0, 255))
+			}
+			res.Color.Pix[4*i+3] = 255
+		}
+		return res, encodeResult(&res, res.Color)
+	}
+
+	src := grey(sub, r.Channel)
 	fill := float32(cropMean(src, crop))
+	res.Fill = float64(fill)
 	if sigma > 0 {
 		src = gaussianBlur(src, sigma)
 	}
 	pl, valid := warp(src, local, r.Interpolation, fill)
-
-	res := Result{Scale: g.scale, AntialiasSigma: sigma, Fill: float64(fill)}
-	f := local.forward
-	ox, oy := float64(region.Min.X), float64(region.Min.Y)
-	res.Transform = Affine{f.A, f.B, f.C - f.A*ox - f.B*oy, f.D, f.E, f.F - f.D*ox - f.E*oy}
 
 	if r.Flatten != nil {
 		res.FlattenSigmaPX = r.Flatten.SigmaMM / 25.4 * OutputPPI
@@ -87,14 +111,22 @@ func Render(o Original, r Recipe) (Result, error) {
 	}
 	res.Image = pl.toGray()
 	res.Width, res.Height = pl.w, pl.h
-	var buf bytes.Buffer
-	if err := (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, res.Image); err != nil {
+	if err := encodeResult(&res, res.Image); err != nil {
 		return Result{}, err
+	}
+	return res, nil
+}
+
+// encodeResult writes img to res as a PNG recording OutputPPI, with its hash.
+func encodeResult(res *Result, img image.Image) error {
+	var buf bytes.Buffer
+	if err := (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, img); err != nil {
+		return err
 	}
 	res.PNG = withPHYs(buf.Bytes(), OutputPPI)
 	sum := sha256.Sum256(res.PNG)
 	res.SHA256 = hex.EncodeToString(sum[:])
-	return res, nil
+	return nil
 }
 
 // EstimateRidgePeriod is the original's dominant ridge period in its own pixels, inside crop

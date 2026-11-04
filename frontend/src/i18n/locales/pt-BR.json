@@ -1165,7 +1165,8 @@
       "luminance": "Luminância",
       "red": "Vermelho",
       "green": "Verde",
-      "blue": "Azul"
+      "blue": "Azul",
+      "color": "Manter cores"
     },
     "flatten": "Correção de iluminação",
     "flattenSigma": "Suavização",
@@ -1204,7 +1205,8 @@
       "score": "Pontuação {{score}}",
       "above": "— no limiar ou acima",
       "below": "— abaixo do limiar"
-    }
+    },
+    "colorOnly": "As cores são mantidas: a imagem é apenas recortada, girada, espelhada e reamostrada para 500 ppi. Correção de iluminação, níveis, CLAHE, Gabor e inversão exigem um canal em tons de cinza."
   },
   "faceLab": {
     "title": "Laboratório facial",

@@ -31,12 +31,15 @@ const (
 	PPIAssumed    = "ASSUMED"    // OutputPPI, with nothing to support it
 )
 
-// Channels: how colour becomes grey.
+// Channels: how colour becomes grey, or ChannelColor to keep it.
 const (
 	ChannelLuminance = "luminance" // ITU-R BT.601 weights
 	ChannelRed       = "red"
 	ChannelGreen     = "green"
 	ChannelBlue      = "blue"
+	// ChannelColor keeps the colour: the render is only the geometry and the resampling to
+	// OutputPPI, so the steps that need one grey channel are refused with it.
+	ChannelColor = "color"
 )
 
 // Interpolations for the geometric transform.
@@ -139,6 +142,10 @@ func (r *Recipe) Normalize(width, height int) error {
 	}
 	switch r.Channel {
 	case ChannelLuminance, ChannelRed, ChannelGreen, ChannelBlue:
+	case ChannelColor:
+		if r.Flatten != nil || r.Levels != nil || r.CLAHE != nil || r.Gabor != nil || r.Invert {
+			return ValidationError("lighting correction, levels, CLAHE, Gabor and inversion need a grey channel, not colour")
+		}
 	default:
 		return ValidationError("unknown channel " + r.Channel)
 	}

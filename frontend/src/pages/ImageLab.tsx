@@ -206,6 +206,8 @@ export default function ImageLab() {
       src.ridgePeriodPx = estimate.periodPx;
       src.ridgeDistanceMm = ridgeDistance;
     }
+    // Colour is only resampled: the grey steps stay set but off, for when grey is chosen again.
+    const grey = steps.channel !== "color";
     return {
       source: src,
       channel: steps.channel,
@@ -213,11 +215,11 @@ export default function ImageLab() {
       rotate: steps.rotate,
       mirror: steps.mirror,
       interpolation: steps.interpolation,
-      flatten: steps.flatten != null ? { sigmaMm: steps.flatten } : undefined,
-      levels: steps.levels ?? undefined,
-      clahe: steps.clahe ?? undefined,
-      gabor: steps.gabor != null ? { orientations: steps.gabor } : undefined,
-      invert: steps.invert,
+      flatten: grey && steps.flatten != null ? { sigmaMm: steps.flatten } : undefined,
+      levels: (grey && steps.levels) || undefined,
+      clahe: (grey && steps.clahe) || undefined,
+      gabor: grey && steps.gabor != null ? { orientations: steps.gabor } : undefined,
+      invert: grey && steps.invert,
     };
   }, [source, method, line, lineMm, estimate, ridgeDistance, steps, crop]);
 
@@ -257,16 +259,18 @@ export default function ImageLab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipeKey]);
 
+  // Ridges are measured on one grey channel: luminance when the render keeps the colour.
+  const ridgeChannel: Channel = steps.channel === "color" ? "luminance" : steps.channel;
   const measureRidges = useCallback(async () => {
     if (!source) return;
     setEstimating(true);
     try {
-      setEstimate(await estimateRidgePeriod(source.id, crop, steps.channel));
+      setEstimate(await estimateRidgePeriod(source.id, crop, ridgeChannel));
       setMethod("ESTIMATED");
     } catch (err) {
       if (err instanceof SourceExpiredError && file) {
         await uploadLabSource(file);
-        setEstimate(await estimateRidgePeriod(source.id, crop, steps.channel));
+        setEstimate(await estimateRidgePeriod(source.id, crop, ridgeChannel));
         setMethod("ESTIMATED");
       } else {
         toast.error(err instanceof Error ? err.message : String(err));
@@ -274,7 +278,7 @@ export default function ImageLab() {
     } finally {
       setEstimating(false);
     }
-  }, [source, crop, steps.channel, file]);
+  }, [source, crop, ridgeChannel, file]);
 
   function applyFingerPhoto() {
     setSteps({ ...FINGER_PHOTO, rotate: steps.rotate });
@@ -468,32 +472,37 @@ export default function ImageLab() {
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-800 dark:text-white/90">
                     {t("imageLab.channel")}
                     <select value={steps.channel} onChange={(e) => set({ channel: e.target.value as Channel })} className={inputClass}>
-                      {(["luminance", "red", "green", "blue"] as const).map((c) => (
+                      {(["luminance", "red", "green", "blue", "color"] as const).map((c) => (
                         <option key={c} value={c}>{t(`imageLab.channels.${c}`)}</option>
                       ))}
                     </select>
                   </label>
-                </Section>
-
-                <Section>
-                  <Toggle label={t("imageLab.flatten")} checked={steps.flatten != null} onChange={(v) => set({ flatten: v ? 2 : null })} />
-                  {steps.flatten != null && (
-                    <Range label={t("imageLab.flattenSigma")} value={steps.flatten} min={0.5} max={10} step={0.1} unit="mm" onChange={(v) => set({ flatten: v })} />
+                  {steps.channel === "color" && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{t("imageLab.colorOnly")}</p>
                   )}
                 </Section>
 
-                <Section>
-                  <Toggle label={t("imageLab.levels.title")} checked={steps.levels != null} onChange={(v) => set({ levels: v ? DEFAULT_LEVELS : null })} />
-                  {steps.levels && <LevelsControl histogram={render?.histogram} value={steps.levels} onChange={(l) => set({ levels: l })} />}
-                </Section>
+                {steps.channel !== "color" && (
+                  <>
+                    <Section>
+                      <Toggle label={t("imageLab.flatten")} checked={steps.flatten != null} onChange={(v) => set({ flatten: v ? 2 : null })} />
+                      {steps.flatten != null && (
+                        <Range label={t("imageLab.flattenSigma")} value={steps.flatten} min={0.5} max={10} step={0.1} unit="mm" onChange={(v) => set({ flatten: v })} />
+                      )}
+                    </Section>
 
-                <Section>
-                  <Toggle label={t("imageLab.clahe")} checked={steps.clahe != null} onChange={(v) => set({ clahe: v ? { tiles: 8, clipLimit: 2 } : null })} />
-                  {steps.clahe && (
-                    <>
-                      <Range label={t("imageLab.claheTiles")} value={steps.clahe.tiles} min={2} max={16} step={1} onChange={(v) => set({ clahe: { ...steps.clahe!, tiles: v } })} />
-                      <Range label={t("imageLab.claheClip")} value={steps.clahe.clipLimit} min={1} max={10} step={0.1} onChange={(v) => set({ clahe: { ...steps.clahe!, clipLimit: v } })} />
-                    </>
+                    <Section>
+                      <Toggle label={t("imageLab.levels.title")} checked={steps.levels != null} onChange={(v) => set({ levels: v ? DEFAULT_LEVELS : null })} />
+                      {steps.levels && <LevelsControl histogram={render?.histogram} value={steps.levels} onChange={(l) => set({ levels: l })} />}
+                    </Section>
+
+                    <Section>
+                      <Toggle label={t("imageLab.clahe")} checked={steps.clahe != null} onChange={(v) => set({ clahe: v ? { tiles: 8, clipLimit: 2 } : null })} />
+                      {steps.clahe && (
+                        <>
+                          <Range label={t("imageLab.claheTiles")} value={steps.clahe.tiles} min={2} max={16} step={1} onChange={(v) => set({ clahe: { ...steps.clahe!, tiles: v } })} />
+                          <Range label={t("imageLab.claheClip")} value={steps.clahe.clipLimit} min={1} max={10} step={0.1} onChange={(v) => set({ clahe: { ...steps.clahe!, clipLimit: v } })} />
+                  </>
                   )}
                 </Section>
 
@@ -513,6 +522,8 @@ export default function ImageLab() {
                 <Section>
                   <Toggle label={t("imageLab.invert")} checked={steps.invert} onChange={(v) => set({ invert: v })} />
                 </Section>
+                </>
+                )}
               </div>
             </ComponentCard>
           </div>

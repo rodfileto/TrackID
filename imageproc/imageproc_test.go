@@ -125,6 +125,41 @@ func TestRenderIsReproducible(t *testing.T) {
 	}
 }
 
+// A colour render keeps the colour and is only resampled: at 1000 ppi, half the size, at 500 ppi,
+// the original's colour where nothing but the scale changed it.
+func TestColorRender(t *testing.T) {
+	o := original(t, ridges(400, 300, 12, 10, false))
+	r := Recipe{Source: Source{Method: PPIFile, PPI: 1000}, Channel: ChannelColor}
+	res := render(t, o, r)
+	if res.Image != nil || res.Color == nil || res.Width != 200 || res.Height != 150 {
+		t.Fatalf("colour render: grey %v, %dx%d", res.Image != nil, res.Width, res.Height)
+	}
+	decoded, err := png.Decode(bytes.NewReader(res.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, grey := decoded.(*image.Gray); grey {
+		t.Error("the PNG decodes as grey, want colour")
+	}
+	if ppi := pngPPI(res.PNG); math.Abs(ppi-OutputPPI) > 0.1 {
+		t.Errorf("the PNG states %.1f ppi, want %d", ppi, OutputPPI)
+	}
+	// The fixture's red is half its green and its blue a third: so is the render's.
+	var red, green, blue float64
+	for i := 0; i < len(res.Color.Pix); i += 4 {
+		red, green, blue = red+float64(res.Color.Pix[i]), green+float64(res.Color.Pix[i+1]), blue+float64(res.Color.Pix[i+2])
+	}
+	if math.Abs(red/green-0.5) > 0.02 || math.Abs(blue/green-1.0/3) > 0.02 {
+		t.Errorf("colour ratios red/green %.3f, blue/green %.3f, want 0.5 and 0.333", red/green, blue/green)
+	}
+	text := Describe(Record{Filename: "dedo.jpg", Original: o, Recipe: r, Result: res, RenderedAt: time.Now()})
+	for _, want := range []string{"Cores mantidas", "Reamostragem de 1000 ppi para 500 ppi", "cores RGB de 8 bits"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the record lacks %q", want)
+		}
+	}
+}
+
 // The transform maps original pixels onto the render: a dark dot ends where Transform says,
 // mirrored and rotated.
 func TestTransformFollowsThePixels(t *testing.T) {
@@ -213,6 +248,7 @@ func TestNormalizeRejects(t *testing.T) {
 		"crop":     {Crop: &Rect{10, 10, 12, 12}},
 		"version":  {Version: 9},
 		"estimate": {Source: Source{Method: PPIEstimated}},
+		"colour":   {Channel: ChannelColor, CLAHE: &CLAHE{Tiles: 8, ClipLimit: 2}},
 	} {
 		if err := r.Normalize(100, 100); err == nil {
 			t.Errorf("%s: accepted", name)
