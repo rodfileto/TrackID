@@ -94,7 +94,7 @@ SELECT s.feature_id, s.counterpart_id, s.role, s.decision, s.system_source, s.us
 FROM biometric_decision_sides s
 LEFT JOIN case_analyses ca ON ca.id = s.case_analysis_id
 WHERE s.feature_id = ANY($1::text[])
-ORDER BY s.feature_id, s.counterpart_id, s.decided_at
+ORDER BY s.feature_id, s.counterpart_id, s.decided_at, s.id
 `
 
 type ListBiometricDecisionsForFeaturesRow struct {

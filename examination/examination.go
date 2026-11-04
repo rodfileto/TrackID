@@ -165,7 +165,9 @@ func scope(ctx context.Context, q *db.Queries, t analyses.Target) ([]candidate, 
 		}
 	} else {
 		for _, p := range systemOrder { // ranked by score, as a candidate list
-			if inScope(p) {
+			// A pair a newer threshold version dropped below its review cutoff (a SYSTEM
+			// NEGATIVE, from cmd/bulk-match apply) is no longer a candidate.
+			if inScope(p) && system[p].decision != "NEGATIVE" {
 				out = append(out, system[p])
 			}
 		}

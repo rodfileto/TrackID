@@ -191,6 +191,57 @@ type BiometricTemplate struct {
 	UpdatedAt          time.Time      `db:"updated_at" json:"updated_at"`
 }
 
+type BulkEnrollOutcome struct {
+	BiometricFeatureID int64           `db:"biometric_feature_id" json:"biometric_feature_id"`
+	EmbeddingType      string          `db:"embedding_type" json:"embedding_type"`
+	ModelVersion       string          `db:"model_version" json:"model_version"`
+	Outcome            string          `db:"outcome" json:"outcome"`
+	Faces              int32           `db:"faces" json:"faces"`
+	DetectorScore      sql.NullFloat64 `db:"detector_score" json:"detector_score"`
+	RelativeSize       sql.NullFloat64 `db:"relative_size" json:"relative_size"`
+	ImageWidth         sql.NullInt32   `db:"image_width" json:"image_width"`
+	ImageHeight        sql.NullInt32   `db:"image_height" json:"image_height"`
+	CropRef            sql.NullString  `db:"crop_ref" json:"crop_ref"`
+	Detail             sql.NullString  `db:"detail" json:"detail"`
+	CreatedAt          time.Time       `db:"created_at" json:"created_at"`
+}
+
+type BulkMatchBatch struct {
+	ID            int64           `db:"id" json:"id"`
+	EmbeddingType string          `db:"embedding_type" json:"embedding_type"`
+	ModelVersion  string          `db:"model_version" json:"model_version"`
+	Status        string          `db:"status" json:"status"`
+	Size          int32           `db:"size" json:"size"`
+	Selection     string          `db:"selection" json:"selection"`
+	ScoreFloor    float32         `db:"score_floor" json:"score_floor"`
+	Neighbours    int32           `db:"neighbours" json:"neighbours"`
+	Comparisons   sql.NullInt64   `db:"comparisons" json:"comparisons"`
+	Scores        sql.NullInt64   `db:"scores" json:"scores"`
+	Hubs          sql.NullInt32   `db:"hubs" json:"hubs"`
+	MatchSeconds  sql.NullFloat64 `db:"match_seconds" json:"match_seconds"`
+	Matcher       sql.NullString  `db:"matcher" json:"matcher"`
+	CreatedAt     time.Time       `db:"created_at" json:"created_at"`
+	MatchedAt     sql.NullTime    `db:"matched_at" json:"matched_at"`
+}
+
+type BulkMatchBatchMember struct {
+	FeatureEmbeddingID int64 `db:"feature_embedding_id" json:"feature_embedding_id"`
+	BatchID            int64 `db:"batch_id" json:"batch_id"`
+}
+
+type BulkMatchHub struct {
+	BatchID            int64   `db:"batch_id" json:"batch_id"`
+	FeatureEmbeddingID int64   `db:"feature_embedding_id" json:"feature_embedding_id"`
+	KthScore           float32 `db:"kth_score" json:"kth_score"`
+}
+
+type BulkMatchScore struct {
+	EmbeddingAID int64   `db:"embedding_a_id" json:"embedding_a_id"`
+	EmbeddingBID int64   `db:"embedding_b_id" json:"embedding_b_id"`
+	Score        float32 `db:"score" json:"score"`
+	BatchID      int64   `db:"batch_id" json:"batch_id"`
+}
+
 type CaseAnalysis struct {
 	ID              int64         `db:"id" json:"id"`
 	BiometricCaseID int64         `db:"biometric_case_id" json:"biometric_case_id"`
@@ -381,6 +432,7 @@ type FeatureEmbedding struct {
 	MatchedAt          sql.NullTime   `db:"matched_at" json:"matched_at"`
 	CreatedAt          time.Time      `db:"created_at" json:"created_at"`
 	UpdatedAt          time.Time      `db:"updated_at" json:"updated_at"`
+	MatchPath          string         `db:"match_path" json:"match_path"`
 }
 
 type Gender struct {

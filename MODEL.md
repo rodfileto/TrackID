@@ -161,6 +161,11 @@ version (`related_reference_kind = 'match_threshold'`). With no version set, fac
 similarity 0.6 with no band. Versions are set with `cmd/match-threshold`, from each
 organization's own validation.
 
+A pair has at most one SYSTEM row per threshold version. A new version reaches pairs already
+decided only through `cmd/bulk-match apply`, which re-bands the score store and writes a row
+where the decision changes, a SYSTEM NEGATIVE for a pair that falls below the review cutoff. The
+latest SYSTEM row is the pair's SYSTEM decision.
+
 **Who may decide** is a user profile (`users`), the same for fingerprints and
 faces. `account_role` (`SUPER_ADMIN` | `ADMIN` | `USER`) is account management only: a SUPER_ADMIN
 manages admins and users, an ADMIN manages plain users, and nobody changes their own role or
@@ -331,7 +336,13 @@ organization import cmd ──► Postgres (the tables above)
     cmd/worker          ──► embeddings and templates ──► SYSTEM decisions ──► clusters
     examiners (the API) ──► human decisions ──► clusters
     cluster-biometrics  ──► clusters, on demand
+    bulk-enroll         ──► a whole register, vectorized ──► vector shards
+    bulk-match          ──► score store ──► SYSTEM decisions per version ──► clusters
 ```
+
+`bulk-enroll` and `bulk-match` load and deduplicate a large gallery
+([plan](docs/large-gallery-plan.md)). Their embeddings carry `match_path = 'BULK'`, so the
+worker's per-face sync leaves them to `bulk-match`.
 
 Every logic entry point reads Postgres — never an external file or a third-party system.
 
@@ -341,6 +352,10 @@ trackid's, content-addressed by sha256: `identity/<register>/<file_type>/<sha256
 `reports/<case>/<sha256>` (report drafts and issued documents). An import cmd holding
 raw bytes uploads them with `identity.UploadFile` / `cases.UploadEvidenceFile`, which return the
 `FileInput` to pass to `Ingest`; `Ingest` itself never touches storage.
+
+A `storage_ref` can also name a file kept outside the bucket: `s3://<bucket>/<key>` on the same
+endpoint, or `file:///<path>` inside a directory listed in `STORAGE_FILE_ROOTS`. That is how
+`bulk-enroll` references a register's originals without copying them.
 
 ## 7. Implementation status
 

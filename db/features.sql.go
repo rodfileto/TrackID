@@ -22,9 +22,10 @@ func (q *Queries) CountUnmatchedBiometricTemplates(ctx context.Context, template
 }
 
 const countUnmatchedFeatureEmbeddings = `-- name: CountUnmatchedFeatureEmbeddings :one
-SELECT COUNT(*) FROM feature_embeddings WHERE embedding_type = $1 AND matched_at IS NULL
+SELECT COUNT(*) FROM feature_embeddings WHERE embedding_type = $1 AND matched_at IS NULL AND match_path = 'SYNC'
 `
 
+// The per-face sync's backlog: BULK embeddings wait for cmd/bulk-match instead.
 func (q *Queries) CountUnmatchedFeatureEmbeddings(ctx context.Context, embeddingType string) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countUnmatchedFeatureEmbeddings, embeddingType)
 	var count int64
@@ -676,7 +677,7 @@ func (q *Queries) ListMatchThresholds(ctx context.Context, embeddingType string)
 const listUnmatchedFeatureEmbeddings = `-- name: ListUnmatchedFeatureEmbeddings :many
 SELECT id, biometric_feature_id, embedding_type, embedding::text AS embedding, model_version
 FROM feature_embeddings
-WHERE embedding_type = $1 AND matched_at IS NULL
+WHERE embedding_type = $1 AND matched_at IS NULL AND match_path = 'SYNC'
 ORDER BY id
 `
 

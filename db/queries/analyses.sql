@@ -13,7 +13,7 @@ SELECT d.feature_a_id, d.feature_b_id, d.modality, d.role, d.decision, d.system_
        d.case_analysis_id, ca.analysis_type, d.conclusion
 FROM biometric_decisions d
 LEFT JOIN case_analyses ca ON ca.id = d.case_analysis_id
-ORDER BY d.feature_a_id, d.feature_b_id, d.decided_at;
+ORDER BY d.feature_a_id, d.feature_b_id, d.decided_at, d.id;
 
 -- name: InsertCaseAnalysis :one
 -- The case's next analysis, numbered after its last one (lock the case first: LockBiometricCase).
@@ -190,10 +190,15 @@ WHERE case_analysis_id = $1
 ORDER BY feature_a_id, feature_b_id, id;
 
 -- name: ListSystemDecisionsForFeatures :many
--- The SYSTEM decisions (the matcher's candidates) touching any of the given features.
+-- The SYSTEM decisions (the matcher's candidates) touching any of the given features: each pair's
+-- latest, the one under the newest threshold version that decided it.
 SELECT feature_a_id, feature_b_id, decision, confidence
-FROM biometric_decisions
-WHERE role = 'SYSTEM' AND (feature_a_id = ANY(@feature_ids::text[]) OR feature_b_id = ANY(@feature_ids::text[]))
+FROM (
+    SELECT DISTINCT ON (feature_a_id, feature_b_id) feature_a_id, feature_b_id, decision, confidence
+    FROM biometric_decisions
+    WHERE role = 'SYSTEM' AND (feature_a_id = ANY(@feature_ids::text[]) OR feature_b_id = ANY(@feature_ids::text[]))
+    ORDER BY feature_a_id, feature_b_id, decided_at DESC, id DESC
+) latest
 ORDER BY confidence DESC NULLS LAST, feature_a_id, feature_b_id;
 
 -- name: CloseCaseAnalysis :exec

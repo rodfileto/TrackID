@@ -107,7 +107,7 @@ WHERE codification_id = $1 AND embedding_type = $2;
 -- name: ListUnmatchedFeatureEmbeddings :many
 SELECT id, biometric_feature_id, embedding_type, embedding::text AS embedding, model_version
 FROM feature_embeddings
-WHERE embedding_type = $1 AND matched_at IS NULL
+WHERE embedding_type = $1 AND matched_at IS NULL AND match_path = 'SYNC'
 ORDER BY id;
 
 -- name: FindNearestFeatureEmbeddings :many
@@ -255,7 +255,8 @@ WHERE embedding_type = $1
 ORDER BY id DESC;
 
 -- name: CountUnmatchedFeatureEmbeddings :one
-SELECT COUNT(*) FROM feature_embeddings WHERE embedding_type = $1 AND matched_at IS NULL;
+-- The per-face sync's backlog: BULK embeddings wait for cmd/bulk-match instead.
+SELECT COUNT(*) FROM feature_embeddings WHERE embedding_type = $1 AND matched_at IS NULL AND match_path = 'SYNC';
 
 -- name: CountUnmatchedBiometricTemplates :one
 SELECT COUNT(*) FROM biometric_templates WHERE template_type = $1 AND matched_at IS NULL;

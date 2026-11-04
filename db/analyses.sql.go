@@ -539,7 +539,7 @@ SELECT d.feature_a_id, d.feature_b_id, d.modality, d.role, d.decision, d.system_
        d.case_analysis_id, ca.analysis_type, d.conclusion
 FROM biometric_decisions d
 LEFT JOIN case_analyses ca ON ca.id = d.case_analysis_id
-ORDER BY d.feature_a_id, d.feature_b_id, d.decided_at
+ORDER BY d.feature_a_id, d.feature_b_id, d.decided_at, d.id
 `
 
 type ListBiometricDecisionsRow struct {
@@ -934,8 +934,12 @@ func (q *Queries) ListPendingWork(ctx context.Context, analysisType sql.NullStri
 
 const listSystemDecisionsForFeatures = `-- name: ListSystemDecisionsForFeatures :many
 SELECT feature_a_id, feature_b_id, decision, confidence
-FROM biometric_decisions
-WHERE role = 'SYSTEM' AND (feature_a_id = ANY($1::text[]) OR feature_b_id = ANY($1::text[]))
+FROM (
+    SELECT DISTINCT ON (feature_a_id, feature_b_id) feature_a_id, feature_b_id, decision, confidence
+    FROM biometric_decisions
+    WHERE role = 'SYSTEM' AND (feature_a_id = ANY($1::text[]) OR feature_b_id = ANY($1::text[]))
+    ORDER BY feature_a_id, feature_b_id, decided_at DESC, id DESC
+) latest
 ORDER BY confidence DESC NULLS LAST, feature_a_id, feature_b_id
 `
 
@@ -946,7 +950,8 @@ type ListSystemDecisionsForFeaturesRow struct {
 	Confidence sql.NullFloat64 `db:"confidence" json:"confidence"`
 }
 
-// The SYSTEM decisions (the matcher's candidates) touching any of the given features.
+// The SYSTEM decisions (the matcher's candidates) touching any of the given features: each pair's
+// latest, the one under the newest threshold version that decided it.
 func (q *Queries) ListSystemDecisionsForFeatures(ctx context.Context, featureIds []string) ([]ListSystemDecisionsForFeaturesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listSystemDecisionsForFeatures, pq.Array(featureIds))
 	if err != nil {

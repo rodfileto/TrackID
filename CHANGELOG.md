@@ -30,6 +30,14 @@ period; `0.x` patch releases fix defects without adding behaviour.
 - Request routing to tasks, and inquiry (IPL) numbers kept apart from police
   report numbers.
 - Video face tracks and frames taken as evidence with their time.
+- Large-gallery load and deduplication in two commands. `bulk-enroll` loads a
+  JSON Lines register and vectorizes its photos, recording an outcome per
+  photo and writing FP16 vector shards. `bulk-match` matches in batches
+  (exact, on the GPU, through a FAISS tool under `tools/bulk-match`), keeps a
+  score store, calibrates from identity records and examiners' decisions, and
+  applies threshold versions by re-banding the stored scores.
+- Storage references to files kept outside the bucket (`s3://`, and
+  `file://` inside `STORAGE_FILE_ROOTS`).
 
 ### Changed
 
@@ -38,6 +46,9 @@ period; `0.x` patch releases fix defects without adding behaviour.
 - Consolidated the migrations into a smaller set with one schema vocabulary.
 - The face-match threshold and the fingerprint review band are versioned data
   rather than constants.
+- A pair may hold one SYSTEM decision per threshold version; the latest
+  counts. Embeddings carry a match path, and the per-face sync matches only
+  `SYNC` ones.
 
 ### Removed
 

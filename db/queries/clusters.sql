@@ -58,7 +58,7 @@ SELECT s.feature_id, s.counterpart_id, s.role, s.decision, s.system_source, s.us
 FROM biometric_decision_sides s
 LEFT JOIN case_analyses ca ON ca.id = s.case_analysis_id
 WHERE s.feature_id = ANY(@feature_ids::text[])
-ORDER BY s.feature_id, s.counterpart_id, s.decided_at;
+ORDER BY s.feature_id, s.counterpart_id, s.decided_at, s.id;
 
 -- name: ListClustersByIDs :many
 SELECT id, modality, basis, created_at

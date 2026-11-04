@@ -2,6 +2,7 @@
 
 Planned 2026-11-03, rewritten twice the same day: after checking the first version against the
 code, and after settling that the first upload must match every enrollment against every other.
+Phases 1–3 built 2026-11-04, in core only: see [Status](#status-2026-11-04).
 
 ## Goal
 
@@ -89,7 +90,7 @@ produce the manifest: core never sees the source system's format.
      (no PNG round trip);
    - detect and embed in batches, FP16, one worker per GPU;
    - write embeddings with `COPY`.
-3. **Crop.** An aligned face crop (112×112, a few KB) is stored in core's bucket, so display and
+3. **Crop** (`-crops`). A face crop (112 px, a few KB; a box crop for now, see Decision 6) is stored in core's bucket, so display and
    comparison never need the external original.
 
 **What it records for every photo** (a new table, one row per feature): the outcome
@@ -107,7 +108,7 @@ arriving during the upload never pulls 10⁸ pending embeddings into the worker.
 sets `matched_at` on a batch's rows once that batch is done. Every embedding after the upload is
 `SYNC`, as today.
 
-**Optional vector shards.** Besides Postgres (the source of truth), `bulk-enroll` can write FP16
+**Vector shards.** Besides Postgres (the source of truth), `bulk-enroll` writes FP16
 vector shards to local disk (about 100 GB per 10⁸), so `bulk-match` reads files instead of
 pulling about 200 GB out of Postgres at every batch.
 
@@ -174,7 +175,7 @@ in what their records carry.
   - the review queue: pairs above Review whose identities differ, ranked by score. Those are the
     fraud candidates, and also what calibrates the next version.
 
-A new version re-bands what is already stored, with no new matching: see Decision 2.
+A new version re-bands what is already stored, with no new matching: see Decision 3.
 
 ## The percolation limit
 
@@ -212,42 +213,64 @@ A duplicate spread across two batches appears only once both are matched, so fra
 complete only after the last batch. AUTOMATIC clusters split and merge as versions change, which
 is what that layer is for. REVIEWED clusters follow people's decisions only and do not move.
 
-## Decisions (proposed, to confirm)
+## Decisions
 
-1. **The GPU matcher is a Python tool under `tools/`.** Exact FP16 matrix multiply and top-k in
-   PyTorch (or FAISS-GPU flat search), reading vector shards or Postgres and writing the score
-   store through `COPY`. The rest of `bulk-match` is Go.
-   - Python gives the simplest exact matcher on GPUs, at the price of a second language in core.
-     `tools/municipalities` already sets that precedent, with uv.
-   - The alternative is Go on trackid-vision's ONNX Runtime CUDA setup: one language, more work.
+Settled 2026-11-04, when building:
 
-2. **A SYSTEM decision per pair and threshold version.**
-   - The unique key admits one SYSTEM row per pair and version.
-   - The decision chain takes the latest SYSTEM row; human rows are untouched.
-   - A pair that falls below Review under a new version gets a SYSTEM NEGATIVE, which removes it
-     from the AUTOMATIC layer and keeps the history.
-   - That keeps `biometric_decisions` append-only and auditable, and lets `apply` re-band.
-   - The alternative, deriving SYSTEM decisions from score and band at read time, avoids the rows
-     but changes every reader of decisions.
-   - `DecidingRound` and its tests change either way.
+1. **The GPU matcher is a Python tool, with FAISS-GPU** (`tools/bulk-match`, run with uv).
+   - It does exact FP16 brute-force top-k (`knn_gpu`) and rescores every candidate in FP32.
+   - It searches both directions (batch against earlier faces, and earlier faces against the
+     batch), so a cap hit on one side does not drop the pair.
+   - Its input and output are files: work-directory `.npy` files written and read by Go, which
+     loads the scores. The tool needs no database access.
+   - The rest of `bulk-match` is Go.
+   - Python adds a second language to core, as `tools/municipalities` already did. Going through
+     Go on trackid-vision's ONNX Runtime would have meant more work.
 
-3. **A home for reviewing gallery pairs.** Analyses belong to a case today. Two options:
-   - an analysis type not tied to a case, which means `biometric_case_id` becomes nullable, with a
-     check per type;
-   - one review case per batch, created by `apply`.
+2. **Vector shards are written by default.** Postgres stays the source of truth.
+   - `bulk-enroll` writes FP16 shards as it vectorizes; `-no-shards` turns that off.
+   - Before matching, `bulk-match match` fills from Postgres any batch or earlier face that no
+     shard holds. That covers a lost shard, and a run killed before it flushed.
+   - `bulk-enroll -rebuild-shards` writes them all again.
 
-   The first is cleaner; the second needs no schema change.
+3. **A SYSTEM decision per pair and threshold version.**
+   - Two partial unique indexes replace `biometric_decisions_pair_role_analysis_key`:
+     - human rows: one per pair, role and analysis, as before;
+     - SYSTEM rows: one per pair and `related_reference` (the version).
+   - The latest SYSTEM row is the pair's SYSTEM decision. The decision chain is read in
+     `decided_at, id` order, and `DecidingRound` already took the last SYSTEM row, so it did not
+     change.
+   - `apply` writes a row only where the decision changes. It writes a SYSTEM NEGATIVE for a pair
+     that had POSITIVE or INCONCLUSIVE and now scores below Review. An unchanged pair keeps the row
+     of the version that first gave it its decision.
+   - Readers that list SYSTEM candidates take the latest row per pair. A review no longer offers a
+     pair whose latest SYSTEM decision is NEGATIVE.
 
-4. **Same and different identity, by record fields.** A setting listing the fields, defaulting
-   to: same document or register, then fiscal number, then name with birth date. Used by
-   `calibrate` and by `apply`'s review queue.
+4. **Same and different identity, by record fields** (`-identity-key`, default `fiscal,name_birth`;
+   also `person`).
+   - A face's key is the first of those fields its record has.
+   - Two faces are the same identity when they share a document or a key. They are different when
+     both have a key from the same field and the keys differ.
+   - Otherwise the relation is unknown, and the pair counts on neither curve.
+   - Keys shared by more than `-max-group` faces (a placeholder fiscal number, say) are ignored.
 
-5. **External originals through a storage resolver** (see `bulk-enroll` step 1), with only the
-   face crop in core's bucket.
+5. **External originals through a storage resolver.** `storage.Client.Download` reads:
+   - `<bucket>/<key>`, as before;
+   - `s3://<bucket>/<key>` on the same endpoint;
+   - `file:///<path>`, only inside `STORAGE_FILE_ROOTS`, with symlinks resolved.
 
-6. **trackid-vision takes decoded pixels and batches.** A batch API (decoded images in, faces
-   out), FP16, one session per GPU. The changes belong in trackid-vision; core passes batches
-   and a device id.
+   This holds for the whole application, so a photo kept outside the bucket also displays.
+
+6. **trackid-vision is unchanged**, for now: this work stays inside core.
+   - `bulk-enroll` hands each photo's original bytes straight to `DetectAndEmbed`, with no canvas
+     and no PNG round trip. `-pad` restores the padded path for photos cropped tight to the face.
+   - It runs one service per GPU (`-devices`).
+   - The batch API (decoded pixels in, FP16 batches) stays the next step for throughput.
+   - Crops are box crops at 112 px, not the recognizer's 5-point alignment, which trackid-vision
+     does not expose.
+
+7. **Still open:** a home for reviewing gallery pairs (an analysis type with no case, or one review
+   case per batch). Until then, `apply -queue-out` writes the review queue as CSV.
 
 ## Steady state after the upload
 
@@ -300,12 +323,12 @@ vectorization, trackid-vision batching (Decision 6), the pixels-in path, crops, 
   the outcome table.
 
 **Phase 2: `bulk-match match` and `apply`.** The GPU tool (Decision 1), the batch and score
-tables, per-version SYSTEM decisions (Decision 2), bulk decision writes, and the cluster report.
+tables, per-version SYSTEM decisions (Decision 3), bulk decision writes, and the cluster report.
 - Exit: three batches over 10⁷ synthetic faces, where `apply` under two versions re-bands without
   re-matching. The decision chain shows both versions, and clusters agree with a from-scratch run.
 
 **Phase 3: `calibrate` and review.** Identity labels (Decision 4), the report, a review home
-(Decision 3), and the chaining guard chosen on the pilot's numbers.
+(Decision 7), and the chaining guard chosen on the pilot's numbers.
 - Exit: on trackid-sim's world (which has known identities), the report's genuine and impostor
   curves match the sim's ground truth.
 
@@ -323,11 +346,71 @@ this phase.
 - Whether `match` runs while `bulk-enroll` is still vectorizing. Both need the GPUs: split the
   cards, or run them in turn.
 
-## Status (2026-11-03)
+## Status (2026-11-04)
 
-Planned; nothing built. Third version of the day:
-- the first matched every face against everything through the per-face sync;
-- the second turned KNOWN↔KNOWN matching off for galleries, which defeats deduplication;
-- this one keeps it, as an exact batch job with stored scores and calibration between batches.
+**Built** (phases 1–3, except the review home):
+- migration `011_bulk_gallery.sql`:
+  - `feature_embeddings.match_path`;
+  - `bulk_enroll_outcomes`;
+  - the batch tables;
+  - the score store `bulk_match_scores` and `bulk_match_hubs`;
+  - the per-version SYSTEM key;
+- package `bulk`;
+- `cmd/bulk-enroll` and `cmd/bulk-match` (`match`, `calibrate`, `apply`);
+- `tools/bulk-match`;
+- the storage resolver.
+
+How each step was built:
+- **`bulk-enroll` rows.** Manifest lines go through `identity.Ingest`, in parallel.
+  `-start-line` resumes a long manifest.
+- **`bulk-enroll` vectorize.** Keyset pages; each page's embeddings and outcomes are written in
+  one transaction, through multi-row `INSERT … unnest`. Ctrl-C stops after the page in flight.
+  `FETCH_FAILED` is retried only with `-retry-failed`.
+- **`match`.**
+  - A random batch, chosen by `-seed`. Stratified selection is left to the deployment.
+  - The scores go into an unlogged staging table with `COPY`, through pgx (or lib/pq in tests).
+  - One transaction then stores them, records the hubs and marks the batch matched. A batch left
+    `SELECTED` by a failed run is resumed.
+- **`calibrate`.**
+  - Genuine scores are computed directly in Postgres, so those below the floor count too.
+  - Impostor comparisons are counted exactly from the identity groups. FMR, FNMR, the review load
+    and the projected mean false degree come out per threshold.
+  - Examiners' decisions are counted by score bin.
+  - It warns when more than 1% of faces are hubs.
+- **`apply`.**
+  - Bands in chunks of embedding ids, each its own transaction; rerunning writes nothing new.
+  - Clusters once, then reports the size distribution, the largest cluster, and the clusters
+    holding more than one identity.
+  - Lists the review queue: pairs at or above Review, records saying different people, no human
+    decision yet.
+  - The chaining guard is an alarm: exit status 3 when the largest automatic cluster exceeds
+    `-max-cluster`. Mutual top-k and per-hub caps wait for the pilot's numbers.
+
+**Tested:**
+- `bulk.TestBulkGallery`, on a synthetic register, runs the whole cycle:
+  - load;
+  - vectorize, with a kill and resume;
+  - the outcome of every photo;
+  - two batches, with a lost shard refilled;
+  - the score store equal to brute force, every pair compared once;
+  - `apply` under three versions (promote, then drop to NEGATIVE), with the chain showing each one;
+  - the review queue led by the planted fraud;
+  - calibration counts.
+
+  It runs with a Go brute-force stand-in for the matcher and with the real Python tool.
+- `tools/bulk-match` tests compare against brute force on GPU, FAISS CPU and NumPy.
+- A smoke run on trackid-sim's synthetic face pool used the real models:
+  - 410 photos, at 68 photos/s, unbatched, on one RTX 2080;
+  - two batches;
+  - the 10 planted duplicates leading the queue.
+
+**Not built yet:**
+- **Phase 0 measurements at 10⁶–10⁷.**
+- **Clustering at gallery size.** `cluster.Run` (called by `apply`) still loads every decision
+  and feature into memory. It is the next bottleneck at 10⁸, together with clusters without
+  singletons (Phase 5).
+- **The review home** (Decision 7).
+- **trackid-vision batching** (Decision 6).
+- **Phase 5, steady state:** the exact trace scan, the `halfvec` partial HNSW, the paged sync.
 
 Deployment-specific figures live in the deployment's own repository.

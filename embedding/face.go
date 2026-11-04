@@ -32,6 +32,23 @@ type FaceEmbedder interface {
 // inside box, or nil if there is none. Pass img.Bounds() as box when the
 // whole image is the face (a codification image or face crop).
 func EmbedFaceInBox(vis FaceEmbedder, img image.Image, box image.Rectangle) ([]float32, error) {
+	faces, err := FacesInBox(vis, img, box)
+	if err != nil {
+		return nil, err
+	}
+	var best []float32
+	var bestScore float32
+	for _, face := range faces {
+		if best == nil || face.Score > bestScore {
+			best, bestScore = face.Embedding, face.Score
+		}
+	}
+	return best, nil
+}
+
+// FacesInBox detects and embeds the faces around box in img (see faceContextScale) and returns
+// those centered inside box, their boxes and landmarks in img's own coordinates.
+func FacesInBox(vis FaceEmbedder, img image.Image, box image.Rectangle) ([]vision.Face, error) {
 	pad := image.Pt(
 		box.Dx()*(faceContextScale-1)/2,
 		box.Dy()*(faceContextScale-1)/2,
@@ -55,8 +72,8 @@ func EmbedFaceInBox(vis FaceEmbedder, img image.Image, box image.Rectangle) ([]f
 	}
 
 	target := box.Sub(region.Min)
-	var best []float32
-	var bestScore float32
+	dx, dy := float32(region.Min.X), float32(region.Min.Y)
+	var out []vision.Face
 	for _, face := range faces {
 		center := image.Pt(
 			int((face.Box[0]+face.Box[2])/2),
@@ -65,9 +82,11 @@ func EmbedFaceInBox(vis FaceEmbedder, img image.Image, box image.Rectangle) ([]f
 		if !center.In(target) {
 			continue
 		}
-		if best == nil || face.Score > bestScore {
-			best, bestScore = face.Embedding, face.Score
+		face.Box = [4]float32{face.Box[0] + dx, face.Box[1] + dy, face.Box[2] + dx, face.Box[3] + dy}
+		for i := range face.Kps {
+			face.Kps[i] = [2]float32{face.Kps[i][0] + dx, face.Kps[i][1] + dy}
 		}
+		out = append(out, face)
 	}
-	return best, nil
+	return out, nil
 }
