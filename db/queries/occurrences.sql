@@ -245,3 +245,6 @@ LIMIT 1;
 
 -- name: CountMunicipalities :one
 SELECT COUNT(*) FROM municipalities;
+
+-- name: SetOccurrenceLocation :execrows
+UPDATE occurrences SET location_id = sqlc.narg('location_id')::bigint, updated_at = NOW() WHERE id = @id;

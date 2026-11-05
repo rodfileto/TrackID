@@ -185,7 +185,12 @@ func normalize(ctx context.Context, q *db.Queries, in *CreateInput, now time.Tim
 		}
 	}
 
-	p := &in.Place
+	return normalizePlace(&in.Place)
+}
+
+// normalizePlace trims a place and checks it, filling its default precision. An empty one is fine:
+// the occurrence has no place yet.
+func normalizePlace(p *PlaceInput) error {
 	if p.ExistingID != 0 {
 		return nil
 	}
@@ -388,6 +393,36 @@ func Update(ctx context.Context, sqlDB *sql.DB, id int64, in UpdateInput, now ti
 		if err := q.AddOccurrenceClassification(ctx, db.AddOccurrenceClassificationParams{OccurrenceID: id, TypeCode: t}); err != nil {
 			return fmt.Errorf("occurrences: %d: type %s: %w", id, t, err)
 		}
+	}
+	return tx.Commit()
+}
+
+// SetPlace gives an occurrence its place once it is known, as Create would place it, or removes it
+// with an empty PlaceInput.
+func SetPlace(ctx context.Context, sqlDB *sql.DB, id int64, place PlaceInput) error {
+	if err := normalizePlace(&place); err != nil {
+		return err
+	}
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	q := db.New(tx)
+	location := sql.NullInt64{}
+	if place.located() {
+		locationID, err := placeLocation(ctx, q, place)
+		if err != nil {
+			return err
+		}
+		location = sql.NullInt64{Int64: locationID, Valid: true}
+	}
+	rows, err := q.SetOccurrenceLocation(ctx, db.SetOccurrenceLocationParams{LocationID: location, ID: id})
+	if err != nil {
+		return fmt.Errorf("occurrences: place of %d: %w", id, err)
+	}
+	if rows == 0 {
+		return ValidationError("occurrence not found")
 	}
 	return tx.Commit()
 }

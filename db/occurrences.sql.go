@@ -751,6 +751,23 @@ func (q *Queries) SetBiometricCaseOccurrence(ctx context.Context, arg SetBiometr
 	return result.RowsAffected()
 }
 
+const setOccurrenceLocation = `-- name: SetOccurrenceLocation :execrows
+UPDATE occurrences SET location_id = $1::bigint, updated_at = NOW() WHERE id = $2
+`
+
+type SetOccurrenceLocationParams struct {
+	LocationID sql.NullInt64 `db:"location_id" json:"location_id"`
+	ID         int64         `db:"id" json:"id"`
+}
+
+func (q *Queries) SetOccurrenceLocation(ctx context.Context, arg SetOccurrenceLocationParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setOccurrenceLocation, arg.LocationID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateOccurrenceDetails = `-- name: UpdateOccurrenceDetails :execrows
 UPDATE occurrences SET occurred_from = $1, inquiry_number = $2,
     description = $3::text, updated_at = NOW()

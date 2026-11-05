@@ -226,6 +226,44 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
+// TestSetPlace: an occurrence with no place gets one later, with its municipality from the point, and
+// loses it again, and a point outside the loaded municipalities is refused.
+func TestSetPlace(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	q := db.New(sqlDB)
+	if err := q.UpsertMunicipality(ctx, db.UpsertMunicipalityParams{
+		Code: "3106200", Name: "Belo Horizonte", Uf: "MG", Source: "test",
+		Geojson: `{"type":"Polygon","coordinates":[[[-44.1,-20.1],[-43.8,-20.1],[-43.8,-19.7],[-44.1,-19.7],[-44.1,-20.1]]]}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 12, 15, 0, 0, 0, time.UTC)
+	created, err := occurrences.Create(ctx, sqlDB, occurrences.CreateInput{Types: []string{"FRAUD"}, Description: "a"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := occurrences.SetPlace(ctx, sqlDB, created.ID, occurrences.PlaceInput{Lon: -43.9, Lat: -19.9, Precision: "STREET", Address: "Rua A"}); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := q.GetOccurrenceSummary(ctx, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !summary.HasPlace || summary.Precision.String != "STREET" || summary.Address.String != "Rua A" {
+		t.Errorf("summary %+v", summary)
+	}
+	if err := occurrences.SetPlace(ctx, sqlDB, created.ID, occurrences.PlaceInput{Lon: -46.6, Lat: -23.5}); !isValidation(err) {
+		t.Errorf("outside the municipalities: %v", err)
+	}
+	if err := occurrences.SetPlace(ctx, sqlDB, created.ID, occurrences.PlaceInput{}); err != nil {
+		t.Fatal(err)
+	}
+	if summary, _ = q.GetOccurrenceSummary(ctx, created.ID); summary.HasPlace {
+		t.Error("the place stayed")
+	}
+}
+
 func isValidation(err error) bool {
 	var v occurrences.ValidationError
 	return errors.As(err, &v)

@@ -20,6 +20,7 @@ period; `0.x` patch releases fix defects without adding behaviour.
   search by them.
 - `requests.Update`, `requests.MoveToCase` and `occurrences.Update`, for correcting what was
   registered.
+- `occurrences.SetPlace` gives an occurrence its place once known.
 - `reports.RecordImported`: a report issued elsewhere becomes an analysis's issued one, its document
   the original PDF.
 - An organization can run its own server (`server.Run` with `Options.Register`) and add pages, menu
