@@ -11,6 +11,7 @@ package requests
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -46,7 +47,16 @@ type Input struct {
 	Notes             string   `json:"notes"`
 	Questions         []string `json:"questions"` // the quesitos, in order
 	FileIDs           []int64  `json:"fileIds"`   // evidence files of the case it sent in (Create only)
-	Task              string   `json:"task"`      // the task it asks of the case, an analysis type (Create only)
+	// References are other numbers its document goes by, labelled by the institute (Reference).
+	References []Reference `json:"references"`
+	Task       string      `json:"task"` // the task it asks of the case, an analysis type (Create only)
+}
+
+// Reference is another number a request's document goes by in the systems around it, such as a task
+// in a case-management system or a process in a document system. Label names the system.
+type Reference struct {
+	Label  string `json:"label"`
+	Number string `json:"number"`
 }
 
 // RegisterInput is a request as it arrives, with what it opens: the occurrence it cites, when
@@ -61,6 +71,10 @@ type RegisterInput struct {
 	// none); with an occurrence, its nature is theirs.
 	CaseType string
 	Cases    []CaseInput
+	// ConcludedAt marks a request that was already answered when registered (an import of old
+	// reports): its analyses are recorded closed at this moment instead of opened for work, and may
+	// be of a type not yet offered. Importers only: the API never sets it.
+	ConcludedAt *time.Time `json:"-"`
 }
 
 // CaseInput is one case a request opens (Description) or joins (CaseID), and the task it asks of
@@ -87,18 +101,19 @@ type CaseRef struct {
 
 // Summary is a request in the list of every request.
 type Summary struct {
-	ID                int64    `json:"id"`
-	Authority         string   `json:"authority"`
-	DocumentReference string   `json:"documentReference"`
-	ReceivedOn        string   `json:"receivedOn"`
-	DueOn             string   `json:"dueOn,omitempty"`
-	OpenAnalyses      int64    `json:"openAnalyses"`
-	Overdue           bool     `json:"overdue"`
-	CitedReference    string   `json:"citedReference,omitempty"`
-	CitedInquiry      string   `json:"citedInquiryNumber,omitempty"`
-	OccurrenceNumber  string   `json:"occurrenceNumber,omitempty"` // TrackID's, else the agency's
-	CaseIDs           []string `json:"caseIds"`
-	Tasks             []string `json:"tasks"` // the analyses it asked, by type, across its cases
+	ID                int64       `json:"id"`
+	Authority         string      `json:"authority"`
+	DocumentReference string      `json:"documentReference"`
+	ReceivedOn        string      `json:"receivedOn"`
+	DueOn             string      `json:"dueOn,omitempty"`
+	OpenAnalyses      int64       `json:"openAnalyses"`
+	Overdue           bool        `json:"overdue"`
+	CitedReference    string      `json:"citedReference,omitempty"`
+	CitedInquiry      string      `json:"citedInquiryNumber,omitempty"`
+	OccurrenceNumber  string      `json:"occurrenceNumber,omitempty"` // TrackID's, else the agency's
+	CaseIDs           []string    `json:"caseIds"`
+	Tasks             []string    `json:"tasks"` // the analyses it asked, by type, across its cases
+	References        []Reference `json:"references"`
 }
 
 // Request is a registered request.
@@ -121,6 +136,7 @@ type Request struct {
 	Files             []File      `json:"files"`
 	Cases             []CaseRef   `json:"cases"` // every case it opened or joined, this one included
 	Tasks             []string    `json:"tasks"` // the analyses it asked of this case, by type
+	References        []Reference `json:"references"`
 }
 
 // Occurrence is the occurrence a request was linked to, by its numbers.
@@ -171,6 +187,7 @@ type fields struct {
 	authority, document         string
 	documentDate, received, due sql.NullTime
 	questions                   []string
+	references                  []Reference
 }
 
 func check(in Input) (fields, error) {
@@ -197,6 +214,15 @@ func check(in Input) (fields, error) {
 	for _, q := range in.Questions {
 		if q = strings.TrimSpace(q); q != "" {
 			f.questions = append(f.questions, q)
+		}
+	}
+	for _, r := range in.References {
+		r = Reference{Label: strings.TrimSpace(r.Label), Number: strings.TrimSpace(r.Number)}
+		if r.Label == "" || r.Number == "" {
+			return f, ValidationError("a reference needs a label and a number")
+		}
+		if !slices.Contains(f.references, r) {
+			f.references = append(f.references, r)
 		}
 	}
 	return f, nil
@@ -260,7 +286,10 @@ func register(ctx context.Context, sqlDB *sql.DB, in RegisterInput, f fields, re
 	var list []opened
 	seen := map[string]bool{}
 	for _, ci := range in.Cases {
-		task, err := taskOf(ci.Task)
+		task, err := parseTask(ci.Task)
+		if err == nil && in.ConcludedAt == nil {
+			err = checkOffered(task, ci.Task)
+		}
 		if err != nil {
 			return Registered{}, err
 		}
@@ -307,7 +336,12 @@ func register(ctx context.Context, sqlDB *sql.DB, in RegisterInput, f fields, re
 		if err := joinCase(ctx, q, requestID, o.id, o.c.CaseType, occurrence); err != nil {
 			return Registered{}, err
 		}
-		if _, err := analyses.OpenIn(ctx, q, o.id, o.c.Modality, o.task, requestID, registeredBy); err != nil {
+		if in.ConcludedAt != nil {
+			_, err = analyses.OpenConcludedIn(ctx, q, o.id, o.c.Modality, o.task, requestID, registeredBy, *in.ConcludedAt)
+		} else {
+			_, err = analyses.OpenIn(ctx, q, o.id, o.c.Modality, o.task, requestID, registeredBy)
+		}
+		if err != nil {
 			return Registered{}, err
 		}
 		out.Cases = append(out.Cases, o.c)
@@ -392,21 +426,39 @@ func insertRequest(ctx context.Context, q *db.Queries, in Input, f fields, occur
 			return 0, err
 		}
 	}
+	for _, r := range f.references {
+		if err := q.InsertCaseRequestReference(ctx, db.InsertCaseRequestReferenceParams{CaseRequestID: id, Label: r.Label, Number: r.Number}); err != nil {
+			return 0, err
+		}
+	}
 	return id, nil
 }
 
 // taskOf reads a task a coordinator chose: an analysis type that can be opened now.
 func taskOf(task string) (analyses.Type, error) {
+	t, err := parseTask(task)
+	if err != nil {
+		return "", err
+	}
+	return t, checkOffered(t, task)
+}
+
+func parseTask(task string) (analyses.Type, error) {
 	t := analyses.Type(strings.ToUpper(strings.TrimSpace(task)))
 	switch {
 	case t == "":
 		return "", ValidationError("each case needs its task: the examination the request asks")
 	case !t.Valid():
 		return "", ValidationError("unknown task " + task)
-	case !t.Offered():
-		return "", ValidationError("the " + task + " examination is not available yet")
 	}
 	return t, nil
+}
+
+func checkOffered(t analyses.Type, task string) error {
+	if !t.Offered() {
+		return ValidationError("the " + task + " examination is not available yet")
+	}
+	return nil
 }
 
 // joinCase makes the request the case's next one. The case's first request is what its analyses
@@ -515,8 +567,8 @@ func Create(ctx context.Context, sqlDB *sql.DB, caseID string, in Input, registe
 
 // ListAll returns up to limit requests across every case, soonest due first (no due date last),
 // each with its cases and whether it is overdue.
-func ListAll(ctx context.Context, sqlDB *sql.DB, limit int) ([]Summary, error) {
-	rows, err := db.New(sqlDB).ListRequests(ctx, int32(limit))
+func ListAll(ctx context.Context, sqlDB *sql.DB, reference string, limit int) ([]Summary, error) {
+	rows, err := db.New(sqlDB).ListRequests(ctx, db.ListRequestsParams{Reference: nullString(reference), RowLimit: int32(limit)})
 	if err != nil {
 		return nil, err
 	}
@@ -531,6 +583,9 @@ func ListAll(ctx context.Context, sqlDB *sql.DB, limit int) ([]Summary, error) {
 		}
 		if s.Tasks == nil {
 			s.Tasks = []string{}
+		}
+		if err := json.Unmarshal(r.Refs, &s.References); err != nil {
+			return nil, fmt.Errorf("requests: references: %w", err)
 		}
 		if r.DueOn.Valid {
 			s.DueOn = r.DueOn.Time.Format(dateLayout)
@@ -614,6 +669,10 @@ func ListWith(ctx context.Context, q *db.Queries, caseID string) ([]Request, err
 	if err != nil {
 		return nil, err
 	}
+	referenceRows, err := q.ListCaseRequestReferences(ctx, caseID)
+	if err != nil {
+		return nil, err
+	}
 	analysisRows, err := q.ListCaseAnalyses(ctx, caseID)
 	if err != nil {
 		return nil, err
@@ -631,6 +690,12 @@ func ListWith(ctx context.Context, q *db.Queries, caseID string) ([]Request, err
 			ReceivedOn: r.ReceivedOn.Format(dateLayout), CitedReference: r.CitedReference.String,
 			CitedInquiry: r.CitedInquiryNumber.String, Notes: r.Notes.String,
 			RegisteredBy: r.RegisteredBy.String, CreatedAt: r.CreatedAt, Questions: []string{}, Files: []File{}, Cases: []CaseRef{}, Tasks: []string{}}
+		req.References = []Reference{}
+		for _, x := range referenceRows {
+			if x.CaseRequestID == r.ID {
+				req.References = append(req.References, Reference{Label: x.Label, Number: x.Number})
+			}
+		}
 		for _, a := range analysisRows {
 			if a.CaseRequestID.Valid && a.CaseRequestID.Int64 == r.ID {
 				req.Tasks = append(req.Tasks, a.AnalysisType)

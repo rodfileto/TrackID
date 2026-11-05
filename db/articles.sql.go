@@ -598,7 +598,9 @@ func (q *Queries) ListMentionClusters(ctx context.Context, ids []int64) ([]ListM
 
 const listMentionInquiries = `-- name: ListMentionInquiries :many
 SELECT inquiry_number::text AS inquiry_number, COUNT(*)::int AS occurrence_count,
-    MIN(occurred_from)::timestamptz AS first_occurred, MAX(occurred_from)::timestamptz AS last_occurred
+    (COUNT(occurred_from) > 0)::bool AS has_dates,
+    COALESCE(MIN(occurred_from), 'epoch')::timestamptz AS first_occurred,
+    COALESCE(MAX(occurred_from), 'epoch')::timestamptz AS last_occurred
 FROM occurrences WHERE inquiry_number = ANY($1::text[])
 GROUP BY inquiry_number
 `
@@ -606,6 +608,7 @@ GROUP BY inquiry_number
 type ListMentionInquiriesRow struct {
 	InquiryNumber   string    `db:"inquiry_number" json:"inquiry_number"`
 	OccurrenceCount int32     `db:"occurrence_count" json:"occurrence_count"`
+	HasDates        bool      `db:"has_dates" json:"has_dates"`
 	FirstOccurred   time.Time `db:"first_occurred" json:"first_occurred"`
 	LastOccurred    time.Time `db:"last_occurred" json:"last_occurred"`
 }
@@ -623,6 +626,7 @@ func (q *Queries) ListMentionInquiries(ctx context.Context, numbers []string) ([
 		if err := rows.Scan(
 			&i.InquiryNumber,
 			&i.OccurrenceCount,
+			&i.HasDates,
 			&i.FirstOccurred,
 			&i.LastOccurred,
 		); err != nil {
@@ -651,7 +655,7 @@ type ListMentionOccurrencesRow struct {
 	Agency           sql.NullString `db:"agency" json:"agency"`
 	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
 	InquiryNumber    sql.NullString `db:"inquiry_number" json:"inquiry_number"`
-	OccurredFrom     time.Time      `db:"occurred_from" json:"occurred_from"`
+	OccurredFrom     sql.NullTime   `db:"occurred_from" json:"occurred_from"`
 	Status           string         `db:"status" json:"status"`
 	Description      string         `db:"description" json:"description"`
 }
@@ -1002,11 +1006,13 @@ func (q *Queries) SearchMentionClusters(ctx context.Context, arg SearchMentionCl
 
 const searchMentionInquiries = `-- name: SearchMentionInquiries :many
 SELECT inquiry_number::text AS inquiry_number, COUNT(*)::int AS occurrence_count,
-    MIN(occurred_from)::timestamptz AS first_occurred, MAX(occurred_from)::timestamptz AS last_occurred
+    (COUNT(occurred_from) > 0)::bool AS has_dates,
+    COALESCE(MIN(occurred_from), 'epoch')::timestamptz AS first_occurred,
+    COALESCE(MAX(occurred_from), 'epoch')::timestamptz AS last_occurred
 FROM occurrences
 WHERE inquiry_number IS NOT NULL AND inquiry_number ILIKE '%' || $1::text || '%'
 GROUP BY inquiry_number
-ORDER BY MAX(occurred_from) DESC
+ORDER BY MAX(occurred_from) DESC NULLS LAST
 LIMIT $2
 `
 
@@ -1018,6 +1024,7 @@ type SearchMentionInquiriesParams struct {
 type SearchMentionInquiriesRow struct {
 	InquiryNumber   string    `db:"inquiry_number" json:"inquiry_number"`
 	OccurrenceCount int32     `db:"occurrence_count" json:"occurrence_count"`
+	HasDates        bool      `db:"has_dates" json:"has_dates"`
 	FirstOccurred   time.Time `db:"first_occurred" json:"first_occurred"`
 	LastOccurred    time.Time `db:"last_occurred" json:"last_occurred"`
 }
@@ -1034,6 +1041,7 @@ func (q *Queries) SearchMentionInquiries(ctx context.Context, arg SearchMentionI
 		if err := rows.Scan(
 			&i.InquiryNumber,
 			&i.OccurrenceCount,
+			&i.HasDates,
 			&i.FirstOccurred,
 			&i.LastOccurred,
 		); err != nil {
@@ -1057,7 +1065,7 @@ WHERE (occurrence_year::text || '.' || lpad(occurrence_seq::text, 4, '0')) ILIKE
    OR occurrence_number ILIKE '%' || $1::text || '%'
    OR inquiry_number ILIKE '%' || $1::text || '%'
    OR description ILIKE '%' || $1::text || '%'
-ORDER BY occurred_from DESC, id DESC
+ORDER BY occurred_from DESC NULLS LAST, id DESC
 LIMIT $2
 `
 
@@ -1073,7 +1081,7 @@ type SearchMentionOccurrencesRow struct {
 	Agency           sql.NullString `db:"agency" json:"agency"`
 	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
 	InquiryNumber    sql.NullString `db:"inquiry_number" json:"inquiry_number"`
-	OccurredFrom     time.Time      `db:"occurred_from" json:"occurred_from"`
+	OccurredFrom     sql.NullTime   `db:"occurred_from" json:"occurred_from"`
 	Status           string         `db:"status" json:"status"`
 	Description      string         `db:"description" json:"description"`
 }

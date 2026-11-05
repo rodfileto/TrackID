@@ -3,6 +3,12 @@ import { getToken } from "./auth";
 import type { Suitability } from "./analyses";
 import type { CreateOccurrenceInput } from "./occurrences";
 
+/** Another number a request's document goes by, labelled with the system it belongs to. */
+export interface RequestReference {
+  label: string;
+  number: string;
+}
+
 /** A request: an authority asking the institute to examine material, with its questions. */
 export interface CaseRequest {
   id: number;
@@ -25,6 +31,7 @@ export interface CaseRequest {
   cases: { caseId: string; modality: string }[];
   /** The analyses it asked of this case, by type. */
   tasks: string[];
+  references: RequestReference[];
 }
 
 /** A request in the list of every request. */
@@ -42,6 +49,7 @@ export interface RequestSummary {
   caseIds: string[];
   /** The analyses it asked, by type, across its cases. */
   tasks: string[];
+  references: RequestReference[];
 }
 
 /** One case a request opens (description) or joins (caseId), and the task it asks of it. */
@@ -75,6 +83,7 @@ export interface CaseRequestInput {
   citedInquiryNumber?: string;
   notes?: string;
   questions: string[];
+  references?: RequestReference[];
   fileIds: number[];
   /** The task the request asks of the case (createCaseRequest only). */
   task?: string;
@@ -110,8 +119,25 @@ export async function listCaseRequests(caseId: string): Promise<CaseRequest[]> {
 }
 
 /** Coordinator: every request, soonest due first. */
-export async function listRequests(): Promise<RequestSummary[]> {
-  return requestApi<RequestSummary[]>("/admin/requests", { headers: authHeaders() });
+/** Reads "Label: number" lines; a line with no colon has no label, which the server refuses. */
+export function parseReferences(text: string): RequestReference[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const colon = line.indexOf(":");
+      return colon < 0 ? { label: "", number: line } : { label: line.slice(0, colon).trim(), number: line.slice(colon + 1).trim() };
+    });
+}
+
+export function formatReferences(references: RequestReference[]): string {
+  return references.map((r) => `${r.label}: ${r.number}`).join(" · ");
+}
+
+export async function listRequests(reference = ""): Promise<RequestSummary[]> {
+  const query = reference ? `?reference=${encodeURIComponent(reference)}` : "";
+  return requestApi<RequestSummary[]>(`/admin/requests${query}`, { headers: authHeaders() });
 }
 
 /** Coordinator: register a request as it arrives, opening its cases and its occurrence. */

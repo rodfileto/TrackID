@@ -636,7 +636,8 @@
     "BODY_FOUND": "Body found",
     "SKELETAL_REMAINS_FOUND": "Skeletal remains found",
     "UNIDENTIFIED_LIVING_PERSON": "Unidentified living person",
-    "DISASTER_VICTIM": "Disaster victim"
+    "DISASTER_VICTIM": "Disaster victim",
+    "UNDETERMINED": "Undetermined"
   },
   "occurrenceGroup": {
     "LETHAL": "Lethal",
@@ -645,7 +646,8 @@
     "THEFT": "Theft",
     "FRAUD": "Fraud",
     "DRUGS": "Drugs",
-    "CIVIL": "Civil identification"
+    "CIVIL": "Civil identification",
+    "OTHER": "Other"
   },
   "occurrenceStatus": {
     "REGISTERED": "Registered",
@@ -952,6 +954,9 @@
     "indirect": "Indirect link"
   },
   "requests": {
+    "references": "Other references, one per line (e.g. Process: 123/2026)",
+    "searchReference": "Search by reference number",
+    "search": "Search",
     "title": "Requests",
     "desc": "Who asked for this examination, what they asked and what they sent.",
     "none": "No request registered yet.",

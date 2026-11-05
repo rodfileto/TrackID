@@ -12,7 +12,7 @@ import { Modal } from "../ui/modal";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import type { Evidence } from "../../services/cases";
 import { listCaseVideos } from "../../services/videos";
-import {
+import { formatReferences, parseReferences,
   citedNumbers,
   createCaseRequest,
   listCaseMaterial,
@@ -55,7 +55,7 @@ function RegisterRequestModal({
 }) {
   const { t } = useTranslation();
   const empty = { authority: "", documentReference: "", documentDate: "", receivedOn: new Date().toISOString().slice(0, 10), dueOn: "",
-    citedReference: "", citedInquiryNumber: "", notes: "", questions: "" };
+    citedReference: "", citedInquiryNumber: "", notes: "", questions: "", references: "" };
   const [form, setForm] = useState(empty);
   const [task, setTask] = useState("");
   const [files, setFiles] = useState<Set<number>>(new Set());
@@ -91,6 +91,7 @@ function RegisterRequestModal({
         authority: form.authority, documentReference: form.documentReference, documentDate: form.documentDate || undefined,
         receivedOn: form.receivedOn, dueOn: form.dueOn || undefined, citedReference: form.citedReference || undefined,
         citedInquiryNumber: form.citedInquiryNumber || undefined, notes: form.notes || undefined, questions: form.questions.split("\n").map((q) => q.trim()).filter(Boolean), fileIds: [...files],
+        references: parseReferences(form.references),
         task,
       };
       await createCaseRequest(caseId, input);
@@ -120,6 +121,10 @@ function RegisterRequestModal({
             <label className={labelClass}>{t("requests.task")}</label>
             <TaskSelect className={inputClass} value={task} modality={modality} onChange={setTask} />
           </div>
+        </div>
+        <div>
+          <label className={labelClass}>{t("requests.references")}</label>
+          <textarea rows={2} className={inputClass} value={form.references} onChange={(e) => setForm({ ...form, references: e.target.value })} />
         </div>
         <div>
           <label className={labelClass}>{t("requests.questions")}</label>
@@ -251,6 +256,9 @@ export default function CaseRequestsCard({
                   : ""}
               {r.registeredBy && ` · ${t("requests.registeredBy", { user: r.registeredBy })}`}
             </p>
+            {r.references.length > 0 && (
+              <p className="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">{formatReferences(r.references)}</p>
+            )}
             {r.cases.length > 1 && (
               <p className="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">
                 {t("requests.alsoIn")}{" "}

@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/lib/pq"
@@ -242,6 +243,21 @@ func (q *Queries) InsertCaseRequestQuestion(ctx context.Context, arg InsertCaseR
 	return err
 }
 
+const insertCaseRequestReference = `-- name: InsertCaseRequestReference :exec
+INSERT INTO case_request_references (case_request_id, label, number) VALUES ($1, $2, $3)
+`
+
+type InsertCaseRequestReferenceParams struct {
+	CaseRequestID int64  `db:"case_request_id" json:"case_request_id"`
+	Label         string `db:"label" json:"label"`
+	Number        string `db:"number" json:"number"`
+}
+
+func (q *Queries) InsertCaseRequestReference(ctx context.Context, arg InsertCaseRequestReferenceParams) error {
+	_, err := q.db.ExecContext(ctx, insertCaseRequestReference, arg.CaseRequestID, arg.Label, arg.Number)
+	return err
+}
+
 const latestCaseRequest = `-- name: LatestCaseRequest :one
 SELECT case_request_id FROM case_request_cases WHERE biometric_case_id = $1 ORDER BY sequence DESC LIMIT 1
 `
@@ -341,6 +357,44 @@ func (q *Queries) ListCaseRequestQuestions(ctx context.Context, caseID string) (
 	for rows.Next() {
 		var i ListCaseRequestQuestionsRow
 		if err := rows.Scan(&i.CaseRequestID, &i.Sequence, &i.Question); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCaseRequestReferences = `-- name: ListCaseRequestReferences :many
+SELECT x.case_request_id, x.label, x.number
+FROM case_request_references x
+JOIN case_request_cases rc ON rc.case_request_id = x.case_request_id
+JOIN biometric_cases bc ON bc.id = rc.biometric_case_id
+WHERE bc.case_id = $1
+ORDER BY x.case_request_id, x.id
+`
+
+type ListCaseRequestReferencesRow struct {
+	CaseRequestID int64  `db:"case_request_id" json:"case_request_id"`
+	Label         string `db:"label" json:"label"`
+	Number        string `db:"number" json:"number"`
+}
+
+func (q *Queries) ListCaseRequestReferences(ctx context.Context, caseID string) ([]ListCaseRequestReferencesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCaseRequestReferences, caseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCaseRequestReferencesRow
+	for rows.Next() {
+		var i ListCaseRequestReferencesRow
+		if err := rows.Scan(&i.CaseRequestID, &i.Label, &i.Number); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -490,34 +544,46 @@ SELECT r.id, r.authority, r.document_reference, r.received_on, r.due_on, r.cited
                  FROM case_request_cases rc JOIN biometric_cases bc ON bc.id = rc.biometric_case_id
                  WHERE rc.case_request_id = r.id), '{}')::text[] AS case_ids,
        COALESCE((SELECT array_agg(ca.analysis_type ORDER BY ca.id)
-                 FROM case_analyses ca WHERE ca.case_request_id = r.id), '{}')::text[] AS tasks
+                 FROM case_analyses ca WHERE ca.case_request_id = r.id), '{}')::text[] AS tasks,
+       COALESCE((SELECT json_agg(json_build_object('label', x.label, 'number', x.number) ORDER BY x.id)
+                 FROM case_request_references x WHERE x.case_request_id = r.id), '[]')::jsonb AS refs
 FROM case_requests r
 LEFT JOIN occurrences o ON o.id = r.occurrence_id
+WHERE $1::text IS NULL OR EXISTS (
+    SELECT 1 FROM case_request_references x
+    WHERE x.case_request_id = r.id AND x.number ILIKE '%' || $1::text || '%')
 ORDER BY r.due_on NULLS LAST, r.received_on DESC, r.id DESC
-LIMIT $1::int
+LIMIT $2::int
 `
 
+type ListRequestsParams struct {
+	Reference sql.NullString `db:"reference" json:"reference"`
+	RowLimit  int32          `db:"row_limit" json:"row_limit"`
+}
+
 type ListRequestsRow struct {
-	ID                 int64          `db:"id" json:"id"`
-	Authority          string         `db:"authority" json:"authority"`
-	DocumentReference  string         `db:"document_reference" json:"document_reference"`
-	ReceivedOn         time.Time      `db:"received_on" json:"received_on"`
-	DueOn              sql.NullTime   `db:"due_on" json:"due_on"`
-	CitedReference     sql.NullString `db:"cited_reference" json:"cited_reference"`
-	CitedInquiryNumber sql.NullString `db:"cited_inquiry_number" json:"cited_inquiry_number"`
-	OccurrenceYear     sql.NullInt32  `db:"occurrence_year" json:"occurrence_year"`
-	OccurrenceSeq      sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
-	Agency             sql.NullString `db:"agency" json:"agency"`
-	OccurrenceNumber   sql.NullString `db:"occurrence_number" json:"occurrence_number"`
-	OpenAnalyses       int64          `db:"open_analyses" json:"open_analyses"`
-	CaseIds            []string       `db:"case_ids" json:"case_ids"`
-	Tasks              []string       `db:"tasks" json:"tasks"`
+	ID                 int64           `db:"id" json:"id"`
+	Authority          string          `db:"authority" json:"authority"`
+	DocumentReference  string          `db:"document_reference" json:"document_reference"`
+	ReceivedOn         time.Time       `db:"received_on" json:"received_on"`
+	DueOn              sql.NullTime    `db:"due_on" json:"due_on"`
+	CitedReference     sql.NullString  `db:"cited_reference" json:"cited_reference"`
+	CitedInquiryNumber sql.NullString  `db:"cited_inquiry_number" json:"cited_inquiry_number"`
+	OccurrenceYear     sql.NullInt32   `db:"occurrence_year" json:"occurrence_year"`
+	OccurrenceSeq      sql.NullInt32   `db:"occurrence_seq" json:"occurrence_seq"`
+	Agency             sql.NullString  `db:"agency" json:"agency"`
+	OccurrenceNumber   sql.NullString  `db:"occurrence_number" json:"occurrence_number"`
+	OpenAnalyses       int64           `db:"open_analyses" json:"open_analyses"`
+	CaseIds            []string        `db:"case_ids" json:"case_ids"`
+	Tasks              []string        `db:"tasks" json:"tasks"`
+	Refs               json.RawMessage `db:"refs" json:"refs"`
 }
 
 // Every request, overdue and soonest due first: what the coordinator has to answer. open counts
-// the analyses still open that answer it.
-func (q *Queries) ListRequests(ctx context.Context, rowLimit int32) ([]ListRequestsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listRequests, rowLimit)
+// the analyses still open that answer it. reference, when given, keeps the requests holding a
+// reference whose number contains it.
+func (q *Queries) ListRequests(ctx context.Context, arg ListRequestsParams) ([]ListRequestsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRequests, arg.Reference, arg.RowLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -540,6 +606,7 @@ func (q *Queries) ListRequests(ctx context.Context, rowLimit int32) ([]ListReque
 			&i.OpenAnalyses,
 			pq.Array(&i.CaseIds),
 			pq.Array(&i.Tasks),
+			&i.Refs,
 		); err != nil {
 			return nil, err
 		}

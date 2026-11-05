@@ -5,7 +5,7 @@ import PageMeta from "../components/common/PageMeta";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import ComponentCard from "../components/common/ComponentCard";
 import Badge from "../components/ui/badge/Badge";
-import { citedNumbers, listRequests, type RequestSummary } from "../services/requests";
+import { citedNumbers, formatReferences, listRequests, type RequestSummary } from "../services/requests";
 import { typeKey } from "../components/analyses/labels";
 import type { AnalysisType } from "../services/analyses";
 
@@ -20,12 +20,14 @@ export default function Requests() {
   const { t } = useTranslation();
   const [items, setItems] = useState<RequestSummary[] | null>(null);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [reference, setReference] = useState("");
 
   useEffect(() => {
-    listRequests()
+    listRequests(reference)
       .then(setItems)
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
-  }, []);
+  }, [reference]);
 
   return (
     <>
@@ -40,6 +42,24 @@ export default function Requests() {
             {t("requests.new")}
           </Link>
         </div>
+        <form
+          className="flex max-w-md gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setReference(search.trim());
+          }}
+        >
+          <input
+            aria-label={t("requests.searchReference")}
+            placeholder={t("requests.searchReference")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-10 min-w-0 flex-1 rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-800 dark:border-gray-700 dark:text-white/90"
+          />
+          <button type="submit" className="h-10 rounded-lg border border-gray-300 px-4 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5">
+            {t("requests.search")}
+          </button>
+        </form>
         {error && <p className="text-sm text-error-500">{error}</p>}
         {items && items.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-400">{t("requests.none")}</p>}
         {items && items.length > 0 && (
@@ -57,7 +77,12 @@ export default function Requests() {
               <tbody className="divide-y divide-gray-100 text-gray-700 dark:divide-gray-800 dark:text-gray-300">
                 {items.map((r) => (
                   <tr key={r.id}>
-                    <td className="px-3 py-2 font-medium text-gray-800 dark:text-white/90">{r.documentReference}</td>
+                    <td className="px-3 py-2 font-medium text-gray-800 dark:text-white/90">
+                      {r.documentReference}
+                      {r.references.length > 0 && (
+                        <span className="block text-theme-xs font-normal text-gray-500 dark:text-gray-400">{formatReferences(r.references)}</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2">{r.authority}</td>
                     <td className="px-3 py-2">{dateBR(r.receivedOn)}</td>
                     <td className="px-3 py-2">

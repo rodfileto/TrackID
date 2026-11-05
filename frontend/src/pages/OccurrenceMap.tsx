@@ -270,7 +270,7 @@ function OccurrenceDetails({ feature, locale }: { feature: OccurrenceFeature | n
           t("occurrenceMap.report"),
           [p.trackidNumber, p.agency && p.number ? `${p.agency} · ${p.number}` : ""].filter(Boolean).join(" — "),
         )}
-        {row(
+        {p.occurredFrom && row(
           t("occurrenceMap.when"),
           p.occurredTo
             ? `${formatDateTime(p.occurredFrom, locale)} – ${formatDateTime(p.occurredTo, locale)}`

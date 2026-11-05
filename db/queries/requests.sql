@@ -21,6 +21,17 @@ RETURNING sequence;
 -- name: InsertCaseRequestQuestion :exec
 INSERT INTO case_request_questions (case_request_id, sequence, question) VALUES ($1, $2, $3);
 
+-- name: InsertCaseRequestReference :exec
+INSERT INTO case_request_references (case_request_id, label, number) VALUES ($1, $2, $3);
+
+-- name: ListCaseRequestReferences :many
+SELECT x.case_request_id, x.label, x.number
+FROM case_request_references x
+JOIN case_request_cases rc ON rc.case_request_id = x.case_request_id
+JOIN biometric_cases bc ON bc.id = rc.biometric_case_id
+WHERE bc.case_id = $1
+ORDER BY x.case_request_id, x.id;
+
 -- name: ListCaseRequests :many
 -- A case's requests in order, with the occurrence each was linked to and who registered it.
 SELECT r.id, rc.sequence, r.authority, r.document_reference, r.document_date, r.received_on, r.due_on, r.cited_reference,
@@ -48,7 +59,8 @@ ORDER BY rc.case_request_id, obc.case_id;
 
 -- name: ListRequests :many
 -- Every request, overdue and soonest due first: what the coordinator has to answer. open counts
--- the analyses still open that answer it.
+-- the analyses still open that answer it. reference, when given, keeps the requests holding a
+-- reference whose number contains it.
 SELECT r.id, r.authority, r.document_reference, r.received_on, r.due_on, r.cited_reference, r.cited_inquiry_number,
        o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
        (SELECT COUNT(*) FROM case_analyses ca WHERE ca.case_request_id = r.id AND ca.status = 'OPEN')::bigint AS open_analyses,
@@ -56,9 +68,14 @@ SELECT r.id, r.authority, r.document_reference, r.received_on, r.due_on, r.cited
                  FROM case_request_cases rc JOIN biometric_cases bc ON bc.id = rc.biometric_case_id
                  WHERE rc.case_request_id = r.id), '{}')::text[] AS case_ids,
        COALESCE((SELECT array_agg(ca.analysis_type ORDER BY ca.id)
-                 FROM case_analyses ca WHERE ca.case_request_id = r.id), '{}')::text[] AS tasks
+                 FROM case_analyses ca WHERE ca.case_request_id = r.id), '{}')::text[] AS tasks,
+       COALESCE((SELECT json_agg(json_build_object('label', x.label, 'number', x.number) ORDER BY x.id)
+                 FROM case_request_references x WHERE x.case_request_id = r.id), '[]')::jsonb AS refs
 FROM case_requests r
 LEFT JOIN occurrences o ON o.id = r.occurrence_id
+WHERE sqlc.narg('reference')::text IS NULL OR EXISTS (
+    SELECT 1 FROM case_request_references x
+    WHERE x.case_request_id = r.id AND x.number ILIKE '%' || sqlc.narg('reference')::text || '%')
 ORDER BY r.due_on NULLS LAST, r.received_on DESC, r.id DESC
 LIMIT @row_limit::int;
 

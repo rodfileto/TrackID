@@ -55,8 +55,8 @@ export default function NewOccurrence() {
       if (caseId) {
         navigate(`/cases/${encodeURIComponent(caseId)}`);
       } else {
-        const year = new Date(draft.occurredFrom).getFullYear();
-        navigate(`/intelligence/map?year=${year}&occurrence=${created.id}`);
+        const year = draft.occurredFrom ? `year=${new Date(draft.occurredFrom).getFullYear()}&` : "";
+        navigate(`/intelligence/map?${year}occurrence=${created.id}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t("occurrenceForm.saveError"));

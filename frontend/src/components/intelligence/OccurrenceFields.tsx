@@ -83,7 +83,7 @@ export default function OccurrenceFields({
             <div>
               <Label htmlFor="occurred-from">{t("occurrenceForm.occurredFrom")}</Label>
               <input id="occurred-from" type="datetime-local" className={inputClass} value={value.occurredFrom}
-                onChange={(e) => set({ occurredFrom: e.target.value })} required />
+                onChange={(e) => set({ occurredFrom: e.target.value })} />
             </div>
             <div>
               <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-400">

@@ -16,7 +16,7 @@ func TestOccurrenceFeatures(t *testing.T) {
 	rows := []db.ListOccurrencesForMapRow{{
 		ID: 7, Agency: sql.NullString{String: "DP-005", Valid: true}, OccurrenceNumber: sql.NullString{String: "SIM-005-00001/2024", Valid: true},
 		OccurrenceYear: sql.NullInt32{Int32: 2024, Valid: true}, OccurrenceSeq: sql.NullInt32{Int32: 7, Valid: true},
-		OccurredFrom: at, RegisteredAt: at,
+		OccurredFrom: sql.NullTime{Time: at, Valid: true}, RegisteredAt: at,
 		Attempted: sql.NullBool{Bool: true, Valid: true}, Status: "REGISTERED", Lon: -43.17, Lat: -22.91,
 		Precision: "EXACT", PlaceType: sql.NullString{String: "BANK", Valid: true},
 		Types: json.RawMessage(`["FRAUD"]`),

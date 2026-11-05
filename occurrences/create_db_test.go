@@ -68,7 +68,6 @@ func TestCreateAndLink(t *testing.T) {
 		"future":               func(c *occurrences.CreateInput) { c.OccurredFrom = now.Add(time.Hour) },
 		"agency alone":         func(c *occurrences.CreateInput) { c.AgencyNumber = "" },
 		"outside":              func(c *occurrences.CreateInput) { c.Place = occurrences.PlaceInput{Lon: -46.63, Lat: -23.55} },
-		"no place":             func(c *occurrences.CreateInput) { c.Place = occurrences.PlaceInput{} },
 	} {
 		c := in
 		c.AgencyNumber = "x-" + name
@@ -123,6 +122,65 @@ func TestCreateAndLink(t *testing.T) {
 	sqlDB.QueryRow(`SELECT COUNT(*) FROM occurrences`).Scan(&after)
 	if after != before {
 		t.Errorf("a refused create left %d occurrences behind", after-before)
+	}
+}
+
+// TestCreateWithoutPlaceOrDate: a document may give neither where nor when, which leaves them empty
+// rather than invented, and the occurrence still shows on its own (its summary and the link
+// search) while staying off the map, which needs a point. A place's details need a point too.
+func TestCreateWithoutPlaceOrDate(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	q := db.New(sqlDB)
+	now := time.Date(2026, 10, 12, 15, 0, 0, 0, time.UTC)
+	created, err := occurrences.Create(ctx, sqlDB, occurrences.CreateInput{
+		Types: []string{"UNDETERMINED"}, Description: "a scene report's occurrence", InquiryNumber: "2026.0001234",
+	}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.LocationID != 0 {
+		t.Errorf("location %d", created.LocationID)
+	}
+	summary, err := q.GetOccurrenceSummary(ctx, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.HasPlace || summary.OccurredFrom.Valid || summary.Lon != 0 || summary.Precision.Valid {
+		t.Errorf("summary %+v", summary)
+	}
+	found, err := q.SearchOccurrences(ctx, "2026.0001234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(found) != 1 || found[0].ID != created.ID {
+		t.Errorf("search found %+v", found)
+	}
+	onMap, err := q.ListOccurrencesForMap(ctx, db.ListOccurrencesForMapParams{MaxRows: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(onMap) != 0 {
+		t.Errorf("on the map: %+v", onMap)
+	}
+	years, err := q.ListOccurrenceYears(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(years) != 0 {
+		t.Errorf("years %v", years)
+	}
+
+	_, err = occurrences.Create(ctx, sqlDB, occurrences.CreateInput{
+		Types: []string{"UNDETERMINED"}, Description: "x", Place: occurrences.PlaceInput{Address: "Rua A, 1"},
+	}, now)
+	if !isValidation(err) {
+		t.Errorf("an address with no point: %v", err)
+	}
+	to := now
+	_, err = occurrences.Create(ctx, sqlDB, occurrences.CreateInput{Types: []string{"UNDETERMINED"}, Description: "x", OccurredTo: &to}, now)
+	if !isValidation(err) {
+		t.Errorf("an end with no start: %v", err)
 	}
 }
 

@@ -204,6 +204,11 @@ ORDER BY confidence DESC NULLS LAST, feature_a_id, feature_b_id;
 -- name: CloseCaseAnalysis :exec
 UPDATE case_analyses SET status = 'CLOSED', closed_at = NOW() WHERE id = $1 AND status = 'OPEN';
 
+-- name: CloseConcludedCaseAnalysis :exec
+-- An analysis that had already ended elsewhere when it was registered: closed when it really ended.
+UPDATE case_analyses SET status = 'CLOSED', stage = 'REPORT', closed_at = sqlc.arg(closed_at)
+WHERE id = sqlc.arg(id) AND status = 'OPEN';
+
 -- name: LatestHumanDecisionID :one
 -- The newest human decision (VERIFICATOR, REVIEWER, INCONSISTENCE): a sync's mark of the
 -- examiners' decisions it has reconciled clusters with (cluster.Settle).

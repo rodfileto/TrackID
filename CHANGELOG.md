@@ -12,6 +12,12 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- An occurrence's place and date are optional, for documents that give neither, and the
+  `UNDETERMINED` occurrence type covers a crime whose document doesn't say which.
+- `requests.RegisterInput.ConcludedAt`: an importer can register a request already answered, whose
+  analysis is recorded closed, including types not yet offered in the app.
+- A request can hold labelled references to other systems' numbers, and the requests list can
+  search by them.
 - Examination workflow: analyses are distributed to examiners in rounds, the
   second examiner works blind, and a disagreement goes to a third; assignments
   are an append-only history.

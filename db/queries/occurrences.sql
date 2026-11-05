@@ -136,12 +136,12 @@ FROM occurrences o
 JOIN locations l ON l.id = o.location_id
 WHERE (sqlc.narg(occurred_after)::timestamptz IS NULL OR o.occurred_from >= sqlc.narg(occurred_after))
   AND (sqlc.narg(occurred_before)::timestamptz IS NULL OR o.occurred_from < sqlc.narg(occurred_before))
-ORDER BY o.occurred_from, o.id
+ORDER BY o.occurred_from NULLS LAST, o.id
 LIMIT sqlc.arg(max_rows);
 
 -- name: ListOccurrenceYears :many
 SELECT DISTINCT EXTRACT(YEAR FROM occurred_from AT TIME ZONE 'America/Sao_Paulo')::int4 AS year
-FROM occurrences ORDER BY year;
+FROM occurrences WHERE occurred_from IS NOT NULL ORDER BY year;
 
 -- name: MaxOccurrenceSeqForYear :one
 -- The highest TrackID sequence already used for a year, or 0.
@@ -183,24 +183,26 @@ SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
     COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
 FROM occurrences o
-JOIN locations l ON l.id = o.location_id
+LEFT JOIN locations l ON l.id = o.location_id
 WHERE (o.occurrence_year::text || '.' || lpad(o.occurrence_seq::text, 4, '0')) ILIKE '%' || sqlc.arg(q)::text || '%'
    OR o.occurrence_number ILIKE '%' || sqlc.arg(q)::text || '%'
    OR o.inquiry_number ILIKE '%' || sqlc.arg(q)::text || '%'
    OR o.agency ILIKE '%' || sqlc.arg(q)::text || '%'
-ORDER BY o.occurred_from DESC, o.id DESC
+ORDER BY o.occurred_from DESC NULLS LAST, o.id DESC
 LIMIT 20;
 
 -- name: GetOccurrenceSummary :one
--- One occurrence as a case page shows it, with its location's point for the card's map.
+-- One occurrence as a case page shows it, with its location's point for the card's map, when it
+-- has a location (has_place).
 SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.inquiry_number, o.occurred_from, o.status,
     l.name AS place_name, l.neighbourhood, l.address, l.precision,
-    ST_X(l.geom::geometry)::float8 AS lon,
-    ST_Y(l.geom::geometry)::float8 AS lat,
+    (o.location_id IS NOT NULL)::bool AS has_place,
+    COALESCE(ST_X(l.geom::geometry), 0)::float8 AS lon,
+    COALESCE(ST_Y(l.geom::geometry), 0)::float8 AS lat,
     COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
 FROM occurrences o
-JOIN locations l ON l.id = o.location_id
+LEFT JOIN locations l ON l.id = o.location_id
 WHERE o.id = $1;
 
 -- name: ListOccurrenceCaseTypes :many

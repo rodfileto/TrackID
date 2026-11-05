@@ -346,6 +346,13 @@ type CaseRequestQuestion struct {
 	Question      string `db:"question" json:"question"`
 }
 
+type CaseRequestReference struct {
+	ID            int64  `db:"id" json:"id"`
+	CaseRequestID int64  `db:"case_request_id" json:"case_request_id"`
+	Label         string `db:"label" json:"label"`
+	Number        string `db:"number" json:"number"`
+}
+
 type CaseTrace struct {
 	ID                        int64           `db:"id" json:"id"`
 	EvidenceID                int64           `db:"evidence_id" json:"evidence_id"`
@@ -525,8 +532,8 @@ type Occurrence struct {
 	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
 	OccurrenceYear   sql.NullInt32  `db:"occurrence_year" json:"occurrence_year"`
 	OccurrenceSeq    sql.NullInt32  `db:"occurrence_seq" json:"occurrence_seq"`
-	LocationID       int64          `db:"location_id" json:"location_id"`
-	OccurredFrom     time.Time      `db:"occurred_from" json:"occurred_from"`
+	LocationID       sql.NullInt64  `db:"location_id" json:"location_id"`
+	OccurredFrom     sql.NullTime   `db:"occurred_from" json:"occurred_from"`
 	OccurredTo       sql.NullTime   `db:"occurred_to" json:"occurred_to"`
 	ReportedAt       sql.NullTime   `db:"reported_at" json:"reported_at"`
 	RegisteredAt     time.Time      `db:"registered_at" json:"registered_at"`

@@ -62,10 +62,11 @@ func RegisterRequestHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	}
 }
 
-// ListRequestsHandler returns every request, soonest due first (requests.ListAll).
+// ListRequestsHandler returns every request, soonest due first (requests.ListAll), or with
+// ?reference= those holding a reference whose number contains it.
 func ListRequestsHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
-		list, err := requests.ListAll(context.Request.Context(), sqlDB, 500)
+		list, err := requests.ListAll(context.Request.Context(), sqlDB, context.Query("reference"), 500)
 		if !writeRequestError(context, err) {
 			context.JSON(http.StatusOK, list)
 		}

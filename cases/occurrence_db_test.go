@@ -59,8 +59,8 @@ func TestOccurrenceLayer(t *testing.T) {
 	occ := func(number string, location int64) int64 {
 		t.Helper()
 		row, err := q.UpsertOccurrence(ctx, db.UpsertOccurrenceParams{
-			Agency: sql.NullString{String: "DP-01", Valid: true}, OccurrenceNumber: sql.NullString{String: number, Valid: true}, LocationID: location,
-			OccurredFrom: when, RegisteredAt: when.Add(2 * time.Hour),
+			Agency: sql.NullString{String: "DP-01", Valid: true}, OccurrenceNumber: sql.NullString{String: number, Valid: true}, LocationID: sql.NullInt64{Int64: location, Valid: true},
+			OccurredFrom: sql.NullTime{Time: when, Valid: true}, RegisteredAt: when.Add(2 * time.Hour),
 			Attempted: sql.NullBool{Bool: false, Valid: true},
 			Status:    "REGISTERED", Description: "bank robbery " + number,
 		})

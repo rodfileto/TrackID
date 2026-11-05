@@ -17,7 +17,8 @@ export interface OccurrenceProperties {
   /** The police agency's own report number, when known. */
   agency?: string;
   number?: string;
-  occurredFrom: string;
+  /** Absent when unknown. */
+  occurredFrom?: string;
   occurredTo?: string;
   registeredAt: string;
   attempted?: boolean;
@@ -95,7 +96,7 @@ export interface OccurrenceSummary {
   agency?: string;
   number?: string;
   inquiryNumber?: string;
-  occurredFrom: string;
+  occurredFrom?: string;
   status: string;
   types: string[];
   placeName?: string;
@@ -122,7 +123,7 @@ export interface PlaceInput {
 export interface CreateOccurrenceInput {
   types: string[];
   attempted?: boolean;
-  occurredFrom: string;
+  occurredFrom?: string;
   occurredTo?: string;
   status?: string;
   description: string;

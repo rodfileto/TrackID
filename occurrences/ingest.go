@@ -36,7 +36,7 @@ type Input struct {
 	Number       string
 	Inquiry      string
 	Location     LocationInput
-	OccurredFrom time.Time
+	OccurredFrom time.Time // zero when unknown
 	OccurredTo   *time.Time
 	ReportedAt   *time.Time
 	RegisteredAt time.Time
@@ -98,7 +98,7 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, in Input) (Result, error) {
 	if reported {
 		occ, err := q.UpsertOccurrence(ctx, db.UpsertOccurrenceParams{
 			Agency: nullString(in.Agency), OccurrenceNumber: nullString(in.Number), InquiryNumber: nullString(in.Inquiry),
-			LocationID: loc.ID, OccurredFrom: in.OccurredFrom, OccurredTo: nullTime(in.OccurredTo), ReportedAt: nullTime(in.ReportedAt),
+			LocationID: validID(loc.ID), OccurredFrom: nullDate(in.OccurredFrom), OccurredTo: nullTime(in.OccurredTo), ReportedAt: nullTime(in.ReportedAt),
 			RegisteredAt: in.RegisteredAt, Attempted: nullBool(in.Attempted),
 			OffenderCount: nullInt16(in.OffenderCount), VictimCount: nullInt16(in.VictimCount),
 			Status: in.Status, Description: in.Description,
@@ -108,7 +108,7 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, in Input) (Result, error) {
 	} else {
 		occ, err := q.UpsertOccurrenceByInquiry(ctx, db.UpsertOccurrenceByInquiryParams{
 			InquiryNumber: nullString(in.Inquiry),
-			LocationID:    loc.ID, OccurredFrom: in.OccurredFrom, OccurredTo: nullTime(in.OccurredTo), ReportedAt: nullTime(in.ReportedAt),
+			LocationID:    validID(loc.ID), OccurredFrom: nullDate(in.OccurredFrom), OccurredTo: nullTime(in.OccurredTo), ReportedAt: nullTime(in.ReportedAt),
 			RegisteredAt: in.RegisteredAt, Attempted: nullBool(in.Attempted),
 			OffenderCount: nullInt16(in.OffenderCount), VictimCount: nullInt16(in.VictimCount),
 			Status: in.Status, Description: in.Description,
@@ -132,6 +132,11 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, in Input) (Result, error) {
 	}
 	return Result{OccurrenceID: id, LocationID: loc.ID, Inserted: inserted}, nil
 }
+
+func validID(id int64) sql.NullInt64 { return sql.NullInt64{Int64: id, Valid: true} }
+
+// nullDate is a date that may be unknown, which is its zero value.
+func nullDate(t time.Time) sql.NullTime { return sql.NullTime{Time: t, Valid: !t.IsZero()} }
 
 func wrap(err error, key string) error {
 	if err == nil {

@@ -54,8 +54,8 @@ type CreateOccurrenceParams struct {
 	Agency           sql.NullString `db:"agency" json:"agency"`
 	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
 	InquiryNumber    sql.NullString `db:"inquiry_number" json:"inquiry_number"`
-	LocationID       int64          `db:"location_id" json:"location_id"`
-	OccurredFrom     time.Time      `db:"occurred_from" json:"occurred_from"`
+	LocationID       sql.NullInt64  `db:"location_id" json:"location_id"`
+	OccurredFrom     sql.NullTime   `db:"occurred_from" json:"occurred_from"`
 	OccurredTo       sql.NullTime   `db:"occurred_to" json:"occurred_to"`
 	ReportedAt       sql.NullTime   `db:"reported_at" json:"reported_at"`
 	Attempted        sql.NullBool   `db:"attempted" json:"attempted"`
@@ -236,12 +236,13 @@ func (q *Queries) GetOccurrenceIDByNumber(ctx context.Context, arg GetOccurrence
 const getOccurrenceSummary = `-- name: GetOccurrenceSummary :one
 SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.inquiry_number, o.occurred_from, o.status,
     l.name AS place_name, l.neighbourhood, l.address, l.precision,
-    ST_X(l.geom::geometry)::float8 AS lon,
-    ST_Y(l.geom::geometry)::float8 AS lat,
+    (o.location_id IS NOT NULL)::bool AS has_place,
+    COALESCE(ST_X(l.geom::geometry), 0)::float8 AS lon,
+    COALESCE(ST_Y(l.geom::geometry), 0)::float8 AS lat,
     COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
 FROM occurrences o
-JOIN locations l ON l.id = o.location_id
+LEFT JOIN locations l ON l.id = o.location_id
 WHERE o.id = $1
 `
 
@@ -252,18 +253,20 @@ type GetOccurrenceSummaryRow struct {
 	Agency           sql.NullString  `db:"agency" json:"agency"`
 	OccurrenceNumber sql.NullString  `db:"occurrence_number" json:"occurrence_number"`
 	InquiryNumber    sql.NullString  `db:"inquiry_number" json:"inquiry_number"`
-	OccurredFrom     time.Time       `db:"occurred_from" json:"occurred_from"`
+	OccurredFrom     sql.NullTime    `db:"occurred_from" json:"occurred_from"`
 	Status           string          `db:"status" json:"status"`
 	PlaceName        sql.NullString  `db:"place_name" json:"place_name"`
 	Neighbourhood    sql.NullString  `db:"neighbourhood" json:"neighbourhood"`
 	Address          sql.NullString  `db:"address" json:"address"`
-	Precision        string          `db:"precision" json:"precision"`
+	Precision        sql.NullString  `db:"precision" json:"precision"`
+	HasPlace         bool            `db:"has_place" json:"has_place"`
 	Lon              float64         `db:"lon" json:"lon"`
 	Lat              float64         `db:"lat" json:"lat"`
 	Types            json.RawMessage `db:"types" json:"types"`
 }
 
-// One occurrence as a case page shows it, with its location's point for the card's map.
+// One occurrence as a case page shows it, with its location's point for the card's map, when it
+// has a location (has_place).
 func (q *Queries) GetOccurrenceSummary(ctx context.Context, id int64) (GetOccurrenceSummaryRow, error) {
 	row := q.db.QueryRowContext(ctx, getOccurrenceSummary, id)
 	var i GetOccurrenceSummaryRow
@@ -280,6 +283,7 @@ func (q *Queries) GetOccurrenceSummary(ctx context.Context, id int64) (GetOccurr
 		&i.Neighbourhood,
 		&i.Address,
 		&i.Precision,
+		&i.HasPlace,
 		&i.Lon,
 		&i.Lat,
 		&i.Types,
@@ -417,7 +421,7 @@ func (q *Queries) ListOccurrenceTypes(ctx context.Context) ([]OccurrenceType, er
 
 const listOccurrenceYears = `-- name: ListOccurrenceYears :many
 SELECT DISTINCT EXTRACT(YEAR FROM occurred_from AT TIME ZONE 'America/Sao_Paulo')::int4 AS year
-FROM occurrences ORDER BY year
+FROM occurrences WHERE occurred_from IS NOT NULL ORDER BY year
 `
 
 func (q *Queries) ListOccurrenceYears(ctx context.Context) ([]int32, error) {
@@ -459,7 +463,7 @@ FROM occurrences o
 JOIN locations l ON l.id = o.location_id
 WHERE ($1::timestamptz IS NULL OR o.occurred_from >= $1)
   AND ($2::timestamptz IS NULL OR o.occurred_from < $2)
-ORDER BY o.occurred_from, o.id
+ORDER BY o.occurred_from NULLS LAST, o.id
 LIMIT $3
 `
 
@@ -475,7 +479,7 @@ type ListOccurrencesForMapRow struct {
 	OccurrenceNumber sql.NullString  `db:"occurrence_number" json:"occurrence_number"`
 	OccurrenceYear   sql.NullInt32   `db:"occurrence_year" json:"occurrence_year"`
 	OccurrenceSeq    sql.NullInt32   `db:"occurrence_seq" json:"occurrence_seq"`
-	OccurredFrom     time.Time       `db:"occurred_from" json:"occurred_from"`
+	OccurredFrom     sql.NullTime    `db:"occurred_from" json:"occurred_from"`
 	OccurredTo       sql.NullTime    `db:"occurred_to" json:"occurred_to"`
 	RegisteredAt     time.Time       `db:"registered_at" json:"registered_at"`
 	Attempted        sql.NullBool    `db:"attempted" json:"attempted"`
@@ -565,7 +569,7 @@ type ListOccurrencesWithinRadiusRow struct {
 	ID               int64          `db:"id" json:"id"`
 	Agency           sql.NullString `db:"agency" json:"agency"`
 	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
-	OccurredFrom     time.Time      `db:"occurred_from" json:"occurred_from"`
+	OccurredFrom     sql.NullTime   `db:"occurred_from" json:"occurred_from"`
 	Status           string         `db:"status" json:"status"`
 	LocationID       string         `db:"location_id" json:"location_id"`
 	Precision        string         `db:"precision" json:"precision"`
@@ -636,12 +640,12 @@ SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
     COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
 FROM occurrences o
-JOIN locations l ON l.id = o.location_id
+LEFT JOIN locations l ON l.id = o.location_id
 WHERE (o.occurrence_year::text || '.' || lpad(o.occurrence_seq::text, 4, '0')) ILIKE '%' || $1::text || '%'
    OR o.occurrence_number ILIKE '%' || $1::text || '%'
    OR o.inquiry_number ILIKE '%' || $1::text || '%'
    OR o.agency ILIKE '%' || $1::text || '%'
-ORDER BY o.occurred_from DESC, o.id DESC
+ORDER BY o.occurred_from DESC NULLS LAST, o.id DESC
 LIMIT 20
 `
 
@@ -652,7 +656,7 @@ type SearchOccurrencesRow struct {
 	Agency           sql.NullString  `db:"agency" json:"agency"`
 	OccurrenceNumber sql.NullString  `db:"occurrence_number" json:"occurrence_number"`
 	InquiryNumber    sql.NullString  `db:"inquiry_number" json:"inquiry_number"`
-	OccurredFrom     time.Time       `db:"occurred_from" json:"occurred_from"`
+	OccurredFrom     sql.NullTime    `db:"occurred_from" json:"occurred_from"`
 	Status           string          `db:"status" json:"status"`
 	PlaceName        sql.NullString  `db:"place_name" json:"place_name"`
 	Neighbourhood    sql.NullString  `db:"neighbourhood" json:"neighbourhood"`
@@ -837,8 +841,8 @@ type UpsertOccurrenceParams struct {
 	Agency           sql.NullString `db:"agency" json:"agency"`
 	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
 	InquiryNumber    sql.NullString `db:"inquiry_number" json:"inquiry_number"`
-	LocationID       int64          `db:"location_id" json:"location_id"`
-	OccurredFrom     time.Time      `db:"occurred_from" json:"occurred_from"`
+	LocationID       sql.NullInt64  `db:"location_id" json:"location_id"`
+	OccurredFrom     sql.NullTime   `db:"occurred_from" json:"occurred_from"`
 	OccurredTo       sql.NullTime   `db:"occurred_to" json:"occurred_to"`
 	ReportedAt       sql.NullTime   `db:"reported_at" json:"reported_at"`
 	RegisteredAt     time.Time      `db:"registered_at" json:"registered_at"`
@@ -898,8 +902,8 @@ RETURNING id, (xmax = 0) AS inserted
 
 type UpsertOccurrenceByInquiryParams struct {
 	InquiryNumber sql.NullString `db:"inquiry_number" json:"inquiry_number"`
-	LocationID    int64          `db:"location_id" json:"location_id"`
-	OccurredFrom  time.Time      `db:"occurred_from" json:"occurred_from"`
+	LocationID    sql.NullInt64  `db:"location_id" json:"location_id"`
+	OccurredFrom  sql.NullTime   `db:"occurred_from" json:"occurred_from"`
 	OccurredTo    sql.NullTime   `db:"occurred_to" json:"occurred_to"`
 	ReportedAt    sql.NullTime   `db:"reported_at" json:"reported_at"`
 	RegisteredAt  time.Time      `db:"registered_at" json:"registered_at"`

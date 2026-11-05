@@ -2,6 +2,7 @@ package articles
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -46,6 +47,14 @@ type Resolved struct {
 
 func dateOf(t time.Time) *time.Time { return &t }
 
+// optionalDateOf is a date that may be unknown.
+func optionalDateOf(t sql.NullTime) *time.Time {
+	if !t.Valid {
+		return nil
+	}
+	return &t.Time
+}
+
 func caseTarget(r db.ListMentionCasesRow) Target {
 	return Target{Kind: KindCase, Ref: r.CaseID, Label: r.CaseID, CaseIDs: []string{r.CaseID},
 		Description: r.Description, CaseType: r.CaseType, Modality: r.Modality, Date: dateOf(r.CreatedAt)}
@@ -70,12 +79,15 @@ func occurrenceLabel(r db.ListMentionOccurrencesRow) string {
 
 func occurrenceTarget(r db.ListMentionOccurrencesRow) Target {
 	return Target{Kind: KindOccurrence, Ref: strconv.FormatInt(r.ID, 10), Label: occurrenceLabel(r),
-		Description: r.Description, Status: r.Status, Date: dateOf(r.OccurredFrom)}
+		Description: r.Description, Status: r.Status, Date: optionalDateOf(r.OccurredFrom)}
 }
 
 func inquiryTarget(r db.ListMentionInquiriesRow) Target {
-	return Target{Kind: KindInquiry, Ref: r.InquiryNumber, Label: r.InquiryNumber,
-		Count: int(r.OccurrenceCount), Date: dateOf(r.LastOccurred)}
+	target := Target{Kind: KindInquiry, Ref: r.InquiryNumber, Label: r.InquiryNumber, Count: int(r.OccurrenceCount)}
+	if r.HasDates {
+		target.Date = dateOf(r.LastOccurred)
+	}
+	return target
 }
 
 func personTarget(r db.ListMentionPersonsRow) Target {

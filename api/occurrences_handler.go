@@ -41,7 +41,7 @@ type OccurrenceProperties struct {
 	TrackIDNumber string           `json:"trackidNumber,omitempty"`
 	Agency        string           `json:"agency,omitempty"`
 	Number        string           `json:"number,omitempty"`
-	OccurredFrom  time.Time        `json:"occurredFrom"`
+	OccurredFrom  *time.Time       `json:"occurredFrom,omitempty"` // absent when unknown
 	OccurredTo    *time.Time       `json:"occurredTo,omitempty"`
 	RegisteredAt  time.Time        `json:"registeredAt"`
 	Attempted     *bool            `json:"attempted,omitempty"`
@@ -144,10 +144,13 @@ func occurrenceFeatures(rows []db.ListOccurrencesForMapRow, types []db.Occurrenc
 		p := OccurrenceProperties{
 			ID: r.ID, Agency: r.Agency.String, Number: r.OccurrenceNumber.String,
 			TrackIDNumber: trackidNumber(r.OccurrenceYear, r.OccurrenceSeq),
-			OccurredFrom:  r.OccurredFrom, RegisteredAt: r.RegisteredAt,
-			Status: r.Status, Description: r.Description,
+			RegisteredAt:  r.RegisteredAt,
+			Status:        r.Status, Description: r.Description,
 			LocationID: r.LocationID, Precision: r.Precision,
 			PlaceType: r.PlaceType.String, PlaceName: r.PlaceName.String, Neighbourhood: r.Neighbourhood.String,
+		}
+		if r.OccurredFrom.Valid {
+			p.OccurredFrom = &r.OccurredFrom.Time
 		}
 		if r.OccurredTo.Valid {
 			p.OccurredTo = &r.OccurredTo.Time

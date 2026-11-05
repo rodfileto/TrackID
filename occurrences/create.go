@@ -27,7 +27,8 @@ var (
 
 // PlaceInput is where a registered occurrence happened: an existing location (ExistingID, from
 // the nearby-locations search, so a repeat place stays one row) or a new point. A new point's
-// municipality comes from the loaded IBGE boundaries (cmd/load-municipalities).
+// municipality comes from the loaded IBGE boundaries (cmd/load-municipalities). Left empty, the
+// occurrence has no place yet.
 type PlaceInput struct {
 	ExistingID int64
 
@@ -39,6 +40,11 @@ type PlaceInput struct {
 	PlaceType     string
 }
 
+// located reports whether the input names a place at all; (0, 0) is in the ocean, not a place.
+func (p PlaceInput) located() bool {
+	return p.ExistingID != 0 || p.Lon != 0 || p.Lat != 0
+}
+
 // CreateInput is an occurrence registered by a user. TrackID numbers it; Agency and AgencyNumber
 // are the police agency's own report number, optional, both or neither. InquiryNumber is the
 // inquiry's (IPL), optional and apart from the report's: the inquiry may itself be the document
@@ -46,7 +52,7 @@ type PlaceInput struct {
 type CreateInput struct {
 	Types         []string
 	Attempted     *bool
-	OccurredFrom  time.Time
+	OccurredFrom  time.Time // zero when unknown
 	OccurredTo    *time.Time
 	ReportedAt    *time.Time
 	Status        string // default REGISTERED
@@ -68,8 +74,8 @@ type Created struct {
 	ID            int64  `json:"id"`
 	TrackIDNumber string `json:"trackidNumber"`
 	Year          int    `json:"year"`
-	LocationID    int64  `json:"locationId"`
-	CaseID        string `json:"caseId,omitempty"` // the case linked to it, when CreateInput.CaseID was set
+	LocationID    int64  `json:"locationId,omitempty"` // 0 when it has no place yet
+	CaseID        string `json:"caseId,omitempty"`     // the case linked to it, when CreateInput.CaseID was set
 }
 
 const maxNumberingAttempts = 3
@@ -150,11 +156,11 @@ func normalize(ctx context.Context, q *db.Queries, in *CreateInput, now time.Tim
 		return ValidationError("attempted and offender count apply to criminal occurrences only")
 	}
 
-	if in.OccurredFrom.IsZero() {
-		return ValidationError("when the occurrence happened is required")
-	}
 	if in.OccurredFrom.After(now.Add(5 * time.Minute)) {
 		return ValidationError("the occurrence cannot be in the future")
+	}
+	if in.OccurredTo != nil && in.OccurredFrom.IsZero() {
+		return ValidationError("the end of the occurrence needs its start")
 	}
 	if in.OccurredTo != nil && (in.OccurredTo.Before(in.OccurredFrom) || in.OccurredTo.After(now.Add(5*time.Minute))) {
 		return ValidationError("the end of the occurrence must be after its start and not in the future")
@@ -183,8 +189,14 @@ func normalize(ctx context.Context, q *db.Queries, in *CreateInput, now time.Tim
 	if p.ExistingID != 0 {
 		return nil
 	}
-	if p.Lon < -180 || p.Lon > 180 || p.Lat < -90 || p.Lat > 90 || (p.Lon == 0 && p.Lat == 0) {
-		return ValidationError("where the occurrence happened is required: a point on the map or an existing location")
+	if !p.located() {
+		if p.Name != "" || p.Address != "" || p.Neighbourhood != "" || p.PlaceType != "" || p.Precision != "" {
+			return ValidationError("a place needs a point on the map or an existing location")
+		}
+		return nil
+	}
+	if p.Lon < -180 || p.Lon > 180 || p.Lat < -90 || p.Lat > 90 {
+		return ValidationError("the place's point is not on the map")
 	}
 	if p.Precision = strings.ToUpper(strings.TrimSpace(p.Precision)); p.Precision == "" {
 		p.Precision = "EXACT"
@@ -222,9 +234,12 @@ func CreateWith(ctx context.Context, q *db.Queries, in CreateInput, now time.Tim
 		return Created{}, err
 	}
 	year := now.Year()
-	locationID, err := placeLocation(ctx, q, in.Place)
-	if err != nil {
-		return Created{}, err
+	var locationID int64
+	if in.Place.located() {
+		var err error
+		if locationID, err = placeLocation(ctx, q, in.Place); err != nil {
+			return Created{}, err
+		}
 	}
 	maxSeq, err := q.MaxOccurrenceSeqForYear(ctx, int32(year))
 	if err != nil {
@@ -235,7 +250,7 @@ func CreateWith(ctx context.Context, q *db.Queries, in CreateInput, now time.Tim
 		OccurrenceYear: sql.NullInt32{Int32: int32(year), Valid: true},
 		OccurrenceSeq:  sql.NullInt32{Int32: seq, Valid: true},
 		Agency:         nullString(in.Agency), OccurrenceNumber: nullString(in.AgencyNumber), InquiryNumber: nullString(in.InquiryNumber),
-		LocationID: locationID, OccurredFrom: in.OccurredFrom, OccurredTo: nullTime(in.OccurredTo),
+		LocationID: sql.NullInt64{Int64: locationID, Valid: locationID != 0}, OccurredFrom: nullDate(in.OccurredFrom), OccurredTo: nullTime(in.OccurredTo),
 		ReportedAt: nullTime(in.ReportedAt), Attempted: nullBool(in.Attempted),
 		OffenderCount: nullInt16(in.OffenderCount), VictimCount: nullInt16(in.VictimCount),
 		Status: in.Status, Description: in.Description,

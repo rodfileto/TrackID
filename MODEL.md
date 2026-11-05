@@ -59,6 +59,7 @@ case_traces ── biometric_features
 | --- | --- |
 | `biometric_cases` | the base case (`case_id`; `case_type` = `CRIMINAL` \| `CIVIL`; `modality` = `FACIAL` \| `FINGERPRINT`) |
 | `case_requests` | what cases answer: an authority's request (ofício) with its document, dates, the occurrence number and the inquiry number it cites, each in its own field (and the occurrence it resolved to), and its questions (`case_request_questions`, quesitos). Registered first: it finds or creates its occurrence and opens or joins its cases, one per exam asked (`case_request_cases`, which also numbers it per case); `requests` package |
+| `case_request_references` | other numbers a request's document goes by, labelled by the institute (a task in its case system, a process in its document system); a request can be found by them |
 | `case_files` | raw files attached to a case (`evidence`, `video`, `document`, `forensic_report`, `report_draft`, `face_crop`, `codification_image`), with their SHA-256; `case_request_id` marks the material a request sent in |
 | `case_videos` | a video sent in and its processing: the tracks of faces trackid-vision's `videoproc` found (`video` package) |
 | `case_evidences` | one evidence item within a case (e.g. a lift card, an image); a frame taken from a video records the video, its time and frame number (`source_*`) |
@@ -101,6 +102,11 @@ for its latents), so the link is `biometric_cases.occurrence_id`, NULL until set
 is not necessarily a crime: as `case_type` covers CIVIL identification, the occurrence covers
 the report that starts it. Deciding that two reports share a place is the importer's job:
 trackid neither geocodes nor deduplicates addresses.
+
+An occurrence's place and date are optional (`location_id`, `occurred_from`): a document may give
+neither, and an invented point or date would pollute the map and the statistics. With no place an
+occurrence stays off the map, which needs a point. `UNDETERMINED` is the type for a crime whose
+document doesn't say.
 
 **Registering** an occurrence in the app goes through `occurrences.Create` (POST
 `/api/occurrences`): it validates the input (types all criminal or all civil; crime-only fields

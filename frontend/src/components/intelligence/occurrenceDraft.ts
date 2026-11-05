@@ -43,7 +43,7 @@ export function occurrenceInput(d: OccurrenceDraft, types: OccurrenceType[]): Cr
   return {
     types: d.chosen,
     attempted: civil ? undefined : d.attempted || undefined,
-    occurredFrom: toISO(d.occurredFrom) ?? "",
+    occurredFrom: toISO(d.occurredFrom),
     occurredTo: d.foundLater ? toISO(d.occurredTo) : undefined,
     status: d.status,
     description: d.description,
@@ -56,8 +56,8 @@ export function occurrenceInput(d: OccurrenceDraft, types: OccurrenceType[]): Cr
   };
 }
 
-/** Whether the draft has what an occurrence requires: a type, when, where and a description. */
+/** Whether the draft has what an occurrence requires: a type and a description. When and where may
+ * not be known yet. */
 export function occurrenceReady(d: OccurrenceDraft): boolean {
-  const hasPlace = d.place.existingId !== undefined || (d.place.lon !== undefined && d.place.lat !== undefined);
-  return d.chosen.length > 0 && d.occurredFrom !== "" && d.description.trim() !== "" && hasPlace;
+  return d.chosen.length > 0 && d.description.trim() !== "";
 }

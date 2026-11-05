@@ -15,7 +15,7 @@ import {
   type OccurrenceDraft,
 } from "../components/intelligence/occurrenceDraft";
 import { listOccurrenceTypes, searchOccurrences, type OccurrenceSummary, type OccurrenceType } from "../services/occurrences";
-import { receiveMaterial, registerRequest, type RegisterRequestInput } from "../services/requests";
+import { parseReferences, receiveMaterial, registerRequest, type RegisterRequestInput } from "../services/requests";
 import FileDropzone from "../components/common/FileDropzone";
 import { MATERIAL_FILES } from "../components/common/fileTypes";
 
@@ -60,6 +60,7 @@ export default function RegisterRequest() {
     citedInquiryNumber: "",
     notes: "",
     questions: "",
+    references: "",
   });
   const [types, setTypes] = useState<OccurrenceType[]>([]);
   const [mode, setMode] = useState<OccurrenceMode>("lookup");
@@ -129,6 +130,7 @@ export default function RegisterRequest() {
         citedInquiryNumber: form.citedInquiryNumber || undefined,
         notes: form.notes || undefined,
         questions: form.questions.split("\n").map((q) => q.trim()).filter(Boolean),
+        references: parseReferences(form.references),
         occurrenceId: mode === "lookup" ? chosen?.id : undefined,
         occurrence: mode === "create" ? occurrenceInput(draft, types) : undefined,
         caseType: mode === "none" ? caseType : undefined,
@@ -175,6 +177,11 @@ export default function RegisterRequest() {
             {field("notes")}
           </div>
           <div>
+            <Label htmlFor="request-references">{t("requests.references")}</Label>
+            <textarea id="request-references" rows={2} value={form.references} onChange={(e) => setForm({ ...form, references: e.target.value })}
+              className="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 dark:border-gray-700 dark:text-white/90" />
+          </div>
+          <div>
             <Label htmlFor="request-questions">{t("requests.questions")}</Label>
             <textarea id="request-questions" rows={4} value={form.questions} onChange={(e) => setForm({ ...form, questions: e.target.value })}
               className="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" />
@@ -219,7 +226,7 @@ export default function RegisterRequest() {
               {matches.map((o) => (
                 <li key={o.id} className="flex flex-wrap items-center gap-2 text-gray-700 dark:text-gray-300">
                   <span className="font-medium">{occurrenceLabel(o)}</span>
-                  <span>{new Date(o.occurredFrom).toLocaleDateString()}</span>
+                  {o.occurredFrom && <span>{new Date(o.occurredFrom).toLocaleDateString()}</span>}
                   <span>{o.types.map((x) => t(`occurrenceType.${x}`)).join(", ")}</span>
                   {o.placeName && <span>{o.placeName}</span>}
                   <button type="button" className="text-brand-500 hover:underline" onClick={() => setChosen(o)}>

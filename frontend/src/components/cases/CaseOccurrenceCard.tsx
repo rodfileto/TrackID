@@ -21,6 +21,13 @@ function label(o: OccurrenceSummary): string {
 // the occurrence map, or
 // searched by TrackID or police number and linked. The API refuses a link
 // between a criminal case and a civil occurrence, or the reverse.
+
+/** The map at the occurrence's year, when it has one. */
+function occurrenceMapLink(o: OccurrenceSummary): string {
+  const year = o.occurredFrom ? `year=${new Date(o.occurredFrom).getFullYear()}&` : "";
+  return `/intelligence/map?${year}occurrence=${o.id}`;
+}
+
 export default function CaseOccurrenceCard({ caseId }: { caseId: string }) {
   const { t, i18n } = useTranslation();
   // Anyone who reads the case sees its occurrence; finding, linking and registering occurrences
@@ -72,7 +79,7 @@ export default function CaseOccurrenceCard({ caseId }: { caseId: string }) {
   const describe = (o: OccurrenceSummary) =>
     [
       o.types.map((c) => t(`occurrenceType.${c}`)).join(" · "),
-      new Date(o.occurredFrom).toLocaleDateString(i18n.language),
+      o.occurredFrom && new Date(o.occurredFrom).toLocaleDateString(i18n.language),
       o.placeName || o.neighbourhood,
     ]
       .filter(Boolean)
@@ -88,7 +95,7 @@ export default function CaseOccurrenceCard({ caseId }: { caseId: string }) {
             <div className="flex flex-col gap-0.5">
               {isIntelligence ? (
                 <Link
-                  to={`/intelligence/map?year=${new Date(linked.occurredFrom).getFullYear()}&occurrence=${linked.id}`}
+                  to={occurrenceMapLink(linked)}
                   className="font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400"
                 >
                   {label(linked)}

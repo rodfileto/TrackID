@@ -122,23 +122,27 @@ WHERE (occurrence_year::text || '.' || lpad(occurrence_seq::text, 4, '0')) ILIKE
    OR occurrence_number ILIKE '%' || sqlc.arg(q)::text || '%'
    OR inquiry_number ILIKE '%' || sqlc.arg(q)::text || '%'
    OR description ILIKE '%' || sqlc.arg(q)::text || '%'
-ORDER BY occurred_from DESC, id DESC
+ORDER BY occurred_from DESC NULLS LAST, id DESC
 LIMIT sqlc.arg(max_rows);
 
 -- name: ListMentionInquiries :many
 -- An inquiry is the occurrences that share its number.
 SELECT inquiry_number::text AS inquiry_number, COUNT(*)::int AS occurrence_count,
-    MIN(occurred_from)::timestamptz AS first_occurred, MAX(occurred_from)::timestamptz AS last_occurred
+    (COUNT(occurred_from) > 0)::bool AS has_dates,
+    COALESCE(MIN(occurred_from), 'epoch')::timestamptz AS first_occurred,
+    COALESCE(MAX(occurred_from), 'epoch')::timestamptz AS last_occurred
 FROM occurrences WHERE inquiry_number = ANY(@numbers::text[])
 GROUP BY inquiry_number;
 
 -- name: SearchMentionInquiries :many
 SELECT inquiry_number::text AS inquiry_number, COUNT(*)::int AS occurrence_count,
-    MIN(occurred_from)::timestamptz AS first_occurred, MAX(occurred_from)::timestamptz AS last_occurred
+    (COUNT(occurred_from) > 0)::bool AS has_dates,
+    COALESCE(MIN(occurred_from), 'epoch')::timestamptz AS first_occurred,
+    COALESCE(MAX(occurred_from), 'epoch')::timestamptz AS last_occurred
 FROM occurrences
 WHERE inquiry_number IS NOT NULL AND inquiry_number ILIKE '%' || sqlc.arg(q)::text || '%'
 GROUP BY inquiry_number
-ORDER BY MAX(occurred_from) DESC
+ORDER BY MAX(occurred_from) DESC NULLS LAST
 LIMIT sqlc.arg(max_rows);
 
 -- name: ListMentionPersons :many

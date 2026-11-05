@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +15,10 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
 
+	"github.com/rodfileto/trackid/analyses"
+	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/cases"
+	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/db/migrations"
 	"github.com/rodfileto/trackid/occurrences"
 	"github.com/rodfileto/trackid/requests"
@@ -201,7 +205,7 @@ func TestRegister(t *testing.T) {
 	if fmt.Sprint(list[0].Tasks) != "[FACIAL_REVIEW]" || fmt.Sprint(list[1].Tasks) != "[FACIAL_COMPARISON]" {
 		t.Errorf("tasks on the facial case: %v, %v", list[0].Tasks, list[1].Tasks)
 	}
-	all, err := requests.ListAll(ctx, sqlDB, 10)
+	all, err := requests.ListAll(ctx, sqlDB, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,5 +285,125 @@ func TestRegisterByInquiry(t *testing.T) {
 	}, 0, now)
 	if err == nil || !strings.Contains(err.Error(), "different occurrences") {
 		t.Errorf("numbers naming occurrences %d and %d: %v", other.ID, first.Occurrence.ID, err)
+	}
+}
+
+// TestRegisterConcluded: an import of an old report records its analysis closed when it ended, even
+// of a type not offered yet, so nothing reaches the queues or can be worked. Without ConcludedAt the
+// type stays unavailable, and a second report on the same case joins it as its next request.
+func TestRegisterConcluded(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	concluded := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+	in := requests.RegisterInput{
+		Input:      requests.Input{Authority: "DPF", DocumentReference: "Despacho 1234567/2026", ReceivedOn: "2026-02-01", CitedInquiry: "2026.0001234", Notes: "Tarefa 1/2026-1"},
+		Occurrence: &occurrences.CreateInput{Types: []string{"UNDETERMINED"}, Description: "scene", InquiryNumber: "2026.0001234"},
+		Cases:      []requests.CaseInput{{Task: "CRIME_SCENE_EXAMINATION", Description: "Laudo local"}},
+	}
+	if _, err := requests.Register(ctx, sqlDB, in, 0, now); err == nil || !strings.Contains(err.Error(), "not available yet") {
+		t.Errorf("a scene examination that is not an import: %v", err)
+	}
+
+	in.ConcludedAt = &concluded
+	first, err := requests.Register(ctx, sqlDB, in, 0, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Occurrence == nil || len(first.Cases) != 1 || first.Cases[0].Modality != "FINGERPRINT" || first.Cases[0].CaseType != "CRIMINAL" {
+		t.Fatalf("registered %+v", first)
+	}
+	var analysisID int64
+	var analysisType, status, stage string
+	var closedAt time.Time
+	if err := sqlDB.QueryRow(`SELECT id, analysis_type, status, stage, closed_at FROM case_analyses WHERE case_request_id = $1`, first.RequestID).
+		Scan(&analysisID, &analysisType, &status, &stage, &closedAt); err != nil {
+		t.Fatal(err)
+	}
+	if analysisType != "CRIME_SCENE_EXAMINATION" || status != "CLOSED" || stage != "REPORT" || !closedAt.Equal(concluded) {
+		t.Errorf("analysis %s %s %s closed %v", analysisType, status, stage, closedAt)
+	}
+	target, err := analyses.GetTarget(ctx, db.New(sqlDB), analysisID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := analyses.CanWork(auth.UserProfile{ID: 1}, target); err == nil {
+		t.Error("a concluded analysis can still be worked")
+	}
+
+	// A lab report under the same inquiry joins the same occurrence and, by number, the same case.
+	second, err := requests.Register(ctx, sqlDB, requests.RegisterInput{
+		Input:       requests.Input{Authority: "DPF", DocumentReference: "Despacho 7654321/2026", ReceivedOn: "2026-03-01", CitedInquiry: "2026.0001234"},
+		Cases:       []requests.CaseInput{{CaseID: first.Cases[0].CaseID, Task: "FINGERPRINT_LAB_EXAMINATION"}},
+		ConcludedAt: &concluded,
+	}, 0, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Occurrence == nil || second.Occurrence.ID != first.Occurrence.ID {
+		t.Errorf("second occurrence %+v, first %+v", second.Occurrence, first.Occurrence)
+	}
+	var requestCount int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM case_request_cases crc JOIN biometric_cases bc ON bc.id = crc.biometric_case_id WHERE bc.case_id = $1`,
+		first.Cases[0].CaseID).Scan(&requestCount); err != nil {
+		t.Fatal(err)
+	}
+	if requestCount != 2 {
+		t.Errorf("requests on the case: %d", requestCount)
+	}
+}
+
+// TestReferences: a request keeps its labelled references, without repeats, shows them with the
+// case and in the list, and can be found by part of a number. Each needs both its label and number.
+func TestReferences(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	in := requests.RegisterInput{
+		Input: requests.Input{Authority: "DPF", DocumentReference: "Despacho 1/2026", ReceivedOn: "2026-02-01", References: []requests.Reference{
+			{Label: " Tarefa E-POL ", Number: " 1234567/2026-1 "}, {Label: "Tarefa E-POL", Number: "1234567/2026-1"},
+			{Label: "Processo SEI", Number: "12345.678901/2026-01"},
+		}},
+		CaseType: "CRIMINAL",
+		Cases:    []requests.CaseInput{{Task: "FINGERPRINT_COMPARISON", Description: "x"}},
+	}
+	registered, err := requests.Register(ctx, sqlDB, in, 0, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []requests.Reference{{Label: "Tarefa E-POL", Number: "1234567/2026-1"}, {Label: "Processo SEI", Number: "12345.678901/2026-01"}}
+	onCase, err := requests.List(ctx, sqlDB, registered.Cases[0].CaseID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(onCase) != 1 || !slices.Equal(onCase[0].References, want) {
+		t.Errorf("on the case: %+v", onCase)
+	}
+
+	other := in
+	other.References = nil
+	other.DocumentReference = "Despacho 2/2026"
+	if _, err := requests.Register(ctx, sqlDB, other, 0, now); err != nil {
+		t.Fatal(err)
+	}
+	all, err := requests.ListAll(ctx, sqlDB, "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Errorf("listed %d", len(all))
+	}
+	found, err := requests.ListAll(ctx, sqlDB, "678901", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(found) != 1 || found[0].ID != registered.RequestID || !slices.Equal(found[0].References, want) {
+		t.Errorf("found %+v", found)
+	}
+
+	bad := in
+	bad.References = []requests.Reference{{Label: "", Number: "1"}}
+	if _, err := requests.Register(ctx, sqlDB, bad, 0, now); err == nil || !strings.Contains(err.Error(), "label and a number") {
+		t.Errorf("a reference with no label: %v", err)
 	}
 }

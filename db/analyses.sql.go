@@ -22,6 +22,22 @@ func (q *Queries) CloseCaseAnalysis(ctx context.Context, id int64) error {
 	return err
 }
 
+const closeConcludedCaseAnalysis = `-- name: CloseConcludedCaseAnalysis :exec
+UPDATE case_analyses SET status = 'CLOSED', stage = 'REPORT', closed_at = $1
+WHERE id = $2 AND status = 'OPEN'
+`
+
+type CloseConcludedCaseAnalysisParams struct {
+	ClosedAt sql.NullTime `db:"closed_at" json:"closed_at"`
+	ID       int64        `db:"id" json:"id"`
+}
+
+// An analysis that had already ended elsewhere when it was registered: closed when it really ended.
+func (q *Queries) CloseConcludedCaseAnalysis(ctx context.Context, arg CloseConcludedCaseAnalysisParams) error {
+	_, err := q.db.ExecContext(ctx, closeConcludedCaseAnalysis, arg.ClosedAt, arg.ID)
+	return err
+}
+
 const countHumanDecisionsOnFeature = `-- name: CountHumanDecisionsOnFeature :one
 SELECT COUNT(*) FROM biometric_decisions
 WHERE role <> 'SYSTEM' AND (feature_a_id = $1::text OR feature_b_id = $1::text)

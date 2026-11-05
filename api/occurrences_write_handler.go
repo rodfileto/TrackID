@@ -21,7 +21,7 @@ import (
 type createOccurrenceRequest struct {
 	Types         []string   `json:"types"`
 	Attempted     *bool      `json:"attempted"`
-	OccurredFrom  time.Time  `json:"occurredFrom"`
+	OccurredFrom  *time.Time `json:"occurredFrom"` // optional: may not be known
 	OccurredTo    *time.Time `json:"occurredTo"`
 	ReportedAt    *time.Time `json:"reportedAt"`
 	Status        string     `json:"status"`
@@ -45,8 +45,13 @@ type createOccurrenceRequest struct {
 }
 
 func (r createOccurrenceRequest) input() occurrences.CreateInput {
+	var occurredFrom time.Time
+	if r.OccurredFrom != nil {
+		occurredFrom = *r.OccurredFrom
+	}
 	return occurrences.CreateInput{
-		Types: r.Types, Attempted: r.Attempted, OccurredFrom: r.OccurredFrom, OccurredTo: r.OccurredTo,
+		OccurredFrom: occurredFrom,
+		Types:        r.Types, Attempted: r.Attempted, OccurredTo: r.OccurredTo,
 		ReportedAt: r.ReportedAt, Status: r.Status, Description: r.Description,
 		Agency: r.Agency, AgencyNumber: r.AgencyNumber, InquiryNumber: r.InquiryNumber, OffenderCount: r.OffenderCount, VictimCount: r.VictimCount,
 		CaseID: r.CaseID,
@@ -100,16 +105,16 @@ func writeOccurrenceError(c *gin.Context, err error, fallback string) {
 
 // OccurrenceSummary is an occurrence as a list or a case page shows it.
 type OccurrenceSummary struct {
-	ID            int64     `json:"id"`
-	TrackIDNumber string    `json:"trackidNumber,omitempty"`
-	Agency        string    `json:"agency,omitempty"`
-	Number        string    `json:"number,omitempty"`
-	InquiryNumber string    `json:"inquiryNumber,omitempty"`
-	OccurredFrom  time.Time `json:"occurredFrom"`
-	Status        string    `json:"status"`
-	Types         []string  `json:"types"`
-	PlaceName     string    `json:"placeName,omitempty"`
-	Neighbourhood string    `json:"neighbourhood,omitempty"`
+	ID            int64      `json:"id"`
+	TrackIDNumber string     `json:"trackidNumber,omitempty"`
+	Agency        string     `json:"agency,omitempty"`
+	Number        string     `json:"number,omitempty"`
+	InquiryNumber string     `json:"inquiryNumber,omitempty"`
+	OccurredFrom  *time.Time `json:"occurredFrom,omitempty"` // absent when unknown
+	Status        string     `json:"status"`
+	Types         []string   `json:"types"`
+	PlaceName     string     `json:"placeName,omitempty"`
+	Neighbourhood string     `json:"neighbourhood,omitempty"`
 
 	// Where it happened, for the case page's map: set only on one occurrence (CaseOccurrenceHandler),
 	// not on search results. Precision is the location's (EXACT, GEOCODED, STREET, MUNICIPALITY).
@@ -119,11 +124,14 @@ type OccurrenceSummary struct {
 	Lat       *float64 `json:"lat,omitempty"`
 }
 
-func summarize(id int64, year, seq sql.NullInt32, agency, number, inquiry sql.NullString, from time.Time, status string,
+func summarize(id int64, year, seq sql.NullInt32, agency, number, inquiry sql.NullString, from sql.NullTime, status string,
 	place, neighbourhood sql.NullString, types json.RawMessage) (OccurrenceSummary, error) {
 	s := OccurrenceSummary{
 		ID: id, TrackIDNumber: trackidNumber(year, seq), Agency: agency.String, Number: number.String, InquiryNumber: inquiry.String,
-		OccurredFrom: from, Status: status, PlaceName: place.String, Neighbourhood: neighbourhood.String,
+		Status: status, PlaceName: place.String, Neighbourhood: neighbourhood.String,
+	}
+	if from.Valid {
+		s.OccurredFrom = &from.Time
 	}
 	return s, json.Unmarshal(types, &s.Types)
 }
@@ -192,7 +200,9 @@ func CaseOccurrenceHandler(sqlDB *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read occurrence"})
 			return
 		}
-		s.Address, s.Precision, s.Lon, s.Lat = r.Address.String, r.Precision, &r.Lon, &r.Lat
+		if r.HasPlace {
+			s.Address, s.Precision, s.Lon, s.Lat = r.Address.String, r.Precision.String, &r.Lon, &r.Lat
+		}
 		c.JSON(http.StatusOK, gin.H{"occurrence": s, "caseType": bc.CaseType})
 	}
 }

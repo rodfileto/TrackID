@@ -636,7 +636,8 @@
     "BODY_FOUND": "Encontro de cadáver",
     "SKELETAL_REMAINS_FOUND": "Encontro de ossada",
     "UNIDENTIFIED_LIVING_PERSON": "Pessoa viva não identificada",
-    "DISASTER_VICTIM": "Vítima de desastre"
+    "DISASTER_VICTIM": "Vítima de desastre",
+    "UNDETERMINED": "Não determinado"
   },
   "occurrenceGroup": {
     "LETHAL": "Letalidade",
@@ -645,7 +646,8 @@
     "THEFT": "Furtos",
     "FRAUD": "Fraudes",
     "DRUGS": "Drogas",
-    "CIVIL": "Identificação civil"
+    "CIVIL": "Identificação civil",
+    "OTHER": "Outros"
   },
   "occurrenceStatus": {
     "REGISTERED": "Registrada",
@@ -952,6 +954,9 @@
     "indirect": "Vínculo indireto"
   },
   "requests": {
+    "references": "Outras referências, uma por linha (ex.: Tarefa E-POL: 1234567/2026-1)",
+    "searchReference": "Buscar por número de referência",
+    "search": "Buscar",
     "title": "Requisições",
     "desc": "Quem solicitou o exame, o que perguntou e o que encaminhou.",
     "none": "Nenhuma requisição registrada.",

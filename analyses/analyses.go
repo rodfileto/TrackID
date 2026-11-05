@@ -256,6 +256,28 @@ func OpenIn(ctx context.Context, q *db.Queries, biometricCaseID int64, caseModal
 		sql.NullInt64{Int64: requestID, Valid: requestID != 0})
 }
 
+// OpenConcludedIn records, inside the caller's transaction, an analysis that had already ended
+// elsewhere when it was registered (an import of old reports): closed at concludedAt, so it never
+// reaches the queues. Unlike OpenIn it takes the types not yet offered, which have no workflow here
+// but do have a past.
+func OpenConcludedIn(ctx context.Context, q *db.Queries, biometricCaseID int64, caseModality string, t Type, requestID, requestedBy int64, concludedAt time.Time) (int64, error) {
+	if !t.Valid() {
+		return 0, ErrInvalidType
+	}
+	if caseModality != string(t.Modality()) {
+		return 0, ErrWrongModality
+	}
+	id, err := insert(ctx, q, biometricCaseID, t, sql.NullInt64{Int64: requestedBy, Valid: requestedBy != 0},
+		sql.NullInt64{Int64: requestID, Valid: requestID != 0})
+	if err != nil {
+		return 0, err
+	}
+	if err := q.CloseConcludedCaseAnalysis(ctx, db.CloseConcludedCaseAnalysisParams{ID: id, ClosedAt: sql.NullTime{Time: concludedAt, Valid: true}}); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 // Open is a coordinator opening an analysis on a case: a comparison, on the given pairs or none
 // yet (AddPairs adds them), or a review (no pairs). Each pair needs at least one trace of this
 // case. requestedBy is the coordinator; checking that they are one is the caller's job. The
