@@ -79,3 +79,14 @@ FROM analysis_reports ar
 JOIN case_analyses ca ON ca.id = ar.case_analysis_id
 WHERE ca.biometric_case_id = $1 AND ar.status = 'ISSUED'
 ORDER BY ar.issued_at, ar.id;
+
+-- name: RecordImportedReport :execrows
+-- An analysis's report as issued elsewhere; again, it refreshes one recorded before.
+UPDATE analysis_reports SET status = 'ISSUED', imported = TRUE, report_year = sqlc.narg('report_year')::int,
+    report_number = sqlc.narg('report_number')::int, issued_at = @issued_at, case_file_id = sqlc.narg('case_file_id')::bigint,
+    snapshot = @snapshot
+WHERE case_analysis_id = @case_analysis_id AND (status = 'DRAFT' OR imported);
+
+-- name: ReportNumberTaken :one
+SELECT EXISTS (SELECT 1 FROM analysis_reports WHERE report_type = @report_type AND report_year = @report_year::int
+    AND report_number = @report_number::int AND case_analysis_id <> @case_analysis_id)::bool AS taken;

@@ -58,6 +58,7 @@ type AnalysisReport struct {
 	DocxFileID          sql.NullInt64         `db:"docx_file_id" json:"docx_file_id"`
 	Snapshot            pqtype.NullRawMessage `db:"snapshot" json:"snapshot"`
 	ComplementsReportID sql.NullInt64         `db:"complements_report_id" json:"complements_report_id"`
+	Imported            bool                  `db:"imported" json:"imported"`
 }
 
 type AnalysisReportVersion struct {

@@ -107,6 +107,9 @@ export default function CaseOccurrenceCard({ caseId }: { caseId: string }) {
               {linked.address && (
                 <span className="text-sm text-gray-500 dark:text-gray-400">{linked.address}</span>
               )}
+              {linked.description && (
+                <span className="text-sm text-gray-500 dark:text-gray-400">{linked.description}</span>
+              )}
             </div>
             {isIntelligence && (
                   <button

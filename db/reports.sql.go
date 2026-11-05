@@ -401,6 +401,62 @@ func (q *Queries) MaxReportNumber(ctx context.Context, arg MaxReportNumberParams
 	return column_1, err
 }
 
+const recordImportedReport = `-- name: RecordImportedReport :execrows
+UPDATE analysis_reports SET status = 'ISSUED', imported = TRUE, report_year = $1::int,
+    report_number = $2::int, issued_at = $3, case_file_id = $4::bigint,
+    snapshot = $5
+WHERE case_analysis_id = $6 AND (status = 'DRAFT' OR imported)
+`
+
+type RecordImportedReportParams struct {
+	ReportYear     sql.NullInt32         `db:"report_year" json:"report_year"`
+	ReportNumber   sql.NullInt32         `db:"report_number" json:"report_number"`
+	IssuedAt       sql.NullTime          `db:"issued_at" json:"issued_at"`
+	CaseFileID     sql.NullInt64         `db:"case_file_id" json:"case_file_id"`
+	Snapshot       pqtype.NullRawMessage `db:"snapshot" json:"snapshot"`
+	CaseAnalysisID int64                 `db:"case_analysis_id" json:"case_analysis_id"`
+}
+
+// An analysis's report as issued elsewhere; again, it refreshes one recorded before.
+func (q *Queries) RecordImportedReport(ctx context.Context, arg RecordImportedReportParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, recordImportedReport,
+		arg.ReportYear,
+		arg.ReportNumber,
+		arg.IssuedAt,
+		arg.CaseFileID,
+		arg.Snapshot,
+		arg.CaseAnalysisID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const reportNumberTaken = `-- name: ReportNumberTaken :one
+SELECT EXISTS (SELECT 1 FROM analysis_reports WHERE report_type = $1 AND report_year = $2::int
+    AND report_number = $3::int AND case_analysis_id <> $4)::bool AS taken
+`
+
+type ReportNumberTakenParams struct {
+	ReportType     string `db:"report_type" json:"report_type"`
+	ReportYear     int32  `db:"report_year" json:"report_year"`
+	ReportNumber   int32  `db:"report_number" json:"report_number"`
+	CaseAnalysisID int64  `db:"case_analysis_id" json:"case_analysis_id"`
+}
+
+func (q *Queries) ReportNumberTaken(ctx context.Context, arg ReportNumberTakenParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, reportNumberTaken,
+		arg.ReportType,
+		arg.ReportYear,
+		arg.ReportNumber,
+		arg.CaseAnalysisID,
+	)
+	var taken bool
+	err := row.Scan(&taken)
+	return taken, err
+}
+
 const setReportComplements = `-- name: SetReportComplements :exec
 UPDATE analysis_reports SET complements_report_id = $2 WHERE id = $1
 `

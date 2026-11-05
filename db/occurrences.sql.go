@@ -235,6 +235,7 @@ func (q *Queries) GetOccurrenceIDByNumber(ctx context.Context, arg GetOccurrence
 
 const getOccurrenceSummary = `-- name: GetOccurrenceSummary :one
 SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.inquiry_number, o.occurred_from, o.status,
+    o.description,
     l.name AS place_name, l.neighbourhood, l.address, l.precision,
     (o.location_id IS NOT NULL)::bool AS has_place,
     COALESCE(ST_X(l.geom::geometry), 0)::float8 AS lon,
@@ -255,6 +256,7 @@ type GetOccurrenceSummaryRow struct {
 	InquiryNumber    sql.NullString  `db:"inquiry_number" json:"inquiry_number"`
 	OccurredFrom     sql.NullTime    `db:"occurred_from" json:"occurred_from"`
 	Status           string          `db:"status" json:"status"`
+	Description      string          `db:"description" json:"description"`
 	PlaceName        sql.NullString  `db:"place_name" json:"place_name"`
 	Neighbourhood    sql.NullString  `db:"neighbourhood" json:"neighbourhood"`
 	Address          sql.NullString  `db:"address" json:"address"`
@@ -279,6 +281,7 @@ func (q *Queries) GetOccurrenceSummary(ctx context.Context, id int64) (GetOccurr
 		&i.InquiryNumber,
 		&i.OccurredFrom,
 		&i.Status,
+		&i.Description,
 		&i.PlaceName,
 		&i.Neighbourhood,
 		&i.Address,

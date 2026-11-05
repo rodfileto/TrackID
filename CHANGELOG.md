@@ -20,6 +20,8 @@ period; `0.x` patch releases fix defects without adding behaviour.
   search by them.
 - `requests.Update`, `requests.MoveToCase` and `occurrences.Update`, for correcting what was
   registered.
+- `reports.RecordImported`: a report issued elsewhere becomes an analysis's issued one, its document
+  the original PDF.
 - An organization can run its own server (`server.Run` with `Options.Register`) and add pages, menu
   items and translations through `frontend/src/extensions/index.tsx`.
 - Examination workflow: analyses are distributed to examiners in rounds, the

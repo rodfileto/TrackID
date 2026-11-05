@@ -11,6 +11,7 @@ import (
 // preliminary, before the report is issued.
 type Summary struct {
 	Preliminary      bool         `json:"preliminary"`
+	Imported         bool         `json:"imported,omitempty"` // issued elsewhere, see the document
 	ReportType       string       `json:"reportType"`
 	Title            string       `json:"title"`
 	Number           string       `json:"number,omitempty"`
@@ -49,7 +50,7 @@ type FaceLine struct {
 
 // Summarize builds the executive summary of d.
 func Summarize(d Data) Summary {
-	s := Summary{Preliminary: d.Number == "", ReportType: d.ReportType, Title: reportTypeText[d.ReportType], Number: d.Number,
+	s := Summary{Preliminary: d.Number == "" && !d.Imported, Imported: d.Imported, ReportType: d.ReportType, Title: reportTypeText[d.ReportType], Number: d.Number,
 		CaseID: d.Case.CaseID, Occurrence: d.Case.Occurrence, PreviousLines: []string{}}
 	if d.Request != nil {
 		s.Request = d.Request.Authority + " — " + d.Request.DocumentReference

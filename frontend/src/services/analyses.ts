@@ -304,6 +304,7 @@ export async function issueReport(caseId: string, analysisId: number): Promise<A
 
 export interface ReportSummary {
   preliminary: boolean;
+  imported?: boolean;
   reportType: string;
   title: string;
   number?: string;

@@ -102,8 +102,15 @@ export default function ReportPanel({
               {t("reports.preliminary")}
             </Badge>
           ) : (
-            <Badge size="sm" color="success">
-              {s.number}
+            s.number && (
+              <Badge size="sm" color="success">
+                {s.number}
+              </Badge>
+            )
+          )}
+          {s.imported && (
+            <Badge size="sm" color="info">
+              {t("reports.imported")}
             </Badge>
           )}
         </div>
@@ -224,7 +231,7 @@ export default function ReportPanel({
         {issued && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              {(["pdf", "docx"] as const).map((format) => (
+              {(s.imported ? (["pdf"] as const) : (["pdf", "docx"] as const)).map((format) => (
                 <Button key={format} size="sm" variant="outline" onClick={() => void run(() => downloadReport(caseId, analysisId, format))}>
                   {t("reports.download", { format: format.toUpperCase() })}
                 </Button>

@@ -118,10 +118,12 @@ type OccurrenceSummary struct {
 
 	// Where it happened, for the case page's map: set only on one occurrence (CaseOccurrenceHandler),
 	// not on search results. Precision is the location's (EXACT, GEOCODED, STREET, MUNICIPALITY).
-	Address   string   `json:"address,omitempty"`
-	Precision string   `json:"precision,omitempty"`
-	Lon       *float64 `json:"lon,omitempty"`
-	Lat       *float64 `json:"lat,omitempty"`
+	Address string `json:"address,omitempty"`
+	// Description is sent with one occurrence that has no place yet: all there is to say of where.
+	Description string   `json:"description,omitempty"`
+	Precision   string   `json:"precision,omitempty"`
+	Lon         *float64 `json:"lon,omitempty"`
+	Lat         *float64 `json:"lat,omitempty"`
 }
 
 func summarize(id int64, year, seq sql.NullInt32, agency, number, inquiry sql.NullString, from sql.NullTime, status string,
@@ -202,6 +204,8 @@ func CaseOccurrenceHandler(sqlDB *sql.DB) gin.HandlerFunc {
 		}
 		if r.HasPlace {
 			s.Address, s.Precision, s.Lon, s.Lat = r.Address.String, r.Precision.String, &r.Lon, &r.Lat
+		} else {
+			s.Description = r.Description
 		}
 		c.JSON(http.StatusOK, gin.H{"occurrence": s, "caseType": bc.CaseType})
 	}

@@ -1039,6 +1039,7 @@
     "title": "Report",
     "summary": "Executive summary",
     "preliminary": "Preliminary — the report is not issued yet",
+    "imported": "Imported: issued outside TrackID",
     "edit": "Edit report",
     "close": "Close editor",
     "editorTitle": "{{title}} — draft v{{version}}",

@@ -24,10 +24,12 @@ import (
 // (analysis_reports.snapshot). Images are referenced by their SHA-256, so the snapshot says which
 // image a report showed without holding it.
 type Data struct {
-	AnalysisID     int64              `json:"analysisId"`
-	AnalysisType   analyses.Type      `json:"analysisType"`
-	ReportType     string             `json:"reportType"`
-	Number         string             `json:"number,omitempty"` // empty while a draft
+	AnalysisID   int64         `json:"analysisId"`
+	AnalysisType analyses.Type `json:"analysisType"`
+	ReportType   string        `json:"reportType"`
+	Number       string        `json:"number,omitempty"` // empty while a draft
+	// Imported says the report was issued elsewhere; its document is the original, and it may have no number.
+	Imported       bool               `json:"imported,omitempty"`
 	IssuedAt       *time.Time         `json:"issuedAt,omitempty"`
 	Complements    string             `json:"complements,omitempty"` // the number of the report it complements
 	Case           CaseInfo           `json:"case"`
@@ -500,7 +502,11 @@ func Build(ctx context.Context, q *db.Queries, analysisID int64, images Images, 
 		if r.CaseAnalysisID == t.ID {
 			continue
 		}
-		d.Previous = append(d.Previous, PriorReport{Type: r.ReportType, Number: fmt.Sprintf("%04d.%04d", r.ReportYear.Int32, r.ReportNumber.Int32),
+		priorNumber := ""
+		if r.ReportNumber.Valid {
+			priorNumber = fmt.Sprintf("%04d.%04d", r.ReportYear.Int32, r.ReportNumber.Int32)
+		}
+		d.Previous = append(d.Previous, PriorReport{Type: r.ReportType, Number: priorNumber,
 			IssuedAt: r.IssuedAt.Time})
 	}
 	return d, imgs, nil

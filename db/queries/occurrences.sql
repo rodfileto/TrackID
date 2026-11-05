@@ -204,6 +204,7 @@ LIMIT 20;
 -- One occurrence as a case page shows it, with its location's point for the card's map, when it
 -- has a location (has_place).
 SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.inquiry_number, o.occurred_from, o.status,
+    o.description,
     l.name AS place_name, l.neighbourhood, l.address, l.precision,
     (o.location_id IS NOT NULL)::bool AS has_place,
     COALESCE(ST_X(l.geom::geometry), 0)::float8 AS lon,

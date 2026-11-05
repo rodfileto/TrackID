@@ -1039,6 +1039,7 @@
     "title": "Documento",
     "summary": "Sumário executivo",
     "preliminary": "Preliminar — o documento ainda não foi emitido",
+    "imported": "Importado: emitido fora do TrackID",
     "edit": "Editar documento",
     "close": "Fechar editor",
     "editorTitle": "{{title}} — rascunho v{{version}}",

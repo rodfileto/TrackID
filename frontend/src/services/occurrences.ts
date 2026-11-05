@@ -103,6 +103,8 @@ export interface OccurrenceSummary {
   neighbourhood?: string;
   /** Where it happened: sent for a case's occurrence (getCaseOccurrence), not by searches. */
   address?: string;
+  /** Sent when it has no place yet. */
+  description?: string;
   precision?: string;
   lon?: number;
   lat?: number;

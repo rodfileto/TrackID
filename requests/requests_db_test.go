@@ -21,6 +21,7 @@ import (
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/db/migrations"
 	"github.com/rodfileto/trackid/occurrences"
+	"github.com/rodfileto/trackid/reports"
 	"github.com/rodfileto/trackid/requests"
 )
 
@@ -460,5 +461,66 @@ func TestUpdateAndMove(t *testing.T) {
 	}
 	if err := requests.MoveToCase(ctx, sqlDB, first.RequestID, from, to); err == nil {
 		t.Error("moved a request that is not on that case")
+	}
+}
+
+// TestRecordImported: an imported report reads as issued, with or without a number, a taken number is
+// left out, recording again refreshes it, and a concluded analysis's report can't be issued over it.
+func TestRecordImported(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	concluded := now.AddDate(0, -1, 0)
+	analysisOf := func(document string) int64 {
+		t.Helper()
+		r, err := requests.Register(ctx, sqlDB, requests.RegisterInput{
+			Input:       requests.Input{Authority: "A", DocumentReference: document, ReceivedOn: "2026-02-01"},
+			CaseType:    "CRIMINAL",
+			Cases:       []requests.CaseInput{{Task: "CRIME_SCENE_EXAMINATION", Description: "x"}},
+			ConcludedAt: &concluded,
+		}, 0, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var id int64
+		if err := sqlDB.QueryRow(`SELECT id FROM case_analyses WHERE case_request_id = $1`, r.RequestID).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	service := reports.Service{DB: sqlDB}
+	first, second := analysisOf("Doc 1"), analysisOf("Doc 2")
+
+	number, err := reports.RecordImported(ctx, sqlDB, reports.ImportedReport{AnalysisID: first, Year: 2026, Number: 12, IssuedAt: concluded}, now)
+	if err != nil || number != "2026.0012" {
+		t.Fatalf("number %q: %v", number, err)
+	}
+	overview, err := service.Get(ctx, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.Status != "ISSUED" || overview.Summary.Preliminary || !overview.Summary.Imported || overview.Number != "2026.0012" {
+		t.Errorf("overview %+v", overview)
+	}
+
+	number, err = reports.RecordImported(ctx, sqlDB, reports.ImportedReport{AnalysisID: second, Year: 2026, Number: 12, IssuedAt: concluded}, now)
+	if err != nil || number != "" {
+		t.Errorf("a taken number: %q, %v", number, err)
+	}
+	overview, err = service.Get(ctx, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.Status != "ISSUED" || overview.Summary.Preliminary || overview.Number != "" {
+		t.Errorf("no number: %+v", overview)
+	}
+	if _, err := reports.RecordImported(ctx, sqlDB, reports.ImportedReport{AnalysisID: second, Year: 2026, Number: 13, IssuedAt: concluded}, now); err != nil {
+		t.Fatal(err)
+	}
+	if overview, _ = service.Get(ctx, second); overview.Number != "2026.0013" {
+		t.Errorf("recorded again: %+v", overview)
+	}
+	if _, _, _, err := service.Document(ctx, first, "pdf"); err != reports.ErrNoDocument {
+		t.Errorf("no PDF attached: %v", err)
 	}
 }

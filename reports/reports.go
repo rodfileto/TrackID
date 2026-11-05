@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/sqlc-dev/pqtype"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -466,6 +467,62 @@ func (s Service) Issue(ctx context.Context, user auth.UserProfile, analysisID in
 		}
 		return analyses.Issued{Snapshot: snapshot, DocxFileID: docxID, PDFFileID: pdfID}, nil
 	})
+}
+
+// ImportedReport is a report issued elsewhere, for an analysis recorded as concluded. Year and Number
+// are its own number, zero when it has none, and PDFFileID its original document on the case.
+type ImportedReport struct {
+	AnalysisID int64
+	Year       int32
+	Number     int32
+	IssuedAt   time.Time
+	PDFFileID  int64
+	PDFSHA256  string
+}
+
+// RecordImported makes an imported report the analysis's issued one, whose document is its original
+// PDF, with the summary drawn from what is registered now: recording it again, after a correction,
+// refreshes both. A number another report holds is left out rather than guessed at, and the number
+// it was recorded with comes back. It refuses a report issued in TrackID.
+func RecordImported(ctx context.Context, sqlDB *sql.DB, in ImportedReport, now time.Time) (string, error) {
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	q := db.New(tx)
+	d, _, err := Build(ctx, q, in.AnalysisID, nil, now)
+	if err != nil {
+		return "", err
+	}
+	year, number := sql.NullInt32{}, sql.NullInt32{}
+	if in.Year != 0 && in.Number != 0 {
+		taken, err := q.ReportNumberTaken(ctx, db.ReportNumberTakenParams{ReportType: d.ReportType, ReportYear: in.Year, ReportNumber: in.Number, CaseAnalysisID: in.AnalysisID})
+		if err != nil {
+			return "", err
+		}
+		if !taken {
+			year, number = sql.NullInt32{Int32: in.Year, Valid: true}, sql.NullInt32{Int32: in.Number, Valid: true}
+			d.Number = fmt.Sprintf("%04d.%04d", in.Year, in.Number)
+		}
+	}
+	d.Imported = true
+	snapshot, err := json.Marshal(Snapshot{Data: d, PDFSHA256: in.PDFSHA256})
+	if err != nil {
+		return "", err
+	}
+	rows, err := q.RecordImportedReport(ctx, db.RecordImportedReportParams{
+		ReportYear: year, ReportNumber: number, IssuedAt: sql.NullTime{Time: in.IssuedAt, Valid: true},
+		CaseFileID: sql.NullInt64{Int64: in.PDFFileID, Valid: in.PDFFileID != 0},
+		Snapshot:   pqtype.NullRawMessage{RawMessage: snapshot, Valid: true}, CaseAnalysisID: in.AnalysisID,
+	})
+	if err != nil {
+		return "", fmt.Errorf("reports: record imported: %w", err)
+	}
+	if rows == 0 {
+		return "", analyses.ErrNotDraft
+	}
+	return d.Number, tx.Commit()
 }
 
 // Snapshot is what an issued report freezes (analysis_reports.snapshot): its data and its
