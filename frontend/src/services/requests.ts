@@ -1,4 +1,4 @@
-import { apiBaseUrl, requestApi } from "./api";
+import { apiBaseUrl, apiFetch, requestApi } from "./api";
 import { getToken } from "./auth";
 import type { Suitability } from "./analyses";
 import type { CreateOccurrenceInput } from "./occurrences";
@@ -127,7 +127,7 @@ export async function registerRequest(input: RegisterRequestInput): Promise<Regi
 export async function receiveMaterial(caseId: string, requestId: number, file: File): Promise<number> {
   const form = new FormData();
   form.append("file", file);
-  const response = await fetch(`${apiBaseUrl}/admin/cases/${encodeURIComponent(caseId)}/requests/${requestId}/material`, {
+  const response = await apiFetch(`${apiBaseUrl}/admin/cases/${encodeURIComponent(caseId)}/requests/${requestId}/material`, {
     method: "POST",
     headers: authHeaders(),
     body: form,

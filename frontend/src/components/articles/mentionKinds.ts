@@ -1,4 +1,5 @@
 import type { MentionKind, MentionTarget } from "../../services/articles";
+import { personPath } from "../../services/persons";
 
 /** Prefixes that narrow the @ search to one kind ("@ipl 4512", "@caso 2026"). Both languages'
  * words are accepted whatever the interface language, so a habit carries over. */
@@ -70,7 +71,7 @@ export function targetHref(target: MentionTarget): string | null {
     case "CASE":
       return `/cases/${encodeURIComponent(target.ref)}`;
     case "PERSON":
-      return `/persons/${encodeURIComponent(target.ref)}`;
+      return personPath(target.personNumber);
     case "CLUSTER":
       return "/clusters";
     case "REQUEST":

@@ -27,6 +27,7 @@ type ClusterMember struct {
 
 	// KNOWN fields -- an enrollment photo.
 	PersonID       string `json:"personId,omitempty"`
+	PersonNumber   int64  `json:"personNumber,omitempty"`
 	Name           string `json:"name,omitempty"`
 	RegisterNumber string `json:"registerNumber,omitempty"`
 	DocumentType   string `json:"documentType,omitempty"`
@@ -212,6 +213,7 @@ func buildClusters(ctx context.Context, q *db.Queries, clusterRows []db.ListClus
 			Kind:           "KNOWN",
 			FeatureID:      m.FeatureID,
 			PersonID:       d.PersonID,
+			PersonNumber:   d.PersonNumber,
 			Name:           d.Name,
 			RegisterNumber: d.RegisterNumber,
 			DocumentType:   d.DocumentType,

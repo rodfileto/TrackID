@@ -1,4 +1,4 @@
-import { apiBaseUrl, requestApi } from "./api";
+import { apiBaseUrl, apiFetch, requestApi } from "./api";
 import { getToken } from "./auth";
 import { SourceExpiredError, type Interpolation, type Rect } from "./imageproc";
 import type { Conclusion } from "./analyses";
@@ -264,7 +264,7 @@ function authHeaders(): Record<string, string> {
 }
 
 async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(`${apiBaseUrl}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
@@ -285,7 +285,7 @@ export function getFaceLabInfo(): Promise<FaceLabInfo> {
 export async function uploadFaceSource(file: File): Promise<FaceSource> {
   const form = new FormData();
   form.append("file", file);
-  const response = await fetch(`${apiBaseUrl}/facelab/sources`, { method: "POST", headers: authHeaders(), body: form });
+  const response = await apiFetch(`${apiBaseUrl}/facelab/sources`, { method: "POST", headers: authHeaders(), body: form });
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? `Could not read ${file.name}`);
@@ -295,7 +295,7 @@ export async function uploadFaceSource(file: File): Promise<FaceSource> {
 
 /** The source as the server still holds it, or SourceExpiredError. */
 export async function getFaceSource(id: string): Promise<FaceSource> {
-  const response = await fetch(`${apiBaseUrl}/facelab/sources/${id}`, { headers: authHeaders() });
+  const response = await apiFetch(`${apiBaseUrl}/facelab/sources/${id}`, { headers: authHeaders() });
   if (response.status === 410) throw new SourceExpiredError("expired");
   if (!response.ok) throw new Error("The request could not be completed");
   return (await response.json()) as FaceSource;

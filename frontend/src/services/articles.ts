@@ -1,4 +1,4 @@
-import { apiBaseUrl } from "./api";
+import { apiBaseUrl, apiFetch } from "./api";
 import { getToken } from "./auth";
 
 /** Person articles (docs/person-article-plan.md): what intelligence analysts write about a
@@ -28,6 +28,7 @@ export const MENTION_KINDS: MentionKind[] = [
 export interface MentionTarget {
   kind: MentionKind;
   ref: string;
+  personNumber?: number;
   label: string;
   caseIds?: string[];
   description?: string;
@@ -97,6 +98,7 @@ export interface Article {
 export interface Backlink {
   subject: { kind: string; ref: string };
   subjectLabel: string;
+  subjectNumber?: number;
   mentions: { kind: MentionKind; ref: string; count: number }[];
   updatedAt: string;
 }
@@ -110,7 +112,7 @@ function headers(): Record<string, string> {
 }
 
 async function getJSON<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, { headers: headers(), signal });
+  const response = await apiFetch(`${apiBaseUrl}${path}`, { headers: headers(), signal });
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? "The request could not be completed");
@@ -138,7 +140,7 @@ export async function savePersonArticle(
   editSummary: string,
   templateId?: number,
 ): Promise<SaveResult> {
-  const response = await fetch(`${apiBaseUrl}${personPath(personId)}`, {
+  const response = await apiFetch(`${apiBaseUrl}${personPath(personId)}`, {
     method: "PUT",
     headers: headers(),
     body: JSON.stringify({ baseRevisionId, body, editSummary, templateId: templateId ?? 0 }),
@@ -172,7 +174,7 @@ export interface ArticleTemplate {
 }
 
 export async function generatePersonArticleTemplate(personId: string, language: string): Promise<ArticleTemplate> {
-  const response = await fetch(`${apiBaseUrl}${personPath(personId)}/template`, {
+  const response = await apiFetch(`${apiBaseUrl}${personPath(personId)}/template`, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({ language }),

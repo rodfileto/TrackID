@@ -1,4 +1,4 @@
-import { apiBaseUrl } from "./api";
+import { apiBaseUrl, apiFetch } from "./api";
 import { getToken } from "./auth";
 
 // The assist lab's API (api/assist_handler.go): extract text from an uploaded file and draft a
@@ -36,7 +36,7 @@ function authHeaders(): Record<string, string> {
 }
 
 export function getAssistInfo(): Promise<AssistInfo> {
-  return fetch(`${apiBaseUrl}/assist`, { headers: authHeaders() }).then(async (r) => {
+  return apiFetch(`${apiBaseUrl}/assist`, { headers: authHeaders() }).then(async (r) => {
     if (!r.ok) throw new Error("The request could not be completed");
     return (await r.json()) as AssistInfo;
   });
@@ -45,7 +45,7 @@ export function getAssistInfo(): Promise<AssistInfo> {
 export async function extractDocument(file: File): Promise<AssistDocument> {
   const form = new FormData();
   form.append("file", file);
-  const response = await fetch(`${apiBaseUrl}/assist/extract`, { method: "POST", headers: authHeaders(), body: form });
+  const response = await apiFetch(`${apiBaseUrl}/assist/extract`, { method: "POST", headers: authHeaders(), body: form });
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? `Could not read ${file.name}`);
@@ -54,7 +54,7 @@ export async function extractDocument(file: File): Promise<AssistDocument> {
 }
 
 export async function draftDocuments(documents: AssistDocument[], instructions: string, signal?: AbortSignal): Promise<AssistDraft> {
-  const response = await fetch(`${apiBaseUrl}/assist/draft`, {
+  const response = await apiFetch(`${apiBaseUrl}/assist/draft`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ documents, instructions }),

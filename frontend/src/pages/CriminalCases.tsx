@@ -71,6 +71,12 @@ export default function CriminalCases() {
 
   const [years, setYears] = useState<string[]>([]);
   const [search, setSearch] = useState(query);
+  // Back and forward change the query under the box.
+  const [shownQuery, setShownQuery] = useState(query);
+  if (query !== shownQuery) {
+    setShownQuery(query);
+    setSearch(query);
+  }
   const [data, setData] = useState<ListCasesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -284,11 +290,6 @@ export default function CriminalCases() {
                     <TableCell className="px-5 py-4 sm:px-6 text-start">
                       <Link
                         to={`/cases/${encodeURIComponent(item.caseId)}`}
-                        state={{
-                          from: searchParams.toString()
-                            ? `/cases?${searchParams.toString()}`
-                            : "/cases",
-                        }}
                         className="block font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300"
                       >
                         {item.caseId}

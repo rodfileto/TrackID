@@ -123,6 +123,33 @@ func GetPersonProfileHandler(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// GetPersonIDByNumberHandler returns the person_id behind a persons.id: the person page's URL
+// carries the number, so the person_id stays out of the browser's history, and every other route
+// keeps taking the person_id.
+func GetPersonIDByNumberHandler(db *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if db == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		number, err := strconv.ParseInt(context.Param("number"), 10, 64)
+		if err != nil {
+			context.JSON(http.StatusNotFound, gin.H{"error": "person not found"})
+			return
+		}
+		personID, err := person.IDForNumber(context.Request.Context(), db, number)
+		if err != nil {
+			if errors.Is(err, person.ErrNotFound) {
+				context.JSON(http.StatusNotFound, gin.H{"error": "person not found"})
+				return
+			}
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load person"})
+			return
+		}
+		context.JSON(http.StatusOK, gin.H{"personId": personID})
+	}
+}
+
 // GetPersonIdentityHandler returns one person's enrollment chain -- their
 // identity documents, registers, and enrolled biometric files/features (see
 // person.GetIdentity).

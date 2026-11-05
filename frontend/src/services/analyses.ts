@@ -1,4 +1,4 @@
-import { apiBaseUrl, requestApi } from "./api";
+import { apiBaseUrl, apiFetch, requestApi } from "./api";
 import { getToken } from "./auth";
 import type { TraceLink } from "./cases";
 
@@ -238,7 +238,7 @@ export function traceKey(modality?: string): string {
 /** One face of the analysis's pairs, by its feature id, as an object URL (the caller revokes it).
  * The server cuts a case's face to its box, so the workspace never needs the evidence itself. */
 export async function getPairImageUrl(caseId: string, analysisId: number, featureId: string): Promise<string> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${apiBaseUrl}${analysisPath(caseId, analysisId)}/pairs/image?feature=${encodeURIComponent(featureId)}`,
     { headers: authHeaders() },
   );
@@ -364,7 +364,7 @@ export async function getReportDraft(
   caseId: string,
   analysisId: number,
 ): Promise<{ bytes: ArrayBuffer; version: number; stale: boolean }> {
-  const response = await fetch(`${apiBaseUrl}${analysisPath(caseId, analysisId)}/report/draft`, { headers: authHeaders() });
+  const response = await apiFetch(`${apiBaseUrl}${analysisPath(caseId, analysisId)}/report/draft`, { headers: authHeaders() });
   if (!response.ok) throw await failure(response, "Could not load the draft");
   return {
     bytes: await response.arrayBuffer(),
@@ -375,7 +375,7 @@ export async function getReportDraft(
 
 /** Saves the examiner's edited .docx as the draft's next version. */
 export async function saveReportDraft(caseId: string, analysisId: number, bytes: ArrayBuffer): Promise<ReportVersion> {
-  const response = await fetch(`${apiBaseUrl}${analysisPath(caseId, analysisId)}/report/draft`, {
+  const response = await apiFetch(`${apiBaseUrl}${analysisPath(caseId, analysisId)}/report/draft`, {
     method: "PUT",
     headers: { ...authHeaders(), "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
     body: bytes,
@@ -393,7 +393,7 @@ export async function refreshReportDraft(caseId: string, analysisId: number): Pr
 
 /** Downloads an issued report's PDF or .docx through the browser. */
 export async function downloadReport(caseId: string, analysisId: number, format: "pdf" | "docx"): Promise<void> {
-  const response = await fetch(`${apiBaseUrl}${analysisPath(caseId, analysisId)}/report/document?format=${format}`, {
+  const response = await apiFetch(`${apiBaseUrl}${analysisPath(caseId, analysisId)}/report/document?format=${format}`, {
     headers: authHeaders(),
   });
   if (!response.ok) throw await failure(response, "Could not download the report");

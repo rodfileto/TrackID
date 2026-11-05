@@ -26,7 +26,8 @@ export default function SignInForm() {
 
     try {
       await login(staffNumber, password, isChecked);
-      const destination = location.state?.from?.pathname ?? "/";
+      const from = location.state?.from;
+      const destination = from ? `${from.pathname}${from.search ?? ""}${from.hash ?? ""}` : "/";
       navigate(destination, { replace: true });
     } catch (submitError) {
       setError(
@@ -52,6 +53,11 @@ export default function SignInForm() {
             </p>
           </div>
           <div>
+            {location.state?.endReason === "deactivated" && !error && (
+              <p className="mb-5 rounded-lg bg-error-50 px-3 py-2 text-sm text-error-600 dark:bg-error-500/15 dark:text-error-400" role="alert">
+                {t("auth.accountDeactivated")}
+              </p>
+            )}
             <form onSubmit={handleSubmit}>
               <div className="space-y-6">
                 <div>

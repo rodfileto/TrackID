@@ -144,7 +144,7 @@ LIMIT sqlc.arg(max_rows);
 -- name: ListMentionPersons :many
 -- Each person with the name on their first register (the person page's display name), empty when
 -- nothing is enrolled yet.
-SELECT p.person_id,
+SELECT p.id AS person_number, p.person_id,
     COALESCE((SELECT r.name FROM identity_documents d JOIN identity_registers r ON r.document_id = d.id
               WHERE d.person_id = p.id ORDER BY d.id, r.id LIMIT 1), '')::text AS name
 FROM persons p WHERE p.person_id = ANY(@person_ids::text[]);
@@ -158,7 +158,7 @@ WITH hits AS (
     UNION
     SELECT p.id FROM persons p WHERE p.person_id = sqlc.arg(q)::text
 )
-SELECT p.person_id,
+SELECT p.id AS person_number, p.person_id,
     COALESCE((SELECT r.name FROM identity_documents d JOIN identity_registers r ON r.document_id = d.id
               WHERE d.person_id = p.id ORDER BY d.id, r.id LIMIT 1), '')::text AS name
 FROM persons p JOIN hits ON hits.pid = p.id

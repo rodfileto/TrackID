@@ -7,6 +7,7 @@ import Badge from "../ui/badge/Badge";
 import Button from "../ui/button/Button";
 import CaseTraceThumbnail from "./CaseTraceThumbnail";
 import IdentityFileThumbnail from "../persons/IdentityFileThumbnail";
+import { personPath } from "../../services/persons";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { addToComparison } from "../../services/analyses";
 import type { CaseCluster, PathStep, TraceLink } from "../../services/cases";
@@ -168,7 +169,7 @@ function LinkRow({
         ) : (
           <>
             <Link
-              to={`/persons/${encodeURIComponent(link.personId ?? "")}`}
+              to={personPath(link.personNumber)}
               className="font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300"
             >
               {link.name}

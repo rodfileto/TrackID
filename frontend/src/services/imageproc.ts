@@ -1,4 +1,4 @@
-import { apiBaseUrl, requestApi } from "./api";
+import { apiBaseUrl, apiFetch, requestApi } from "./api";
 import { getToken } from "./auth";
 
 // The image lab's API (api/imageproc_handler.go): fingerprint processing tried on any image,
@@ -88,7 +88,7 @@ function authHeaders(): Record<string, string> {
 }
 
 async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(`${apiBaseUrl}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
@@ -109,7 +109,7 @@ export function getLabInfo(): Promise<LabInfo> {
 export async function uploadLabSource(file: File): Promise<LabSource> {
   const form = new FormData();
   form.append("file", file);
-  const response = await fetch(`${apiBaseUrl}/imageproc/sources`, { method: "POST", headers: authHeaders(), body: form });
+  const response = await apiFetch(`${apiBaseUrl}/imageproc/sources`, { method: "POST", headers: authHeaders(), body: form });
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? `Could not read ${file.name}`);

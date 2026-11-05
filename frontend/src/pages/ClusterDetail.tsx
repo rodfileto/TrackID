@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
+import BackLink from "../components/common/BackLink";
 import { useTranslation } from "react-i18next";
 import ForceGraph2D, {
   type ForceGraphMethods,
@@ -26,7 +27,7 @@ import {
   type ClusterPersonSample,
   type EdgeStatus,
 } from "../services/clusters";
-import type { PersonClusterMember } from "../services/persons";
+import { personPath, type PersonClusterMember } from "../services/persons";
 
 const PAIRS_PAGE = 50;
 const GRAPH_HEIGHT = 420;
@@ -88,7 +89,7 @@ function MemberLink({ member, featureId }: { member?: PersonClusterMember; featu
   if (!member) return <span className="font-mono text-xs">{featureId}</span>;
   if (member.kind === "KNOWN") {
     return (
-      <Link to={`/persons/${encodeURIComponent(member.personId ?? "")}`} className={linkClass}>
+      <Link to={personPath(member.personNumber)} className={linkClass}>
         {memberLabel(member, featureId)}
       </Link>
     );
@@ -171,7 +172,7 @@ function PersonsCard({ detail }: { detail: ClusterDetail }) {
             return (
               <div key={personId} className="rounded-xl border border-gray-200 p-4 dark:border-white/[0.05]">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <Link to={`/persons/${encodeURIComponent(personId)}`} className={linkClass}>
+                  <Link to={personPath(samples[0].personNumber)} className={linkClass}>
                     {samples[0].name}
                   </Link>
                   <span className="text-xs text-gray-500 dark:text-gray-400">{personId}</span>
@@ -709,9 +710,9 @@ export default function ClusterDetailPage() {
     <>
       <PageMeta title={`${title} | TrackID`} description={t("clusterDetail.metaDescription")} />
       <PageBreadcrumb pageTitle={title} />
-      <Link to="/clusters" className={`mb-4 inline-block text-sm ${linkClass}`}>
-        ← {t("clusterDetail.back")}
-      </Link>
+      <div className="mb-4">
+        <BackLink fallback="/clusters" label={t("clusterDetail.back")} />
+      </div>
     </>
   );
 

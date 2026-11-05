@@ -205,6 +205,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	identity := protected.Group("persons")
 	identity.Use(RequirePersonIdentity(deps.DB))
 	identity.GET("search", SearchPersonsHandler(deps.DB))
+	identity.GET("by-number/:number", GetPersonIDByNumberHandler(deps.DB))
 	identity.GET(":personId/identity", GetPersonIdentityHandler(deps.DB))
 	identity.GET(":personId/identity-files/:identityFileId/download", DownloadIdentityFileHandler(deps.DB, deps.Storage))
 

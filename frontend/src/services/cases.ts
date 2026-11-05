@@ -1,4 +1,4 @@
-import { apiBaseUrl, requestApi } from "./api";
+import { apiBaseUrl, apiFetch, requestApi } from "./api";
 import { getToken } from "./auth";
 import type { ThumbnailBox } from "./persons";
 import type { Conclusion, LinkStrength } from "./analyses";
@@ -85,6 +85,7 @@ export interface TraceLink {
   kind: "KNOWN" | "QUESTIONED";
 
   personId?: string;
+  personNumber?: number;
   name?: string;
   identityFileId?: number;
   contentType?: string;
@@ -258,7 +259,7 @@ export async function compareFaces(
   caseId: string,
   codificationIds: [number, number],
 ): Promise<FaceComparison> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/codifications/compare`,
     {
       method: "POST",
@@ -306,6 +307,7 @@ export async function listCaseClusters(caseId: string): Promise<CaseCluster[]> {
  * not settled by examiners), CONFIRMED, EXCLUDED, INCONCLUSIVE or DISPUTED. */
 export interface IdentityDecision {
   personId: string;
+  personNumber: number;
   name: string;
   identityFileId: number;
   contentType?: string;
@@ -348,7 +350,7 @@ export async function addEvidence(
   form.append("file", file);
 
   const token = getToken();
-  const response = await fetch(
+  const response = await apiFetch(
     `${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/evidences`,
     {
       method: "POST",
@@ -382,7 +384,7 @@ export async function getEvidenceObjectUrl(
   evidenceId: number,
 ): Promise<string> {
   const token = getToken();
-  const response = await fetch(
+  const response = await apiFetch(
     `${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/evidences/${evidenceId}/download`,
     {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -532,7 +534,7 @@ export async function saveCodificationImage(
   form.append("file", blob, "codification.png");
 
   const token = getToken();
-  const response = await fetch(
+  const response = await apiFetch(
     `${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/evidences/${evidenceId}/traces/${traceId}/codification-image`,
     {
       method: "POST",

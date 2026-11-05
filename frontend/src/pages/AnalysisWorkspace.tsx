@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router";
+import { useParams } from "react-router";
+import BackLink from "../components/common/BackLink";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import PageMeta from "../components/common/PageMeta";
@@ -325,13 +326,9 @@ export default function AnalysisWorkspace() {
 
       <div className="mb-6">
         {blind ? (
-          <Link to="/analyses" className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400">
-            ← {t("analyses.backToMyAnalyses")}
-          </Link>
+          <BackLink fallback="/analyses" label={t("analyses.backToMyAnalyses")} />
         ) : (
-          <Link to={`/cases/${encodeURIComponent(caseId)}`} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400">
-            ← {t("analyses.backToCase", { caseId })}
-          </Link>
+          <BackLink fallback={`/cases/${encodeURIComponent(caseId)}`} label={t("analyses.backToCase", { caseId })} />
         )}
       </div>
 

@@ -1,4 +1,4 @@
-import { apiBaseUrl, requestApi } from "./api";
+import { apiBaseUrl, apiFetch, requestApi } from "./api";
 import { getToken } from "./auth";
 import type { VideoLabFace } from "./videolab";
 
@@ -51,7 +51,7 @@ export async function listCaseVideos(caseId: string): Promise<CaseVideo[]> {
 export async function uploadCaseVideo(caseId: string, file: File): Promise<CaseVideo> {
   const form = new FormData();
   form.append("file", file);
-  const response = await fetch(`${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/videos`, {
+  const response = await apiFetch(`${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/videos`, {
     method: "POST",
     headers: authHeaders(),
     body: form,
@@ -115,7 +115,7 @@ export async function getFrameFaces(caseId: string, fileId: number, timestampMs:
 
 /** Fetches a case's video to play it in the page, as an object URL the caller revokes. */
 export async function getVideoObjectUrl(caseId: string, fileId: number, signal?: AbortSignal): Promise<string> {
-  const response = await fetch(`${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/videos/${fileId}/content`, {
+  const response = await apiFetch(`${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/videos/${fileId}/content`, {
     headers: authHeaders(),
     signal,
   });
@@ -128,7 +128,7 @@ export async function getVideoObjectUrl(caseId: string, fileId: number, signal?:
 
 /** Queues a case's video to be processed again. */
 export async function reprocessVideo(caseId: string, fileId: number): Promise<void> {
-  const response = await fetch(`${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/videos/${fileId}/reprocess`, {
+  const response = await apiFetch(`${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/videos/${fileId}/reprocess`, {
     method: "POST",
     headers: authHeaders(),
   });

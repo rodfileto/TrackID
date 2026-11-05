@@ -16,6 +16,8 @@ import {
 } from "../components/intelligence/occurrenceDraft";
 import { listOccurrenceTypes, searchOccurrences, type OccurrenceSummary, type OccurrenceType } from "../services/occurrences";
 import { receiveMaterial, registerRequest, type RegisterRequestInput } from "../services/requests";
+import FileDropzone from "../components/common/FileDropzone";
+import { MATERIAL_FILES } from "../components/common/fileTypes";
 
 const inputClass =
   "h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90";
@@ -278,9 +280,26 @@ export default function RegisterRequest() {
               </div>
               <div>
                 <Label htmlFor={`case-files-${i}`}>{t("requests.caseMaterial")}</Label>
-                <input id={`case-files-${i}`} type="file" multiple accept="image/*,application/pdf,video/*"
-                  className="text-sm text-gray-700 dark:text-gray-300"
-                  onChange={(e) => setRow(i, { files: Array.from(e.target.files ?? []) })} />
+                <FileDropzone
+                  id={`case-files-${i}`}
+                  multiple
+                  variant="compact"
+                  accept={MATERIAL_FILES}
+                  onFiles={(files) => setRow(i, { files: [...row.files, ...files] })}
+                />
+                {row.files.length > 0 && (
+                  <ul className="mt-2 divide-y divide-gray-100 text-sm dark:divide-white/[0.05]">
+                    {row.files.map((file, f) => (
+                      <li key={`${file.name}-${f}`} className="flex items-center justify-between gap-3 py-1.5 text-gray-700 dark:text-gray-300">
+                        <span className="truncate">{file.name}</span>
+                        <button type="button" className="shrink-0 text-error-500 hover:underline"
+                          onClick={() => setRow(i, { files: row.files.filter((_, j) => j !== f) })}>
+                          {t("common.remove")}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           ))}

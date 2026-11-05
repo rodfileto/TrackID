@@ -169,7 +169,7 @@ func (q *Queries) FindNearestFeatureEmbeddings(ctx context.Context, arg FindNear
 }
 
 const findNearestPersonsByFaceEmbedding = `-- name: FindNearestPersonsByFaceEmbedding :many
-SELECT p.person_id, r.name, r.register_number, d.document_type, d.document_number,
+SELECT p.id AS person_number, p.person_id, r.name, r.register_number, d.document_type, d.document_number,
        f.id AS identity_file_id, f.content_type,
        fe.embedding <=> $1::vector AS distance
 FROM feature_embeddings fe
@@ -190,6 +190,7 @@ type FindNearestPersonsByFaceEmbeddingParams struct {
 }
 
 type FindNearestPersonsByFaceEmbeddingRow struct {
+	PersonNumber   int64          `db:"person_number" json:"person_number"`
 	PersonID       string         `db:"person_id" json:"person_id"`
 	Name           string         `db:"name" json:"name"`
 	RegisterNumber string         `db:"register_number" json:"register_number"`
@@ -219,6 +220,7 @@ func (q *Queries) FindNearestPersonsByFaceEmbedding(ctx context.Context, arg Fin
 	for rows.Next() {
 		var i FindNearestPersonsByFaceEmbeddingRow
 		if err := rows.Scan(
+			&i.PersonNumber,
 			&i.PersonID,
 			&i.Name,
 			&i.RegisterNumber,

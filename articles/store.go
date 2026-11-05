@@ -366,10 +366,12 @@ func checkMentions(ctx context.Context, q *db.Queries, articleID int64, mentions
 
 // Backlink is one article whose current revision mentions a target.
 type Backlink struct {
-	Subject      Subject            `json:"subject"`
-	SubjectLabel string             `json:"subjectLabel"`
-	Mentions     []MentionCountJSON `json:"mentions"`
-	UpdatedAt    time.Time          `json:"updatedAt"`
+	Subject      Subject `json:"subject"`
+	SubjectLabel string  `json:"subjectLabel"`
+	// SubjectNumber is persons.id for a person's article, what a link to the page carries.
+	SubjectNumber int64              `json:"subjectNumber,omitempty"`
+	Mentions      []MentionCountJSON `json:"mentions"`
+	UpdatedAt     time.Time          `json:"updatedAt"`
 }
 
 // MentionCountJSON is one target a backlink's article mentions, and how many times.
@@ -420,8 +422,11 @@ func Backlinks(ctx context.Context, sqlDB *sql.DB, targets []MentionKey, self *S
 			return nil, err
 		}
 		for _, n := range names {
-			if i, ok := index[PersonSubject(n.PersonID)]; ok && n.Name != "" {
-				out[i].SubjectLabel = n.Name
+			if i, ok := index[PersonSubject(n.PersonID)]; ok {
+				out[i].SubjectNumber = n.PersonNumber
+				if n.Name != "" {
+					out[i].SubjectLabel = n.Name
+				}
 			}
 		}
 	}

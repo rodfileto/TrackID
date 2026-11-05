@@ -1,4 +1,4 @@
-import { apiBaseUrl } from "./api";
+import { apiBaseUrl, apiFetch } from "./api";
 import { getToken } from "./auth";
 
 // The video lab's API (api/videolab_handler.go, video/lab.go): send any video, trackid-vision finds
@@ -69,7 +69,7 @@ async function fail(response: Response, fallback: string): Promise<never> {
 }
 
 export async function getVideoLabInfo(): Promise<VideoLabInfo> {
-  const response = await fetch(`${apiBaseUrl}/videolab`, { headers: authHeaders() });
+  const response = await apiFetch(`${apiBaseUrl}/videolab`, { headers: authHeaders() });
   if (!response.ok) return fail(response, "The request could not be completed");
   return (await response.json()) as VideoLabInfo;
 }
@@ -80,25 +80,25 @@ export async function uploadVideoLab(file: File, intervalSeconds: number, minBlu
   form.append("intervalSeconds", String(intervalSeconds));
   form.append("minBlur", String(minBlur));
   form.append("file", file);
-  const response = await fetch(`${apiBaseUrl}/videolab/jobs`, { method: "POST", headers: authHeaders(), body: form });
+  const response = await apiFetch(`${apiBaseUrl}/videolab/jobs`, { method: "POST", headers: authHeaders(), body: form });
   if (!response.ok) return fail(response, "Could not send the video");
   return (await response.json()) as VideoLabJob;
 }
 
 export async function getVideoLabJob(id: string, signal?: AbortSignal): Promise<VideoLabJob> {
-  const response = await fetch(`${apiBaseUrl}/videolab/jobs/${encodeURIComponent(id)}`, { headers: authHeaders(), signal });
+  const response = await apiFetch(`${apiBaseUrl}/videolab/jobs/${encodeURIComponent(id)}`, { headers: authHeaders(), signal });
   if (!response.ok) return fail(response, "The request could not be completed");
   return (await response.json()) as VideoLabJob;
 }
 
 export async function deleteVideoLabJob(id: string): Promise<void> {
-  const response = await fetch(`${apiBaseUrl}/videolab/jobs/${encodeURIComponent(id)}`, { method: "DELETE", headers: authHeaders() });
+  const response = await apiFetch(`${apiBaseUrl}/videolab/jobs/${encodeURIComponent(id)}`, { method: "DELETE", headers: authHeaders() });
   if (!response.ok && response.status !== 410) return fail(response, "Could not remove the video");
 }
 
 /** The full frame at timestampMs, extracted on the server from the original, as a blob. */
 export async function getVideoLabFrame(id: string, timestampMs: number): Promise<Blob> {
-  const response = await fetch(`${apiBaseUrl}/videolab/jobs/${encodeURIComponent(id)}/frame?ms=${Math.round(timestampMs)}`, {
+  const response = await apiFetch(`${apiBaseUrl}/videolab/jobs/${encodeURIComponent(id)}/frame?ms=${Math.round(timestampMs)}`, {
     headers: authHeaders(),
   });
   if (!response.ok) return fail(response, "Could not extract the frame");

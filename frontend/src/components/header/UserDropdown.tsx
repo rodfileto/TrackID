@@ -3,7 +3,7 @@ import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { clearSession } from "../../services/auth";
+import { signOut } from "../../services/auth";
 import UserAvatar from "../common/UserAvatar";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 
@@ -24,7 +24,7 @@ export default function UserDropdown() {
 
   function handleSignOut() {
     closeDropdown();
-    clearSession();
+    signOut();
     navigate("/signin", { replace: true });
   }
   return (

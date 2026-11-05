@@ -48,6 +48,10 @@ func Middleware(jwtSecret string) gin.HandlerFunc {
 	}
 }
 
+// accountDeactivatedCode tells this refusal apart from any other 403: the session is over, so the
+// frontend signs out rather than showing an error.
+const accountDeactivatedCode = "account_deactivated"
+
 // currentUserKey is the context key ActiveUser stores the signed-in auth.UserProfile under.
 const currentUserKey = "currentUser"
 
@@ -77,7 +81,7 @@ func ActiveUser(repo *auth.Repository) gin.HandlerFunc {
 			return
 		}
 		if !user.IsActive {
-			context.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "account is deactivated"})
+			context.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "account is deactivated", "code": accountDeactivatedCode})
 			return
 		}
 		context.Set(currentUserKey, user)

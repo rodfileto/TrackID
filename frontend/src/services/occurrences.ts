@@ -1,4 +1,4 @@
-import { apiBaseUrl, requestApi } from "./api";
+import { apiBaseUrl, apiFetch, requestApi } from "./api";
 import { getToken } from "./auth";
 
 /** A biometric case linked to an occurrence -- see api.OccurrenceCase. */
@@ -201,7 +201,7 @@ export async function linkCaseOccurrence(
   caseId: string,
   occurrenceId: number | null,
 ): Promise<void> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/occurrence`,
     {
       method: "PUT",

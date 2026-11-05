@@ -431,7 +431,7 @@ func (q *Queries) ListClustersByIDs(ctx context.Context, clusterIds []int64) ([]
 }
 
 const listKnownClusterMembers = `-- name: ListKnownClusterMembers :many
-SELECT p.person_id, r.name, r.register_number, d.document_type, d.document_number,
+SELECT p.id AS person_number, p.person_id, r.name, r.register_number, d.document_type, d.document_number,
        f.id AS identity_file_id, f.content_type
 FROM identity_files f
 JOIN identity_registers r ON r.id = f.register_id
@@ -441,6 +441,7 @@ WHERE f.id = ANY($1::bigint[])
 `
 
 type ListKnownClusterMembersRow struct {
+	PersonNumber   int64          `db:"person_number" json:"person_number"`
 	PersonID       string         `db:"person_id" json:"person_id"`
 	Name           string         `db:"name" json:"name"`
 	RegisterNumber string         `db:"register_number" json:"register_number"`
@@ -464,6 +465,7 @@ func (q *Queries) ListKnownClusterMembers(ctx context.Context, identityFileIds [
 	for rows.Next() {
 		var i ListKnownClusterMembersRow
 		if err := rows.Scan(
+			&i.PersonNumber,
 			&i.PersonID,
 			&i.Name,
 			&i.RegisterNumber,

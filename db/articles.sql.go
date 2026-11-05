@@ -690,15 +690,16 @@ func (q *Queries) ListMentionOccurrences(ctx context.Context, ids []int64) ([]Li
 }
 
 const listMentionPersons = `-- name: ListMentionPersons :many
-SELECT p.person_id,
+SELECT p.id AS person_number, p.person_id,
     COALESCE((SELECT r.name FROM identity_documents d JOIN identity_registers r ON r.document_id = d.id
               WHERE d.person_id = p.id ORDER BY d.id, r.id LIMIT 1), '')::text AS name
 FROM persons p WHERE p.person_id = ANY($1::text[])
 `
 
 type ListMentionPersonsRow struct {
-	PersonID string `db:"person_id" json:"person_id"`
-	Name     string `db:"name" json:"name"`
+	PersonNumber int64  `db:"person_number" json:"person_number"`
+	PersonID     string `db:"person_id" json:"person_id"`
+	Name         string `db:"name" json:"name"`
 }
 
 // Each person with the name on their first register (the person page's display name), empty when
@@ -712,7 +713,7 @@ func (q *Queries) ListMentionPersons(ctx context.Context, personIds []string) ([
 	var items []ListMentionPersonsRow
 	for rows.Next() {
 		var i ListMentionPersonsRow
-		if err := rows.Scan(&i.PersonID, &i.Name); err != nil {
+		if err := rows.Scan(&i.PersonNumber, &i.PersonID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1117,7 +1118,7 @@ WITH hits AS (
     UNION
     SELECT p.id FROM persons p WHERE p.person_id = $2::text
 )
-SELECT p.person_id,
+SELECT p.id AS person_number, p.person_id,
     COALESCE((SELECT r.name FROM identity_documents d JOIN identity_registers r ON r.document_id = d.id
               WHERE d.person_id = p.id ORDER BY d.id, r.id LIMIT 1), '')::text AS name
 FROM persons p JOIN hits ON hits.pid = p.id
@@ -1131,8 +1132,9 @@ type SearchMentionPersonsParams struct {
 }
 
 type SearchMentionPersonsRow struct {
-	PersonID string `db:"person_id" json:"person_id"`
-	Name     string `db:"name" json:"name"`
+	PersonNumber int64  `db:"person_number" json:"person_number"`
+	PersonID     string `db:"person_id" json:"person_id"`
+	Name         string `db:"name" json:"name"`
 }
 
 // Persons by a name on any register (the trigram index) or by their exact person id. Callers
@@ -1146,7 +1148,7 @@ func (q *Queries) SearchMentionPersons(ctx context.Context, arg SearchMentionPer
 	var items []SearchMentionPersonsRow
 	for rows.Next() {
 		var i SearchMentionPersonsRow
-		if err := rows.Scan(&i.PersonID, &i.Name); err != nil {
+		if err := rows.Scan(&i.PersonNumber, &i.PersonID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

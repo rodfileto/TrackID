@@ -39,6 +39,7 @@ func GetProfile(ctx context.Context, sqlDB *sql.DB, personID string) (Profile, e
 	}
 
 	profile := Profile{Identity: buildIdentity(personID, personRow.Meta, chainRows)}
+	profile.Identity.PersonNumber = personRow.ID
 	if len(clusterIDs) == 0 {
 		return profile, nil
 	}

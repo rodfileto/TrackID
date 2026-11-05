@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import ComponentCard from "../common/ComponentCard";
 import Badge from "../ui/badge/Badge";
-import Button from "../ui/button/Button";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import VideoPlayer, { type VideoPlayerHandle } from "../video/VideoPlayer";
 import PersonFaces from "../video/PersonFaces";
@@ -19,6 +18,8 @@ import {
   type VideoFace,
   type VideoTrack,
 } from "../../services/videos";
+import FileDropzone from "../common/FileDropzone";
+import { VIDEO_FILES } from "../common/fileTypes";
 
 const buttonClass =
   "rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5";
@@ -66,7 +67,6 @@ export default function CaseVideosCard({
   const [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
   const [capture, setCapture] = useState<CaptureRequest | null>(null);
-  const input = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
     listCaseVideos(caseId).then(setVideos).catch(() => setVideos([]));
@@ -173,20 +173,13 @@ export default function CaseVideosCard({
       {isExaminer && !canWrite && <p className="mt-4 text-theme-xs text-gray-500 dark:text-gray-400">{t("videos.readOnly")}</p>}
       {canChange && (
         <div className="mt-4">
-          <input
-            ref={input}
-            type="file"
-            accept="video/*,.mp4,.mov,.avi,.mkv,.webm"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void upload(f);
-              e.target.value = "";
-            }}
+          <FileDropzone
+            variant="inline"
+            accept={VIDEO_FILES}
+            disabled={busy}
+            label={t("videos.upload")}
+            onFiles={([f]) => void upload(f)}
           />
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => input.current?.click()}>
-            {t("videos.upload")}
-          </Button>
         </div>
       )}
       <FrameCaptureModal caseId={caseId} request={capture} onClose={() => setCapture(null)} onCaptured={onEvidenceAdded} />

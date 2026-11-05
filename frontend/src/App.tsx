@@ -5,7 +5,7 @@ import SignIn from "./pages/AuthPages/SignIn";
 import NotFound from "./pages/OtherPage/NotFound";
 import UserProfiles from "./pages/UserProfiles";
 import AppLayout from "./layout/AppLayout";
-import { ScrollToTop } from "./components/common/ScrollToTop";
+import { NavigationTracker } from "./components/common/NavigationTracker";
 import Home from "./pages/Dashboard/Home";
 import RequireAuth from "./components/auth/RequireAuth";
 import RequireCapability from "./components/auth/RequireCapability";
@@ -60,7 +60,7 @@ export default function App() {
     <>
       <Toaster theme={theme} position="top-right" richColors />
       <Router>
-        <ScrollToTop />
+        <NavigationTracker />
         <Routes>
           {/* Dashboard Layout */}
           <Route element={<RequireAuth />}>
@@ -87,7 +87,7 @@ export default function App() {
               </Route>
               <Route element={<RequireCapability need="persons" />}>
                 <Route path="/persons" element={<PersonLookup />} />
-                <Route path="/persons/:personId" element={<PersonProfilePage />} />
+                <Route path="/persons/:personRef" element={<PersonProfilePage />} />
               </Route>
               <Route element={<RequireCapability need="intelligence" />}>
                 <Route path="/clusters" element={<Clusters />} />

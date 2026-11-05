@@ -8,7 +8,8 @@ import {
   ImageViewer,
   type ImageViewerHandle,
 } from "../ui/image-viewer/ImageViewer";
-import EvidenceDropzone from "./EvidenceDropzone";
+import FileDropzone from "../common/FileDropzone";
+import { EVIDENCE_FILES } from "../common/fileTypes";
 import TraceEditor, { type TraceBox } from "./TraceEditor";
 import CaseClusters from "./CaseClusters";
 import CaseIdentityDecisions from "./CaseIdentityDecisions";
@@ -869,8 +870,10 @@ export default function FacialCaseWorkspace({
               </div>
 
               <div className="flex shrink-0 flex-col gap-3 md:h-[52vh] md:w-48">
-                <EvidenceDropzone
-                  compact
+                <FileDropzone
+                  multiple
+                  accept={EVIDENCE_FILES}
+                  variant="compact"
                   className="md:flex-1"
                   onFiles={(files) =>
                     setSelectedFiles((current) => [...current, ...files])

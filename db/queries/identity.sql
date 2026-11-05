@@ -52,6 +52,11 @@ SELECT id, person_id, meta, created_at, updated_at
 FROM persons
 WHERE person_id = $1;
 
+-- name: GetPersonIDByNumber :one
+-- The person_id behind persons.id, the number a person page's URL carries instead (an importer's
+-- person_id may be built from a personal document number).
+SELECT person_id FROM persons WHERE id = $1;
+
 -- name: GetIdentityFileForPerson :one
 -- Scopes an identity_files row to the given person (through
 -- identity_registers -> identity_documents), same scoping GetCaseFile does
@@ -94,7 +99,7 @@ ORDER BY d.id, r.id, f.sequence;
 -- documents/registers can surface more than once, once per matching
 -- register -- useful signal on its own (an alias, or the same name spelled
 -- differently across enrollments), so callers are not deduplicated here.
-SELECT p.person_id, r.name, r.register_number, d.document_type, d.document_number
+SELECT p.id AS person_number, p.person_id, r.name, r.register_number, d.document_type, d.document_number
 FROM identity_registers r
 JOIN identity_documents d ON d.id = r.document_id
 JOIN persons p ON p.id = d.person_id

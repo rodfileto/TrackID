@@ -135,6 +135,19 @@ func (q *Queries) GetPersonByPersonID(ctx context.Context, personID string) (Per
 	return i, err
 }
 
+const getPersonIDByNumber = `-- name: GetPersonIDByNumber :one
+SELECT person_id FROM persons WHERE id = $1
+`
+
+// The person_id behind persons.id, the number a person page's URL carries instead (an importer's
+// person_id may be built from a personal document number).
+func (q *Queries) GetPersonIDByNumber(ctx context.Context, id int64) (string, error) {
+	row := q.db.QueryRowContext(ctx, getPersonIDByNumber, id)
+	var person_id string
+	err := row.Scan(&person_id)
+	return person_id, err
+}
+
 const listEnrolledReferences = `-- name: ListEnrolledReferences :many
 SELECT f.id AS identity_file_id, p.person_id, r.name, r.register_number, d.document_type, d.document_number,
        r.created_at AS enrolled_at, f.content_type
@@ -285,7 +298,7 @@ func (q *Queries) ListIdentityChainByPerson(ctx context.Context, personID sql.Nu
 }
 
 const searchPersonsByName = `-- name: SearchPersonsByName :many
-SELECT p.person_id, r.name, r.register_number, d.document_type, d.document_number
+SELECT p.id AS person_number, p.person_id, r.name, r.register_number, d.document_type, d.document_number
 FROM identity_registers r
 JOIN identity_documents d ON d.id = r.document_id
 JOIN persons p ON p.id = d.person_id
@@ -300,6 +313,7 @@ type SearchPersonsByNameParams struct {
 }
 
 type SearchPersonsByNameRow struct {
+	PersonNumber   int64  `db:"person_number" json:"person_number"`
 	PersonID       string `db:"person_id" json:"person_id"`
 	Name           string `db:"name" json:"name"`
 	RegisterNumber string `db:"register_number" json:"register_number"`
@@ -324,6 +338,7 @@ func (q *Queries) SearchPersonsByName(ctx context.Context, arg SearchPersonsByNa
 	for rows.Next() {
 		var i SearchPersonsByNameRow
 		if err := rows.Scan(
+			&i.PersonNumber,
 			&i.PersonID,
 			&i.Name,
 			&i.RegisterNumber,

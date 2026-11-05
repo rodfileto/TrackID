@@ -127,7 +127,7 @@ LIMIT sqlc.arg(result_limit);
 -- matched identity_files itself (id + content_type) -- the enrollment photo
 -- the embedding was computed from -- so a caller can render it as a
 -- thumbnail (see DownloadIdentityFileHandler).
-SELECT p.person_id, r.name, r.register_number, d.document_type, d.document_number,
+SELECT p.id AS person_number, p.person_id, r.name, r.register_number, d.document_type, d.document_number,
        f.id AS identity_file_id, f.content_type,
        fe.embedding <=> sqlc.arg(embedding)::vector AS distance
 FROM feature_embeddings fe

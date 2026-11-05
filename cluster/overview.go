@@ -28,8 +28,9 @@ type Summary struct {
 
 // SummaryPerson is one enrolled person a Summary's cluster has resolved to.
 type SummaryPerson struct {
-	PersonID string `json:"personId"`
-	Name     string `json:"name"`
+	PersonID     string `json:"personId"`
+	PersonNumber int64  `json:"personNumber"`
+	Name         string `json:"name"`
 }
 
 // ListOverviewParams filters/paginates ListOverview.
@@ -208,7 +209,7 @@ func loadIdentifiedPersons(ctx context.Context, sqlDB *sql.DB, clusterIDs []int6
 			continue
 		}
 		seen[clusterID][r.PersonID] = true
-		out[clusterID] = append(out[clusterID], SummaryPerson{PersonID: r.PersonID, Name: r.Name})
+		out[clusterID] = append(out[clusterID], SummaryPerson{PersonID: r.PersonID, PersonNumber: r.PersonNumber, Name: r.Name})
 	}
 	return out, nil
 }

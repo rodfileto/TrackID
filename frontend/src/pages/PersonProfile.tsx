@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import BackLink from "../components/common/BackLink";
 import { useTranslation } from "react-i18next";
 import PageMeta from "../components/common/PageMeta";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
@@ -18,7 +19,9 @@ import { useCurrentUser } from "../context/CurrentUserContext";
 import LinkBadge from "../components/analyses/LinkBadge";
 import PersonArticle from "../components/articles/PersonArticle";
 import {
+  getPersonIdByNumber,
   getPersonIdentity,
+  personPath,
   getPersonProfile,
   listPersonCaseLinks,
   type CaseCertainty,
@@ -86,7 +89,7 @@ function ClusterMemberCard({ member }: { member: PersonClusterMember }) {
           {t("personProfile.enrolled")}
         </Badge>
         <Link
-          to={`/persons/${encodeURIComponent(member.personId ?? "")}`}
+          to={personPath(member.personNumber)}
           className="line-clamp-2 w-full break-words text-xs text-brand-500 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300"
         >
           {member.name}
@@ -172,7 +175,9 @@ function ClusterCard({ cluster }: { cluster: PersonCluster }) {
 
 export default function PersonProfilePage() {
   const { t } = useTranslation();
-  const { personId } = useParams<{ personId: string }>();
+  // The address carries the person's number (personPath); an older link may still have the person_id.
+  const { personRef } = useParams<{ personRef: string }>();
+  const navigate = useNavigate();
   const { isIntelligence } = useCurrentUser();
   const [profile, setProfile] = useState<PersonProfile | null>(null);
   // Every case, at every certainty (not only the reviewed profile.cases): intelligence only.
@@ -186,17 +191,24 @@ export default function PersonProfilePage() {
     setSearchParams(next === "article" ? {} : { tab: next }, { replace: true });
 
   useEffect(() => {
-    if (!personId) return;
+    if (!personRef) return;
     let cancelled = false;
 
     async function load() {
       setLoading(true);
       setError("");
       try {
+        if (!/^\d+$/.test(personRef!)) {
+          // Swaps the person_id out of the address, and out of this history entry.
+          const { personNumber } = await getPersonIdentity(personRef!);
+          if (!cancelled) navigate({ pathname: personPath(personNumber), search: window.location.search }, { replace: true });
+          return;
+        }
+        const personId = await getPersonIdByNumber(personRef!);
         // Anyone else may see who the person is, not where they have been.
         const [result, links] = isIntelligence
-          ? await Promise.all([getPersonProfile(personId!), listPersonCaseLinks(personId!)])
-          : [{ identity: await getPersonIdentity(personId!), clusters: [], cases: [] }, []];
+          ? await Promise.all([getPersonProfile(personId), listPersonCaseLinks(personId)])
+          : [{ identity: await getPersonIdentity(personId), clusters: [], cases: [] }, []];
         if (!cancelled) {
           setProfile(result);
           setCaseLinks(links);
@@ -216,7 +228,7 @@ export default function PersonProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, [personId, t, isIntelligence]);
+  }, [personRef, navigate, t, isIntelligence]);
 
   const documents = profile?.identity.documents ?? [];
   const clusters = profile?.clusters ?? [];
@@ -225,34 +237,13 @@ export default function PersonProfilePage() {
   return (
     <>
       <PageMeta
-        title={`${t("personProfile.personTitle", { personId: personId ?? "" })} | TrackID`}
+        title={`${t("personProfile.title")} | TrackID`}
         description={t("personProfile.metaDescription")}
       />
       <PageBreadcrumb pageTitle={t("personProfile.title")} />
 
       <div className="mb-6">
-        <Link
-          to="/persons"
-          className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-        >
-          <svg
-            className="stroke-current"
-            width="17"
-            height="16"
-            viewBox="0 0 17 16"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M10.9235 12.667L6.75683 8.50033L10.9235 4.33366"
-              stroke=""
-              strokeWidth="1.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          {t("personProfile.backToLookup")}
-        </Link>
+        <BackLink fallback="/persons" label={t("personProfile.backToLookup")} />
       </div>
 
       {loading && !profile && (

@@ -21,6 +21,8 @@ import {
   type VideoLabInfo,
   type VideoLabJob,
 } from "../services/videolab";
+import FileDropzone from "../components/common/FileDropzone";
+import { VIDEO_FILES } from "../components/common/fileTypes";
 
 const buttonClass =
   "rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5";
@@ -104,7 +106,7 @@ export default function VideoLab() {
   const persons = useMemo(() => job?.persons ?? [], [job]);
   const intervalMs = (job?.options.intervalSeconds ?? interval) * 1000;
 
-  function chooseFile(f: File | null) {
+  function chooseFile(f: File) {
     setFile(f);
     setJob(null);
     setSelected(null);
@@ -174,15 +176,10 @@ export default function VideoLab() {
       <div className="space-y-6">
         <ComponentCard title={t("videoLab.title")} desc={t("videoLab.desc")}>
           <div className="flex flex-wrap items-end gap-4">
-            <label className="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-300">
-              {t("videoLab.file")}
-              <input
-                type="file"
-                accept="video/*,.mp4,.m4v,.mov,.avi,.mkv,.webm"
-                onChange={(e) => chooseFile(e.target.files?.[0] ?? null)}
-                className="text-sm"
-              />
-            </label>
+            <div className="flex min-w-0 flex-col gap-1 text-sm text-gray-700 dark:text-gray-300">
+              <label htmlFor="video-lab-file">{t("videoLab.file")}</label>
+              <FileDropzone id="video-lab-file" variant="inline" accept={VIDEO_FILES} label={file?.name} onFiles={([f]) => chooseFile(f)} />
+            </div>
             <label className="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-300">
               {t("videoLab.interval")}
               <input

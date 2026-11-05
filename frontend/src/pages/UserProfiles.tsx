@@ -8,6 +8,8 @@ import UserAvatar from "../components/common/UserAvatar";
 import Badge from "../components/ui/badge/Badge";
 import { useCurrentUser } from "../context/CurrentUserContext";
 import { changeMyPassword, removeAvatar, updateMe, uploadAvatar } from "../services/auth";
+import FileDropzone from "../components/common/FileDropzone";
+import { AVATAR_FILES } from "../components/common/fileTypes";
 
 const inputClass =
   "h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90";
@@ -126,20 +128,14 @@ export default function UserProfiles() {
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">{user.job_title}</p>
               </div>
-              <div className="flex flex-wrap gap-3 text-sm">
-                <label className={`cursor-pointer font-medium text-brand-500 hover:underline ${picture !== "idle" ? "pointer-events-none opacity-50" : ""}`}>
-                  {picture === "uploading" ? t("profile.picture.uploading") : t("profile.picture.change")}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      e.target.value = "";
-                      if (file) void changePicture(file);
-                    }}
-                  />
-                </label>
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <FileDropzone
+                  variant="inline"
+                  accept={AVATAR_FILES}
+                  disabled={picture !== "idle"}
+                  label={picture === "uploading" ? t("profile.picture.uploading") : t("profile.picture.change")}
+                  onFiles={([file]) => void changePicture(file)}
+                />
                 {user.avatar_updated_at && (
                   <button type="button" onClick={dropPicture} disabled={picture !== "idle"} className="text-gray-500 hover:underline disabled:opacity-50 dark:text-gray-400">
                     {picture === "removing" ? t("profile.picture.removing") : t("profile.picture.remove")}

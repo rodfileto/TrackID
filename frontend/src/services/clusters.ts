@@ -5,6 +5,7 @@ import type { PersonClusterMember } from "./persons";
 /** One enrolled person a cluster has resolved to -- see cluster.SummaryPerson. */
 export interface ClusterPerson {
   personId: string;
+  personNumber: number;
   name: string;
 }
 
@@ -153,6 +154,7 @@ export interface ClusterMerge {
  * in the same layer -- see cluster.PersonSample. */
 export interface ClusterPersonSample {
   personId: string;
+  personNumber: number;
   name: string;
   registerNumber: string;
   identityFileId: number;

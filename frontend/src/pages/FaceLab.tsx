@@ -39,6 +39,8 @@ import {
   type Summary,
   type Warning,
 } from "../services/facelab";
+import FileDropzone from "../components/common/FileDropzone";
+import { IMAGE_FILES, SESSION_FILES } from "../components/common/fileTypes";
 
 // The face lab (docs/facial-comparison-tool-plan.md): a one-to-one facial comparison after FISWG
 // on any two images, questioned (Q) and known (K). Processing, alignment, markups, findings and
@@ -519,13 +521,12 @@ export default function FaceLab() {
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-base font-semibold text-gray-800 dark:text-white/90">{t(`faceLab.image.${code}`)}</span>
-          <label className={`${primaryClass} cursor-pointer`}>
-            {s.missing ? t("faceLab.open.again", { filename: s.missing.filename }) : s.source ? t("faceLab.open.another") : t("faceLab.open.open")}
-            <input type="file" accept="image/*,.tif,.tiff,.bmp" className="hidden" onChange={(e) => {
-              if (e.target.files?.[0]) void openFile(code, e.target.files[0]);
-              e.target.value = "";
-            }} />
-          </label>
+          <FileDropzone
+            accept={IMAGE_FILES}
+            variant="inline"
+            label={s.missing ? t("faceLab.open.again", { filename: s.missing.filename }) : s.source ? t("faceLab.open.another") : t("faceLab.open.open")}
+            onFiles={([f]) => void openFile(code, f)}
+          />
           {s.source && s.source.faces.length > 1 && (
             <select className="rounded border border-gray-300 px-1 py-0.5 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
               onChange={(e) => chooseFace(code, Number(e.target.value))}>
@@ -573,13 +574,12 @@ export default function FaceLab() {
             <Toggle label={t("faceLab.session.questionedFirst")} checked={session.questionedFirst} onChange={(v) => setSession((s) => ({ ...s, questionedFirst: v }))} />
             <span className="grow" />
             <button type="button" className={buttonClass} onClick={saveSession} disabled={!session.questioned.sourceId}>{t("faceLab.session.save")}</button>
-            <label className={`${buttonClass} cursor-pointer`}>
-              {t("faceLab.session.load")}
-              <input type="file" accept="application/json,.json" className="hidden" onChange={(e) => {
-                if (e.target.files?.[0]) void loadSession(e.target.files[0]);
-                e.target.value = "";
-              }} />
-            </label>
+            <FileDropzone
+              accept={SESSION_FILES}
+              variant="inline"
+              label={t("faceLab.session.load")}
+              onFiles={([f]) => void loadSession(f)}
+            />
             <button type="button" className={buttonClass} onClick={() => {
               setSession(newSession());
               setSides({ Q: EMPTY_SIDE, K: EMPTY_SIDE });

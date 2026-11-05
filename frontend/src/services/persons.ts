@@ -1,4 +1,4 @@
-import { apiBaseUrl, requestApi } from "./api";
+import { apiBaseUrl, apiFetch, requestApi } from "./api";
 import { getToken } from "./auth";
 import type { LinkStrength } from "./analyses";
 
@@ -43,6 +43,7 @@ export interface PersonIdentityDocument {
 /** A person's full enrollment chain. */
 export interface PersonIdentity {
   personId: string;
+  personNumber: number;
   documents: PersonIdentityDocument[];
 }
 
@@ -56,6 +57,7 @@ export interface PersonClusterMember {
   featureId: string;
 
   personId?: string;
+  personNumber?: number;
   name?: string;
   registerNumber?: string;
   documentType?: string;
@@ -124,6 +126,7 @@ export interface ModalityCount {
  * cases. */
 export interface PersonSearchResult {
   personId: string;
+  personNumber: number;
   name: string;
   registerNumber: string;
   documentType: string;
@@ -185,6 +188,21 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/** A person page's address. It carries persons.id rather than the person_id, which an importer may
+ * build from a personal document number and which the address would put in the browser's history
+ * (and, as the page's title, in the history list). */
+export function personPath(personNumber: number | undefined): string {
+  return `/persons/${personNumber ?? ""}`;
+}
+
+/** The person_id behind the number in a person page's address. */
+export async function getPersonIdByNumber(personNumber: string): Promise<string> {
+  const { personId } = await requestApi<{ personId: string }>(`/persons/by-number/${personNumber}`, {
+    headers: authHeaders(),
+  });
+  return personId;
+}
+
 export async function searchPersonsByName(
   name: string,
 ): Promise<PersonSearchResult[]> {
@@ -202,7 +220,7 @@ export async function searchPersonsByFace(
   form.append("image", image);
 
   const token = getToken();
-  const response = await fetch(`${apiBaseUrl}/persons/search-by-face`, {
+  const response = await apiFetch(`${apiBaseUrl}/persons/search-by-face`, {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: form,
@@ -232,7 +250,7 @@ export async function getIdentityFileObjectUrl(
   identityFileId: number,
 ): Promise<string> {
   const token = getToken();
-  const response = await fetch(
+  const response = await apiFetch(
     `${apiBaseUrl}/persons/${encodeURIComponent(personId)}/identity-files/${identityFileId}/download`,
     { headers: token ? { Authorization: `Bearer ${token}` } : {} },
   );

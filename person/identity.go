@@ -17,9 +17,11 @@ import (
 // identity document, register, and file/feature recorded for them. See
 // MODEL.md section 2.1.
 type Identity struct {
-	PersonID  string          `json:"personId"`
-	Meta      json.RawMessage `json:"meta,omitempty"`
-	Documents []Document      `json:"documents"`
+	PersonID string `json:"personId"`
+	// PersonNumber is persons.id, what the person page's URL carries instead of PersonID.
+	PersonNumber int64           `json:"personNumber"`
+	Meta         json.RawMessage `json:"meta,omitempty"`
+	Documents    []Document      `json:"documents"`
 }
 
 // Document is one identity_documents row plus the registers filed under it.
@@ -63,6 +65,16 @@ type File struct {
 	FeatureType string `json:"featureType,omitempty"`
 }
 
+// IDForNumber returns the person_id of the person with this persons.id. Returns ErrNotFound if
+// there is none.
+func IDForNumber(ctx context.Context, sqlDB *sql.DB, number int64) (string, error) {
+	personID, err := db.New(sqlDB).GetPersonIDByNumber(ctx, number)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return personID, err
+}
+
 // GetIdentity loads one person's full enrollment chain -- every identity
 // document, register, and file/feature recorded for them -- by
 // person.person_id. Returns ErrNotFound if no person row matches.
@@ -89,7 +101,9 @@ func GetIdentity(ctx context.Context, sqlDB *sql.DB, personID string) (Identity,
 		return Identity{}, err
 	}
 
-	return buildIdentity(personID, personRow.Meta, chainRows), nil
+	identity := buildIdentity(personID, personRow.Meta, chainRows)
+	identity.PersonNumber = personRow.ID
+	return identity, nil
 }
 
 // buildIdentity assembles an Identity from an already-loaded identity chain

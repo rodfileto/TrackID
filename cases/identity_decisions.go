@@ -47,6 +47,7 @@ type CaseFaceIdentities struct {
 // (empty while pending); Score is the matcher's, when it scored the pair.
 type IdentityDecision struct {
 	PersonID       string   `json:"personId"`
+	PersonNumber   int64    `json:"personNumber"`
 	Name           string   `json:"name"`
 	IdentityFileID int64    `json:"identityFileId"`
 	ContentType    string   `json:"contentType,omitempty"`
@@ -138,7 +139,7 @@ func ListCaseIdentityDecisions(ctx context.Context, sqlDB *sql.DB, caseID string
 			if !ok {
 				continue
 			}
-			d := IdentityDecision{PersonID: person.PersonID, Name: person.Name, IdentityFileID: person.IdentityFileID,
+			d := IdentityDecision{PersonID: person.PersonID, PersonNumber: person.PersonNumber, Name: person.Name, IdentityFileID: person.IdentityFileID,
 				ContentType: person.ContentType, FeatureID: known, Status: status}
 			var role string
 			role, d.DecidedBy, d.Score = reviewedDecision(chain)

@@ -15,9 +15,11 @@ import (
 // Target is a mention target as the @ menu and a mention chip show it: a label, the case or
 // cases it belongs to (to link it), and a few facts for the chip's card.
 type Target struct {
-	Kind  Kind   `json:"kind"`
-	Ref   string `json:"ref"`
-	Label string `json:"label"`
+	Kind Kind   `json:"kind"`
+	Ref  string `json:"ref"`
+	// PersonNumber is persons.id for a person, what a link to their page carries instead of Ref.
+	PersonNumber int64  `json:"personNumber,omitempty"`
+	Label        string `json:"label"`
 	// CaseIDs are the case a target is (CASE) or belongs to (REPORT), or the cases a request
 	// opened or joined (REQUEST).
 	CaseIDs     []string   `json:"caseIds,omitempty"`
@@ -81,7 +83,7 @@ func personTarget(r db.ListMentionPersonsRow) Target {
 	if label == "" {
 		label = r.PersonID
 	}
-	return Target{Kind: KindPerson, Ref: r.PersonID, Label: label, Description: r.PersonID}
+	return Target{Kind: KindPerson, Ref: r.PersonID, PersonNumber: r.PersonNumber, Label: label, Description: r.PersonID}
 }
 
 func clusterTarget(r db.ListMentionClustersRow) Target {

@@ -12,7 +12,7 @@ import {
   type ArticleTemplate,
   type Backlink,
 } from "../../services/articles";
-import type { PersonProfile } from "../../services/persons";
+import { personPath, type PersonProfile } from "../../services/persons";
 import ArticleView, { ArticleToc } from "./ArticleView";
 import ArticleEditor from "./ArticleEditor";
 import PersonInfobox from "./PersonInfobox";
@@ -30,7 +30,7 @@ function WhatLinksHere({ backlinks }: { backlinks: Backlink[] }) {
           {backlinks.map((b) => (
             <li key={`${b.subject.kind}:${b.subject.ref}`}>
               <Link
-                to={`/persons/${encodeURIComponent(b.subject.ref)}`}
+                to={personPath(b.subjectNumber)}
                 className="text-brand-500 hover:underline dark:text-brand-400"
               >
                 {b.subjectLabel}

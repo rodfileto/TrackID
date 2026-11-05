@@ -65,6 +65,7 @@ var supportedImageFormats = map[string]bool{
 // no linked cases.
 type SearchResult struct {
 	PersonID       string          `json:"personId"`
+	PersonNumber   int64           `json:"personNumber"`
 	Name           string          `json:"name"`
 	RegisterNumber string          `json:"registerNumber"`
 	DocumentType   string          `json:"documentType"`
@@ -127,6 +128,7 @@ func SearchByName(ctx context.Context, sqlDB *sql.DB, query string) ([]SearchRes
 	for _, r := range rows {
 		out = append(out, SearchResult{
 			PersonID:       r.PersonID,
+			PersonNumber:   r.PersonNumber,
 			Name:           r.Name,
 			RegisterNumber: r.RegisterNumber,
 			DocumentType:   r.DocumentType,
@@ -252,6 +254,7 @@ func SearchByFace(ctx context.Context, sqlDB *sql.DB, vis embedding.FaceEmbedder
 		persons = append(persons, FaceSearchResult{
 			SearchResult: SearchResult{
 				PersonID:       r.PersonID,
+				PersonNumber:   r.PersonNumber,
 				Name:           r.Name,
 				RegisterNumber: r.RegisterNumber,
 				DocumentType:   r.DocumentType,

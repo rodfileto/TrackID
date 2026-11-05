@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useParams } from "react-router";
+import { useParams } from "react-router";
+import BackLink from "../components/common/BackLink";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import PageMeta from "../components/common/PageMeta";
@@ -18,7 +19,8 @@ import {
 } from "../components/ui/table";
 import Badge from "../components/ui/badge/Badge";
 import Button from "../components/ui/button/Button";
-import EvidenceDropzone from "../components/cases/EvidenceDropzone";
+import FileDropzone from "../components/common/FileDropzone";
+import { EVIDENCE_FILES } from "../components/common/fileTypes";
 import EvidencePreview from "../components/cases/EvidencePreview";
 import FacialCaseWorkspace from "../components/cases/FacialCaseWorkspace";
 import CaseIdentityDecisions from "../components/cases/CaseIdentityDecisions";
@@ -72,9 +74,6 @@ function formatDay(day: string, locale: string): string {
 export default function CaseDetailPage() {
   const { t, i18n } = useTranslation();
   const { caseId } = useParams<{ caseId: string }>();
-  const location = useLocation();
-  const backToCases =
-    (location.state as { from?: string } | null)?.from ?? "/cases";
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -179,28 +178,7 @@ export default function CaseDetailPage() {
       <PageBreadcrumb pageTitle={t("caseDetail.title", { caseId: caseId ?? "" })} />
 
       <div className="mb-6">
-        <Link
-          to={backToCases}
-          className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-        >
-          <svg
-            className="stroke-current"
-            width="17"
-            height="16"
-            viewBox="0 0 17 16"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M10.9235 12.667L6.75683 8.50033L10.9235 4.33366"
-              stroke=""
-              strokeWidth="1.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          {t("caseDetail.backToCases")}
-        </Link>
+        <BackLink fallback="/cases" label={t("caseDetail.backToCases")} />
       </div>
 
       {/* Only the first load blanks the page: reloads after an upload or
@@ -262,7 +240,10 @@ export default function CaseDetailPage() {
                 desc={t("caseDetail.attachFiles")}
                 className="h-full"
               >
-                <EvidenceDropzone
+                <FileDropzone
+                  multiple
+                  accept={EVIDENCE_FILES}
+                  description={t("dropzone.description")}
                   onFiles={handleFiles}
                   onRejected={handleRejected}
                 />

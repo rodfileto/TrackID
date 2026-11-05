@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "../components/ui/table";
 import Badge from "../components/ui/badge/Badge";
+import { personPath } from "../services/persons";
 import {
   listClusters,
   type ClusterSummary,
@@ -46,7 +47,7 @@ function IdentifiedCell({ cluster }: { cluster: ClusterSummary }) {
       {(cluster.persons ?? []).map((person) => (
         <Link
           key={person.personId}
-          to={`/persons/${encodeURIComponent(person.personId)}`}
+          to={personPath(person.personNumber)}
           className="font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300"
         >
           {person.name}

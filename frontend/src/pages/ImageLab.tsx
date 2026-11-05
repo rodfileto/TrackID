@@ -25,6 +25,8 @@ import {
   type Recipe,
   type Rect,
 } from "../services/imageproc";
+import FileDropzone from "../components/common/FileDropzone";
+import { IMAGE_FILES } from "../components/common/fileTypes";
 
 // The image lab (docs/fingerprint-image-processing-plan.md): try the fingerprint processing
 // steps on any image. The server renders every change and writes its record (in Portuguese, for
@@ -336,10 +338,14 @@ export default function ImageLab() {
       <div className="flex flex-col gap-4">
         <ComponentCard title={t("imageLab.title")} desc={t("imageLab.desc")}>
           <div className="flex flex-wrap items-center gap-4">
-            <label className="inline-flex h-10 cursor-pointer items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600">
-              {uploading ? t("imageLab.reading") : source ? t("imageLab.openAnother") : t("imageLab.open")}
-              <input type="file" accept="image/*,.tif,.tiff,.bmp" className="hidden" onChange={(e) => e.target.files?.[0] && openFile(e.target.files[0])} />
-            </label>
+            <FileDropzone
+              accept={IMAGE_FILES}
+              variant={source ? "inline" : "panel"}
+              className={source ? "" : "w-full"}
+              disabled={uploading}
+              label={uploading ? t("imageLab.reading") : source ? t("imageLab.openAnother") : t("imageLab.open")}
+              onFiles={([f]) => void openFile(f)}
+            />
             {source && (
               <div className="text-xs text-gray-600 dark:text-gray-400">
                 <div className="font-medium text-gray-800 dark:text-white/90">{source.filename}</div>
@@ -550,10 +556,12 @@ export default function ImageLab() {
         {render && info?.compare && (
           <ComponentCard title={t("imageLab.compare.title")} desc={t("imageLab.compare.desc", { threshold: info.matchThreshold })}>
             <div className="flex flex-wrap items-center gap-3 text-sm">
-              <label className="inline-flex h-9 cursor-pointer items-center rounded-lg border border-gray-300 px-3 text-xs dark:border-gray-700 dark:text-gray-300">
-                {reference ? reference.source.filename : t("imageLab.compare.open")}
-                <input type="file" accept="image/*,.tif,.tiff,.bmp" className="hidden" onChange={(e) => e.target.files?.[0] && openReference(e.target.files[0])} />
-              </label>
+              <FileDropzone
+                accept={IMAGE_FILES}
+                variant="inline"
+                label={reference ? reference.source.filename : t("imageLab.compare.open")}
+                onFiles={([f]) => void openReference(f)}
+              />
               <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                 {t("imageLab.compare.ppi")}
                 <input value={referencePpi} onChange={(e) => setReferencePpi(e.target.value)} className={`${inputClass} w-20 text-right`} />

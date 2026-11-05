@@ -1,4 +1,4 @@
-import { apiBaseUrl } from "./api";
+import { apiBaseUrl, apiFetch } from "./api";
 import { getToken } from "./auth";
 
 // Codification versions of a face (cases.CodificationVersion, api/codification_versions_handler.go):
@@ -56,7 +56,7 @@ async function failed(response: Response, fallback: string): Promise<never> {
 }
 
 export async function listCodificationVersions(caseId: string, evidenceId: number, traceId: number) {
-  const response = await fetch(base(caseId, evidenceId, traceId), { headers: headers(false) });
+  const response = await apiFetch(base(caseId, evidenceId, traceId), { headers: headers(false) });
   if (!response.ok) return failed(response, "Could not load the versions");
   return (await response.json()) as { versions: CodificationVersion[]; recipeVersion: number; software: string };
 }
@@ -68,7 +68,7 @@ export async function previewCodificationVersion(
   recipe: FaceRecipe,
   signal?: AbortSignal,
 ): Promise<RenderedVersion> {
-  const response = await fetch(`${base(caseId, evidenceId, traceId)}/preview`, {
+  const response = await apiFetch(`${base(caseId, evidenceId, traceId)}/preview`, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({ recipe }),
@@ -85,7 +85,7 @@ export async function createCodificationVersion(
   recipe: FaceRecipe,
   label: string,
 ): Promise<CodificationVersion> {
-  const response = await fetch(base(caseId, evidenceId, traceId), {
+  const response = await apiFetch(base(caseId, evidenceId, traceId), {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({ recipe, label }),
@@ -95,18 +95,18 @@ export async function createCodificationVersion(
 }
 
 export async function setRecognitionVersion(caseId: string, evidenceId: number, traceId: number, codificationId: number) {
-  const response = await fetch(`${base(caseId, evidenceId, traceId)}/${codificationId}/recognition`, { method: "PUT", headers: headers(false) });
+  const response = await apiFetch(`${base(caseId, evidenceId, traceId)}/${codificationId}/recognition`, { method: "PUT", headers: headers(false) });
   if (!response.ok) return failed(response, "Could not choose the version");
 }
 
 export async function deleteCodificationVersion(caseId: string, evidenceId: number, traceId: number, codificationId: number) {
-  const response = await fetch(`${base(caseId, evidenceId, traceId)}/${codificationId}`, { method: "DELETE", headers: headers(false) });
+  const response = await apiFetch(`${base(caseId, evidenceId, traceId)}/${codificationId}`, { method: "DELETE", headers: headers(false) });
   if (!response.ok) return failed(response, "Could not delete the version");
 }
 
 /** A codification's own image as an object URL the caller revokes. */
 export async function getCodificationVersionImageUrl(caseId: string, evidenceId: number, traceId: number, codificationId: number) {
-  const response = await fetch(`${base(caseId, evidenceId, traceId)}/${codificationId}/image`, { headers: headers(false) });
+  const response = await apiFetch(`${base(caseId, evidenceId, traceId)}/${codificationId}/image`, { headers: headers(false) });
   if (!response.ok) return failed(response, "Could not load the version's image");
   return URL.createObjectURL(await response.blob());
 }

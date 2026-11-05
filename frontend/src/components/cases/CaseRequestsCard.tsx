@@ -23,6 +23,8 @@ import {
   type CaseRequestInput,
   type MaterialTrace,
 } from "../../services/requests";
+import FileDropzone from "../common/FileDropzone";
+import { MATERIAL_FILES } from "../common/fileTypes";
 
 const inputClass =
   "h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90";
@@ -195,11 +197,10 @@ export default function CaseRequestsCard({
   useEffect(load, [load, refreshKey]);
 
   /** Coordinator: receive more files a request sent in, into this case. */
-  async function receive(requestId: number, files: FileList | null) {
-    if (!files || files.length === 0) return;
+  async function receive(requestId: number, files: File[]) {
     setReceiving(requestId);
     try {
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         await receiveMaterial(caseId, requestId, file);
       }
       toast.success(t("requests.saved"));
@@ -288,11 +289,15 @@ export default function CaseRequestsCard({
               </ul>
             )}
             {isCoordinator && (
-              <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-theme-xs text-brand-500 hover:underline">
-                {receiving === r.id ? "…" : t("requests.receive")}
-                <input type="file" multiple accept="image/*,application/pdf,video/*" className="hidden" disabled={receiving !== null}
-                  onChange={(e) => void receive(r.id, e.target.files)} />
-              </label>
+              <FileDropzone
+                multiple
+                variant="inline"
+                className="mt-2"
+                accept={MATERIAL_FILES}
+                disabled={receiving !== null}
+                label={receiving === r.id ? "…" : t("requests.receive")}
+                onFiles={(files) => void receive(r.id, files)}
+              />
             )}
           </li>
         ))}

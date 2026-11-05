@@ -90,7 +90,7 @@ ORDER BY bc.case_id, ct.id;
 -- see graph.KnownFeatureID) to the enrollment they belong to, for rendering
 -- a cluster's membership (see person.buildClusters). Same join shape as
 -- FindNearestPersonsByFaceEmbedding, minus the embedding distance.
-SELECT p.person_id, r.name, r.register_number, d.document_type, d.document_number,
+SELECT p.id AS person_number, p.person_id, r.name, r.register_number, d.document_type, d.document_number,
        f.id AS identity_file_id, f.content_type
 FROM identity_files f
 JOIN identity_registers r ON r.id = f.register_id

@@ -14,6 +14,8 @@ import {
   type AssistDraft,
   type AssistInfo,
 } from "../services/assist";
+import FileDropzone from "../components/common/FileDropzone";
+import { DOCUMENT_FILES } from "../components/common/fileTypes";
 
 const buttonClass =
   "rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5";
@@ -56,9 +58,8 @@ export default function AssistLab() {
     getAssistInfo().then(setInfo).catch((err) => toast.error(err instanceof Error ? err.message : String(err)));
   }, []);
 
-  async function addFiles(files: FileList | null) {
-    if (!files) return;
-    for (const file of Array.from(files)) {
+  async function addFiles(files: File[]) {
+    for (const file of files) {
       try {
         const doc = await extractDocument(file);
         setDocuments((docs) => [...docs, doc]);
@@ -131,20 +132,15 @@ export default function AssistLab() {
             <span className="text-xs text-gray-500 dark:text-gray-400">{t("assistLab.instructionsHint")}</span>
           </div>
 
+          <FileDropzone
+            multiple
+            accept={DOCUMENT_FILES}
+            variant={documents.length ? "inline" : "panel"}
+            label={documents.length ? t("assistLab.addMore") : t("assistLab.addFiles")}
+            onFiles={(files) => void addFiles(files)}
+          />
+
           <div className="flex flex-wrap items-center gap-2">
-            <label className={`${primaryClass} cursor-pointer`}>
-              {documents.length ? t("assistLab.addMore") : t("assistLab.addFiles")}
-              <input
-                type="file"
-                multiple
-                accept="application/pdf,text/plain,text/*,image/*,.tif,.tiff,.bmp"
-                className="hidden"
-                onChange={(e) => {
-                  void addFiles(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-            </label>
             <button type="button" className={primaryClass} disabled={!canDraft || drafting} onClick={runDraft}>
               {drafting ? t("assistLab.drafting", { seconds: elapsed }) : t("assistLab.draft")}
             </button>

@@ -61,6 +61,7 @@ type TraceLink struct {
 	Kind string `json:"kind"` // "KNOWN" | "QUESTIONED"
 
 	PersonID       string `json:"personId,omitempty"`
+	PersonNumber   int64  `json:"personNumber,omitempty"`
 	Name           string `json:"name,omitempty"`
 	IdentityFileID int64  `json:"identityFileId,omitempty"`
 	ContentType    string `json:"contentType,omitempty"`
@@ -419,7 +420,7 @@ func DescribeFeatures(ctx context.Context, q *db.Queries, featureIDs []string) (
 			return nil, err
 		}
 		for _, d := range rows {
-			out[graph.KnownFeatureID(d.IdentityFileID)] = TraceLink{Kind: "KNOWN", PersonID: d.PersonID, Name: d.Name,
+			out[graph.KnownFeatureID(d.IdentityFileID)] = TraceLink{Kind: "KNOWN", PersonID: d.PersonID, PersonNumber: d.PersonNumber, Name: d.Name,
 				IdentityFileID: d.IdentityFileID, ContentType: d.ContentType.String}
 		}
 	}

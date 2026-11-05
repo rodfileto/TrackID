@@ -11,7 +11,7 @@ can get articles later without a new schema.
 
 ## What is there now
 
-- **The person page** (`frontend/src/pages/PersonProfile.tsx`, route `/persons/:personId`) shows
+- **The person page** (`frontend/src/pages/PersonProfile.tsx`, route `/persons/:personRef`, by `persons.id`) shows
   data only, in stacked cards:
   - Person;
   - Identity: documents, registers, enrolled files;
@@ -154,7 +154,7 @@ The Article tab:
     The snapshot is never shown either, so an article can't leak another unit's case number.
 - **Each chip links to its target:**
   - case → `/cases/:caseId`;
-  - person → `/persons/:personId`;
+  - person → `/persons/:personRef` (`persons.id`, so the `person_id` stays out of the browser's history);
   - cluster → `/clusters?cluster=:id`;
   - request and laudo → the case page, on its requests or report section;
   - occurrence → a new **occurrence page**, `/intelligence/occurrences/:id`;

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import ComponentCard from "../common/ComponentCard";
 import Badge from "../ui/badge/Badge";
 import IdentityFileThumbnail from "../persons/IdentityFileThumbnail";
+import { personPath } from "../../services/persons";
 import {
   listCaseIdentityDecisions,
   type CaseFaceIdentities,
@@ -146,7 +147,7 @@ function FaceIdentities({
               </div>
               <div className="min-w-0 flex-1">
                 <Link
-                  to={`/persons/${encodeURIComponent(d.personId)}`}
+                  to={personPath(d.personNumber)}
                   className="font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300"
                 >
                   {d.name}
