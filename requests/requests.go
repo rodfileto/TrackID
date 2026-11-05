@@ -565,6 +565,111 @@ func Create(ctx context.Context, sqlDB *sql.DB, caseID string, in Input, registe
 	return Request{}, fmt.Errorf("requests: %d not found after insert", requestID)
 }
 
+// UpdateInput is what can be corrected in a registered request, the whole of it each time. The
+// occurrence is found from CitedInquiry as Register finds it: named exactly by one, or none.
+type UpdateInput struct {
+	Authority         string
+	DocumentReference string
+	DocumentDate      string
+	ReceivedOn        string
+	DueOn             string
+	CitedInquiry      string
+	OccurrenceID      *int64 // the occurrence, when the caller knows it; otherwise CitedInquiry finds it
+	Notes             string
+	References        []Reference
+}
+
+// Update corrects a registered request. Its cases and analyses stay as they are (MoveToCase moves it).
+func Update(ctx context.Context, sqlDB *sql.DB, requestID int64, in UpdateInput) error {
+	f, err := check(Input{Authority: in.Authority, DocumentReference: in.DocumentReference, DocumentDate: in.DocumentDate,
+		ReceivedOn: in.ReceivedOn, DueOn: in.DueOn, References: in.References})
+	if err != nil {
+		return err
+	}
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	q := db.New(tx)
+	occurrence, err := resolveOccurrence(ctx, q, RegisterInput{Input: Input{OccurrenceID: in.OccurrenceID, CitedInquiry: in.CitedInquiry}}, time.Now())
+	if err != nil {
+		return err
+	}
+	rows, err := q.UpdateCaseRequest(ctx, db.UpdateCaseRequestParams{
+		ID: requestID, Authority: f.authority, DocumentReference: f.document, DocumentDate: f.documentDate,
+		ReceivedOn: f.received.Time, DueOn: f.due, CitedInquiryNumber: nullString(in.CitedInquiry),
+		OccurrenceID: occurrence, Notes: nullString(in.Notes),
+	})
+	if err != nil {
+		return fmt.Errorf("requests: update %d: %w", requestID, err)
+	}
+	if rows == 0 {
+		return ValidationError("request not found")
+	}
+	if err := q.DeleteCaseRequestReferences(ctx, requestID); err != nil {
+		return err
+	}
+	for _, r := range f.references {
+		if err := q.InsertCaseRequestReference(ctx, db.InsertCaseRequestReferenceParams{CaseRequestID: requestID, Label: r.Label, Number: r.Number}); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// MoveToCase moves a request from one case to another of the same modality, with the analyses that
+// answer it and the material it sent in, when it was registered under the wrong case.
+func MoveToCase(ctx context.Context, sqlDB *sql.DB, requestID int64, fromCaseID, toCaseID string) error {
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	q := db.New(tx)
+	from, err := q.GetCaseForRequest(ctx, fromCaseID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ValidationError("case " + fromCaseID + " not found")
+	}
+	if err != nil {
+		return err
+	}
+	to, err := q.GetCaseForRequest(ctx, toCaseID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ValidationError("case " + toCaseID + " not found")
+	}
+	if err != nil {
+		return err
+	}
+	if from.ID == to.ID {
+		return nil
+	}
+	if from.Modality != to.Modality {
+		return ValidationError("the cases are of different modalities")
+	}
+	// In a fixed order, so two moves in opposite directions can't deadlock.
+	first, second := min(from.ID, to.ID), max(from.ID, to.ID)
+	for _, id := range []int64{first, second} {
+		if _, err := q.LockBiometricCase(ctx, id); err != nil {
+			return err
+		}
+	}
+	rows, err := q.MoveCaseRequestLink(ctx, db.MoveCaseRequestLinkParams{ToCase: to.ID, CaseRequestID: requestID, FromCase: from.ID})
+	if err != nil {
+		return fmt.Errorf("requests: move %d: %w", requestID, err)
+	}
+	if rows == 0 {
+		return ValidationError("the request is not on case " + fromCaseID)
+	}
+	if _, err := q.MoveRequestAnalyses(ctx, db.MoveRequestAnalysesParams{ToCase: to.ID, CaseRequestID: requestID, FromCase: from.ID}); err != nil {
+		return fmt.Errorf("requests: move analyses of %d: %w", requestID, err)
+	}
+	if err := q.MoveRequestFiles(ctx, db.MoveRequestFilesParams{ToCase: to.ID, CaseRequestID: requestID, FromCase: from.ID}); err != nil {
+		return fmt.Errorf("requests: move files of %d: %w", requestID, err)
+	}
+	return tx.Commit()
+}
+
 // ListAll returns up to limit requests across every case, soonest due first (no due date last),
 // each with its cases and whether it is overdue.
 func ListAll(ctx context.Context, sqlDB *sql.DB, reference string, limit int) ([]Summary, error) {

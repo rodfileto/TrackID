@@ -3,6 +3,7 @@ import LanguageDetector from "i18next-browser-languagedetector";
 import { initReactI18next } from "react-i18next";
 import en from "./locales/en.json";
 import ptBR from "./locales/pt-BR.json";
+import { extension } from "../extensions";
 
 export const SUPPORTED_LANGUAGES = [
   { code: "en", label: "English" },
@@ -29,6 +30,10 @@ i18n
         lng.startsWith("pt") ? "pt-BR" : lng,
     },
   });
+
+for (const [language, bundle] of Object.entries(extension.translations)) {
+  i18n.addResourceBundle(language, "translation", bundle, true, true);
+}
 
 const syncHtmlLang = (lng: string) => {
   document.documentElement.lang = lng;

@@ -32,7 +32,16 @@ import (
 // Run starts the API server on the configured port. The database is optional:
 // when DATABASE_URL is empty the API still serves /health and the frontend, and
 // every DB-backed route returns 503.
-func Run() error {
+// Options are what an organization's own server adds to core's.
+type Options struct {
+	// Register adds the organization's routes, given the dependencies core built. protected
+	// requires a signed-in, active user.
+	Register func(deps api.Dependencies, engine *gin.Engine, protected *gin.RouterGroup)
+}
+
+// Run starts the API server and, when a build is present, the frontend. An organization runs its own
+// routes through Options; cmd/trackid runs none.
+func Run(options Options) error {
 	env.Load()
 
 	configuration := config.Load()
@@ -131,7 +140,7 @@ func Run() error {
 		log.Printf("ASSIST_ENDPOINT/ASSIST_MODEL not configured; the assist lab will not draft")
 	}
 
-	router := api.NewRouter(api.Dependencies{
+	deps := api.Dependencies{
 		DB:          db,
 		JWTSecret:   configuration.JWTSecret,
 		EmailDomain: configuration.EmailDomain,
@@ -146,7 +155,13 @@ func Run() error {
 		AssistDrafter:   assistDrafter,
 		AssistModel:     configuration.AssistModel,
 		VideoLab:        videoLab,
-	})
+	}
+	if options.Register != nil {
+		deps.Register = func(engine *gin.Engine, protected *gin.RouterGroup) {
+			options.Register(deps, engine, protected)
+		}
+	}
+	router := api.NewRouter(deps)
 
 	if distDir := web.DistDir(); distDir != "" {
 		log.Printf("serving prototype frontend from %s", distDir)

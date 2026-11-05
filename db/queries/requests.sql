@@ -21,6 +21,35 @@ RETURNING sequence;
 -- name: InsertCaseRequestQuestion :exec
 INSERT INTO case_request_questions (case_request_id, sequence, question) VALUES ($1, $2, $3);
 
+-- name: UpdateCaseRequest :execrows
+UPDATE case_requests SET authority = @authority::text, document_reference = @document_reference::text,
+    document_date = sqlc.narg('document_date')::date, received_on = @received_on::date,
+    due_on = sqlc.narg('due_on')::date, cited_inquiry_number = sqlc.narg('cited_inquiry_number')::text,
+    occurrence_id = sqlc.narg('occurrence_id')::bigint, notes = sqlc.narg('notes')::text
+WHERE id = @id;
+
+-- name: DeleteCaseRequestReferences :exec
+DELETE FROM case_request_references WHERE case_request_id = $1;
+
+-- name: MoveCaseRequestLink :execrows
+-- A request's link moves to another case, as that case's next request (lock both cases first).
+UPDATE case_request_cases SET biometric_case_id = @to_case::bigint, sequence = (
+    SELECT COALESCE(MAX(sequence), 0) + 1 FROM case_request_cases WHERE biometric_case_id = @to_case::bigint)
+WHERE case_request_id = @case_request_id::bigint AND biometric_case_id = @from_case::bigint;
+
+-- name: MoveRequestAnalyses :execrows
+-- The analyses answering a request follow it to another case, numbered after that case's last.
+UPDATE case_analyses ca SET biometric_case_id = @to_case::bigint, sequence = moved.sequence
+FROM (SELECT a.id, (SELECT COALESCE(MAX(x.sequence), 0) FROM case_analyses x WHERE x.biometric_case_id = @to_case::bigint)
+          + ROW_NUMBER() OVER (ORDER BY a.sequence) AS sequence
+      FROM case_analyses a
+      WHERE a.case_request_id = @case_request_id::bigint AND a.biometric_case_id = @from_case::bigint) moved
+WHERE ca.id = moved.id;
+
+-- name: MoveRequestFiles :exec
+UPDATE case_files SET biometric_case_id = @to_case::bigint, updated_at = NOW()
+WHERE case_request_id = @case_request_id::bigint AND biometric_case_id = @from_case::bigint;
+
 -- name: InsertCaseRequestReference :exec
 INSERT INTO case_request_references (case_request_id, label, number) VALUES ($1, $2, $3);
 

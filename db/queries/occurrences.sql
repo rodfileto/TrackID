@@ -76,6 +76,15 @@ ON CONFLICT (inquiry_number) WHERE occurrence_number IS NULL AND occurrence_seq 
     updated_at = NOW()
 RETURNING id, (xmax = 0) AS inserted;
 
+-- name: UpdateOccurrenceDetails :execrows
+UPDATE occurrences SET occurred_from = sqlc.narg('occurred_from'), inquiry_number = sqlc.narg('inquiry_number'),
+    description = @description::text, updated_at = NOW()
+WHERE id = @id;
+
+-- name: ListOccurrenceLinkedCaseTypes :many
+-- The natures of the cases linked to an occurrence: its types must keep agreeing with them.
+SELECT DISTINCT case_type FROM biometric_cases WHERE occurrence_id = $1;
+
 -- name: DeleteOccurrenceClassifications :exec
 -- With AddOccurrenceClassification, replaces an occurrence's types inside one transaction.
 DELETE FROM occurrence_classifications WHERE occurrence_id = $1;

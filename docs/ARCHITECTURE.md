@@ -103,7 +103,7 @@ organizations import to build their import commands) and an **internal** runtime
   loading, and the Postgres connection pool
 - `internal/cmdutil/` — shared bootstrap helpers for the `cmd/` tools (`-commit`
   dry-run flag, opening the database)
-- `internal/server/` — the composition root: wires the API router and mounts the
+- `server/` — the composition root: wires the API router and mounts the
   prototype frontend
 - `internal/web/` — serves the built frontend as a single-page application
 
@@ -141,8 +141,9 @@ To integrate with this package, an organization:
    (`locations`, `occurrences`, `occurrence_classifications`), the unified
    `biometric_features`, and the `biometric_decisions` log — via the queries declared in
    `db/queries/`;
-3. optionally registers extra routes through the `api.Dependencies.Register` hook and
-   copies the base frontend to add its own pages.
+3. optionally runs its own server with `server.Run(server.Options{Register: ...})` to add routes,
+   and replaces `frontend/src/extensions/index.tsx` in its copy of the frontend to add pages, menu
+   items and translations, so it keeps receiving core's frontend unchanged.
 
 ## Development
 

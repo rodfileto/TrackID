@@ -1,0 +1,27 @@
+import type { ReactNode } from "react";
+
+/** A page an organization adds, shown to those with the capability when one is named. */
+export interface ExtensionRoute {
+  path: string;
+  element: ReactNode;
+  need?: "admin" | "coordinator" | "intelligence" | "persons";
+}
+
+/** A menu item an organization adds to the management section. */
+export interface ExtensionNavItem {
+  name: string;
+  path: string;
+  icon: ReactNode;
+  requires?: "admin" | "coordinator" | "intelligence" | "persons";
+}
+
+export interface Extension {
+  routes: ExtensionRoute[];
+  navItems: ExtensionNavItem[];
+  /** Merged over core's translations, by language. */
+  translations: Record<string, object>;
+}
+
+/** Core adds nothing. An organization replaces this file in its copy of the frontend, importing from
+ * core's own folders, and so keeps receiving the rest of the frontend unchanged. */
+export const extension: Extension = { routes: [], navItems: [], translations: {} };

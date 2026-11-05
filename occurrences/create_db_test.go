@@ -3,6 +3,7 @@ package occurrences_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -181,6 +182,47 @@ func TestCreateWithoutPlaceOrDate(t *testing.T) {
 	_, err = occurrences.Create(ctx, sqlDB, occurrences.CreateInput{Types: []string{"UNDETERMINED"}, Description: "x", OccurredTo: &to}, now)
 	if !isValidation(err) {
 		t.Errorf("an end with no start: %v", err)
+	}
+}
+
+// TestUpdate: a correction replaces the types, date, inquiry and description, and must keep the
+// nature of the cases linked.
+func TestUpdate(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	q := db.New(sqlDB)
+	now := time.Date(2026, 10, 12, 15, 0, 0, 0, time.UTC)
+	created, err := occurrences.Create(ctx, sqlDB, occurrences.CreateInput{Types: []string{"UNDETERMINED"}, Description: "a", InquiryNumber: "1"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := occurrences.Update(ctx, sqlDB, created.ID, occurrences.UpdateInput{
+		Types: []string{"FRAUD"}, OccurredFrom: now.Add(-time.Hour), InquiryNumber: "2", Description: "b",
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := q.GetOccurrenceSummary(ctx, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !summary.OccurredFrom.Valid || summary.InquiryNumber.String != "2" || !strings.Contains(string(summary.Types), "FRAUD") {
+		t.Errorf("summary %+v", summary)
+	}
+	if _, err := cases.Ingest(ctx, sqlDB, cases.CaseInput{CaseID: "C", CaseType: "CRIMINAL", Modality: "FINGERPRINT", Description: "c"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := occurrences.LinkCase(ctx, sqlDB, "C", &created.ID); err != nil {
+		t.Fatal(err)
+	}
+	for name, in := range map[string]occurrences.UpdateInput{
+		"another nature": {Types: []string{"BODY_FOUND"}, Description: "b"},
+		"no types":       {Description: "b"},
+		"no description": {Types: []string{"FRAUD"}},
+		"future":         {Types: []string{"FRAUD"}, Description: "b", OccurredFrom: now.Add(time.Hour)},
+	} {
+		if err := occurrences.Update(ctx, sqlDB, created.ID, in, now); !isValidation(err) {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }
 

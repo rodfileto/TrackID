@@ -20,6 +20,7 @@ import {
 import { useSidebar } from "../context/SidebarContext";
 import { useCurrentUser } from "../context/CurrentUserContext";
 import Brand from "../components/common/Brand";
+import { extension } from "../extensions";
 
 type NavItem = {
   name: string;
@@ -89,6 +90,7 @@ const allNavSections: NavSection[] = [
       { icon: <DocsIcon />, name: "nav.requests", path: "/requests", requires: "coordinator" },
       { icon: <TableIcon />, name: "nav.distribution", path: "/admin/distribution", requires: "coordinator" },
       { icon: <LockIcon />, name: "nav.users", path: "/admin/users", requires: "admin" },
+      ...extension.navItems,
     ],
   },
 ];

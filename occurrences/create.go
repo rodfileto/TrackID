@@ -311,6 +311,87 @@ func placeLocation(ctx context.Context, q *db.Queries, p PlaceInput) (int64, err
 	return loc.ID, nil
 }
 
+// UpdateInput is what can be corrected in an occurrence once registered, the whole of it each time.
+type UpdateInput struct {
+	Types         []string
+	OccurredFrom  time.Time // zero when unknown
+	InquiryNumber string
+	Description   string
+}
+
+// Update corrects an occurrence's types, date, inquiry number and description. Its types must keep
+// the nature of the cases linked to it.
+func Update(ctx context.Context, sqlDB *sql.DB, id int64, in UpdateInput, now time.Time) error {
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	q := db.New(tx)
+	known, err := q.ListOccurrenceTypes(ctx)
+	if err != nil {
+		return fmt.Errorf("occurrences: list types: %w", err)
+	}
+	natureOf := map[string]string{}
+	for _, t := range known {
+		natureOf[t.Code] = t.CaseType
+	}
+	var types []string
+	nature := ""
+	for _, t := range in.Types {
+		t = strings.ToUpper(strings.TrimSpace(t))
+		if t == "" || slices.Contains(types, t) {
+			continue
+		}
+		n, ok := natureOf[t]
+		if !ok {
+			return ValidationError("unknown occurrence type " + t)
+		}
+		if nature != "" && n != nature {
+			return ValidationError("an occurrence's types must all be criminal or all civil")
+		}
+		nature = n
+		types = append(types, t)
+	}
+	if len(types) == 0 {
+		return ValidationError("at least one occurrence type is required")
+	}
+	linked, err := q.ListOccurrenceLinkedCaseTypes(ctx, sql.NullInt64{Int64: id, Valid: true})
+	if err != nil {
+		return fmt.Errorf("occurrences: linked cases: %w", err)
+	}
+	for _, caseType := range linked {
+		if caseType != nature {
+			return ValidationError(fmt.Sprintf("a %s case is linked to this occurrence", strings.ToLower(caseType)))
+		}
+	}
+	if in.OccurredFrom.After(now.Add(5 * time.Minute)) {
+		return ValidationError("the occurrence cannot be in the future")
+	}
+	description := strings.TrimSpace(in.Description)
+	if description == "" {
+		return ValidationError("a description is required")
+	}
+	rows, err := q.UpdateOccurrenceDetails(ctx, db.UpdateOccurrenceDetailsParams{
+		ID: id, OccurredFrom: nullDate(in.OccurredFrom), InquiryNumber: nullString(in.InquiryNumber), Description: description,
+	})
+	if err != nil {
+		return fmt.Errorf("occurrences: update %d: %w", id, err)
+	}
+	if rows == 0 {
+		return ValidationError("occurrence not found")
+	}
+	if err := q.DeleteOccurrenceClassifications(ctx, id); err != nil {
+		return fmt.Errorf("occurrences: %d: types: %w", id, err)
+	}
+	for _, t := range types {
+		if err := q.AddOccurrenceClassification(ctx, db.AddOccurrenceClassificationParams{OccurrenceID: id, TypeCode: t}); err != nil {
+			return fmt.Errorf("occurrences: %d: type %s: %w", id, t, err)
+		}
+	}
+	return tx.Commit()
+}
+
 // LinkCase links the case caseID to occurrence occurrenceID, or unlinks it when occurrenceID is
 // nil. A case links only to an occurrence of its own nature (CRIMINAL or CIVIL).
 func LinkCase(ctx context.Context, sqlDB *sql.DB, caseID string, occurrenceID *int64) error {

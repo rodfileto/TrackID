@@ -52,6 +52,15 @@ func (q *Queries) AttachUnrequestedAnalyses(ctx context.Context, arg AttachUnreq
 	return result.RowsAffected()
 }
 
+const deleteCaseRequestReferences = `-- name: DeleteCaseRequestReferences :exec
+DELETE FROM case_request_references WHERE case_request_id = $1
+`
+
+func (q *Queries) DeleteCaseRequestReferences(ctx context.Context, caseRequestID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteCaseRequestReferences, caseRequestID)
+	return err
+}
+
 const findOccurrenceByInquiryNumber = `-- name: FindOccurrenceByInquiryNumber :many
 SELECT o.id
 FROM occurrences o
@@ -621,6 +630,67 @@ func (q *Queries) ListRequests(ctx context.Context, arg ListRequestsParams) ([]L
 	return items, nil
 }
 
+const moveCaseRequestLink = `-- name: MoveCaseRequestLink :execrows
+UPDATE case_request_cases SET biometric_case_id = $1::bigint, sequence = (
+    SELECT COALESCE(MAX(sequence), 0) + 1 FROM case_request_cases WHERE biometric_case_id = $1::bigint)
+WHERE case_request_id = $2::bigint AND biometric_case_id = $3::bigint
+`
+
+type MoveCaseRequestLinkParams struct {
+	ToCase        int64 `db:"to_case" json:"to_case"`
+	CaseRequestID int64 `db:"case_request_id" json:"case_request_id"`
+	FromCase      int64 `db:"from_case" json:"from_case"`
+}
+
+// A request's link moves to another case, as that case's next request (lock both cases first).
+func (q *Queries) MoveCaseRequestLink(ctx context.Context, arg MoveCaseRequestLinkParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, moveCaseRequestLink, arg.ToCase, arg.CaseRequestID, arg.FromCase)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const moveRequestAnalyses = `-- name: MoveRequestAnalyses :execrows
+UPDATE case_analyses ca SET biometric_case_id = $1::bigint, sequence = moved.sequence
+FROM (SELECT a.id, (SELECT COALESCE(MAX(x.sequence), 0) FROM case_analyses x WHERE x.biometric_case_id = $1::bigint)
+          + ROW_NUMBER() OVER (ORDER BY a.sequence) AS sequence
+      FROM case_analyses a
+      WHERE a.case_request_id = $2::bigint AND a.biometric_case_id = $3::bigint) moved
+WHERE ca.id = moved.id
+`
+
+type MoveRequestAnalysesParams struct {
+	ToCase        int64 `db:"to_case" json:"to_case"`
+	CaseRequestID int64 `db:"case_request_id" json:"case_request_id"`
+	FromCase      int64 `db:"from_case" json:"from_case"`
+}
+
+// The analyses answering a request follow it to another case, numbered after that case's last.
+func (q *Queries) MoveRequestAnalyses(ctx context.Context, arg MoveRequestAnalysesParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, moveRequestAnalyses, arg.ToCase, arg.CaseRequestID, arg.FromCase)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const moveRequestFiles = `-- name: MoveRequestFiles :exec
+UPDATE case_files SET biometric_case_id = $1::bigint, updated_at = NOW()
+WHERE case_request_id = $2::bigint AND biometric_case_id = $3::bigint
+`
+
+type MoveRequestFilesParams struct {
+	ToCase        int64 `db:"to_case" json:"to_case"`
+	CaseRequestID int64 `db:"case_request_id" json:"case_request_id"`
+	FromCase      int64 `db:"from_case" json:"from_case"`
+}
+
+func (q *Queries) MoveRequestFiles(ctx context.Context, arg MoveRequestFilesParams) error {
+	_, err := q.db.ExecContext(ctx, moveRequestFiles, arg.ToCase, arg.CaseRequestID, arg.FromCase)
+	return err
+}
+
 const setBiometricCaseOccurrenceIfNone = `-- name: SetBiometricCaseOccurrenceIfNone :execrows
 UPDATE biometric_cases SET occurrence_id = $2, updated_at = NOW() WHERE id = $1 AND occurrence_id IS NULL
 `
@@ -632,6 +702,44 @@ type SetBiometricCaseOccurrenceIfNoneParams struct {
 
 func (q *Queries) SetBiometricCaseOccurrenceIfNone(ctx context.Context, arg SetBiometricCaseOccurrenceIfNoneParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, setBiometricCaseOccurrenceIfNone, arg.ID, arg.OccurrenceID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateCaseRequest = `-- name: UpdateCaseRequest :execrows
+UPDATE case_requests SET authority = $1::text, document_reference = $2::text,
+    document_date = $3::date, received_on = $4::date,
+    due_on = $5::date, cited_inquiry_number = $6::text,
+    occurrence_id = $7::bigint, notes = $8::text
+WHERE id = $9
+`
+
+type UpdateCaseRequestParams struct {
+	Authority          string         `db:"authority" json:"authority"`
+	DocumentReference  string         `db:"document_reference" json:"document_reference"`
+	DocumentDate       sql.NullTime   `db:"document_date" json:"document_date"`
+	ReceivedOn         time.Time      `db:"received_on" json:"received_on"`
+	DueOn              sql.NullTime   `db:"due_on" json:"due_on"`
+	CitedInquiryNumber sql.NullString `db:"cited_inquiry_number" json:"cited_inquiry_number"`
+	OccurrenceID       sql.NullInt64  `db:"occurrence_id" json:"occurrence_id"`
+	Notes              sql.NullString `db:"notes" json:"notes"`
+	ID                 int64          `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateCaseRequest(ctx context.Context, arg UpdateCaseRequestParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateCaseRequest,
+		arg.Authority,
+		arg.DocumentReference,
+		arg.DocumentDate,
+		arg.ReceivedOn,
+		arg.DueOn,
+		arg.CitedInquiryNumber,
+		arg.OccurrenceID,
+		arg.Notes,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}

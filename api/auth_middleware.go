@@ -101,6 +101,9 @@ func RequireAdmin() gin.HandlerFunc {
 	}
 }
 
+// CurrentUser is the signed-in user, for an organization's own routes behind ActiveUser.
+func CurrentUser(context *gin.Context) auth.UserProfile { return currentUser(context) }
+
 func currentUser(context *gin.Context) auth.UserProfile {
 	user, _ := context.Get(currentUserKey)
 	profile, _ := user.(auth.UserProfile)

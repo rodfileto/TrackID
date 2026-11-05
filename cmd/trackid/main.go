@@ -1,15 +1,15 @@
 // trackid runs the API server, serving both the core API and (when a frontend
-// build is present) the prototype frontend. See internal/server.Run.
+// build is present) the prototype frontend. See server.Run.
 package main
 
 import (
 	"log"
 
-	"github.com/rodfileto/trackid/internal/server"
+	"github.com/rodfileto/trackid/server"
 )
 
 func main() {
-	if err := server.Run(); err != nil {
+	if err := server.Run(server.Options{}); err != nil {
 		log.Fatal(err)
 	}
 }

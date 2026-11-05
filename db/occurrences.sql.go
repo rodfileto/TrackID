@@ -392,6 +392,34 @@ func (q *Queries) ListOccurrenceCaseTypes(ctx context.Context, occurrenceID int6
 	return items, nil
 }
 
+const listOccurrenceLinkedCaseTypes = `-- name: ListOccurrenceLinkedCaseTypes :many
+SELECT DISTINCT case_type FROM biometric_cases WHERE occurrence_id = $1
+`
+
+// The natures of the cases linked to an occurrence: its types must keep agreeing with them.
+func (q *Queries) ListOccurrenceLinkedCaseTypes(ctx context.Context, occurrenceID sql.NullInt64) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listOccurrenceLinkedCaseTypes, occurrenceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var case_type string
+		if err := rows.Scan(&case_type); err != nil {
+			return nil, err
+		}
+		items = append(items, case_type)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOccurrenceTypes = `-- name: ListOccurrenceTypes :many
 SELECT code, case_type, grp FROM occurrence_types ORDER BY code
 `
@@ -714,6 +742,32 @@ type SetBiometricCaseOccurrenceParams struct {
 // A NULL occurrence_id unlinks the case.
 func (q *Queries) SetBiometricCaseOccurrence(ctx context.Context, arg SetBiometricCaseOccurrenceParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, setBiometricCaseOccurrence, arg.OccurrenceID, arg.CaseID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateOccurrenceDetails = `-- name: UpdateOccurrenceDetails :execrows
+UPDATE occurrences SET occurred_from = $1, inquiry_number = $2,
+    description = $3::text, updated_at = NOW()
+WHERE id = $4
+`
+
+type UpdateOccurrenceDetailsParams struct {
+	OccurredFrom  sql.NullTime   `db:"occurred_from" json:"occurred_from"`
+	InquiryNumber sql.NullString `db:"inquiry_number" json:"inquiry_number"`
+	Description   string         `db:"description" json:"description"`
+	ID            int64          `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateOccurrenceDetails(ctx context.Context, arg UpdateOccurrenceDetailsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateOccurrenceDetails,
+		arg.OccurredFrom,
+		arg.InquiryNumber,
+		arg.Description,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}

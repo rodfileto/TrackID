@@ -407,3 +407,58 @@ func TestReferences(t *testing.T) {
 		t.Errorf("a reference with no label: %v", err)
 	}
 }
+
+// TestUpdateAndMove: a registered request can be corrected, its references replaced, and moved to
+// the case it belongs to with its analysis, leaving the other case without it.
+func TestUpdateAndMove(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	concluded := now.AddDate(0, -1, 0)
+	register := func(document string) requests.Registered {
+		t.Helper()
+		r, err := requests.Register(ctx, sqlDB, requests.RegisterInput{
+			Input:       requests.Input{Authority: "A", DocumentReference: document, ReceivedOn: "2026-02-01", References: []requests.Reference{{Label: "L", Number: "1"}}},
+			CaseType:    "CRIMINAL",
+			Cases:       []requests.CaseInput{{Task: "CRIME_SCENE_EXAMINATION", Description: "x"}},
+			ConcludedAt: &concluded,
+		}, 0, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	first, second := register("Doc 1"), register("Doc 2")
+	if err := requests.Update(ctx, sqlDB, first.RequestID, requests.UpdateInput{
+		Authority: "B", DocumentReference: "Doc 1b", ReceivedOn: "2026-02-02", DocumentDate: "2026-01-30",
+		References: []requests.Reference{{Label: "L", Number: "2"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := requests.Update(ctx, sqlDB, first.RequestID, requests.UpdateInput{Authority: "", DocumentReference: "x", ReceivedOn: "2026-02-02"}); err == nil {
+		t.Error("a request with no authority")
+	}
+
+	from, to := first.Cases[0].CaseID, second.Cases[0].CaseID
+	if err := requests.MoveToCase(ctx, sqlDB, first.RequestID, from, to); err != nil {
+		t.Fatal(err)
+	}
+	onTo, err := requests.List(ctx, sqlDB, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(onTo) != 2 || onTo[1].ID != first.RequestID || onTo[1].Sequence != 2 || onTo[1].Authority != "B" ||
+		onTo[1].DocumentDate != "2026-01-30" || !slices.Equal(onTo[1].References, []requests.Reference{{Label: "L", Number: "2"}}) || len(onTo[1].Tasks) != 1 {
+		t.Errorf("on the case it moved to: %+v", onTo)
+	}
+	onFrom, err := requests.List(ctx, sqlDB, from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(onFrom) != 0 {
+		t.Errorf("left behind: %+v", onFrom)
+	}
+	if err := requests.MoveToCase(ctx, sqlDB, first.RequestID, from, to); err == nil {
+		t.Error("moved a request that is not on that case")
+	}
+}

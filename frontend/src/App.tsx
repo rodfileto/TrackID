@@ -25,6 +25,7 @@ import FaceLab from "./pages/FaceLab";
 import AssistLab from "./pages/AssistLab";
 import ComingSoon from "./pages/ComingSoon";
 import Users from "./pages/Users";
+import { extension } from "./extensions";
 // A lazy page whose code fails to load -- the tab predates a new build or a dev-server
 // restart, so the chunk it asks for no longer exists -- reloads once to fetch the current
 // version, instead of leaving a blank screen. The flag stops a reload loop when the failure
@@ -82,6 +83,15 @@ export default function App() {
                 <Route path="/requests" element={<Requests />} />
                 <Route path="/requests/new" element={<RegisterRequest />} />
               </Route>
+              {extension.routes.map(({ path, element, need }) =>
+                need ? (
+                  <Route key={path} element={<RequireCapability need={need} />}>
+                    <Route path={path} element={element} />
+                  </Route>
+                ) : (
+                  <Route key={path} path={path} element={element} />
+                ),
+              )}
               <Route element={<RequireCapability need="admin" />}>
                 <Route path="/admin/users" element={<Users />} />
               </Route>

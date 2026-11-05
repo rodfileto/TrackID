@@ -18,6 +18,10 @@ period; `0.x` patch releases fix defects without adding behaviour.
   analysis is recorded closed, including types not yet offered in the app.
 - A request can hold labelled references to other systems' numbers, and the requests list can
   search by them.
+- `requests.Update`, `requests.MoveToCase` and `occurrences.Update`, for correcting what was
+  registered.
+- An organization can run its own server (`server.Run` with `Options.Register`) and add pages, menu
+  items and translations through `frontend/src/extensions/index.tsx`.
 - Examination workflow: analyses are distributed to examiners in rounds, the
   second examiner works blind, and a disagreement goes to a third; assignments
   are an append-only history.
