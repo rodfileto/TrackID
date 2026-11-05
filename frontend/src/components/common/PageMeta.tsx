@@ -1,5 +1,4 @@
-import { HelmetProvider, Helmet } from "react-helmet-async";
-
+// React moves these into the document's <head> and swaps them as pages change.
 const PageMeta = ({
   title,
   description,
@@ -7,14 +6,10 @@ const PageMeta = ({
   title: string;
   description: string;
 }) => (
-  <Helmet>
+  <>
     <title>{title}</title>
     <meta name="description" content={description} />
-  </Helmet>
-);
-
-export const AppWrapper = ({ children }: { children: React.ReactNode }) => (
-  <HelmetProvider>{children}</HelmetProvider>
+  </>
 );
 
 export default PageMeta;
