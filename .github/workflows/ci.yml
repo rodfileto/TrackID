@@ -56,8 +56,12 @@ jobs:
       # The video tests make clips and extract frames with ffmpeg, as the API and the worker do.
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      # The bulk gallery test runs tools/bulk-match, which uv sets up from its lockfile.
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: '0.13.7'
       - run: go vet ./...
-      - name: Test (no skipped database, sidecar or ffmpeg tests)
+      - name: Test (no skipped database, sidecar, ffmpeg or uv tests)
         run: |
           go test -v ./... 2>&1 | tee test.log
           status=${PIPESTATUS[0]}

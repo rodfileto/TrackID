@@ -199,7 +199,7 @@ func TestBulkGallery(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		runGallery(t, []string{"env", "BULK_HELPER_MATCHER=1", exe, "-test.run=TestHelperMatcher", "--"})
+		runGallery(t, []string{"env", "BULK_HELPER_MATCHER=1", exe})
 	})
 	t.Run("python-matcher", func(t *testing.T) {
 		if _, err := exec.LookPath("uv"); err != nil {
@@ -498,18 +498,17 @@ func embeddingIDs(ctx context.Context, sqlDB *sql.DB) (map[string]int64, error) 
 	return out, rows.Err()
 }
 
-// TestHelperMatcher is not a test: run by the go-matcher subtest as the matcher command, it does
-// what tools/bulk-match does, by brute force and with no cap.
-func TestHelperMatcher(t *testing.T) {
-	if os.Getenv("BULK_HELPER_MATCHER") != "1" {
-		t.Skip("helper process")
+// TestMain lets this test binary be the go-matcher subtest's matcher command: asked to, it does
+// what tools/bulk-match does, by brute force and with no cap, instead of running the tests.
+func TestMain(m *testing.M) {
+	if os.Getenv("BULK_HELPER_MATCHER") == "1" {
+		if err := helperMatch(os.Args[len(os.Args)-1]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
-	work := os.Args[len(os.Args)-1]
-	if err := helperMatch(work); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	os.Exit(0)
+	os.Exit(m.Run())
 }
 
 func helperMatch(work string) error {
