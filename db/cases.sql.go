@@ -1309,8 +1309,8 @@ func (q *Queries) UpdateCodificationPoint(ctx context.Context, arg UpdateCodific
 }
 
 const upsertBiometricCase = `-- name: UpsertBiometricCase :one
-INSERT INTO biometric_cases (case_id, case_type, modality, description)
-VALUES ($1, $2, $3, $4)
+INSERT INTO biometric_cases (case_id, case_type, modality, description, unit_id)
+VALUES ($1, $2, $3, $4, COALESCE($5::bigint, default_case_unit()))
 ON CONFLICT (case_id) DO UPDATE SET
     case_type = EXCLUDED.case_type,
     modality = EXCLUDED.modality,
@@ -1320,10 +1320,11 @@ RETURNING id, (xmax = 0) AS inserted
 `
 
 type UpsertBiometricCaseParams struct {
-	CaseID      string `db:"case_id" json:"case_id"`
-	CaseType    string `db:"case_type" json:"case_type"`
-	Modality    string `db:"modality" json:"modality"`
-	Description string `db:"description" json:"description"`
+	CaseID      string        `db:"case_id" json:"case_id"`
+	CaseType    string        `db:"case_type" json:"case_type"`
+	Modality    string        `db:"modality" json:"modality"`
+	Description string        `db:"description" json:"description"`
+	UnitID      sql.NullInt64 `db:"unit_id" json:"unit_id"`
 }
 
 type UpsertBiometricCaseRow struct {
@@ -1333,12 +1334,15 @@ type UpsertBiometricCaseRow struct {
 
 // (xmax = 0) tells a real insert apart from a row that already existed: RowsAffected() is
 // 1 either way, so callers that need to report insert-vs-update counts need this instead.
+// A new case takes the unit named, or the one that receives new cases. An existing one keeps its own,
+// so running an import again doesn't undo a transfer.
 func (q *Queries) UpsertBiometricCase(ctx context.Context, arg UpsertBiometricCaseParams) (UpsertBiometricCaseRow, error) {
 	row := q.db.QueryRowContext(ctx, upsertBiometricCase,
 		arg.CaseID,
 		arg.CaseType,
 		arg.Modality,
 		arg.Description,
+		arg.UnitID,
 	)
 	var i UpsertBiometricCaseRow
 	err := row.Scan(&i.ID, &i.Inserted)

@@ -147,6 +147,7 @@ type BiometricCase struct {
 	OccurrenceID sql.NullInt64 `db:"occurrence_id" json:"occurrence_id"`
 	CreatedAt    time.Time     `db:"created_at" json:"created_at"`
 	UpdatedAt    time.Time     `db:"updated_at" json:"updated_at"`
+	UnitID       int64         `db:"unit_id" json:"unit_id"`
 }
 
 type BiometricDecision struct {
@@ -349,6 +350,7 @@ type CaseRequest struct {
 	RegisteredBy       sql.NullInt64  `db:"registered_by" json:"registered_by"`
 	CreatedAt          time.Time      `db:"created_at" json:"created_at"`
 	CitedInquiryNumber sql.NullString `db:"cited_inquiry_number" json:"cited_inquiry_number"`
+	RequestingUnitID   sql.NullInt64  `db:"requesting_unit_id" json:"requesting_unit_id"`
 }
 
 type CaseRequestCase struct {
@@ -589,6 +591,17 @@ type Operation struct {
 	ClosedAt    sql.NullTime  `db:"closed_at" json:"closed_at"`
 }
 
+type Organization struct {
+	ID        int64          `db:"id" json:"id"`
+	Acronym   string         `db:"acronym" json:"acronym"`
+	Name      string         `db:"name" json:"name"`
+	Kind      string         `db:"kind" json:"kind"`
+	Uf        sql.NullString `db:"uf" json:"uf"`
+	Active    bool           `db:"active" json:"active"`
+	CreatedAt time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time      `db:"updated_at" json:"updated_at"`
+}
+
 type Person struct {
 	ID        int64                 `db:"id" json:"id"`
 	PersonID  string                `db:"person_id" json:"person_id"`
@@ -606,6 +619,20 @@ type ReportDelivery struct {
 	Notes            sql.NullString `db:"notes" json:"notes"`
 	RecordedBy       int64          `db:"recorded_by" json:"recorded_by"`
 	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
+}
+
+type Unit struct {
+	ID               int64          `db:"id" json:"id"`
+	OrganizationID   int64          `db:"organization_id" json:"organization_id"`
+	ParentID         sql.NullInt64  `db:"parent_id" json:"parent_id"`
+	Acronym          string         `db:"acronym" json:"acronym"`
+	Name             string         `db:"name" json:"name"`
+	Uf               sql.NullString `db:"uf" json:"uf"`
+	MunicipalityCode sql.NullString `db:"municipality_code" json:"municipality_code"`
+	ReceivesNewCases bool           `db:"receives_new_cases" json:"receives_new_cases"`
+	Active           bool           `db:"active" json:"active"`
+	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt        time.Time      `db:"updated_at" json:"updated_at"`
 }
 
 type User struct {

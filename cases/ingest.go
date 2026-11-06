@@ -82,6 +82,9 @@ type CaseInput struct {
 	CaseType    string // CRIMINAL or CIVIL
 	Modality    string
 	Description string
+	// UnitID is the unit responsible for a new case, 0 for the one that receives new cases. An existing
+	// case keeps its unit.
+	UnitID int64
 	// Occurrence, when set, links the case to an occurrence already ingested
 	// (occurrences.Ingest). nil leaves the case's link as it is.
 	Occurrence *OccurrenceRef
@@ -181,6 +184,7 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, c CaseInput, opts ...Option) (Re
 		CaseType:    c.CaseType,
 		Modality:    c.Modality,
 		Description: c.Description,
+		UnitID:      sql.NullInt64{Int64: c.UnitID, Valid: c.UnitID != 0},
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("cases: upsert biometric_cases: %w", err)

@@ -1,8 +1,10 @@
 -- name: UpsertBiometricCase :one
 -- (xmax = 0) tells a real insert apart from a row that already existed: RowsAffected() is
 -- 1 either way, so callers that need to report insert-vs-update counts need this instead.
-INSERT INTO biometric_cases (case_id, case_type, modality, description)
-VALUES ($1, $2, $3, $4)
+-- A new case takes the unit named, or the one that receives new cases. An existing one keeps its own,
+-- so running an import again doesn't undo a transfer.
+INSERT INTO biometric_cases (case_id, case_type, modality, description, unit_id)
+VALUES ($1, $2, $3, $4, COALESCE(sqlc.narg('unit_id')::bigint, default_case_unit()))
 ON CONFLICT (case_id) DO UPDATE SET
     case_type = EXCLUDED.case_type,
     modality = EXCLUDED.modality,
