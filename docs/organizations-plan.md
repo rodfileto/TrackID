@@ -47,14 +47,22 @@ compartmentalise data access and case distribution.
 
 1. **Two levels: organization, then units.**
    - An **organization** is the legal body that owns cases and issues laudos: PF, PC/MG.
-   - A **unit** belongs to one organization and forms a tree inside it. For example: PF → DITEC →
-     INI → SR/PF/MG → NUCRIM/SETEC.
+   - A **unit** belongs to one organization and forms a tree inside it. For example: PF → SR/PF/CE →
+     DPF/JNE/CE, and PF → SR/PF/MG → NUCRIM/SETEC.
+   - A unit may have a state and a municipality. One with neither is where its parent is, as a sector
+     is. Municipalities are IBGE's codes, unchecked against `municipalities` as on `locations`, since
+     a deployment may load only its own state's.
    - Organizations are separated strictly. Units compartmentalise within one organization,
      following its hierarchy.
 2. **Every case belongs to one organization and one unit.**
    - Its requests, analyses, decisions, reports, files and videos follow the case. They need no
      column of their own, since they hang off the case.
+   - The case stores only its unit (`biometric_cases.unit_id`); its organization is the unit's.
    - The unit is the one responsible for the case. It is chosen when the request is registered.
+     A case created naming no unit goes to the one unit with `receives_new_cases`.
+   - **Owning is not asking.** A request may name the unit that asks
+     (`case_requests.requesting_unit_id`), of any organization, while the case belongs to another:
+     a state's police can own a case or only request it.
    - A case can be **transferred** to another unit of the same organization, with the transfer
      recorded. It never moves to another organization.
 3. **Every user belongs to one organization and to one or more units.**
@@ -135,9 +143,11 @@ compartmentalise data access and case distribution.
 
 ## Phases
 
-1. **Organizations, units and membership.** Migration, `auth`, the Organizations and Units pages,
-   and units on the Users page. Each case gets its organization and unit, and requests choose the
-   unit.
+1. **Organizations, units and membership.**
+   - Done (`018_organizations.sql`): the tables, each case's unit, the receiving unit, and the
+     requesting unit.
+   - To do: membership in `auth`, the Organizations and Units pages, units on the Users page, and
+     requests choosing the unit.
 2. **Scope enforcement.** `access.Scope`, `Rights`, the lists, distribution, coordinators and
    requests, and the access-table test over two organizations.
 3. **The boundary.**

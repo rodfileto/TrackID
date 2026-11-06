@@ -12,6 +12,9 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- Organizations and units (`docs/organizations-plan.md`, phase 1, no pages or access limits yet): a tree of units
+  per organization, with an optional state and municipality. Every case has a unit, given to `cases.Ingest` or
+  else the one that receives new cases, and a request can name the unit that asks.
 - Intelligence operations (`docs/operations-plan.md`): named lines of work with a stable slug, listed, created
   and edited by analysts at `/intelligence/operations`. An organization can attach its own panel to one
   (`Extension.operationPanels`). Linking cases, persons, occurrences and clusters comes next.

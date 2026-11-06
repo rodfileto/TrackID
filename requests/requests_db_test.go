@@ -524,3 +524,49 @@ func TestRecordImported(t *testing.T) {
 		t.Errorf("no PDF attached: %v", err)
 	}
 }
+
+// TestRequestingUnit covers a request from a unit that doesn't own what it opens, such as a state's
+// police asking the federal one.
+func TestRequestingUnit(t *testing.T) {
+	sqlDB := testDB(t)
+	ctx := context.Background()
+	var organization, unit, owner int64
+	if err := sqlDB.QueryRow(`INSERT INTO organizations (acronym, name, kind, uf) VALUES ('PC/CE', 'Polícia Civil do Ceará', 'STATE', 'CE') RETURNING id`).Scan(&organization); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlDB.QueryRow(`INSERT INTO units (organization_id, acronym, name) VALUES ($1, 'PC/CE', 'Polícia Civil do Ceará') RETURNING id`, organization).Scan(&unit); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlDB.QueryRow(`SELECT id FROM units WHERE receives_new_cases`).Scan(&owner); err != nil {
+		t.Fatal(err)
+	}
+	input := func(requesting int64) requests.RegisterInput {
+		return requests.RegisterInput{
+			Input:    requests.Input{Authority: "PC/CE", RequestingUnitID: &requesting, DocumentReference: "Ofício 1/2026", ReceivedOn: "2026-10-27"},
+			CaseType: "CRIMINAL",
+			Cases:    []requests.CaseInput{{Task: "FACIAL_REVIEW", Description: "Câmeras"}},
+		}
+	}
+	r, err := requests.Register(ctx, sqlDB, input(unit), 0, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var caseUnit int64
+	if err := sqlDB.QueryRow(`SELECT unit_id FROM biometric_cases WHERE case_id = $1`, r.Cases[0].CaseID).Scan(&caseUnit); err != nil {
+		t.Fatal(err)
+	}
+	if caseUnit != owner {
+		t.Errorf("case's unit %d, want %d: asking doesn't make the requester its owner", caseUnit, owner)
+	}
+	list, err := requests.List(ctx, sqlDB, r.Cases[0].CaseID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := list[0].RequestingUnitID; got == nil || *got != unit {
+		t.Errorf("requesting unit %v, want %d", got, unit)
+	}
+	var invalid requests.ValidationError
+	if _, err := requests.Register(ctx, sqlDB, input(unit+1000), 0, time.Now()); !errors.As(err, &invalid) {
+		t.Errorf("unknown requesting unit: %v, want a validation error", err)
+	}
+}

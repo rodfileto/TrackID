@@ -2,11 +2,11 @@
 
 -- name: InsertCaseRequest :one
 INSERT INTO case_requests (authority, document_reference, document_date, received_on, due_on,
-    cited_reference, cited_inquiry_number, occurrence_id, notes, registered_by)
+    cited_reference, cited_inquiry_number, occurrence_id, notes, registered_by, requesting_unit_id)
 VALUES (@authority::text, @document_reference::text, sqlc.narg('document_date')::date, @received_on::date,
         sqlc.narg('due_on')::date, sqlc.narg('cited_reference')::text, sqlc.narg('cited_inquiry_number')::text,
         sqlc.narg('occurrence_id')::bigint,
-        sqlc.narg('notes')::text, sqlc.narg('registered_by')::bigint)
+        sqlc.narg('notes')::text, sqlc.narg('registered_by')::bigint, sqlc.narg('requesting_unit_id')::bigint)
 RETURNING id;
 
 -- name: LinkCaseRequest :one
@@ -63,7 +63,7 @@ ORDER BY x.case_request_id, x.id;
 
 -- name: ListCaseRequests :many
 -- A case's requests in order, with the occurrence each was linked to and who registered it.
-SELECT r.id, rc.sequence, r.authority, r.document_reference, r.document_date, r.received_on, r.due_on, r.cited_reference,
+SELECT r.id, rc.sequence, r.authority, r.requesting_unit_id, r.document_reference, r.document_date, r.received_on, r.due_on, r.cited_reference,
        r.cited_inquiry_number, r.occurrence_id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
        o.inquiry_number,
        r.notes, u.username AS registered_by, r.created_at
