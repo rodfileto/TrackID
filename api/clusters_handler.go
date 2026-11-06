@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/rodfileto/trackid/cluster"
+	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/person"
 )
 
@@ -26,19 +27,20 @@ type ListClustersResponse struct {
 // how many distinct biometric cases it touches (descending). ?identified=true
 // keeps only clusters resolved to an enrolled identity (see
 // cluster.ListOverview).
-func ListClustersHandler(db *sql.DB) gin.HandlerFunc {
+func ListClustersHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
-		if db == nil {
+		if sqlDB == nil {
 			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
 			return
 		}
 		page := parsePositiveInt(context.Query("page"), 1)
 		pageSize := parsePositiveInt(context.Query("page_size"), 25)
 
-		result, err := cluster.ListOverview(context.Request.Context(), db, cluster.ListOverviewParams{
+		result, err := cluster.ListOverview(context.Request.Context(), sqlDB, cluster.ListOverviewParams{
 			Page:           page,
 			PageSize:       pageSize,
 			IdentifiedOnly: context.Query("identified") == "true",
+			ConflictOnly:   context.Query("conflict") == "true",
 		})
 		if err != nil {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not list clusters"})
@@ -57,13 +59,13 @@ func ListClustersHandler(db *sql.DB) gin.HandlerFunc {
 // ClustersGraphHandler returns the top biometric clusters as a
 // person -- cluster -- trace graph (see cluster.BuildGraph). ?limit= caps how
 // many clusters are drawn (default 40, max 300) and ?min_members= drops clusters with fewer samples.
-func ClustersGraphHandler(db *sql.DB) gin.HandlerFunc {
+func ClustersGraphHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
-		if db == nil {
+		if sqlDB == nil {
 			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
 			return
 		}
-		result, err := cluster.BuildGraph(context.Request.Context(), db, min(parsePositiveInt(context.Query("limit"), 40), 300), parsePositiveInt(context.Query("min_members"), 1))
+		result, err := cluster.BuildGraph(context.Request.Context(), sqlDB, min(parsePositiveInt(context.Query("limit"), 40), 300), parsePositiveInt(context.Query("min_members"), 1))
 		if err != nil {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not build cluster graph"})
 			return
@@ -75,13 +77,13 @@ func ClustersGraphHandler(db *sql.DB) gin.HandlerFunc {
 // OverviewGraphHandler returns the home page's illustration of how identities, clusters and case
 // traces connect, to every signed-in user: the same graph as ClustersGraphHandler, anonymous
 // (cluster.Anonymous), at a fixed size.
-func OverviewGraphHandler(db *sql.DB) gin.HandlerFunc {
+func OverviewGraphHandler(sqlDB *sql.DB) gin.HandlerFunc {
 	return func(context *gin.Context) {
-		if db == nil {
+		if sqlDB == nil {
 			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
 			return
 		}
-		result, err := cluster.BuildGraph(context.Request.Context(), db, 60, 2)
+		result, err := cluster.BuildGraph(context.Request.Context(), sqlDB, 60, 2)
 		if err != nil {
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not build the overview"})
 			return
@@ -96,6 +98,8 @@ func OverviewGraphHandler(db *sql.DB) gin.HandlerFunc {
 type ClusterDetailResponse struct {
 	cluster.Detail
 	ResolvedMembers []person.ClusterMember `json:"resolvedMembers"`
+	// Conflicts are the identity conflicts sitting in the cluster (cluster.ListConflicts).
+	Conflicts []cluster.Conflict `json:"conflicts"`
 }
 
 // GetClusterHandler returns one cluster, of either layer, in depth (cluster.GetDetail): every
@@ -131,6 +135,57 @@ func GetClusterHandler(sqlDB *sql.DB) gin.HandlerFunc {
 		if members == nil {
 			members = []person.ClusterMember{}
 		}
-		context.JSON(http.StatusOK, ClusterDetailResponse{Detail: detail, ResolvedMembers: members})
+		conflicts, err := cluster.ListConflicts(ctx, sqlDB)
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load the cluster"})
+			return
+		}
+		ofCluster := cluster.ConflictsOfCluster(conflicts, clusterID)
+		if err := cluster.AddRegisters(ctx, sqlDB, ofCluster); err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load the cluster"})
+			return
+		}
+		context.JSON(http.StatusOK, ClusterDetailResponse{Detail: detail, ResolvedMembers: members, Conflicts: ofCluster})
+	}
+}
+
+// PersonIdentityConflictsHandler returns the identity conflicts involving a person, for the person
+// page. Reading them is reading the person, and is logged as such (router).
+func PersonIdentityConflictsHandler(sqlDB *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		ctx := context.Request.Context()
+		row, err := db.New(sqlDB).GetPersonByPersonID(ctx, context.Param("personId"))
+		if errors.Is(err, sql.ErrNoRows) {
+			context.JSON(http.StatusNotFound, gin.H{"error": "person not found"})
+			return
+		}
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load the person"})
+			return
+		}
+		conflicts, err := cluster.ListConflicts(ctx, sqlDB)
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load the conflicts"})
+			return
+		}
+		ofPerson := cluster.ConflictsOfPerson(conflicts, row.ID)
+		if err := cluster.AddRegisters(ctx, sqlDB, ofPerson); err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load the conflicts"})
+			return
+		}
+		// The comparison shows the other people's registers too, and each of them has been read. The
+		// route's own log covers this person.
+		logged := map[string]bool{context.Param("personId"): true}
+		for _, c := range ofPerson {
+			for _, p := range c.Persons {
+				if !logged[p.PersonID] {
+					logged[p.PersonID] = true
+					if !recordAccess(context, sqlDB, accessPerson, p.PersonID) {
+						return
+					}
+				}
+			}
+		}
+		context.JSON(http.StatusOK, gin.H{"conflicts": ofPerson})
 	}
 }

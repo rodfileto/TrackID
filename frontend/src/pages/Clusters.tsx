@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "../components/ui/table";
 import Badge from "../components/ui/badge/Badge";
+import { ConflictBadges } from "../components/clusters/IdentityConflicts";
 import { personPath } from "../services/persons";
 import {
   listClusters,
@@ -44,6 +45,9 @@ function IdentifiedCell({ cluster }: { cluster: ClusterSummary }) {
   }
   return (
     <div className="flex flex-col gap-1">
+      {(cluster.conflicts ?? []).map((conflict, i) => (
+        <ConflictBadges key={i} kind={conflict.kind} strength={conflict.strength} />
+      ))}
       {(cluster.persons ?? []).map((person) => (
         <Link
           key={person.personId}
@@ -66,6 +70,7 @@ export default function Clusters() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const identifiedOnly = searchParams.get("identified") === "true";
+  const conflictOnly = searchParams.get("conflict") === "true";
   const page = parsePage(searchParams.get("page"));
 
   const [data, setData] = useState<ListClustersResponse | null>(null);
@@ -97,6 +102,7 @@ export default function Clusters() {
           page,
           pageSize: PAGE_SIZE,
           identifiedOnly,
+          conflictOnly,
         });
         if (!cancelled) setData(result);
       } catch (err) {
@@ -114,11 +120,18 @@ export default function Clusters() {
     return () => {
       cancelled = true;
     };
-  }, [page, identifiedOnly, t]);
+  }, [page, identifiedOnly, conflictOnly, t]);
 
   function toggleIdentifiedOnly() {
     updateParams({
       identified: identifiedOnly ? undefined : "true",
+      page: undefined,
+    });
+  }
+
+  function toggleConflictOnly() {
+    updateParams({
+      conflict: conflictOnly ? undefined : "true",
       page: undefined,
     });
   }
@@ -143,7 +156,7 @@ export default function Clusters() {
         <p className="mb-4 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-white/[0.03] dark:text-gray-400">
           {t("clusters.automaticNote")}
         </p>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <button
             type="button"
             onClick={toggleIdentifiedOnly}
@@ -156,8 +169,21 @@ export default function Clusters() {
           >
             {t("clusters.identifiedOnly")}
           </button>
+          <button
+            type="button"
+            onClick={toggleConflictOnly}
+            aria-pressed={conflictOnly}
+            title={t("clusters.conflictOnlyHint")}
+            className={`inline-flex h-11 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-medium shadow-theme-xs transition-colors ${
+              conflictOnly
+                ? "border-warning-500 bg-warning-500 text-white"
+                : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.03]"
+            }`}
+          >
+            {t("clusters.conflictOnly")}
+          </button>
 
-          <span className="text-sm text-gray-500 dark:text-gray-400">
+          <span className="text-sm text-gray-500 sm:ml-auto dark:text-gray-400">
             {t("clusters.count", { count: total })}
           </span>
         </div>

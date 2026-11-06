@@ -122,6 +122,10 @@ type PersonSample struct {
 	PersonNumber   int64  `json:"personNumber"`
 	Name           string `json:"name"`
 	RegisterNumber string `json:"registerNumber"`
+	// BirthDate and the parents' names are the sample's register's, for comparing the persons on the page.
+	BirthDate      string `json:"birthDate,omitempty"`
+	Parent1Name    string `json:"parent1Name"`
+	Parent2Name    string `json:"parent2Name"`
 	IdentityFileID int64  `json:"identityFileId"`
 	FileType       string `json:"fileType"`
 	Modality       string `json:"modality"`
@@ -438,7 +442,8 @@ func loadPersonSamples(ctx context.Context, sqlDB *sql.DB, clusterID int64, basi
 			JOIN identity_documents d ON d.id = r.document_id
 			WHERE cm.cluster_id = $1 AND cm.feature_id NOT LIKE 'TRACE:%'
 		)
-		SELECT p.person_id, p.id, r.name, r.register_number, f.id, f.file_type, COALESCE(f.content_type, ''),
+		SELECT p.person_id, p.id, r.name, r.register_number, COALESCE(r.birth_date, ''), r.parent_1_name, r.parent_2_name,
+		       f.id, f.file_type, COALESCE(f.content_type, ''),
 		       bf.feature_type, COALESCE(cm.cluster_id, 0)
 		FROM persons_in pi
 		JOIN persons p ON p.id = pi.person_id
@@ -456,7 +461,7 @@ func loadPersonSamples(ctx context.Context, sqlDB *sql.DB, clusterID int64, basi
 	for rows.Next() {
 		var s PersonSample
 		var featureType string
-		if err := rows.Scan(&s.PersonID, &s.PersonNumber, &s.Name, &s.RegisterNumber, &s.IdentityFileID, &s.FileType,
+		if err := rows.Scan(&s.PersonID, &s.PersonNumber, &s.Name, &s.RegisterNumber, &s.BirthDate, &s.Parent1Name, &s.Parent2Name, &s.IdentityFileID, &s.FileType,
 			&s.ContentType, &featureType, &s.ClusterID); err != nil {
 			return nil, err
 		}

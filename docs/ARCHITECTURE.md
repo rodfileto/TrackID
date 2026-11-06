@@ -72,6 +72,9 @@ organizations import to build their import commands) and an **internal** runtime
 - `fingerprint/` — the Go client for `sourceafis-sidecar/` (extract + match a
   fingerprint template) and the Asynq tasks that extract on codification/enrollment
   save and store into `biometric_templates`, the fingerprint counterpart of `embedding/`
+- `ask/` — the AI mode (`docs/ask-plan.md`): analysts' questions, and walks from a person to cases, occurrences and
+  inquiries, answered by a language model behind any OpenAI-compatible endpoint, through fixed read-only tools over
+  parameterized queries; recorded in `ask_queries`, with person and case reads in `access_log`
 - `articles/` — what intelligence analysts write about a person: one shared article per subject,
   Wikipedia style, with revisions, `@` mentions of cases, occurrences, inquiries, persons,
   clusters, requests and laudos, and backlinks. Analysis, never read by the forensic packages

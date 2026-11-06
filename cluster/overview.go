@@ -8,9 +8,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
+
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/graph"
 )
+
+// conflictFilter numbers the optional filter's parameter; empty stays empty.
+func conflictFilter(format string, parameter int) string {
+	if format == "" {
+		return ""
+	}
+	return fmt.Sprintf(format, parameter)
+}
 
 // Summary is one persisted cluster's row in a general clusters listing: how
 // many biometric samples it holds, how many distinct biometric cases its
@@ -24,6 +34,14 @@ type Summary struct {
 	CaseCount   int             `json:"caseCount"`
 	Identified  bool            `json:"identified"`
 	Persons     []SummaryPerson `json:"persons,omitempty"`
+	// Conflicts are the identity conflicts sitting in the cluster (ListConflicts).
+	Conflicts []SummaryConflict `json:"conflicts,omitempty"`
+}
+
+// SummaryConflict is what a listing shows of one identity conflict.
+type SummaryConflict struct {
+	Kind     ConflictKind     `json:"kind"`
+	Strength ConflictStrength `json:"strength"`
 }
 
 // SummaryPerson is one enrolled person a Summary's cluster has resolved to.
@@ -40,6 +58,8 @@ type ListOverviewParams struct {
 	// IdentifiedOnly keeps only clusters with at least one KNOWN member --
 	// resolved to an enrolled identity, not just to other case evidence.
 	IdentifiedOnly bool
+	// ConflictOnly keeps only clusters with an identity conflict (ListConflicts).
+	ConflictOnly bool
 	// MinMembers keeps only clusters holding at least this many samples.
 	MinMembers int
 }
@@ -89,6 +109,26 @@ func ListOverview(ctx context.Context, sqlDB *sql.DB, params ListOverviewParams)
 		having = "WHERE " + strings.Join(conds, " AND ")
 	}
 
+	conflicts, err := ListConflicts(ctx, sqlDB)
+	if err != nil {
+		return ListOverviewResult{}, err
+	}
+	conflictsByCluster := map[int64][]SummaryConflict{}
+	for _, c := range conflicts {
+		for _, id := range c.ClusterIDs {
+			conflictsByCluster[id] = append(conflictsByCluster[id], SummaryConflict{Kind: c.Kind, Strength: c.Strength})
+		}
+	}
+	// $n: every cluster, or those with a conflict.
+	onlyConflicts := ""
+	conflictIDs := []int64{}
+	if params.ConflictOnly {
+		for id := range conflictsByCluster {
+			conflictIDs = append(conflictIDs, id)
+		}
+		onlyConflicts = " AND c.id = ANY($%d)"
+	}
+
 	var total int
 	countQuery := `
 		WITH agg AS (
@@ -97,11 +137,15 @@ func ListOverview(ctx context.Context, sqlDB *sql.DB, params ListOverviewParams)
 				COUNT(*) FILTER (WHERE cm.feature_id NOT LIKE 'TRACE:%') AS known_count
 			FROM clusters c
 			JOIN cluster_members cm ON cm.cluster_id = c.id
-			WHERE c.basis = $1
+			WHERE c.basis = $1` + conflictFilter(onlyConflicts, 2) + `
 			GROUP BY c.id
 		)
 		SELECT COUNT(*) FROM agg ` + having
-	if err := sqlDB.QueryRowContext(ctx, countQuery, string(BasisAutomatic)).Scan(&total); err != nil {
+	countArgs := []any{string(BasisAutomatic)}
+	if params.ConflictOnly {
+		countArgs = append(countArgs, pq.Array(conflictIDs))
+	}
+	if err := sqlDB.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
 		return ListOverviewResult{}, fmt.Errorf("cluster: count overview: %w", err)
 	}
 
@@ -119,7 +163,7 @@ func ListOverview(ctx context.Context, sqlDB *sql.DB, params ListOverviewParams)
 			LEFT JOIN case_traces ct ON cm.feature_id = 'TRACE:' || ct.id || '#feature'
 			LEFT JOIN case_evidences ce ON ce.id = ct.evidence_id
 			LEFT JOIN biometric_cases bc ON bc.id = ce.biometric_case_id
-			WHERE c.basis = $3
+			WHERE c.basis = $3` + conflictFilter(onlyConflicts, 4) + `
 			GROUP BY c.id
 		)
 		SELECT cluster_id, modality, created_at, member_count, case_count, known_count
@@ -127,7 +171,11 @@ func ListOverview(ctx context.Context, sqlDB *sql.DB, params ListOverviewParams)
 		ORDER BY case_count DESC, cluster_id DESC
 		LIMIT $1 OFFSET $2`
 
-	rows, err := sqlDB.QueryContext(ctx, listQuery, pageSize, (page-1)*pageSize, string(BasisAutomatic))
+	listArgs := []any{pageSize, (page - 1) * pageSize, string(BasisAutomatic)}
+	if params.ConflictOnly {
+		listArgs = append(listArgs, pq.Array(conflictIDs))
+	}
+	rows, err := sqlDB.QueryContext(ctx, listQuery, listArgs...)
 	if err != nil {
 		return ListOverviewResult{}, fmt.Errorf("cluster: list overview: %w", err)
 	}
@@ -142,6 +190,7 @@ func ListOverview(ctx context.Context, sqlDB *sql.DB, params ListOverviewParams)
 			return ListOverviewResult{}, fmt.Errorf("cluster: scan overview row: %w", err)
 		}
 		s.Identified = knownCount > 0
+		s.Conflicts = conflictsByCluster[s.ClusterID]
 		if s.Identified {
 			identifiedIDs = append(identifiedIDs, s.ClusterID)
 		}

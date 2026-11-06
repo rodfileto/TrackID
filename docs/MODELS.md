@@ -12,6 +12,10 @@ weights are, and they are not bundled — you download them.
 | SCRFD `scrfd_10g_bnkps.onnx` (InsightFace) | detector, opt-in (`VISION_DETECTOR=scrfd`) | **Non-commercial research only** (InsightFace's terms). Do not use in a commercial product or service without their licence. |
 | [SourceAFIS](https://sourceafis.machinezoo.com/) 3.18.1 (machinezoo) | fingerprint extraction + matching, via `sourceafis-sidecar/` | Apache-2.0. A library, not downloaded weights -- pinned in `sourceafis-sidecar/fetch-deps.sh`, which fetches it and its runtime dependencies from Maven Central at build time. |
 
+The AI mode ([ask-plan.md](ask-plan.md)) and the assist lab bundle no language model: each deployment
+chooses its own server and model, under that model's terms. An outside provider's terms also govern what is
+sent to it, which is why the AI mode only sends it synthetic data.
+
 Notes for anyone deploying this:
 
 - **Thresholds are yours to validate.** `faceMatchThreshold` and the detector's score

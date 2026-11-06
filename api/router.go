@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
 
+	"github.com/rodfileto/trackid/ask"
 	"github.com/rodfileto/trackid/assist"
 	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/cases"
@@ -54,6 +55,8 @@ type Dependencies struct {
 	VideoLab *video.Lab
 	// AssistModel is the model name behind AssistDrafter, shown by the assist lab's info endpoint.
 	AssistModel string
+	// AskModel answers the AI mode's questions (ask package); nil means questions return 503.
+	AskModel *ask.Model
 	// Register is an optional hook called after the core routes are registered.
 	// It receives the engine and the authenticated route group (mounted under
 	// /api) so integrations can attach their own routes. May be nil.
@@ -226,12 +229,17 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	// Generating a draft reads the person's whole history (logged as a read); the draft itself
 	// is logged in article_templates.
 	intelligence.POST("persons/:personId/article/template", LogAccess(deps.DB, accessPerson, "personId"), GeneratePersonArticleTemplateHandler(deps.DB))
+	intelligence.GET("persons/:personId/identity-conflicts", LogAccess(deps.DB, accessPerson, "personId"), PersonIdentityConflictsHandler(deps.DB))
 	intelligence.GET("persons/:personId/link-counts", LogAccess(deps.DB, accessPerson, "personId"), GetPersonLinkCountsHandler(deps.DB))
 	intelligence.GET("persons/:personId/article/history", LogAccess(deps.DB, accessPerson, "personId"), GetPersonArticleHistoryHandler(deps.DB))
 	intelligence.GET("persons/:personId/article/revisions/:number", LogAccess(deps.DB, accessPerson, "personId"), GetPersonArticleRevisionHandler(deps.DB))
 	intelligence.GET("persons/:personId/article/backlinks", LogAccess(deps.DB, accessPerson, "personId"), GetPersonBacklinksHandler(deps.DB))
 	intelligence.GET("cases/:caseId/article-backlinks", LogAccess(deps.DB, accessCase, "caseId"), GetCaseBacklinksHandler(deps.DB))
 	intelligence.GET("mentions/search", SearchMentionsHandler(deps.DB))
+
+	// The AI mode (docs/ask-plan.md): each question is recorded in ask_queries.
+	intelligence.GET("ask", AskInfoHandler(deps.DB, deps.AskModel))
+	intelligence.POST("ask", AskHandler(deps.DB, deps.AskModel))
 
 	intelligence.GET("clusters", ListClustersHandler(deps.DB))
 	intelligence.GET("clusters/graph", ClustersGraphHandler(deps.DB))

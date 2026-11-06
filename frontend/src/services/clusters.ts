@@ -9,6 +9,62 @@ export interface ClusterPerson {
   name: string;
 }
 
+export type ConflictKind = "ONE_BIOMETRIC_MANY_NAMES" | "ONE_IDENTITY_MANY_BIOMETRICS";
+export type ConflictStrength = "REVIEWED" | "TWO_MODALITIES" | "ONE_MODALITY" | "INDIRECT" | "HUMAN_NEGATIVE";
+
+export interface ConflictRecord {
+  personNumber: number;
+  name: string;
+  documentType: string;
+  documentNumber: string;
+}
+
+export interface ConflictRegister {
+  personNumber: number;
+  documentType: string;
+  documentNumber: string;
+  fiscalNumber?: string;
+  registerNumber: string;
+  name: string;
+  birthDate?: string;
+  parent1Name: string;
+  parent2Name: string;
+}
+
+/** An identity conflict -- see cluster.Conflict. */
+export interface IdentityConflict {
+  kind: ConflictKind;
+  strength: ConflictStrength;
+  modalities: string[];
+  /** What makes the records one identity, for ONE_IDENTITY_MANY_BIOMETRICS. */
+  identityBasis?: "PERSON" | "FISCAL" | "NAME_BIRTH";
+  clusterIds: number[];
+  reviewedClusterIds?: number[];
+  traces: number;
+  persons: {
+    personNumber: number;
+    personId: string;
+    names: string[];
+    birthDates: string[];
+    documents: { type: string; number: string }[];
+    /** Their strongest reviewed link to case evidence; absent when people have confirmed none. */
+    status?: { basis: "LEAD" | "LAUDO"; identified: boolean; conclusion?: string };
+  }[];
+  /** Every register of the people, to compare side by side. Filled for the pages only, never in the AI mode. */
+  registers?: ConflictRegister[];
+  comparisons: {
+    modality: string;
+    a: ConflictRecord;
+    b: ConflictRecord;
+    status?: string;
+    settledBy?: string;
+    score?: number;
+    threshold?: number;
+    /** The score was measured from the embeddings, not decided by the matcher. */
+    measured?: boolean;
+  }[];
+}
+
 /** One persisted biometric cluster's row in the general clusters listing --
  * see cluster.Summary. identified is true when at least one of its members
  * is a KNOWN (enrolled) feature, not just other case evidence; persons names
@@ -21,6 +77,7 @@ export interface ClusterSummary {
   caseCount: number;
   identified: boolean;
   persons?: ClusterPerson[];
+  conflicts?: { kind: ConflictKind; strength: ConflictStrength }[];
 }
 
 export interface ListClustersResponse {
@@ -35,6 +92,7 @@ export interface ListClustersParams {
   page?: number;
   pageSize?: number;
   identifiedOnly?: boolean;
+  conflictOnly?: boolean;
 }
 
 function authHeaders(): Record<string, string> {
@@ -51,6 +109,7 @@ export async function listClusters(
   if (params.page) query.set("page", String(params.page));
   if (params.pageSize) query.set("page_size", String(params.pageSize));
   if (params.identifiedOnly) query.set("identified", "true");
+  if (params.conflictOnly) query.set("conflict", "true");
 
   const qs = query.toString();
   return requestApi<ListClustersResponse>(`/clusters${qs ? `?${qs}` : ""}`, {
@@ -157,6 +216,9 @@ export interface ClusterPersonSample {
   personNumber: number;
   name: string;
   registerNumber: string;
+  birthDate?: string;
+  parent1Name: string;
+  parent2Name: string;
   identityFileId: number;
   fileType: string;
   modality: string;
@@ -189,6 +251,7 @@ export interface ClusterDetail {
   personSamples: ClusterPersonSample[];
   linkedClusters: LinkedCluster[];
   resolvedMembers: PersonClusterMember[];
+  conflicts: IdentityConflict[];
 }
 
 /** One cluster, of either layer, in depth: its members, every decision touching it, what holds it

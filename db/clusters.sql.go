@@ -349,6 +349,42 @@ func (q *Queries) ListClusterMembershipsForFeatureIDs(ctx context.Context, arg L
 	return items, nil
 }
 
+const listClusterTraceCounts = `-- name: ListClusterTraceCounts :many
+SELECT cluster_id, COUNT(*)::bigint AS traces
+FROM cluster_members
+WHERE cluster_id = ANY($1::bigint[]) AND feature_id LIKE 'TRACE:%'
+GROUP BY cluster_id
+`
+
+type ListClusterTraceCountsRow struct {
+	ClusterID int64 `db:"cluster_id" json:"cluster_id"`
+	Traces    int64 `db:"traces" json:"traces"`
+}
+
+// How many case traces each of the given clusters holds.
+func (q *Queries) ListClusterTraceCounts(ctx context.Context, clusterIds []int64) ([]ListClusterTraceCountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listClusterTraceCounts, pq.Array(clusterIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClusterTraceCountsRow
+	for rows.Next() {
+		var i ListClusterTraceCountsRow
+		if err := rows.Scan(&i.ClusterID, &i.Traces); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClusters = `-- name: ListClusters :many
 
 SELECT id, modality
@@ -417,6 +453,249 @@ func (q *Queries) ListClustersByIDs(ctx context.Context, clusterIds []int64) ([]
 			&i.Basis,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listConflictCandidateMembers = `-- name: ListConflictCandidateMembers :many
+WITH known AS (
+    SELECT m.basis, m.cluster_id, c.modality, m.feature_id, f.id AS identity_file_id, p.id AS person_number, p.person_id,
+        r.name, r.birth_date, d.document_type, d.document_number, d.fiscal_number
+    FROM cluster_members m
+    JOIN clusters c ON c.id = m.cluster_id
+    JOIN identity_files f ON f.id::text = m.feature_id
+    JOIN identity_registers r ON r.id = f.register_id
+    JOIN identity_documents d ON d.id = r.document_id
+    JOIN persons p ON p.id = d.person_id
+),
+named AS (
+    SELECT cluster_id FROM known GROUP BY cluster_id HAVING COUNT(DISTINCT lower(name)) > 1
+),
+split_person AS (
+    SELECT person_number, modality FROM known WHERE basis = 'AUTOMATIC'
+    GROUP BY person_number, modality HAVING COUNT(DISTINCT cluster_id) > 1
+),
+split_fiscal AS (
+    SELECT fiscal_number, modality FROM known WHERE basis = 'AUTOMATIC' AND NULLIF(btrim(fiscal_number), '') IS NOT NULL
+    GROUP BY fiscal_number, modality HAVING COUNT(DISTINCT cluster_id) > 1
+),
+split_name AS (
+    SELECT lower(name) AS name, birth_date, modality FROM known WHERE basis = 'AUTOMATIC' AND NULLIF(btrim(birth_date), '') IS NOT NULL
+    GROUP BY lower(name), birth_date, modality HAVING COUNT(DISTINCT cluster_id) > 1
+)
+SELECT k.basis, k.cluster_id, k.modality, k.feature_id, k.identity_file_id, k.person_number, k.person_id,
+    k.name, k.birth_date, k.document_type, k.document_number, k.fiscal_number
+FROM known k
+WHERE k.cluster_id IN (SELECT cluster_id FROM named)
+   OR (k.person_number, k.modality) IN (SELECT person_number, modality FROM split_person)
+   OR (k.fiscal_number, k.modality) IN (SELECT fiscal_number, modality FROM split_fiscal)
+   OR (lower(k.name), k.birth_date, k.modality) IN (SELECT name, birth_date, modality FROM split_name)
+ORDER BY k.cluster_id, k.person_number, k.feature_id
+`
+
+type ListConflictCandidateMembersRow struct {
+	Basis          string         `db:"basis" json:"basis"`
+	ClusterID      int64          `db:"cluster_id" json:"cluster_id"`
+	Modality       string         `db:"modality" json:"modality"`
+	FeatureID      string         `db:"feature_id" json:"feature_id"`
+	IdentityFileID int64          `db:"identity_file_id" json:"identity_file_id"`
+	PersonNumber   int64          `db:"person_number" json:"person_number"`
+	PersonID       string         `db:"person_id" json:"person_id"`
+	Name           string         `db:"name" json:"name"`
+	BirthDate      sql.NullString `db:"birth_date" json:"birth_date"`
+	DocumentType   string         `db:"document_type" json:"document_type"`
+	DocumentNumber string         `db:"document_number" json:"document_number"`
+	FiscalNumber   sql.NullString `db:"fiscal_number" json:"fiscal_number"`
+}
+
+// The enrollment samples that can be part of an identity conflict (cluster.ListConflicts): those in a
+// cluster holding more than one name, and every sample whose identity -- by person, fiscal number, or
+// name with birth date -- has samples of one modality in different AUTOMATIC clusters. Spelling
+// variants and homonyms still come through here; Go tells them apart.
+func (q *Queries) ListConflictCandidateMembers(ctx context.Context) ([]ListConflictCandidateMembersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listConflictCandidateMembers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListConflictCandidateMembersRow
+	for rows.Next() {
+		var i ListConflictCandidateMembersRow
+		if err := rows.Scan(
+			&i.Basis,
+			&i.ClusterID,
+			&i.Modality,
+			&i.FeatureID,
+			&i.IdentityFileID,
+			&i.PersonNumber,
+			&i.PersonID,
+			&i.Name,
+			&i.BirthDate,
+			&i.DocumentType,
+			&i.DocumentNumber,
+			&i.FiscalNumber,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listConflictRecords = `-- name: ListConflictRecords :many
+SELECT p.id AS person_number, d.document_type, d.document_number, d.fiscal_number, r.register_number, r.name, r.birth_date,
+    r.parent_1_name, r.parent_2_name
+FROM persons p
+JOIN identity_documents d ON d.person_id = p.id
+JOIN identity_registers r ON r.document_id = d.id
+WHERE p.id = ANY($1::bigint[])
+ORDER BY p.id, r.id
+`
+
+type ListConflictRecordsRow struct {
+	PersonNumber   int64          `db:"person_number" json:"person_number"`
+	DocumentType   string         `db:"document_type" json:"document_type"`
+	DocumentNumber string         `db:"document_number" json:"document_number"`
+	FiscalNumber   sql.NullString `db:"fiscal_number" json:"fiscal_number"`
+	RegisterNumber string         `db:"register_number" json:"register_number"`
+	Name           string         `db:"name" json:"name"`
+	BirthDate      sql.NullString `db:"birth_date" json:"birth_date"`
+	Parent1Name    string         `db:"parent_1_name" json:"parent_1_name"`
+	Parent2Name    string         `db:"parent_2_name" json:"parent_2_name"`
+}
+
+// The biographic data on the given people's registers, for comparing them side by side on a page.
+func (q *Queries) ListConflictRecords(ctx context.Context, personNumbers []int64) ([]ListConflictRecordsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listConflictRecords, pq.Array(personNumbers))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListConflictRecordsRow
+	for rows.Next() {
+		var i ListConflictRecordsRow
+		if err := rows.Scan(
+			&i.PersonNumber,
+			&i.DocumentType,
+			&i.DocumentNumber,
+			&i.FiscalNumber,
+			&i.RegisterNumber,
+			&i.Name,
+			&i.BirthDate,
+			&i.Parent1Name,
+			&i.Parent2Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDecisionsBetweenFeatures = `-- name: ListDecisionsBetweenFeatures :many
+SELECT bd.feature_a_id, bd.feature_b_id, bd.role, bd.decision, bd.confidence, bd.threshold,
+    bd.case_analysis_id, ca.analysis_type, bd.conclusion
+FROM biometric_decisions bd
+LEFT JOIN case_analyses ca ON ca.id = bd.case_analysis_id
+WHERE bd.feature_a_id = ANY($1::text[]) AND bd.feature_b_id = ANY($1::text[])
+ORDER BY bd.feature_a_id, bd.feature_b_id, bd.decided_at, bd.id
+`
+
+type ListDecisionsBetweenFeaturesRow struct {
+	FeatureAID     string          `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID     string          `db:"feature_b_id" json:"feature_b_id"`
+	Role           string          `db:"role" json:"role"`
+	Decision       string          `db:"decision" json:"decision"`
+	Confidence     sql.NullFloat64 `db:"confidence" json:"confidence"`
+	Threshold      sql.NullFloat64 `db:"threshold" json:"threshold"`
+	CaseAnalysisID sql.NullInt64   `db:"case_analysis_id" json:"case_analysis_id"`
+	AnalysisType   sql.NullString  `db:"analysis_type" json:"analysis_type"`
+	Conclusion     sql.NullString  `db:"conclusion" json:"conclusion"`
+}
+
+// Every decision comparing two of the given features directly, oldest first.
+func (q *Queries) ListDecisionsBetweenFeatures(ctx context.Context, featureIds []string) ([]ListDecisionsBetweenFeaturesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDecisionsBetweenFeatures, pq.Array(featureIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDecisionsBetweenFeaturesRow
+	for rows.Next() {
+		var i ListDecisionsBetweenFeaturesRow
+		if err := rows.Scan(
+			&i.FeatureAID,
+			&i.FeatureBID,
+			&i.Role,
+			&i.Decision,
+			&i.Confidence,
+			&i.Threshold,
+			&i.CaseAnalysisID,
+			&i.AnalysisType,
+			&i.Conclusion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFaceScoresBetweenFiles = `-- name: ListFaceScoresBetweenFiles :many
+SELECT fa.identity_file_id::bigint AS file_a, fb.identity_file_id::bigint AS file_b,
+    (1 - (ea.embedding <=> eb.embedding))::float8 AS score
+FROM biometric_features fa
+JOIN feature_embeddings ea ON ea.biometric_feature_id = fa.id
+JOIN biometric_features fb ON fb.identity_file_id > fa.identity_file_id
+JOIN feature_embeddings eb ON eb.biometric_feature_id = fb.id AND eb.embedding_type = ea.embedding_type
+WHERE fa.identity_file_id = ANY($1::bigint[]) AND fb.identity_file_id = ANY($1::bigint[])
+`
+
+type ListFaceScoresBetweenFilesRow struct {
+	FileA int64   `db:"file_a" json:"file_a"`
+	FileB int64   `db:"file_b" json:"file_b"`
+	Score float64 `db:"score" json:"score"`
+}
+
+// The cosine similarity between the enrollment faces of the given identity files, measured from their
+// embeddings. The matcher only stores what it found alike, so this is what shows two records differ.
+func (q *Queries) ListFaceScoresBetweenFiles(ctx context.Context, fileIds []int64) ([]ListFaceScoresBetweenFilesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFaceScoresBetweenFiles, pq.Array(fileIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFaceScoresBetweenFilesRow
+	for rows.Next() {
+		var i ListFaceScoresBetweenFilesRow
+		if err := rows.Scan(&i.FileA, &i.FileB, &i.Score); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

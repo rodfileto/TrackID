@@ -118,6 +118,24 @@ type ArticleTemplate struct {
 	GeneratedAt time.Time       `db:"generated_at" json:"generated_at"`
 }
 
+type AskQuery struct {
+	ID                int64           `db:"id" json:"id"`
+	UserID            int64           `db:"user_id" json:"user_id"`
+	Username          string          `db:"username" json:"username"`
+	Endpoint          string          `db:"endpoint" json:"endpoint"`
+	Model             string          `db:"model" json:"model"`
+	External          bool            `db:"external" json:"external"`
+	Question          string          `db:"question" json:"question"`
+	History           json.RawMessage `db:"history" json:"history"`
+	Steps             json.RawMessage `db:"steps" json:"steps"`
+	Answer            string          `db:"answer" json:"answer"`
+	UnverifiedNumbers json.RawMessage `db:"unverified_numbers" json:"unverified_numbers"`
+	Error             string          `db:"error" json:"error"`
+	DurationMs        int64           `db:"duration_ms" json:"duration_ms"`
+	AskedAt           time.Time       `db:"asked_at" json:"asked_at"`
+	Focus             json.RawMessage `db:"focus" json:"focus"`
+}
+
 type BiometricCase struct {
 	ID           int64         `db:"id" json:"id"`
 	CaseID       string        `db:"case_id" json:"case_id"`
