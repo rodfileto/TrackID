@@ -19,7 +19,7 @@
     "@tiptap/react": "^3.32.2",
     "@tiptap/starter-kit": "^3.32.2",
     "@tiptap/suggestion": "^3.32.2",
-    "apexcharts": "^4.1.0",
+    "apexcharts": "^8.6.0",
     "clsx": "^2.1.1",
     "flatpickr": "^4.6.13",
     "i18next": "^26.5.12",
