@@ -20,4 +20,6 @@ export interface Extension {
   navItems: ExtensionNavItem[];
   /** Merged over core's translations, by language. */
   translations: Record<string, object>;
+  /** A panel on an intelligence operation's page, by the operation's slug. */
+  operationPanels?: Record<string, ReactNode>;
 }

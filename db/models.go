@@ -577,6 +577,18 @@ type OccurrenceType struct {
 	Grp      string `db:"grp" json:"grp"`
 }
 
+type Operation struct {
+	ID          int64         `db:"id" json:"id"`
+	Slug        string        `db:"slug" json:"slug"`
+	Name        string        `db:"name" json:"name"`
+	Description string        `db:"description" json:"description"`
+	Status      string        `db:"status" json:"status"`
+	CreatedBy   sql.NullInt64 `db:"created_by" json:"created_by"`
+	CreatedAt   time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt   time.Time     `db:"updated_at" json:"updated_at"`
+	ClosedAt    sql.NullTime  `db:"closed_at" json:"closed_at"`
+}
+
 type Person struct {
 	ID        int64                 `db:"id" json:"id"`
 	PersonID  string                `db:"person_id" json:"person_id"`

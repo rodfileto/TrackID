@@ -241,6 +241,12 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	intelligence.GET("ask", AskInfoHandler(deps.DB, deps.AskModel))
 	intelligence.POST("ask", AskHandler(deps.DB, deps.AskModel))
 
+	// Intelligence operations (docs/operations-plan.md).
+	intelligence.GET("operations", ListOperationsHandler(deps.DB))
+	intelligence.POST("operations", CreateOperationHandler(deps.DB))
+	intelligence.GET("operations/:slug", GetOperationHandler(deps.DB))
+	intelligence.PUT("operations/:slug", UpdateOperationHandler(deps.DB))
+
 	intelligence.GET("clusters", ListClustersHandler(deps.DB))
 	intelligence.GET("clusters/graph", ClustersGraphHandler(deps.DB))
 	intelligence.GET("clusters/:clusterId", GetClusterHandler(deps.DB))
