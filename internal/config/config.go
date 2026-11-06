@@ -52,6 +52,18 @@ type Config struct {
 	// AssistTimeout bounds one draft (ASSIST_TIMEOUT, a Go duration such as "5m"); zero means
 	// assist.DefaultTimeout.
 	AssistTimeout time.Duration
+
+	// Ask: the AI mode's model (ask package), anything speaking the OpenAI chat protocol with tool
+	// calling, local or not. AskEndpoint and AskModel empty leave the AI mode off, unless the assist
+	// model is configured, which it then shares. An API key never crosses to another endpoint: the
+	// assist settings are taken together or not at all.
+	AskEndpoint string
+	AskModel    string
+	AskAPIKey   string
+	// AskExtraBody is a JSON object of request fields the server wants (ASK_EXTRA_BODY).
+	AskExtraBody string
+	// AskTimeout bounds one question (ASK_TIMEOUT); zero means ask.DefaultTimeout.
+	AskTimeout time.Duration
 }
 
 func Load() Config {
@@ -83,6 +95,18 @@ func Load() Config {
 		}
 		assistTimeout = d
 	}
+	var askTimeout time.Duration
+	if v := os.Getenv("ASK_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			log.Fatalf("ASK_TIMEOUT: %v", err)
+		}
+		askTimeout = d
+	}
+	askEndpoint, askModel, askAPIKey := os.Getenv("ASK_ENDPOINT"), os.Getenv("ASK_MODEL"), os.Getenv("ASK_API_KEY")
+	if askEndpoint == "" && askModel == "" {
+		askEndpoint, askModel, askAPIKey = os.Getenv("ASSIST_ENDPOINT"), os.Getenv("ASSIST_MODEL"), os.Getenv("ASSIST_API_KEY")
+	}
 
 	return Config{
 		Port:        port,
@@ -112,5 +136,11 @@ func Load() Config {
 		AssistModel:    os.Getenv("ASSIST_MODEL"),
 		AssistAPIKey:   os.Getenv("ASSIST_API_KEY"),
 		AssistTimeout:  assistTimeout,
+
+		AskEndpoint:  askEndpoint,
+		AskModel:     askModel,
+		AskAPIKey:    askAPIKey,
+		AskExtraBody: os.Getenv("ASK_EXTRA_BODY"),
+		AskTimeout:   askTimeout,
 	}
 }

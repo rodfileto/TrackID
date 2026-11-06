@@ -1,3 +1,4 @@
+import type { IdentityConflict } from "./clusters";
 import { apiBaseUrl, apiFetch, requestApi } from "./api";
 import { getToken } from "./auth";
 import type { LinkStrength } from "./analyses";
@@ -299,6 +300,15 @@ export interface PersonCaseLink {
   reviewedClusterIds: number[];
   automaticClusterId?: number;
   score?: number;
+}
+
+/** The identity conflicts involving a person: intelligence only, and logged as reading them. */
+export async function listPersonIdentityConflicts(personId: string): Promise<IdentityConflict[]> {
+  const { conflicts } = await requestApi<{ conflicts: IdentityConflict[] }>(
+    `/persons/${encodeURIComponent(personId)}/identity-conflicts`,
+    { headers: authHeaders() },
+  );
+  return conflicts;
 }
 
 /** Every case the records link to a person, confirmed or not: intelligence only. */

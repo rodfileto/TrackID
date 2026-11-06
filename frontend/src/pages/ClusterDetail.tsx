@@ -19,6 +19,8 @@ import {
 } from "../components/ui/table";
 import Badge from "../components/ui/badge/Badge";
 import IdentityFileThumbnail from "../components/persons/IdentityFileThumbnail";
+import RegisterFacts from "../components/persons/RegisterFacts";
+import { IdentityConflictList } from "../components/clusters/IdentityConflicts";
 import CaseTraceThumbnail from "../components/cases/CaseTraceThumbnail";
 import {
   getCluster,
@@ -176,11 +178,22 @@ function PersonsCard({ detail }: { detail: ClusterDetail }) {
                     {samples[0].name}
                   </Link>
                   <span className="text-xs text-gray-500 dark:text-gray-400">{personId}</span>
-                  {elsewhere && (
+                  {/* On the reviewed layer an unreviewed sample sits alone: that says nothing yet. */}
+                  {elsewhere && detail.basis === "AUTOMATIC" && (
                     <Badge size="sm" color="warning">
                       {t("clusterDetail.samplesElsewhere")}
                     </Badge>
                   )}
+                </div>
+                <div className="mb-3 flex flex-col gap-3">
+                  {[...new Map(samples.map((s) => [s.registerNumber, s])).values()].map((s) => (
+                    <div key={s.registerNumber}>
+                      <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">
+                        {s.registerNumber} · <span className="font-medium text-gray-800 dark:text-white/90">{s.name}</span>
+                      </p>
+                      <RegisterFacts birthDate={s.birthDate} parent1Name={s.parent1Name} parent2Name={s.parent2Name} />
+                    </div>
+                  ))}
                 </div>
                 <ul className="flex flex-wrap gap-3">
                   {samples.map((s) => (
@@ -734,9 +747,6 @@ export default function ClusterDetailPage() {
   const bridges = edges.filter((p) => p.bridge).length;
   const scores = edges.map((p) => p.score).filter((s): s is number => s !== undefined);
   const weakest = scores.length ? Math.min(...scores) : undefined;
-  const elsewhere = detail.personSamples.filter(
-    (s) => s.modality === detail.modality && s.clusterId !== detail.clusterId,
-  );
   const reviewedEdges = edges.filter((p) => p.reviewed).length;
 
   return (
@@ -765,7 +775,7 @@ export default function ClusterDetailPage() {
             <Stat label={t("clusterDetail.stats.known")} value={known} />
             <Stat label={t("clusterDetail.stats.questioned")} value={detail.members.length - known} />
             <Stat label={t("clusterDetail.stats.cases")} value={cases} />
-            <Stat label={t("clusterDetail.stats.persons")} value={persons.length} tone={persons.length > 1 ? "warn" : undefined} />
+            <Stat label={t("clusterDetail.stats.persons")} value={persons.length} tone={detail.conflicts.length > 0 ? "warn" : undefined} />
             <Stat label={t("clusterDetail.stats.edges")} value={`${edges.length} (${reviewedEdges})`} />
             <Stat label={t("clusterDetail.stats.bridges")} value={bridges} tone={bridges > 0 ? "warn" : undefined} />
             <Stat label={t("clusterDetail.stats.weakest")} value={score(weakest)} />
@@ -773,31 +783,20 @@ export default function ClusterDetailPage() {
           <p className="text-xs text-gray-500 dark:text-gray-400">{t("clusterDetail.edgesNote")}</p>
         </ComponentCard>
 
-        {(persons.length > 1 || elsewhere.length > 0 || bridges > 0 || detail.components > 1) && (
+        {(bridges > 0 || detail.components > 1) && (
           <div className="space-y-3">
             {detail.components > 1 && (
               <Flag tone="error">{t("clusterDetail.flags.components", { count: detail.components })}</Flag>
-            )}
-            {persons.length > 1 && (
-              <Flag tone="warning">
-                {t("clusterDetail.flags.persons", {
-                  count: persons.length,
-                  names: persons.map(([, name]) => name).join(", "),
-                })}
-              </Flag>
-            )}
-            {elsewhere.length > 0 && (
-              <Flag tone="warning">
-                {t("clusterDetail.flags.elsewhere", {
-                  names: [...new Set(elsewhere.map((s) => s.name))].join(", "),
-                  clusters: [...new Set(elsewhere.map((s) => (s.clusterId ? `#${s.clusterId}` : "—")))].join(", "),
-                })}
-              </Flag>
             )}
             {bridges > 0 && <Flag tone="info">{t("clusterDetail.flags.bridges", { count: bridges })}</Flag>}
           </div>
         )}
 
+        {detail.conflicts.length > 0 && (
+          <ComponentCard title={t("identityConflict.title")} desc={t("identityConflict.desc")}>
+            <IdentityConflictList conflicts={detail.conflicts} currentCluster={detail.clusterId} />
+          </ComponentCard>
+        )}
         <PersonsCard detail={detail} />
         <OtherModalitiesCard detail={detail} />
         {detail.members.length > 1 && (

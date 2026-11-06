@@ -18,12 +18,16 @@ import CaseTraceThumbnail from "../components/cases/CaseTraceThumbnail";
 import { useCurrentUser } from "../context/CurrentUserContext";
 import LinkBadge from "../components/analyses/LinkBadge";
 import PersonArticle from "../components/articles/PersonArticle";
+import { IdentityConflictList } from "../components/clusters/IdentityConflicts";
+import RegisterFacts from "../components/persons/RegisterFacts";
+import type { IdentityConflict } from "../services/clusters";
 import {
   getPersonIdByNumber,
   getPersonIdentity,
   personPath,
   getPersonProfile,
   listPersonCaseLinks,
+  listPersonIdentityConflicts,
   type CaseCertainty,
   type PersonCaseLink,
   type PersonProfile,
@@ -182,6 +186,7 @@ export default function PersonProfilePage() {
   const [profile, setProfile] = useState<PersonProfile | null>(null);
   // Every case, at every certainty (not only the reviewed profile.cases): intelligence only.
   const [caseLinks, setCaseLinks] = useState<PersonCaseLink[]>([]);
+  const [conflicts, setConflicts] = useState<IdentityConflict[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   // Analysts see the article first (docs/person-article-plan.md §1); the data is a tab away.
@@ -206,12 +211,13 @@ export default function PersonProfilePage() {
         }
         const personId = await getPersonIdByNumber(personRef!);
         // Anyone else may see who the person is, not where they have been.
-        const [result, links] = isIntelligence
-          ? await Promise.all([getPersonProfile(personId), listPersonCaseLinks(personId)])
-          : [{ identity: await getPersonIdentity(personId), clusters: [], cases: [] }, []];
+        const [result, links, flagged] = isIntelligence
+          ? await Promise.all([getPersonProfile(personId), listPersonCaseLinks(personId), listPersonIdentityConflicts(personId)])
+          : [{ identity: await getPersonIdentity(personId), clusters: [], cases: [] }, [], []];
         if (!cancelled) {
           setProfile(result);
           setCaseLinks(links);
+          setConflicts(flagged);
         }
       } catch (err) {
         if (!cancelled) {
@@ -251,6 +257,14 @@ export default function PersonProfilePage() {
       )}
 
       {!loading && error && <p className="text-sm text-error-500">{error}</p>}
+
+      {profile && isIntelligence && conflicts.length > 0 && (
+        <div className="mb-6">
+          <ComponentCard title={t("identityConflict.title")} desc={t("identityConflict.desc")}>
+            <IdentityConflictList conflicts={conflicts} />
+          </ComponentCard>
+        </div>
+      )}
 
       {profile && isIntelligence && (
         <div className="mb-6 flex gap-1 border-b border-gray-200 dark:border-gray-800" role="tablist">
@@ -332,14 +346,11 @@ export default function PersonProfilePage() {
                         </span>
                         <span className="text-xs text-gray-500 dark:text-gray-400">
                           {t("personProfile.register", { number: register.registerNumber })}
-                          {register.birthDate
-                            ? ` · ${t("personProfile.born", { date: register.birthDate })}`
-                            : ""}
                         </span>
                       </div>
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        {t("personProfile.parents", { parent1: register.parent1Name, parent2: register.parent2Name })}
-                      </p>
+                      <div className="mt-3">
+                        <RegisterFacts birthDate={register.birthDate} parent1Name={register.parent1Name} parent2Name={register.parent2Name} />
+                      </div>
 
                       {register.files.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-3">

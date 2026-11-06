@@ -259,7 +259,7 @@ coordination. An examiner lists and opens only the cases where they hold a step 
 open or closed, and adds or changes evidence there; an intelligence analyst or a coordinator reads
 every case (`distribution.Rights`, enforced on every `cases/:caseId` route), and such a read by
 someone holding no step there goes to `access_log`, as do full person pages.
-Persons, clusters, face search and the occurrence map are intelligence only; an examiner sees a
+Persons, clusters, face search, the occurrence map and the AI mode are intelligence only; an examiner sees a
 person's identity. Distribution, reassignment and opening comparisons are coordination. Working on
 an analysis -- deciding on its pairs, submitting, issuing its report -- is narrower and the same
 for everyone: only the examiner holding the step of its current stage, while they examine its
@@ -325,6 +325,12 @@ Clusters come in two layers (`clusters.basis`), reconciled the same way by
 This separates the two uses of a match instead of changing the decision rule: a SYSTEM POSITIVE
 is still CONFIRMED, so matching stays fast for intelligence, while forensic work rests only on
 reviewed links.
+
+**Identity conflicts** (`cluster.ListConflicts`, `docs/ask-plan.md`). A cluster should be one identity's, and an
+identity should sit in one cluster per modality. A cluster holding different names, or an identity (one person row, one
+fiscal number, or one name and birth date no fiscal number contradicts) spread over several clusters of a modality, is
+flagged for an examiner, on the AUTOMATIC layer. Nothing merges persons: a person is whatever the importer sends. Several documents under one name with one
+biometric, and spelling variants, are normal. Nothing here says which identity is the true one.
 
 ## 5. Feature ids
 

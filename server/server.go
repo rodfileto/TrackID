@@ -15,6 +15,7 @@ import (
 	"github.com/rodfileto/trackid-vision/vision"
 
 	"github.com/rodfileto/trackid/api"
+	"github.com/rodfileto/trackid/ask"
 	"github.com/rodfileto/trackid/assist"
 	"github.com/rodfileto/trackid/cases"
 	"github.com/rodfileto/trackid/fingerprint"
@@ -140,6 +141,20 @@ func Run(options Options) error {
 		log.Printf("ASSIST_ENDPOINT/ASSIST_MODEL not configured; the assist lab will not draft")
 	}
 
+	// The AI mode's model. A configuration that makes no sense leaves it off, and says so, rather
+	// than stopping the rest of the application.
+	askModel, err := ask.NewModel(ask.Settings{
+		Endpoint: configuration.AskEndpoint, Model: configuration.AskModel, APIKey: configuration.AskAPIKey,
+		ExtraBody: configuration.AskExtraBody, Timeout: configuration.AskTimeout,
+	})
+	if err != nil {
+		log.Printf("the AI mode is off: %v", err)
+	} else if askModel == nil {
+		log.Printf("ASK_ENDPOINT/ASK_MODEL not configured; the AI mode is off")
+	} else {
+		log.Printf("AI mode: model %s at %s (external: %t)", askModel.Name(), askModel.Host(), askModel.External())
+	}
+
 	deps := api.Dependencies{
 		DB:          db,
 		JWTSecret:   configuration.JWTSecret,
@@ -154,6 +169,7 @@ func Run(options Options) error {
 		WordcraftWebDir: os.Getenv("WORDCRAFT_WEB_DIR"),
 		AssistDrafter:   assistDrafter,
 		AssistModel:     configuration.AssistModel,
+		AskModel:        askModel,
 		VideoLab:        videoLab,
 	}
 	if options.Register != nil {

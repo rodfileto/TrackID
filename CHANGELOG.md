@@ -12,6 +12,16 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- Identity conflicts (`cluster.ListConflicts`): one biometric under different names, or one identity with different
+  biometrics, flagged with their evidence on the Clusters list, the cluster page and the person page, and in the AI mode.
+  They replace the cluster page's older warnings, which also fired on two documents under one name.
+- AI mode (`/intelligence/ask`, `docs/ask-plan.md`): analysts ask about the criminal scenario in plain
+  language, or follow a person through cases, occurrences, inquiries and nearby occurrences by conversation, and a
+  language model answers through fixed read-only tools, showing what they returned and flagging numbers no query
+  returned. Biometric links are labelled reviewed or lead, and `person_identities` reports the biometric evidence that a
+  person may hold another identity, for an examiner to review. Any server speaking the OpenAI protocol works
+  (`ASK_ENDPOINT`, `ASK_MODEL`, `ASK_API_KEY`); one outside the institute only ever reads synthetic data.
+  Each question is recorded in `ask_queries`, and reads of persons and cases in `access_log`.
 - An occurrence's place and date are optional, for documents that give neither, and the
   `UNDETERMINED` occurrence type covers a crime whose document doesn't say which.
 - `requests.RegisterInput.ConcludedAt`: an importer can register a request already answered, whose
