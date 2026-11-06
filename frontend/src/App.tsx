@@ -24,6 +24,8 @@ import ImageLab from "./pages/ImageLab";
 import FaceLab from "./pages/FaceLab";
 import AssistLab from "./pages/AssistLab";
 import AskAI from "./pages/AskAI";
+import Operations from "./pages/Operations";
+import OperationDetail from "./pages/OperationDetail";
 import ComingSoon from "./pages/ComingSoon";
 import Users from "./pages/Users";
 import { extension } from "./extensions";
@@ -102,6 +104,8 @@ export default function App() {
               </Route>
               <Route element={<RequireCapability need="intelligence" />}>
                 <Route path="/intelligence/ask" element={<AskAI />} />
+                <Route path="/intelligence/operations" element={<Operations />} />
+                <Route path="/intelligence/operations/:slug" element={<OperationDetail />} />
                 <Route path="/clusters" element={<Clusters />} />
                 <Route path="/clusters/:clusterId" element={<ClusterDetailPage />} />
                 <Route

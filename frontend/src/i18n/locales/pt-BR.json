@@ -31,6 +31,7 @@
   },
   "nav": {
     "sectionCasework": "Trabalho pericial",
+    "operations": "Operações",
     "sectionInvestigation": "Investigação",
     "sectionManagement": "Gestão",
     "occurrences": "Ocorrências",
@@ -1782,6 +1783,30 @@
       "FISCAL": "Mesma identidade por: mesmo CPF em cadastros de pessoa diferentes.",
       "NAME_BIRTH": "Mesma identidade por: só nome e nascimento, sem CPF para confirmar. Podem ser homônimos."
     }
+  },
+  "operations": {
+    "title": "Operações",
+    "desc": "Linhas de trabalho de inteligência com nome próprio.",
+    "empty": "Nenhuma operação ainda.",
+    "create": "Nova operação",
+    "created": "Operação criada.",
+    "name": "Nome",
+    "description": "Descrição",
+    "statusLabel": "Situação",
+    "createdAt": "Criada em",
+    "status": {
+      "ACTIVE": "Ativa",
+      "CLOSED": "Encerrada"
+    },
+    "back": "Todas as operações",
+    "edit": "Editar",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "close": "Encerrar operação",
+    "reopen": "Reabrir",
+    "sensitiveHint": "Todos os analistas veem as operações: não coloque detalhes sensíveis na descrição.",
+    "loadError": "Não foi possível carregar as operações.",
+    "saveError": "Não foi possível salvar a operação."
   },
   "ask": {
     "title": "Modo IA",

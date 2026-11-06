@@ -167,6 +167,10 @@ func TestAccessProfiles(t *testing.T) {
 	allowed("/api/cases/HELD/article-backlinks", get, analyst)
 	allowed("/api/mentions/search?q=x", get, analyst)
 	allowed("/api/clusters", get, analyst)
+	allowed("/api/operations", get, analyst)
+	allowed("/api/operations", post, analyst)
+	allowed("/api/operations/none", get, analyst)
+	allowed("/api/operations/none", put, analyst)
 	allowed("/api/occurrences/map", get, analyst)
 	// A coordinator registering a request creates the occurrence it cites: the form's routes only.
 	allowed("/api/occurrences/types", get, analyst, coordinator)

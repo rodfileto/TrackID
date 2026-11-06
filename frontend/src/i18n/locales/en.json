@@ -31,6 +31,7 @@
   },
   "nav": {
     "sectionCasework": "Casework",
+    "operations": "Operations",
     "sectionInvestigation": "Investigation",
     "sectionManagement": "Management",
     "occurrences": "Occurrences",
@@ -1782,6 +1783,30 @@
       "FISCAL": "One identity by: the same CPF on different person records.",
       "NAME_BIRTH": "One identity by: name and birth date only, with no CPF to confirm it. They may be homonyms."
     }
+  },
+  "operations": {
+    "title": "Operations",
+    "desc": "Named lines of intelligence work.",
+    "empty": "No operations yet.",
+    "create": "New operation",
+    "created": "Operation created.",
+    "name": "Name",
+    "description": "Description",
+    "statusLabel": "Status",
+    "createdAt": "Created",
+    "status": {
+      "ACTIVE": "Active",
+      "CLOSED": "Closed"
+    },
+    "back": "All operations",
+    "edit": "Edit",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close operation",
+    "reopen": "Reopen",
+    "sensitiveHint": "Every analyst can see operations, so keep sensitive details out of the description.",
+    "loadError": "Could not load operations.",
+    "saveError": "Could not save the operation."
   },
   "ask": {
     "title": "AI mode",

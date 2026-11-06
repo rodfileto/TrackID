@@ -197,11 +197,11 @@ func (q *Queries) GetOccurrenceNumbers(ctx context.Context, id int64) (GetOccurr
 const insertCaseRequest = `-- name: InsertCaseRequest :one
 
 INSERT INTO case_requests (authority, document_reference, document_date, received_on, due_on,
-    cited_reference, cited_inquiry_number, occurrence_id, notes, registered_by)
+    cited_reference, cited_inquiry_number, occurrence_id, notes, registered_by, requesting_unit_id)
 VALUES ($1::text, $2::text, $3::date, $4::date,
         $5::date, $6::text, $7::text,
         $8::bigint,
-        $9::text, $10::bigint)
+        $9::text, $10::bigint, $11::bigint)
 RETURNING id
 `
 
@@ -216,6 +216,7 @@ type InsertCaseRequestParams struct {
 	OccurrenceID       sql.NullInt64  `db:"occurrence_id" json:"occurrence_id"`
 	Notes              sql.NullString `db:"notes" json:"notes"`
 	RegisteredBy       sql.NullInt64  `db:"registered_by" json:"registered_by"`
+	RequestingUnitID   sql.NullInt64  `db:"requesting_unit_id" json:"requesting_unit_id"`
 }
 
 // Requests and received material (docs/facial-reports-plan.md, phase 1).
@@ -231,6 +232,7 @@ func (q *Queries) InsertCaseRequest(ctx context.Context, arg InsertCaseRequestPa
 		arg.OccurrenceID,
 		arg.Notes,
 		arg.RegisteredBy,
+		arg.RequestingUnitID,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -418,7 +420,7 @@ func (q *Queries) ListCaseRequestReferences(ctx context.Context, caseID string) 
 }
 
 const listCaseRequests = `-- name: ListCaseRequests :many
-SELECT r.id, rc.sequence, r.authority, r.document_reference, r.document_date, r.received_on, r.due_on, r.cited_reference,
+SELECT r.id, rc.sequence, r.authority, r.requesting_unit_id, r.document_reference, r.document_date, r.received_on, r.due_on, r.cited_reference,
        r.cited_inquiry_number, r.occurrence_id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
        o.inquiry_number,
        r.notes, u.username AS registered_by, r.created_at
@@ -435,6 +437,7 @@ type ListCaseRequestsRow struct {
 	ID                 int64          `db:"id" json:"id"`
 	Sequence           int16          `db:"sequence" json:"sequence"`
 	Authority          string         `db:"authority" json:"authority"`
+	RequestingUnitID   sql.NullInt64  `db:"requesting_unit_id" json:"requesting_unit_id"`
 	DocumentReference  string         `db:"document_reference" json:"document_reference"`
 	DocumentDate       sql.NullTime   `db:"document_date" json:"document_date"`
 	ReceivedOn         time.Time      `db:"received_on" json:"received_on"`
@@ -466,6 +469,7 @@ func (q *Queries) ListCaseRequests(ctx context.Context, caseID string) ([]ListCa
 			&i.ID,
 			&i.Sequence,
 			&i.Authority,
+			&i.RequestingUnitID,
 			&i.DocumentReference,
 			&i.DocumentDate,
 			&i.ReceivedOn,

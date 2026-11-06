@@ -73,6 +73,7 @@ const allNavSections: NavSection[] = [
     title: "nav.sectionInvestigation",
     items: [
       { icon: <ChatIcon />, name: "nav.ask", path: "/intelligence/ask", requires: "intelligence" },
+      { icon: <ShootingStarIcon />, name: "nav.operations", path: "/intelligence/operations", requires: "intelligence" },
       { icon: <GroupIcon />, name: "nav.persons", path: "/persons", requires: "persons" },
       { icon: <BoxCubeIcon />, name: "nav.clusters", path: "/clusters", requires: "intelligence" },
       {

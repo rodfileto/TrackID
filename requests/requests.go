@@ -37,6 +37,7 @@ const dateLayout = "2006-01-02"
 // Input is a request as it is registered.
 type Input struct {
 	Authority         string   `json:"authority"`          // who asks, e.g. "37ª Delegacia de Polícia"
+	RequestingUnitID  *int64   `json:"requestingUnitId"`   // the unit that asks, when it is one we know, of any organization; optional
 	DocumentReference string   `json:"documentReference"`  // the request's own document, e.g. "Ofício nº 123/2026"
 	DocumentDate      string   `json:"documentDate"`       // YYYY-MM-DD, optional
 	ReceivedOn        string   `json:"receivedOn"`         // YYYY-MM-DD
@@ -121,6 +122,7 @@ type Request struct {
 	ID                int64       `json:"id"`
 	Sequence          int16       `json:"sequence"`
 	Authority         string      `json:"authority"`
+	RequestingUnitID  *int64      `json:"requestingUnitId,omitempty"`
 	DocumentReference string      `json:"documentReference"`
 	DocumentDate      string      `json:"documentDate,omitempty"`
 	ReceivedOn        string      `json:"receivedOn"`
@@ -412,12 +414,20 @@ func occurrenceRef(ctx context.Context, q *db.Queries, id int64) (*Occurrence, e
 
 func insertRequest(ctx context.Context, q *db.Queries, in Input, f fields, occurrence sql.NullInt64, registeredBy int64) (int64, error) {
 	cited := strings.TrimSpace(in.CitedReference)
+	requestingUnit := sql.NullInt64{}
+	if in.RequestingUnitID != nil {
+		requestingUnit = sql.NullInt64{Int64: *in.RequestingUnitID, Valid: true}
+	}
 	id, err := q.InsertCaseRequest(ctx, db.InsertCaseRequestParams{
-		Authority: f.authority, DocumentReference: f.document, DocumentDate: f.documentDate,
+		RequestingUnitID: requestingUnit,
+		Authority:        f.authority, DocumentReference: f.document, DocumentDate: f.documentDate,
 		ReceivedOn: f.received.Time, DueOn: f.due, CitedReference: nullString(cited),
 		CitedInquiryNumber: nullString(in.CitedInquiry), OccurrenceID: occurrence,
 		Notes: nullString(in.Notes), RegisteredBy: sql.NullInt64{Int64: registeredBy, Valid: registeredBy != 0},
 	})
+	if err != nil && strings.Contains(err.Error(), "case_requests_requesting_unit_id_fkey") {
+		return 0, ValidationError("requesting unit not found")
+	}
 	if err != nil {
 		return 0, fmt.Errorf("requests: insert: %w", err)
 	}
@@ -795,6 +805,9 @@ func ListWith(ctx context.Context, q *db.Queries, caseID string) ([]Request, err
 			ReceivedOn: r.ReceivedOn.Format(dateLayout), CitedReference: r.CitedReference.String,
 			CitedInquiry: r.CitedInquiryNumber.String, Notes: r.Notes.String,
 			RegisteredBy: r.RegisteredBy.String, CreatedAt: r.CreatedAt, Questions: []string{}, Files: []File{}, Cases: []CaseRef{}, Tasks: []string{}}
+		if r.RequestingUnitID.Valid {
+			req.RequestingUnitID = &r.RequestingUnitID.Int64
+		}
 		req.References = []Reference{}
 		for _, x := range referenceRows {
 			if x.CaseRequestID == r.ID {
