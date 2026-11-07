@@ -22,6 +22,8 @@ import IdentityFileThumbnail from "../components/persons/IdentityFileThumbnail";
 import RegisterFacts from "../components/persons/RegisterFacts";
 import { IdentityConflictList } from "../components/clusters/IdentityConflicts";
 import CaseTraceThumbnail from "../components/cases/CaseTraceThumbnail";
+import IntelligencePanels from "../components/common/IntelligencePanels";
+import { extension } from "../extensions";
 import {
   getCluster,
   type ClusterDetail,
@@ -799,6 +801,7 @@ export default function ClusterDetailPage() {
         )}
         <PersonsCard detail={detail} />
         <OtherModalitiesCard detail={detail} />
+        <IntelligencePanels panels={extension.clusterPanels} props={{ clusterId: detail.clusterId, modality: detail.modality }} />
         {detail.members.length > 1 && (
           <StructureGraph detail={detail} resolved={resolved} selected={selected} onSelect={setSelected} />
         )}

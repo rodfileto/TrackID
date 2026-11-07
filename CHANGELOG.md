@@ -12,6 +12,8 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- Panels an organization can add to the case, person and cluster pages (`Extension.casePanels`, `personPanels`,
+  `clusterPanels`), shown to intelligence analysts only.
 - Organizations and units (`docs/organizations-plan.md`, phase 1, no pages or access limits yet): a tree of units
   per organization, with an optional state and municipality. Every case has a unit, given to `cases.Ingest` or
   else the one that receives new cases, and a request can name the unit that asks.

@@ -146,7 +146,8 @@ To integrate with this package, an organization:
    `db/queries/`;
 3. optionally runs its own server with `server.Run(server.Options{Register: ...})` to add routes,
    and replaces `frontend/src/extensions/index.tsx` in its copy of the frontend to add pages, menu
-   items and translations, so it keeps receiving core's frontend unchanged.
+   items, translations and panels on the operation, case, person and cluster pages, so it keeps
+   receiving core's frontend unchanged.
 
 ## Development
 

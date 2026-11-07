@@ -20,6 +20,8 @@ import LinkBadge from "../components/analyses/LinkBadge";
 import PersonArticle from "../components/articles/PersonArticle";
 import { IdentityConflictList } from "../components/clusters/IdentityConflicts";
 import RegisterFacts from "../components/persons/RegisterFacts";
+import IntelligencePanels from "../components/common/IntelligencePanels";
+import { extension } from "../extensions";
 import type { IdentityConflict } from "../services/clusters";
 import {
   getPersonIdByNumber,
@@ -305,6 +307,8 @@ export default function PersonProfilePage() {
               {displayName(profile.identity.personId, documents)}
             </span>
           </ComponentCard>
+
+          <IntelligencePanels panels={extension.personPanels} props={{ personId: profile.identity.personId }} />
 
           <ComponentCard
             title={t("personProfile.identity")}

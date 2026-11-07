@@ -10,6 +10,8 @@ import CaseOccurrenceCard from "../components/cases/CaseOccurrenceCard";
 import CaseAnalysesCard from "../components/analyses/CaseAnalysesCard";
 import CaseRequestsCard from "../components/cases/CaseRequestsCard";
 import CaseVideosCard from "../components/cases/CaseVideosCard";
+import IntelligencePanels from "../components/common/IntelligencePanels";
+import { extension } from "../extensions";
 import {
   Table,
   TableBody,
@@ -221,6 +223,8 @@ export default function CaseDetailPage() {
           />
 
           <CaseAnalysesCard caseId={detail.caseId} modality={detail.modality} refreshKey={analysesKey} />
+
+          <IntelligencePanels panels={extension.casePanels} props={{ caseId: detail.caseId, modality: detail.modality }} />
 
           {detail.modality === "FACIAL" && <CaseVideosCard caseId={detail.caseId} canWrite={!!detail.access?.write} onEvidenceAdded={load} />}
 
