@@ -59,6 +59,8 @@ type AnalysisReport struct {
 	Snapshot            pqtype.NullRawMessage `db:"snapshot" json:"snapshot"`
 	ComplementsReportID sql.NullInt64         `db:"complements_report_id" json:"complements_report_id"`
 	Imported            bool                  `db:"imported" json:"imported"`
+	IssuingUnitID       sql.NullInt64         `db:"issuing_unit_id" json:"issuing_unit_id"`
+	Discipline          sql.NullString        `db:"discipline" json:"discipline"`
 }
 
 type AnalysisReportVersion struct {

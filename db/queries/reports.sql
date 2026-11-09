@@ -1,14 +1,19 @@
 -- name: InsertAnalysisReport :exec
 INSERT INTO analysis_reports (case_analysis_id, report_type) VALUES ($1, $2);
 
+-- name: CaseUnitOfAnalysis :one
+SELECT bc.unit_id FROM case_analyses ca JOIN biometric_cases bc ON bc.id = ca.biometric_case_id WHERE ca.id = $1;
+
 -- name: MaxReportNumber :one
+-- The last number of a unit's sequence for the report type's discipline in a year.
 SELECT COALESCE(MAX(report_number), 0)::integer
 FROM analysis_reports
-WHERE report_type = $1 AND report_year = $2;
+WHERE issuing_unit_id = @issuing_unit_id::bigint AND discipline = report_discipline(@report_type::text)
+    AND report_year = @report_year::int;
 
 -- name: IssueAnalysisReport :one
 UPDATE analysis_reports
-SET status = 'ISSUED', report_year = $2, report_number = $3, issued_by = $4, issued_at = $5
+SET status = 'ISSUED', report_year = $2, report_number = $3, issued_by = $4, issued_at = $5, issuing_unit_id = $6
 WHERE case_analysis_id = $1 AND status = 'DRAFT'
 RETURNING report_type, report_year, report_number, issued_at;
 
@@ -84,9 +89,10 @@ ORDER BY ar.issued_at, ar.id;
 -- An analysis's report as issued elsewhere; again, it refreshes one recorded before.
 UPDATE analysis_reports SET status = 'ISSUED', imported = TRUE, report_year = sqlc.narg('report_year')::int,
     report_number = sqlc.narg('report_number')::int, issued_at = @issued_at, case_file_id = sqlc.narg('case_file_id')::bigint,
-    snapshot = @snapshot
+    snapshot = @snapshot, issuing_unit_id = @issuing_unit_id::bigint
 WHERE case_analysis_id = @case_analysis_id AND (status = 'DRAFT' OR imported);
 
 -- name: ReportNumberTaken :one
-SELECT EXISTS (SELECT 1 FROM analysis_reports WHERE report_type = @report_type AND report_year = @report_year::int
+SELECT EXISTS (SELECT 1 FROM analysis_reports WHERE issuing_unit_id = @issuing_unit_id::bigint
+    AND discipline = report_discipline(@report_type::text) AND report_year = @report_year::int
     AND report_number = @report_number::int AND case_analysis_id <> @case_analysis_id)::bool AS taken;

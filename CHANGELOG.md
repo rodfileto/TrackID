@@ -10,6 +10,13 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ## [Unreleased]
 
+### Changed
+
+- A report's number is now its issuing unit's, by discipline and year, rather than global per report type (migration
+  021): `analysis_reports` keeps `issuing_unit_id` and a `discipline` derived from the type, so a facial review and
+  comparison share a sequence and two units can issue the same number. A report issued in TrackID takes its case's
+  unit; `reports.ImportedReport.IssuingUnitID` names another. Reports already numbered keep their numbers.
+
 ### Added
 
 - Searching TrackID from a case's face at a threshold the analyst picks (intelligence analysts; `POST
