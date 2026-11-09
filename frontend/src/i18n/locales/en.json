@@ -81,6 +81,7 @@
     "subtitle": "Cases imported into TrackID, filterable by modality.",
     "loadError": "Could not load cases",
     "allYears": "All years",
+    "allStates": "All states",
     "searchPlaceholder": "Search by description...",
     "count_one": "{{count}} case",
     "count_other": "{{count}} cases",

@@ -16,6 +16,7 @@ import Button from "../components/ui/button/Button";
 import { useCurrentUser } from "../context/CurrentUserContext";
 import {
   listCases,
+  listCaseStates,
   listCaseYears,
   type Case,
   type ListCasesResponse,
@@ -64,10 +65,12 @@ export default function CriminalCases() {
   const caseType = searchParams.get("caseType") ?? "";
   const modality = searchParams.get("modality") ?? "";
   const year = searchParams.get("year") ?? "";
+  const state = searchParams.get("state") ?? "";
   const query = searchParams.get("q") ?? "";
   const page = parsePage(searchParams.get("page"));
 
   const [years, setYears] = useState<string[]>([]);
+  const [states, setStates] = useState<string[]>([]);
   const [search, setSearch] = useState(query);
   // Back and forward change the query under the box.
   const [shownQuery, setShownQuery] = useState(query);
@@ -100,6 +103,9 @@ export default function CriminalCases() {
     listCaseYears()
       .then(setYears)
       .catch(() => setYears([]));
+    listCaseStates()
+      .then(setStates)
+      .catch(() => setStates([]));
   }, []);
 
   useEffect(() => {
@@ -115,6 +121,7 @@ export default function CriminalCases() {
           caseType: caseType || undefined,
           modality: modality || undefined,
           year: year || undefined,
+          state: state || undefined,
           q: query || undefined,
         });
         if (!cancelled) setData(result);
@@ -133,7 +140,7 @@ export default function CriminalCases() {
     return () => {
       cancelled = true;
     };
-  }, [page, caseType, modality, year, query, t]);
+  }, [page, caseType, modality, year, state, query, t]);
 
   function handleCaseTypeChange(value: string) {
     updateParams({ caseType: value || undefined, page: undefined });
@@ -145,6 +152,10 @@ export default function CriminalCases() {
 
   function handleYearChange(value: string) {
     updateParams({ year: value || undefined, page: undefined });
+  }
+
+  function handleStateChange(value: string) {
+    updateParams({ state: value || undefined, page: undefined });
   }
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
@@ -207,6 +218,23 @@ export default function CriminalCases() {
                 </option>
               ))}
             </select>
+
+            {/* Only where units have states, and cases this user can list are in them. */}
+            {states.length > 0 && (
+              <select
+                value={state}
+                onChange={(event) => handleStateChange(event.target.value)}
+                aria-label={t("cases.allStates")}
+                className="h-11 rounded-lg border border-gray-200 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+              >
+                <option value="">{t("cases.allStates")}</option>
+                {states.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            )}
 
             <form
               onSubmit={handleSearchSubmit}

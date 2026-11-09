@@ -186,6 +186,8 @@ export interface ListCasesParams {
   modality?: string;
   q?: string;
   year?: string;
+  /** The state of the unit responsible for the case. */
+  state?: string;
 }
 
 function authHeaders(): Record<string, string> {
@@ -203,6 +205,7 @@ export async function listCases(
   if (params.modality) query.set("modality", params.modality);
   if (params.q) query.set("q", params.q);
   if (params.year) query.set("year", params.year);
+  if (params.state) query.set("state", params.state);
 
   const qs = query.toString();
   return requestApi<ListCasesResponse>(`/cases${qs ? `?${qs}` : ""}`, {
@@ -215,6 +218,13 @@ export async function listCaseYears(): Promise<string[]> {
     headers: authHeaders(),
   });
   return years;
+}
+
+export async function listCaseStates(): Promise<string[]> {
+  const { states } = await requestApi<{ states: string[] }>("/cases/states", {
+    headers: authHeaders(),
+  });
+  return states;
 }
 
 export async function getCase(caseId: string): Promise<CaseDetail> {

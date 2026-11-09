@@ -161,6 +161,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	// else (docs/scene-collection-plan.md).
 	protected.POST("collections", RequireSceneCollection(deps.DB), RegisterCollectionHandler(deps.DB))
 	protected.GET("cases/years", ListCaseYearsHandler(deps.DB))
+	protected.GET("cases/states", ListCaseStatesHandler(deps.DB))
 
 	// Everything about one case: analysts and coordinators read every case, anyone else only the cases
 	// where they hold an analysis (distribution.Rights).

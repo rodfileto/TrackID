@@ -81,6 +81,7 @@
     "subtitle": "Casos importados no TrackID, filtráveis por modalidade.",
     "loadError": "Não foi possível carregar os casos",
     "allYears": "Todos os anos",
+    "allStates": "Todos os estados",
     "searchPlaceholder": "Buscar por descrição...",
     "count_one": "{{count}} caso",
     "count_other": "{{count}} casos",

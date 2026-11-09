@@ -33,6 +33,15 @@ func assignedToFilter(p string) string {
 		" WHEN 'INCONSISTENCE' THEN 'INCONSISTENCE' END)"
 }
 
+// unitStates gives every unit its state: its own, or else its parent's, since a unit with none is where its parent
+// is. A root with none takes its organization's, which only a state's organization has (018_organizations.sql). A
+// unit may still have no state, as a federal organization's root: its cases are under none.
+const unitStates = `WITH RECURSIVE unit_states AS (
+	SELECT u.id, COALESCE(u.uf, o.uf)::text AS uf FROM units u JOIN organizations o ON o.id = u.organization_id WHERE u.parent_id IS NULL
+	UNION ALL
+	SELECT child.id, COALESCE(child.uf::text, parent.uf) FROM units child JOIN unit_states parent ON child.parent_id = parent.id
+)`
+
 type ListResponse struct {
 	Items      []cases.Case `json:"items"`
 	Total      int          `json:"total"`
@@ -71,6 +80,10 @@ func ListCasesHandler(db *sql.DB) gin.HandlerFunc {
 		addFilter("modality =", strings.ToUpper(context.Query("modality")))
 		if year := strings.TrimSpace(context.Query("year")); year != "" && caseYearPattern.MatchString(year) {
 			addFilter("case_id ~", `(^|\.)`+year+`(\.|$)`)
+		}
+		if state := strings.ToUpper(strings.TrimSpace(context.Query("state"))); state != "" {
+			args = append(args, state)
+			filters = append(filters, "unit_id IN ("+unitStates+" SELECT id FROM unit_states WHERE uf = $"+strconv.Itoa(len(args))+")")
 		}
 		user := currentUser(context)
 		every, err := distribution.SeesEveryCase(context.Request.Context(), db, user)
@@ -161,6 +174,50 @@ func ListCaseYearsHandler(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		context.JSON(http.StatusOK, gin.H{"years": years})
+	}
+}
+
+// ListCaseStatesHandler returns the states of the units responsible for the cases the user may list, for populating
+// the "filter by state" dropdown.
+func ListCaseStatesHandler(db *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if db == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		where, args := "", []any{}
+		user := currentUser(context)
+		every, err := distribution.SeesEveryCase(context.Request.Context(), db, user)
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not check case access"})
+			return
+		}
+		if !every {
+			where, args = " WHERE "+assignedToFilter("$1"), []any{user.ID}
+		}
+		rows, err := db.QueryContext(context.Request.Context(), unitStates+`
+			SELECT DISTINCT uf FROM unit_states
+			WHERE uf IS NOT NULL AND id IN (SELECT unit_id FROM biometric_cases`+where+`)
+			ORDER BY uf`, args...)
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not list case states"})
+			return
+		}
+		defer rows.Close()
+		states := []string{}
+		for rows.Next() {
+			var state string
+			if err := rows.Scan(&state); err != nil {
+				context.JSON(http.StatusInternalServerError, gin.H{"error": "could not read case states"})
+				return
+			}
+			states = append(states, state)
+		}
+		if err := rows.Err(); err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not read case states"})
+			return
+		}
+		context.JSON(http.StatusOK, gin.H{"states": states})
 	}
 }
 
