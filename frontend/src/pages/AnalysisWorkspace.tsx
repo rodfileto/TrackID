@@ -1,0 +1,414 @@
+import { useCallback, useEffect, useState } from "react";
+import { useParams } from "react-router";
+import BackLink from "../components/common/BackLink";
+import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import PageMeta from "../components/common/PageMeta";
+import PageBreadcrumb from "../components/common/PageBreadCrumb";
+import ComponentCard from "../components/common/ComponentCard";
+import Badge from "../components/ui/badge/Badge";
+import Button from "../components/ui/button/Button";
+import FaceImage from "../components/analyses/FaceImage";
+import ReportPanel from "../components/analyses/ReportPanel";
+import { decisionColor, decisionValues, stageColor, typeKey } from "../components/analyses/labels";
+import { useCurrentUser } from "../context/CurrentUserContext";
+import {
+  assessTrace,
+  conclusionDecision,
+  conclusions,
+  getWorksheet,
+  listCaseAnalyses,
+  saveDraft,
+  submitStep,
+  suitabilities,
+  type Analysis,
+  type Conclusion,
+  type DecisionValue,
+  type PairView,
+  type Suitability,
+  type Worksheet,
+  taskModality,
+  traceKey,
+} from "../services/analyses";
+import { listCaseMaterial, type MaterialTrace } from "../services/requests";
+import type { TraceLink } from "../services/cases";
+
+function pairKey(p: { featureA: string; featureB: string }): string {
+  return `${p.featureA}|${p.featureB}`;
+}
+
+function describe(face: TraceLink, t: (key: string, opts?: Record<string, unknown>) => string, modality?: string): string {
+  if (face.kind === "KNOWN") {
+    return t("analyses.enrolled", { name: face.name ?? "?", personId: face.personId ?? "?" });
+  }
+  return t(traceKey(modality), { traceId: face.traceId ?? "?", caseId: face.caseId ?? "?" });
+}
+
+/** One pair: the two faces side by side, what the matcher said, the decisions the viewer may see,
+ * and -- when it is their step -- their own decision and notes. Blind (verification, inconsistence) shows only the
+ * two images and the decision: no score, no matcher decision, nothing naming who or which case is
+ * on them. */
+function PairCard({
+  caseId,
+  analysisId,
+  pair,
+  index,
+  editable,
+  blind,
+  comparison,
+  modality,
+  material,
+  canAssess,
+  onDecide,
+  onAssess,
+}: {
+  caseId: string;
+  analysisId: number;
+  pair: PairView;
+  index: number;
+  editable: boolean;
+  blind: boolean;
+  /** A facial comparison decides on the conclusion scale; a review or a fingerprint comparison on
+   * POSITIVE/NEGATIVE/INCONCLUSIVE. */
+  comparison: boolean;
+  /** FACIAL or FINGERPRINT: how the case's traces are named. */
+  modality: string;
+  /** The questioned face's role and suitability, when the viewer may see them. */
+  material?: MaterialTrace;
+  canAssess: boolean;
+  onDecide: (pair: PairView, decision: DecisionValue, notes: string, conclusion?: Conclusion) => Promise<void>;
+  onAssess: (traceId: number, suitability: Suitability) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [notes, setNotes] = useState(pair.draft?.notes ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function decide(decision: DecisionValue, conclusion?: Conclusion) {
+    setSaving(true);
+    try {
+      await onDecide(pair, decision, notes, conclusion);
+    } finally {
+      setSaving(false);
+    }
+  }
+  const buttonClass = (selected: boolean, decision: DecisionValue) =>
+    `rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+      selected
+        ? decision === "POSITIVE"
+          ? "border-success-500 bg-success-500 text-white"
+          : decision === "NEGATIVE"
+            ? "border-error-500 bg-error-500 text-white"
+            : "border-warning-500 bg-warning-500 text-white"
+        : "border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.03]"
+    }`;
+
+  return (
+    <div
+      className={`rounded-2xl border p-4 ${
+        pair.draft
+          ? "border-gray-200 dark:border-gray-800"
+          : editable
+            ? "border-brand-300 dark:border-brand-800"
+            : "border-gray-200 dark:border-gray-800"
+      }`}
+    >
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-gray-800 dark:text-white/90">
+          {t("analyses.pairNumber", { n: index + 1 })}
+        </span>
+        {!blind && pair.score !== undefined && (
+          <Badge size="sm" color="light">
+            {t("analyses.score", { score: pair.score.toFixed(3) })}
+          </Badge>
+        )}
+        {!blind && pair.systemDecision && (
+          <Badge size="sm" color={decisionColor(pair.systemDecision)}>
+            {t("analyses.system")}: {t(`analyses.decision.${pair.systemDecision}`)}
+          </Badge>
+        )}
+        {!blind && pair.disputed && (
+          <Badge size="sm" color="warning">
+            {t("analyses.disputed")}
+          </Badge>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <FaceImage
+          caseId={caseId}
+          analysisId={analysisId}
+          face={pair.questioned}
+          label={blind ? t("analyses.blindQuestioned") : describe(pair.questioned, t, modality)}
+        />
+        <FaceImage
+          caseId={caseId}
+          analysisId={analysisId}
+          face={pair.counterpart}
+          label={blind ? t("analyses.blindReference") : describe(pair.counterpart, t, modality)}
+        />
+      </div>
+
+      {!blind && pair.decisions.length > 0 && (
+        <ul className="mt-3 space-y-1">
+          {pair.decisions.map((d) => (
+            <li key={d.step} className="flex flex-wrap items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+              <span>{t(`analyses.step.${d.step}`)}</span>
+              <Badge size="sm" color={decisionColor(d.decision)}>
+                {d.conclusion ? t(`analyses.conclusion.${d.conclusion}`) : t(`analyses.decision.${d.decision}`)}
+              </Badge>
+              <span>{d.username}</span>
+              {d.notes && <span className="italic">“{d.notes}”</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!blind && material?.role === "QUESTIONED" && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-gray-500 dark:text-gray-400">{t("analyses.suitabilityLabel")}:</span>
+          {canAssess ? (
+            <select
+              value={material.suitability ?? ""}
+              onChange={(event) => void onAssess(material.traceId, event.target.value as Suitability)}
+              className="h-9 rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+            >
+              <option value="" disabled>
+                {t("analyses.suitability.none")}
+              </option>
+              {suitabilities.map((s) => (
+                <option key={s} value={s}>
+                  {t(`analyses.suitability.${s}`)}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <Badge size="sm" color={material.suitability === "SUITABLE" ? "success" : material.suitability ? "warning" : "light"}>
+              {t(`analyses.suitability.${material.suitability ?? "none"}`)}
+            </Badge>
+          )}
+        </div>
+      )}
+
+      {editable && (
+        <div className="mt-4 space-y-3">
+          <textarea
+            rows={2}
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            onBlur={() => {
+              if (pair.draft && notes !== (pair.draft.notes ?? "")) void decide(pair.draft.decision, pair.draft.conclusion);
+            }}
+            placeholder={t("analyses.notesPlaceholder")}
+            className="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+          />
+          <div className="flex flex-wrap gap-2">
+            {comparison
+              ? conclusions.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void decide(conclusionDecision(value), value)}
+                    className={buttonClass(pair.draft?.conclusion === value, conclusionDecision(value))}
+                  >
+                    {t(`analyses.conclusion.${value}`)}
+                  </button>
+                ))
+              : decisionValues.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void decide(value)}
+                    className={buttonClass(pair.draft?.decision === value, value)}
+                  >
+                    {t(`analyses.decision.${value}`)}
+                  </button>
+                ))}
+          </div>
+          {comparison && <p className="text-xs text-gray-500 dark:text-gray-400">{t("analyses.conclusionHint")}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function AnalysisWorkspace() {
+  const { t } = useTranslation();
+  const { caseId = "", analysisId = "" } = useParams<{ caseId: string; analysisId: string }>();
+  const id = Number(analysisId);
+  const { user } = useCurrentUser();
+  const [worksheet, setWorksheet] = useState<Worksheet | null>(null);
+  const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [material, setMaterial] = useState<MaterialTrace[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      // While the viewer works it blind the case's analyses are closed to them (403): they name the
+      // other examiners.
+      const ws = await getWorksheet(caseId, id);
+      const list = ws.blind ? [] : await listCaseAnalyses(caseId);
+      setMaterial(ws.blind ? [] : await listCaseMaterial(caseId));
+      setWorksheet(ws);
+      setAnalysis(list.find((a) => a.id === id) ?? null);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("analyses.loadError"));
+    }
+  }, [caseId, id, t]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function onDecide(pair: PairView, decision: DecisionValue, notes: string, conclusion?: Conclusion) {
+    try {
+      await saveDraft(caseId, id, pair, decision, notes, conclusion);
+      setWorksheet((ws) => {
+        if (!ws) return ws;
+        const pairs = ws.pairs.map((p) =>
+          pairKey(p) === pairKey(pair) ? { ...p, draft: { decision, notes, conclusion } } : p,
+        );
+        return { ...ws, pairs, drafted: pairs.filter((p) => p.draft).length };
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("analyses.saveError"));
+    }
+  }
+
+  async function onSubmit() {
+    if (!window.confirm(t("analyses.submitConfirm"))) return;
+    setBusy(true);
+    try {
+      const result = await submitStep(caseId, id);
+      toast.success(t("analyses.submitted", { stage: t(`analyses.stage.${result.stage}`) }));
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("analyses.saveError"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onAssess(traceId: number, suitability: Suitability) {
+    try {
+      await assessTrace(caseId, id, traceId, suitability, "");
+      setMaterial((list) => list.map((m) => (m.traceId === traceId ? { ...m, suitability } : m)));
+      toast.success(t("analyses.suitabilitySaved"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("analyses.saveError"));
+    }
+  }
+
+  // Blind verification: the verifier sees only the images and makes the decision -- no case, no
+  // links to it or its clusters, no scores (FISWG: verification without contextual information).
+  const blind = worksheet?.blind ?? false;
+  const title = blind
+    ? t("analyses.blindTitle")
+    : analysis
+    ? t("analyses.workspaceTitle", { type: t(typeKey(analysis.type)), sequence: analysis.sequence, caseId })
+    : t("analyses.workspaceTitleShort", { caseId });
+  const editable = !!worksheet?.yourStep;
+  const firstExaminer = !!analysis && analysis.examiners.VERIFICATOR?.userId === user?.id;
+  const canIssue = !!analysis && analysis.status === "OPEN" && analysis.stage === "REPORT" && firstExaminer;
+  // The first examiner records image quality while they examine, and until the report is issued.
+  const canAssess = !blind && !!analysis && analysis.status === "OPEN" && firstExaminer &&
+    (worksheet?.yourStep === "VERIFICATOR" || analysis.stage === "REPORT");
+  const materialByFeature = new Map(material.map((m) => [m.featureId, m]));
+  const showReport = !blind && !!analysis && (analysis.stage === "REPORT" || analysis.status === "CLOSED");
+
+  return (
+    <>
+      <PageMeta title={`${title} | TrackID`} description={t("analyses.metaDescription")} />
+      <PageBreadcrumb pageTitle={title} />
+
+      <div className="mb-6">
+        {blind ? (
+          <BackLink fallback="/analyses" label={t("analyses.backToMyAnalyses")} />
+        ) : (
+          <BackLink fallback={`/cases/${encodeURIComponent(caseId)}`} label={t("analyses.backToCase", { caseId })} />
+        )}
+      </div>
+
+      {error && <p className="text-sm text-error-500">{error}</p>}
+
+      {worksheet && (
+        <div className="space-y-6">
+          <ComponentCard title={t("analyses.status")}>
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge size="sm" color={stageColor(worksheet.stage, worksheet.status)}>
+                {worksheet.status === "CLOSED" ? t("analyses.closed") : t(`analyses.stage.${worksheet.stage}`)}
+              </Badge>
+              {worksheet.yourStep && (
+                <Badge size="sm" color="primary">
+                  {t("analyses.yourStep", { step: t(`analyses.step.${worksheet.yourStep}`) })}
+                </Badge>
+              )}
+              {!blind && analysis?.report.number && (
+                <Badge size="sm" color="success">
+                  {t("analyses.reportNumber", { number: analysis.report.number })}
+                </Badge>
+              )}
+              {editable && (
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {t("analyses.progress", { drafted: worksheet.drafted, total: worksheet.pairs.length })}
+                </span>
+              )}
+              <div className="ml-auto flex gap-2">
+                {editable && (
+                  <Button size="sm" onClick={() => void onSubmit()} disabled={busy || worksheet.drafted < worksheet.pairs.length}>
+                    {t("analyses.submit")}
+                  </Button>
+                )}
+
+              </div>
+            </div>
+            {worksheet.yourStep === "REVIEWER" && (
+              <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">{t("analyses.blindHint")}</p>
+            )}
+            {worksheet.yourStep === "INCONSISTENCE" && (
+              <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">{t("analyses.inconsistenceHint")}</p>
+            )}
+            {!editable && !canIssue && worksheet.status === "OPEN" && (
+              <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">{t("analyses.readOnlyHint")}</p>
+            )}
+          </ComponentCard>
+
+          {showReport && analysis && (
+            <ReportPanel
+              caseId={caseId}
+              analysisId={id}
+              canWrite={canIssue}
+              canDeliver={!!user?.coordinator || analysis.report.issuedBy === user?.username}
+              onIssued={() => void load()}
+            />
+          )}
+
+          {worksheet.pairs.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t("analyses.noPairs")}</p>
+          ) : (
+            worksheet.pairs.map((pair, index) => (
+              <PairCard
+                key={pairKey(pair)}
+                caseId={caseId}
+                analysisId={id}
+                pair={pair}
+                index={index}
+                editable={editable}
+                blind={blind}
+                comparison={worksheet.type === "FACIAL_COMPARISON"}
+                modality={taskModality(worksheet.type)}
+                material={materialByFeature.get(pair.questioned.featureId ?? "")}
+                canAssess={canAssess}
+                onDecide={onDecide}
+                onAssess={onAssess}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </>
+  );
+}

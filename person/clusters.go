@@ -1,0 +1,312 @@
+package person
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/rodfileto/trackid/cluster"
+	"github.com/rodfileto/trackid/db"
+	"github.com/rodfileto/trackid/graph"
+)
+
+// ClusterMember is one biometric sample -- an enrollment photo or a
+// crime-scene trace -- a cluster groups together. Kind says which: "KNOWN"
+// populates the enrollment fields (PersonID..ContentType), "QUESTIONED"
+// populates the case-evidence fields (CaseID..ThumbnailBox). A cluster on a
+// person's own profile always has at least one KNOWN member (this person);
+// any QUESTIONED members are crime-scene evidence a reviewed decision has
+// matched to them.
+type ClusterMember struct {
+	Kind string `json:"kind"`
+	// FeatureID is the member's cluster_members.feature_id (graph.KnownFeatureID /
+	// graph.QuestionedFeatureID).
+	FeatureID string `json:"featureId"`
+
+	// KNOWN fields -- an enrollment photo.
+	PersonID       string `json:"personId,omitempty"`
+	PersonNumber   int64  `json:"personNumber,omitempty"`
+	Name           string `json:"name,omitempty"`
+	RegisterNumber string `json:"registerNumber,omitempty"`
+	DocumentType   string `json:"documentType,omitempty"`
+	DocumentNumber string `json:"documentNumber,omitempty"`
+	IdentityFileID int64  `json:"identityFileId,omitempty"`
+	ContentType    string `json:"contentType,omitempty"`
+
+	// QUESTIONED fields -- a case_trace, thumbnail resolved the same way as
+	// CaseFaceSearchResult (see its doc comment).
+	CaseID          string        `json:"caseId,omitempty"`
+	Modality        string        `json:"modality,omitempty"`
+	Description     string        `json:"description,omitempty"`
+	TraceID         int64         `json:"traceId,omitempty"`
+	ThumbnailFileID int64         `json:"thumbnailFileId,omitempty"`
+	ThumbnailBox    *ThumbnailBox `json:"thumbnailBox,omitempty"`
+	// Link is how a QUESTIONED member is identified as an enrolled member of its cluster: the
+	// strongest direct reviewed link between them -- a laudo at or above the identification level,
+	// a lead, or a laudo below it (cluster.ReviewedLink). Nil when only an indirect path links it.
+	Link *cluster.Link `json:"link,omitempty"`
+}
+
+// Cluster is one biometric cluster a person's enrolled (KNOWN) features have
+// resolved into: a group of same-modality biometric samples -- enrollment
+// records and/or crime-scene evidence -- that reviewed decision chains have
+// linked together (see cluster.Run). See MODEL.md section 4.
+//
+// HasCaseEvidence is true when at least one member is QUESTIONED -- this
+// person's biometric has been matched to real crime-scene evidence, not just
+// to another enrollment record.
+type Cluster struct {
+	ClusterID       int64           `json:"clusterId"`
+	Modality        string          `json:"modality"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	MemberCount     int             `json:"memberCount"`
+	HasCaseEvidence bool            `json:"hasCaseEvidence"`
+	Members         []ClusterMember `json:"members"`
+}
+
+// ListClusters returns every biometric cluster resolved to the given
+// person -- one entry per REVIEWED cluster a reviewed decision has placed one of the
+// person's enrolled features into. A person with documents/registers of more
+// than one modality can resolve into several clusters; most resolve into at
+// most one per modality. Returns ErrNotFound if no person row matches.
+func ListClusters(ctx context.Context, sqlDB *sql.DB, personID string) ([]Cluster, error) {
+	if sqlDB == nil {
+		return nil, fmt.Errorf("person: nil db")
+	}
+	if personID == "" {
+		return nil, fmt.Errorf("person: personID is required")
+	}
+
+	_, _, clusterIDs, err := loadPersonAndClusterIDs(ctx, sqlDB, personID)
+	if err != nil {
+		return nil, err
+	}
+	if len(clusterIDs) == 0 {
+		return nil, nil
+	}
+
+	q := db.New(sqlDB)
+	clusterRows, err := q.ListClustersByIDs(ctx, clusterIDs)
+	if err != nil {
+		return nil, err
+	}
+	memberRows, err := q.ListClusterMembersByClusterIDs(ctx, clusterIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	return buildClusters(ctx, q, clusterRows, memberRows)
+}
+
+// ClusterByID returns one cluster, of either layer, with its members resolved as ListClusters
+// resolves them. ok is false when no cluster has the id.
+func ClusterByID(ctx context.Context, sqlDB *sql.DB, clusterID int64) (c Cluster, ok bool, err error) {
+	if sqlDB == nil {
+		return Cluster{}, false, fmt.Errorf("person: nil db")
+	}
+	q := db.New(sqlDB)
+	clusterRows, err := q.ListClustersByIDs(ctx, []int64{clusterID})
+	if err != nil || len(clusterRows) == 0 {
+		return Cluster{}, false, err
+	}
+	memberRows, err := q.ListClusterMembersByClusterIDs(ctx, []int64{clusterID})
+	if err != nil {
+		return Cluster{}, false, err
+	}
+	clusters, err := buildClusters(ctx, q, clusterRows, memberRows)
+	if err != nil || len(clusters) == 0 {
+		return Cluster{}, false, err
+	}
+	return clusters[0], true, nil
+}
+
+// buildClusters assembles the Cluster list -- each with its resolved member
+// details -- from an already-loaded set of cluster rows and their combined
+// membership. The reusable core both ListClusters and GetProfile build on.
+func buildClusters(ctx context.Context, q *db.Queries, clusterRows []db.ListClustersByIDsRow, memberRows []db.ListClusterMembersByClusterIDsRow) ([]Cluster, error) {
+	var identityFileIDs, traceIDs []int64
+	seenIdentityFile := map[int64]bool{}
+	seenTrace := map[int64]bool{}
+	for _, m := range memberRows {
+		if traceID, ok := graph.ParseQuestionedFeatureID(m.FeatureID); ok {
+			if !seenTrace[traceID] {
+				seenTrace[traceID] = true
+				traceIDs = append(traceIDs, traceID)
+			}
+			continue
+		}
+		id, err := strconv.ParseInt(m.FeatureID, 10, 64)
+		if err != nil {
+			continue
+		}
+		if !seenIdentityFile[id] {
+			seenIdentityFile[id] = true
+			identityFileIDs = append(identityFileIDs, id)
+		}
+	}
+
+	knownByFile := map[int64]db.ListKnownClusterMembersRow{}
+	if len(identityFileIDs) > 0 {
+		rows, err := q.ListKnownClusterMembers(ctx, identityFileIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			knownByFile[r.IdentityFileID] = r
+		}
+	}
+
+	questionedByTrace := map[int64]db.ListQuestionedClusterMembersRow{}
+	if len(traceIDs) > 0 {
+		rows, err := q.ListQuestionedClusterMembers(ctx, traceIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			questionedByTrace[r.CaseTraceID] = r
+		}
+	}
+
+	membersByCluster := map[int64][]ClusterMember{}
+	for _, m := range memberRows {
+		if traceID, ok := graph.ParseQuestionedFeatureID(m.FeatureID); ok {
+			d, ok := questionedByTrace[traceID]
+			if !ok {
+				// The trace's evidence was excluded/deleted since clustering.
+				continue
+			}
+			member := ClusterMember{
+				Kind:        "QUESTIONED",
+				FeatureID:   m.FeatureID,
+				CaseID:      d.CaseID,
+				Modality:    d.Modality,
+				Description: d.Description,
+				TraceID:     traceID,
+			}
+			switch {
+			case d.TraceCropFileID.Valid:
+				member.ThumbnailFileID = d.TraceCropFileID.Int64
+			case d.EvidenceFileID.Valid && d.BoxX1.Valid:
+				member.ThumbnailFileID = d.EvidenceFileID.Int64
+				member.ThumbnailBox = &ThumbnailBox{
+					X1: d.BoxX1.Float64,
+					Y1: d.BoxY1.Float64,
+					X2: d.BoxX2.Float64,
+					Y2: d.BoxY2.Float64,
+				}
+			}
+			membersByCluster[m.ClusterID] = append(membersByCluster[m.ClusterID], member)
+			continue
+		}
+
+		id, err := strconv.ParseInt(m.FeatureID, 10, 64)
+		if err != nil {
+			continue
+		}
+		d, ok := knownByFile[id]
+		if !ok {
+			continue
+		}
+		membersByCluster[m.ClusterID] = append(membersByCluster[m.ClusterID], ClusterMember{
+			Kind:           "KNOWN",
+			FeatureID:      m.FeatureID,
+			PersonID:       d.PersonID,
+			PersonNumber:   d.PersonNumber,
+			Name:           d.Name,
+			RegisterNumber: d.RegisterNumber,
+			DocumentType:   d.DocumentType,
+			DocumentNumber: d.DocumentNumber,
+			IdentityFileID: d.IdentityFileID,
+			ContentType:    d.ContentType.String,
+		})
+	}
+
+	if err := linkMembers(ctx, q, memberRows, membersByCluster); err != nil {
+		return nil, err
+	}
+
+	out := make([]Cluster, 0, len(clusterRows))
+	for _, c := range clusterRows {
+		members := membersByCluster[c.ID]
+		hasCaseEvidence := false
+		for _, m := range members {
+			if m.Kind == "QUESTIONED" {
+				hasCaseEvidence = true
+				break
+			}
+		}
+		out = append(out, Cluster{
+			ClusterID:       c.ID,
+			Modality:        c.Modality,
+			CreatedAt:       c.CreatedAt,
+			MemberCount:     len(members),
+			HasCaseEvidence: hasCaseEvidence,
+			Members:         members,
+		})
+	}
+	return out, nil
+}
+
+// linkMembers sets each QUESTIONED member's Link: its strongest direct reviewed link to a KNOWN
+// member of the same cluster.
+func linkMembers(ctx context.Context, q *db.Queries, memberRows []db.ListClusterMembersByClusterIDsRow, membersByCluster map[int64][]ClusterMember) error {
+	clusterOf := map[string]int64{}
+	var questioned []string
+	for _, m := range memberRows {
+		clusterOf[m.FeatureID] = m.ClusterID
+		if _, ok := graph.ParseQuestionedFeatureID(m.FeatureID); ok {
+			questioned = append(questioned, m.FeatureID)
+		}
+	}
+	if len(questioned) == 0 {
+		return nil
+	}
+	level, err := cluster.IdentificationLevel(ctx, q)
+	if err != nil {
+		return err
+	}
+	rows, err := q.ListBiometricDecisionsForFeatures(ctx, questioned)
+	if err != nil {
+		return err
+	}
+	chains := map[[2]string][]cluster.ChainEntry{}
+	for _, r := range rows {
+		if _, isTrace := graph.ParseQuestionedFeatureID(r.CounterpartID); isTrace || clusterOf[r.CounterpartID] != clusterOf[r.FeatureID] {
+			continue
+		}
+		k := [2]string{r.FeatureID, r.CounterpartID}
+		chains[k] = append(chains[k], cluster.ChainEntry{Role: cluster.Role(r.Role), Decision: cluster.Decision(r.Decision),
+			Analysis: r.CaseAnalysisID.Int64, AnalysisType: r.AnalysisType.String, Conclusion: cluster.Conclusion(r.Conclusion.String)})
+	}
+	strength := func(l cluster.Link) int {
+		switch {
+		case l.Basis == cluster.LinkLaudo && l.Identified:
+			return 3
+		case l.Basis == cluster.LinkLead:
+			return 2
+		}
+		return 1
+	}
+	best := map[int64]*cluster.Link{} // by trace id
+	for k, chain := range chains {
+		l, ok := cluster.ReviewedLink(chain, level)
+		if !ok {
+			continue
+		}
+		traceID, _ := graph.ParseQuestionedFeatureID(k[0])
+		if b := best[traceID]; b == nil || strength(l) > strength(*b) {
+			best[traceID] = &l
+		}
+	}
+	for id, members := range membersByCluster {
+		for i := range members {
+			if members[i].Kind == "QUESTIONED" {
+				members[i].Link = best[members[i].TraceID]
+			}
+		}
+		membersByCluster[id] = members
+	}
+	return nil
+}

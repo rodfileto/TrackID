@@ -1,0 +1,18 @@
+// Package person provides read-only intelligence views over one enrolled
+// person: their identity chain (identity_documents/identity_registers), the
+// biometric clusters their enrolled features have resolved into, and the
+// biometric cases linked to them through those clusters.
+//
+// Every view here is a Postgres-only projection over person / identity_* /
+// biometric_features / cluster_* / case_* (see MODEL.md). A person is never linked to a cluster or a case by raw
+// co-occurrence: the link always runs through the REVIEWED layer of
+// cluster_members (cluster.BasisReviewed), which only grows from a
+// biometric_decisions chain people confirmed (cluster.Reviewed) -- never from
+// a SYSTEM match alone. This package writes nothing; it reads what
+// cluster.Run/cluster.Identify have already derived.
+package person
+
+import "errors"
+
+// ErrNotFound is returned when the given person_id has no person row.
+var ErrNotFound = errors.New("person: person not found")

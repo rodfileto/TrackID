@@ -1,0 +1,24 @@
+# Inteligência forense {#sec-inteligencia-forense}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+A inteligência forense trata os vestígios como informação que vale além do processo de origem:
+ligados entre casos, revelam séries, autores recorrentes e padrões no tempo e no espaço. O capítulo
+apresenta a disciplina, o ciclo de inteligência e a diferença entre a prova para o julgamento e a
+informação para a investigação -- e por que uma mesma decisão pode servir às duas.
+:::
+
+## Seções previstas
+
+- Do vestígio à informação: o vestígio como dado de inteligência
+- Vínculos entre casos, séries e sujeitos desconhecidos
+- O ciclo de inteligência e o lugar da ciência forense nele
+- Tempo e espaço: ocorrências, lugares e mapas
+- Prova e inteligência: exigências diferentes sobre a mesma decisão
+
+::: {.callout-warning appearance="simple"}
+## Fontes candidatas
+
+A conferir com o original antes de citar: [@ribaux1999; @ribaux2006; @ribaux2014; @rossy2013; @morelato2014].
+:::

@@ -1,0 +1,38 @@
+# Backend
+.env
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# IDE
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Docker
+.dockerignore
+
+# Quarto (papers/)
+papers/.quarto/
+papers/**/.quarto/
+papers/**/*_files/
+papers/**/*.pdf
+papers/**/*.docx
+papers/**/*.html
+papers/**/*.tex
+
+# scripts/start_dev.sh runtime state (pids/logs of the locally-run processes).
+.run/
+
+# Local data snapshots (scripts/backup_data.sh): database dumps and the object store mirror.
+backups/

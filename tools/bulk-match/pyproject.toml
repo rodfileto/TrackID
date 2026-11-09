@@ -1,0 +1,17 @@
+[project]
+name = "bulk-match"
+version = "0.1.0"
+description = "TrackID's exact GPU matcher for cmd/bulk-match: FAISS brute-force top-k over vector shards"
+requires-python = "==3.12.*"
+dependencies = [
+    "numpy==2.3.5",
+]
+
+[project.optional-dependencies]
+# FAISS on CUDA 12 (the wheels bring their own CUDA runtime and cuBLAS; the host needs only the
+# NVIDIA driver). The CPU build is for machines without a GPU and for tests. One of the two.
+gpu = ["faiss-gpu-cu12==1.14.1.post1"]
+cpu = ["faiss-cpu==1.14.3"]
+
+[tool.uv]
+conflicts = [[{ extra = "gpu" }, { extra = "cpu" }]]

@@ -1,0 +1,15 @@
+# Telas e papéis {#sec-telas}
+
+::: {.callout-note appearance="simple"}
+## Resumo
+
+Referência rápida: cada tela do TrackID, quem a vê e o que se faz nela.
+:::
+
+## Seções previstas
+
+- Casos e a página do caso
+- Minhas análises
+- Tela de trabalho da análise
+- Distribuição
+- Clusters, pessoas e mapa

@@ -1,0 +1,59 @@
+project:
+  type: book
+  output-dir: _book
+
+lang: pt-BR
+
+book:
+  title: "Inteligência forense, ACE-V e inteligência coletiva"
+  subtitle: "Identificação de pessoas com o TrackID"
+  author: "Rodrigo Fileto Cuerci Maciel"
+  date: today
+  date-format: long
+  search: true
+  chapters:
+    - index.qmd
+    - convencoes.qmd
+    - part: "Fundamentos"
+      chapters:
+        - parte-1/01-identificacao-e-silos.qmd
+        - parte-1/02-inteligencia-forense.qmd
+        - parte-1/03-ace-v.qmd
+        - parte-1/04-inteligencia-coletiva.qmd
+        - parte-1/05-humanos-e-maquinas.qmd
+    - part: "O sistema"
+      chapters:
+        - parte-2/06-modelo-de-dados.qmd
+        - parte-2/07-do-escore-a-decisao.qmd
+        - parte-2/08-ace-v-no-trackid.qmd
+        - parte-2/09-distribuicao-e-papeis.qmd
+        - parte-2/10-da-decisao-a-inteligencia.qmd
+        - parte-2/11-auditoria-privacidade-limites.qmd
+    - part: "O exercício"
+      chapters:
+        - parte-3/12-mundo-sintetico.qmd
+        - parte-3/13-roteiro-da-aula.qmd
+        - parte-3/14-avaliando-as-decisoes.qmd
+        - parte-3/15-discussao.qmd
+    - glossario.qmd
+    - references.qmd
+  appendices:
+    - apendices/a-instalacao.qmd
+    - apendices/b-telas-e-papeis.qmd
+
+bibliography: references.bib
+csl: abnt.csl
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    number-sections: true
+    crossref:
+      chapters: true
+  pdf:
+    documentclass: scrreprt
+    papersize: a4
+    toc: true
+    number-sections: true
+    colorlinks: true
