@@ -12,6 +12,12 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- Live notifications (`docs/realtime-plan.md`): a bell in the header tells examiners, without reloading, when an
+  analysis step is assigned to them, manually or by distribution. Rows are written in the assignment's transaction
+  (`notifications`, migration 021) and reach the browser over a WebSocket (`realtime`, `/api/realtime`) opened with a
+  one-time ticket; Postgres `LISTEN/NOTIFY` carries them across processes, so this needs no Redis. What a notification
+  says is built when it is read, under the reader's current access, and shows no case identity during blind work.
+  The API now also shuts down cleanly on SIGINT and SIGTERM.
 - Searching TrackID from a case's face at a threshold the analyst picks (intelligence analysts; `POST
   /api/cases/:caseId/traces/:traceId/face-search`, "Search in TrackID" on the facial comparison panes): the enrolled
   persons and other cases' faces at or above it, from the face's stored embedding, the face itself left out. It

@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { useSidebar } from "../context/SidebarContext";
 import { ThemeToggleButton } from "../components/common/ThemeToggleButton";
 import LanguageSwitcher from "../components/common/LanguageSwitcher";
+import NotificationDropdown from "../components/header/NotificationDropdown";
 import UserDropdown from "../components/header/UserDropdown";
 import Brand from "../components/common/Brand";
 
@@ -103,6 +104,7 @@ const AppHeader: React.FC = () => {
             <LanguageSwitcher />
             <ThemeToggleButton />
             {/* <!-- Dark Mode Toggler --> */}
+            <NotificationDropdown />
           </div>
           {/* <!-- User Area --> */}
           <UserDropdown />

@@ -48,6 +48,12 @@ export default defineConfig({
   ],
   server: {
     proxy: {
+      // Listed before /api, which would otherwise match it. The Host header stays as the browser
+      // sent it, because the API accepts WebSockets only when Origin matches Host.
+      "/api/realtime": {
+        target: "http://localhost:8082",
+        ws: true,
+      },
       "/api": {
         target: "http://localhost:8082",
         changeOrigin: true,

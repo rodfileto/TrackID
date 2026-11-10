@@ -6,8 +6,12 @@ package server
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +29,8 @@ import (
 	"github.com/rodfileto/trackid/internal/env"
 	"github.com/rodfileto/trackid/internal/queue"
 	"github.com/rodfileto/trackid/internal/web"
+	"github.com/rodfileto/trackid/notifications"
+	"github.com/rodfileto/trackid/realtime"
 	"github.com/rodfileto/trackid/reports"
 	"github.com/rodfileto/trackid/storage"
 	"github.com/rodfileto/trackid/video"
@@ -155,12 +161,25 @@ func Run(options Options) error {
 		log.Printf("AI mode: model %s at %s (external: %t)", askModel.Name(), askModel.Host(), askModel.External())
 	}
 
+	signals, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Live updates: the hub pushes to browsers, and the listener brings in what the worker or any
+	// other process committed (docs/realtime-plan.md). Neither needs Redis.
+	var hub *realtime.Hub
+	if db != nil {
+		hub = realtime.NewHub(realtime.Options{})
+		defer hub.Close()
+		go realtime.Listen(signals, configuration.DatabaseURL, notifications.Channel, notifications.Relay(db, hub), hub.Resync)
+	}
+
 	deps := api.Dependencies{
 		DB:          db,
 		JWTSecret:   configuration.JWTSecret,
 		EmailDomain: configuration.EmailDomain,
 		Storage:     store,
 		Queue:       queueClient,
+		Hub:         hub,
 		FaceVision:  faceVision,
 		Geocoder:    geocoder,
 		Fingerprint: fingerprintClient,
@@ -187,8 +206,29 @@ func Run(options Options) error {
 	}
 
 	log.Printf("trackid backend listening on :%s", configuration.Port)
-	return router.Run(":" + configuration.Port)
+	httpServer := &http.Server{Addr: ":" + configuration.Port, Handler: router.Handler()}
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- httpServer.ListenAndServe() }()
+	select {
+	case err := <-serveErr:
+		return err
+	case <-signals.Done():
+	}
+
+	// Shutdown does not wait for WebSockets, which it can't see once upgraded, so close them first.
+	if hub != nil {
+		hub.Close()
+	}
+	shutdown, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := httpServer.Shutdown(shutdown); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }
+
+// shutdownTimeout is how long requests in progress get to finish when the server is stopped.
+const shutdownTimeout = 10 * time.Second
 
 // reportRenderer renders issued reports with wordcraft-cli at WORDCRAFT_CLI; nil when unset.
 func reportRenderer() reports.Renderer {

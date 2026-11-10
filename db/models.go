@@ -595,6 +595,15 @@ type Municipality struct {
 	LoadedAt time.Time   `db:"loaded_at" json:"loaded_at"`
 }
 
+type Notification struct {
+	ID        int64        `db:"id" json:"id"`
+	UserID    int64        `db:"user_id" json:"user_id"`
+	Kind      string       `db:"kind" json:"kind"`
+	Subject   string       `db:"subject" json:"subject"`
+	CreatedAt time.Time    `db:"created_at" json:"created_at"`
+	ReadAt    sql.NullTime `db:"read_at" json:"read_at"`
+}
+
 type Occurrence struct {
 	ID               int64          `db:"id" json:"id"`
 	Agency           sql.NullString `db:"agency" json:"agency"`

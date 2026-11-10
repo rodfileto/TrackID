@@ -59,6 +59,15 @@
     "crimeSceneExamination": "Exame de local",
     "sceneCollection": "Coleta em local"
   },
+  "notifications": {
+    "title": "Notificações",
+    "open": "Abrir notificações",
+    "empty": "Nenhuma notificação por enquanto.",
+    "markAllRead": "Marcar todas como lidas",
+    "assigned": "Nova atribuição: {{type}}, caso {{caseId}}",
+    "assignedBlind": "Nova atribuição: exame às cegas",
+    "assignmentMoved": "Esta atribuição não é mais sua"
+  },
   "userMenu": {
     "editProfile": "Editar perfil",
     "accountSettings": "Configurações da conta",

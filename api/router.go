@@ -12,6 +12,7 @@ import (
 	"github.com/rodfileto/trackid/cases"
 	"github.com/rodfileto/trackid/fingerprint"
 	"github.com/rodfileto/trackid/geocode"
+	"github.com/rodfileto/trackid/realtime"
 	"github.com/rodfileto/trackid/reports"
 	"github.com/rodfileto/trackid/storage"
 	"github.com/rodfileto/trackid/video"
@@ -30,6 +31,9 @@ type Dependencies struct {
 	// means the request path that would enqueue one just logs and moves on --
 	// see cases.SaveCodificationImage.
 	Queue *asynq.Client
+	// Hub pushes live updates to browsers (docs/realtime-plan.md). Nil means realtime/ticket and
+	// realtime return 503; notifications can still be listed.
+	Hub *realtime.Hub
 	// FaceVision backs face detection on evidence images and machine face
 	// comparison. Nil means detect-faces returns 503, and comparisons only
 	// work between codifications that already have stored embeddings.
@@ -77,6 +81,9 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	// There is no public sign-up: the first SUPER_ADMIN comes from cmd/create-superuser and
 	// admins create every other account.
 	api.POST("/auth/login", LoginHandler(authRepository, deps.JWTSecret))
+	// Outside protected: browsers can't send Authorization on a WebSocket, so a ticket from
+	// realtime/ticket proves who is connecting.
+	api.GET("/realtime", RealtimeHandler(deps.Hub, authRepository))
 
 	protected := api.Group("/")
 	protected.Use(Middleware(deps.JWTSecret), ActiveUser(authRepository))
@@ -87,6 +94,10 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.DELETE("me/avatar", RemoveMyAvatarHandler(authRepository))
 	protected.GET("users/:userId/avatar", UserAvatarHandler(authRepository))
 	protected.GET("me/analyses", MyAnalysesHandler(deps.DB))
+	protected.POST("realtime/ticket", RealtimeTicketHandler(deps.Hub))
+	protected.GET("notifications", ListNotificationsHandler(deps.DB))
+	protected.PUT("notifications/read-all", MarkAllNotificationsReadHandler(deps.DB, deps.Hub))
+	protected.PUT("notifications/:notificationId/read", MarkNotificationReadHandler(deps.DB, deps.Hub))
 	// The home page's illustration, anonymous: every signed-in user sees it.
 	protected.GET("overview/graph", OverviewGraphHandler(deps.DB))
 

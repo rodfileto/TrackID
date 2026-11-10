@@ -16,12 +16,14 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/examination"
+	"github.com/rodfileto/trackid/notifications"
 )
 
 // Assignment methods (analysis_assignments.method).
@@ -191,6 +193,9 @@ func Distribute(ctx context.Context, sqlDB *sql.DB, req Request) (Result, error)
 			}); err != nil {
 				return Result{}, err
 			}
+			if err := notifyAssigned(ctx, q, a.UserID, a.AnalysisID); err != nil {
+				return Result{}, err
+			}
 		}
 		if err := tx.Commit(); err != nil {
 			return Result{}, err
@@ -314,7 +319,17 @@ func Assign(ctx context.Context, sqlDB *sql.DB, analysisID int64, userID *int64,
 	}); err != nil {
 		return err
 	}
+	if userID != nil && *userID != by { // nobody needs telling what they just did themselves
+		if err := notifyAssigned(ctx, q, *userID, analysisID); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
+}
+
+// notifyAssigned tells a user that an analysis step is now theirs, in the assignment's transaction.
+func notifyAssigned(ctx context.Context, q *db.Queries, userID, analysisID int64) error {
+	return notifications.Create(ctx, q, userID, notifications.KindAnalysisAssigned, strconv.FormatInt(analysisID, 10))
 }
 
 // PendingCount is how many analyses of one type wait for an examiner at one stage.

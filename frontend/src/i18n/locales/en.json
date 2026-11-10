@@ -59,6 +59,15 @@
     "crimeSceneExamination": "Crime scene examination",
     "sceneCollection": "Scene collection"
   },
+  "notifications": {
+    "title": "Notifications",
+    "open": "Open notifications",
+    "empty": "No notifications yet.",
+    "markAllRead": "Mark all as read",
+    "assigned": "New assignment: {{type}}, case {{caseId}}",
+    "assignedBlind": "New assignment: blind examination",
+    "assignmentMoved": "This assignment is no longer yours"
+  },
   "userMenu": {
     "editProfile": "Edit profile",
     "accountSettings": "Account settings",

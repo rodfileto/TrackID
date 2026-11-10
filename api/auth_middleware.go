@@ -44,6 +44,9 @@ func Middleware(jwtSecret string) gin.HandlerFunc {
 		if username, ok := claims["username"].(string); ok {
 			context.Set("username", username)
 		}
+		if expires, err := claims.GetExpirationTime(); err == nil && expires != nil {
+			context.Set(tokenExpiryKey, expires.Time)
+		}
 		context.Next()
 	}
 }
@@ -54,6 +57,9 @@ const accountDeactivatedCode = "account_deactivated"
 
 // currentUserKey is the context key ActiveUser stores the signed-in auth.UserProfile under.
 const currentUserKey = "currentUser"
+
+// tokenExpiryKey is the context key Middleware stores the token's expiry under, when it has one.
+const tokenExpiryKey = "tokenExpiry"
 
 // ActiveUser runs after Middleware: it loads the token's user and refuses one that no longer
 // exists or was deactivated, so deactivating an account takes effect on its next request
