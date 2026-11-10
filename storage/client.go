@@ -6,6 +6,9 @@ package storage
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -103,29 +106,59 @@ func (client *Client) Upload(ctx context.Context, objectKey string, content []by
 	return client.bucket + "/" + objectKey, nil
 }
 
+// ErrNotFound is returned, wrapped, when a reference names an object or a file that isn't there.
+var ErrNotFound = errors.New("storage: not found")
+
 // Download fetches the content behind a storage reference. Three forms are read:
 //   - "<bucket>/<objectKey>", as Upload returns, in this client's bucket;
 //   - "s3://<bucket>/<objectKey>", an object in another bucket of the same endpoint;
 //   - "file:///<absolute path>", a local file inside one of the roots WithFileRoots allowed.
 func (client *Client) Download(ctx context.Context, storageRef string) ([]byte, error) {
+	content, err := client.Open(ctx, storageRef)
+	if err != nil {
+		return nil, err
+	}
+	defer content.Close()
+	return io.ReadAll(content)
+}
+
+// Open streams the content behind a storage reference, in the forms Download reads. A reference
+// to nothing returns an error wrapping ErrNotFound.
+func (client *Client) Open(ctx context.Context, storageRef string) (io.ReadCloser, error) {
 	switch {
 	case strings.HasPrefix(storageRef, "file://"):
-		return client.readFile(strings.TrimPrefix(storageRef, "file://"))
+		return client.openFile(strings.TrimPrefix(storageRef, "file://"))
 	case strings.HasPrefix(storageRef, "s3://"):
 		bucket, key, ok := strings.Cut(strings.TrimPrefix(storageRef, "s3://"), "/")
 		if !ok || bucket == "" || key == "" {
 			return nil, fmt.Errorf("storage ref %q is not s3://<bucket>/<key>", storageRef)
 		}
-		return client.get(ctx, bucket, key)
+		return client.open(ctx, bucket, key)
 	}
 	objectKey := strings.TrimPrefix(storageRef, client.bucket+"/")
 	if client.bucket == "" || objectKey == storageRef {
 		return nil, fmt.Errorf("storage ref %q does not belong to bucket %q", storageRef, client.bucket)
 	}
-	return client.get(ctx, client.bucket, objectKey)
+	return client.open(ctx, client.bucket, objectKey)
 }
 
-func (client *Client) get(ctx context.Context, bucket, objectKey string) ([]byte, error) {
+// Digest reads the content behind a storage reference as a stream and returns its SHA-256, in
+// lower-case hex as case_files.hash_id keeps it, and its size: a file of any size, without holding
+// it in memory.
+func (client *Client) Digest(ctx context.Context, storageRef string) (sha256Hex string, size int64, err error) {
+	content, err := client.Open(ctx, storageRef)
+	if err != nil {
+		return "", 0, err
+	}
+	defer content.Close()
+	hash := sha256.New()
+	if size, err = io.Copy(hash, content); err != nil {
+		return "", 0, err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), size, nil
+}
+
+func (client *Client) open(ctx context.Context, bucket, objectKey string) (io.ReadCloser, error) {
 	if client.minio == nil {
 		return nil, fmt.Errorf("object storage is not configured")
 	}
@@ -133,23 +166,33 @@ func (client *Client) get(ctx context.Context, bucket, objectKey string) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	defer object.Close()
-	return io.ReadAll(object)
+	// GetObject is lazy: Stat makes the request, so a missing object is known here.
+	if _, err := object.Stat(); err != nil {
+		object.Close()
+		if code := minio.ToErrorResponse(err).Code; code == "NoSuchKey" || code == "NoSuchBucket" {
+			return nil, fmt.Errorf("%w: %s/%s", ErrNotFound, bucket, objectKey)
+		}
+		return nil, err
+	}
+	return object, nil
 }
 
-// readFile reads a local file, refusing any path that is not, once symlinks are resolved, inside
+// openFile opens a local file, refusing any path that is not, once symlinks are resolved, inside
 // one of the allowed roots.
-func (client *Client) readFile(path string) ([]byte, error) {
+func (client *Client) openFile(path string) (io.ReadCloser, error) {
 	if !filepath.IsAbs(path) {
 		return nil, fmt.Errorf("storage: file reference %q is not an absolute path", path)
 	}
 	resolved, err := filepath.EvalSymlinks(filepath.Clean(path))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, path)
+	}
 	if err != nil {
 		return nil, err
 	}
 	for _, root := range client.fileRoots {
 		if rel, err := filepath.Rel(root, resolved); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return os.ReadFile(resolved)
+			return os.Open(resolved)
 		}
 	}
 	return nil, fmt.Errorf("storage: file %q is outside the allowed roots (%s)", path, FileRootsEnv)

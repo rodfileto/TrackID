@@ -1,0 +1,161 @@
+name: Images
+
+# Builds TrackID's three images: the application, Postgres (pgvector + PostGIS) and the fingerprint
+# sidecar. On main and pull requests it only builds and scans them, so a broken Dockerfile shows
+# the day it breaks. A version tag (v*) publishes them to GitHub's registry, ghcr.io, under that
+# tag, once CI has passed on the tagged commit and the scan finds no fixable HIGH or CRITICAL
+# vulnerability. Each published image carries an SBOM and build provenance, and is signed with
+# cosign, keyless, as this workflow. docs/deployment.md shows how to check the signature.
+#
+# Third-party actions are pinned to a commit, not a tag: a tag can be moved, and this workflow can
+# publish packages and sign as the repository.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  # A newer push supersedes a build of a branch, but a release always runs to the end.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  # A tag publishes only a commit CI passed on. CI may still be running when the tag arrives (the
+  # release commit and its tag are pushed together), so this waits for it, up to 45 minutes.
+  ci-passed:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Wait for CI on the tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          for _ in $(seq 90); do
+            run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$SHA" --event push \
+              --json status,conclusion --jq 'first // empty | "\(.status) \(.conclusion)"')
+            case "$run" in
+              "completed success") echo "CI passed on $SHA"; exit 0 ;;
+              completed*) echo "CI on $SHA: $run"; exit 1 ;;
+            esac
+            echo "CI on $SHA: ${run:-not started}; waiting"
+            sleep 30
+          done
+          echo "CI did not finish on $SHA"
+          exit 1
+
+  image:
+    needs: [ci-passed]
+    # On a tag, only once CI has passed; elsewhere ci-passed is skipped and this runs.
+    if: ${{ !cancelled() && (needs.ci-passed.result == 'success' || needs.ci-passed.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: trackid
+            context: .
+          - name: trackid-postgres
+            context: db/postgres
+          - name: trackid-sourceafis
+            context: sourceafis-sidecar
+    permissions:
+      contents: read
+      packages: write # publish to ghcr.io (used on a tag only)
+      id-token: write # cosign's keyless signature, as this workflow (used on a tag only)
+    env:
+      PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # The tag's own name (v0.3.0), which deploy/.env's TRACKID_VERSION names. No "latest":
+      # deployments pin a version, so an upgrade is always deliberate.
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: latest=false
+          tags: type=ref,event=tag
+          labels: |
+            org.opencontainers.image.title=${{ matrix.name }}
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          load: true
+          push: false
+          tags: scan/${{ matrix.name }}:${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      # Fixable HIGH and CRITICAL vulnerabilities fail a release; elsewhere they are only reported.
+      - name: Scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.1
+          image-ref: scan/${{ matrix.name }}:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: ${{ env.PUBLISH == 'true' && '1' || '0' }}
+
+      - name: Log in to ghcr.io
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # The same build, from the cache the scanned one filled, with an SBOM and provenance attached.
+      - name: Publish
+        id: publish
+        if: env.PUBLISH == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=${{ matrix.name }}
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        if: env.PUBLISH == 'true'
+
+      # Keyless: the signature names this repository and workflow, through GitHub's OIDC token,
+      # and is recorded in Sigstore's public transparency log. There is no key to keep.
+      - name: Sign
+        if: env.PUBLISH == 'true'
+        env:
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: cosign sign --yes "$IMAGE@$DIGEST"
+
+      - name: Summary
+        if: env.PUBLISH == 'true'
+        env:
+          DIGEST: ${{ steps.publish.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          {
+            echo "### $IMAGE"
+            echo "- tags: $TAGS"
+            echo "- digest: \`$DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"

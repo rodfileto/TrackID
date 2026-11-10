@@ -45,7 +45,10 @@ RUN curl -fsSL -o /tmp/ort.tgz \
 # --- The runtime ---------------------------------------------------------------------------------
 FROM debian:${DEBIAN_VERSION}-slim
 # ffmpeg/ffprobe: the video package's frames; curl: the API's healthcheck in deploy/compose.yml.
+# The upgrade takes Debian's security fixes released since the base image was cut, so a release
+# built today carries them (the image scan in .github/workflows/images.yml fails on fixable ones).
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --user-group --home-dir /app --no-create-home trackid

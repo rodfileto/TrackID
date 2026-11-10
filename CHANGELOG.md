@@ -12,6 +12,15 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Changed
 
+- `golang.org/x/net` 0.62.0, for CVE-2026-78661 (HTML parsing; TrackID doesn't call the parser, but every binary
+  carried it). The three images take their distribution's security updates when they are built.
+- The fingerprint sidecar runs Jackson 2.18.11 instead of the 2.15.3 SourceAFIS 3.18.1 names, for the
+  vulnerabilities fixed since, on a pinned JRE (Temurin 21.0.13). The Postgres image rebuilds `gosu` 1.20 with a
+  current Go, since the base image's build carried an old standard library.
+- `storage.Client.Download` is built on the new `Open`, which streams, and `Digest`, which hashes a stored file
+  without holding it in memory; a missing object or file is `storage.ErrNotFound`. CI runs the S3 tests against
+  the dev stack's SeaweedFS.
+
 - Object storage is SeaweedFS instead of MinIO, whose community edition no longer publishes images
   (`docs/production-plan.md`, decision 11). The dev stack's `minio` service is now `seaweedfs`, on the same host
   port and keys, so `.env` doesn't change. Its data doesn't move by itself:
@@ -29,6 +38,19 @@ period; `0.x` patch releases fix defects without adding behaviour.
   unit; `reports.ImportedReport.IssuingUnitID` names another. Reports already numbered keep their numbers.
 
 ### Added
+
+- Backups and restores for a deployment (`docs/production-plan.md` phase 4). `deploy/backup.sh` dumps the database,
+  encrypted to an age key when `BACKUP_AGE_RECIPIENT` is set, then copies the evidence bucket into a mirror that
+  each run adds to and checks, and keeps `BACKUP_KEEP` dumps. `deploy/restore.sh` restores one into a stack and
+  ends by checking every stored file. `storagecheck` and `cmd/verify-storage` read every file the database refers
+  to and check it is there and, for case files, that its SHA-256 is the one recorded: after a restore, and from
+  time to time, to catch a file deleted or overwritten in storage. `worker -queues` shows each task queue's state.
+
+- Release images (`.github/workflows/images.yml`): a version tag publishes `trackid`, `trackid-postgres` and
+  `trackid-sourceafis` to ghcr.io once CI has passed on the tagged commit and Trivy finds no fixable HIGH or
+  CRITICAL vulnerability, each with an SBOM and provenance and signed with cosign, keyless. Main and pull requests
+  build and scan them without publishing. `RELEASING.md` and `docs/deployment.md` say how to release and how to
+  check a signature; `docs/MODELS.md` lists the third-party software in each image.
 
 - Production mode (`TRACKID_ENV=production`, `docs/production-plan.md` phase 2): the API and the worker refuse to
   start without the database, Redis and object storage, a JWT_SECRET of 32 bytes or more and an https APP_URL

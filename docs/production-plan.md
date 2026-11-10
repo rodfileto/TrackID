@@ -7,7 +7,14 @@ at runtime, and a synthetic world loaded through the internal network. The worke
 the image's CPU onnxruntime, with the same clustering results as on the GPU, and its evidence was
 stored locked and came back byte for byte. **Phase 2 is built** the same day (strict production
 mode, secrets from files, `/ready` and `worker -check`, trusted proxies, body limits). JSON logs
-were left out. Phases 3 to 5 are still proposals.
+were left out. **Phase 3's workflow is written** (`.github/workflows/images.yml`) and checked
+with actionlint, its CI gate against the repository's real runs, and its scan against images
+built here. It publishes at the first version tag. **Phase 4 is built** the same day and was
+tested on two stacks: an encrypted backup of a loaded one, restored into a fresh one, which then
+served the same rows and evidence byte for byte. `verify-storage` caught a file overwritten and
+another deleted with the storage keys, and both were brought back from their locked versions.
+`asynqmon` was left out: it hasn't been released since 2023, so `worker -queues` reports the
+queues instead. Phase 5 is still a proposal.
 
 The goal: an institute that has never seen the code can go from a release tag to a running,
 hardened TrackID on one server of its own, by following one document and editing one
@@ -193,10 +200,11 @@ single-node only and points to SeaweedFS's documentation for anything bigger.
 ### Phase 5: optional pieces
 
 - CUDA image variant (`-cuda` tag) for the `gpu` profile.
-- WordCraft in the image: a Rust/trunk build stage at a pinned rev (core gains a
-  `wordcraft.rev`), so reports can be issued without a separate build.
-- `nominatim` and `llm` profiles with sizing notes. The map-tile server needs a decision of
-  its own, because `VITE_MAP_TILE_URL` is baked in at build time (see questions).
+- `nominatim` and `llm` profiles with sizing notes.
+
+WordCraft is not in the image (decided 2026-11-10, question 4). A deployment that edits and
+issues reports builds WordCraft itself and mounts the build into the API container
+(`docs/deployment.md`, "Reports").
 
 ## Not in scope
 
@@ -214,8 +222,8 @@ probably the first an institute will ask for.
    environment variables (map tile URL and attribution to start with), and the frontend reads
    it at startup instead of the build-time `VITE_MAP_TILE_*`. One image then fits every
    deployment. This goes in phase 1, since the published image depends on it.
-4. **WordCraft in the core image (phase 5) or left to each deployment?** It makes the image
-   build need Rust and trunk, and its i18n data (`craft-i18n`) may be per-language.
+4. *Decided 2026-11-10:* WordCraft stays out of the image. Each deployment that issues reports
+   builds it, at the revision and with the language data it wants, and mounts it.
 5. **CUDA variant.** Is a GPU image worth maintaining in core, or is CPU-only plus a documented
    way to build the GPU one enough? CPU suffices for small galleries; the large-gallery plan
    points to GPU at scale.

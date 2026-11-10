@@ -80,3 +80,29 @@ func TestEnsureLockedBucketRefusesAnUnlockedBucket(t *testing.T) {
 		t.Fatalf("expected ErrBucketNotLocked, got %v", err)
 	}
 }
+
+// Open and Digest against a real server: a stored object's SHA-256 and size, and ErrNotFound for
+// a key that isn't there.
+func TestDigestAndNotFoundOnS3(t *testing.T) {
+	endpoint, accessKey, secretKey, _ := testS3(t)
+	ctx := context.Background()
+	client, err := NewClient(ctx, endpoint, accessKey, secretKey, fmt.Sprintf("trackid-digest-test-%d", time.Now().UnixNano()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := client.Upload(ctx, "evidence/a.jpg", []byte("abc"), "image/jpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum, size, err := client.Digest(ctx, ref)
+	// SHA-256 of "abc".
+	if err != nil || size != 3 || sum != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
+		t.Fatalf("Digest = %s, %d, %v", sum, size, err)
+	}
+	if _, _, err := client.Digest(ctx, ref+".missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a missing key: expected ErrNotFound, got %v", err)
+	}
+	if _, err := client.Download(ctx, "s3://no-such-bucket-trackid/x"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a missing bucket: expected ErrNotFound, got %v", err)
+	}
+}

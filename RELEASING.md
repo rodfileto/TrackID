@@ -36,8 +36,21 @@ A release only ever needs three things to be true of `main`:
    git push origin v0.2.0
    ```
 
-4. Create the GitHub release from the tag, using the CHANGELOG section as the
-   notes.
+4. The tag starts `.github/workflows/images.yml`. It waits for CI to pass on the tagged
+   commit, builds the three images (`trackid`, `trackid-postgres`, `trackid-sourceafis`),
+   scans them, and publishes them to `ghcr.io/rodfileto/<image>:v0.2.0` with an SBOM and
+   provenance, signed with cosign. A fixable HIGH or CRITICAL vulnerability stops it before
+   anything is published: fix it (usually a dependency bump, or rebuilding for Debian's
+   latest security updates) and release the next patch version.
+5. Check the signature, as a deployment would (`docs/deployment.md`), then create the GitHub
+   release from the tag, using the CHANGELOG section as the notes.
+
+A tag such as `v0.3.0-rc.1` publishes a pre-release the same way, for trying a release on a
+staging server first.
+
+**Published images are permanent.** Never move, delete or reuse a tag that has been
+pushed: deployments may already run its images, and their signatures name the original build.
+A fix is always a new version. There is no `latest` tag: deployments pin a version.
 
 ## Notes for consumers
 
@@ -45,5 +58,5 @@ A release only ever needs three things to be true of `main`:
   organizations depend on a tag, not on `main`, so a tag name must be a valid
   module version (`v` prefix).
 - Because the database schema can change between `0.x` releases, a release note
-  should call out any migration a deployment must run (`cmd/migrate up` applies
-  them).
+  should call out any migration a deployment must run. `deploy/compose.yml` runs
+  `migrate up` at every start, so the note is what tells the institute to back up first.

@@ -22,6 +22,10 @@ jobs:
       # and skip when it is unset; the fingerprint tests need the real sidecar.
       TRACKID_TEST_DATABASE_URL: postgres://trackid:trackid_dev@localhost:55432/trackid?sslmode=disable
       FINGERPRINT_SIDECAR_URL: http://localhost:58090
+      # The storage tests that need S3 (object lock, missing objects) use the dev stack's SeaweedFS.
+      TRACKID_TEST_S3_ENDPOINT: http://localhost:59000
+      TRACKID_TEST_S3_ACCESS_KEY: trackid
+      TRACKID_TEST_S3_SECRET_KEY: trackid_dev_storage
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -42,10 +46,11 @@ jobs:
           sqlc-version: '1.31.1'
       - name: sqlc diff
         run: sqlc diff
-      # Postgres from db/postgres (pgvector + PostGIS) and sourceafis-sidecar, as in development.
-      - name: Start Postgres and the fingerprint sidecar
+      # Postgres from db/postgres (pgvector + PostGIS), SeaweedFS and sourceafis-sidecar, as in
+      # development.
+      - name: Start Postgres, SeaweedFS and the fingerprint sidecar
         run: |
-          docker compose up -d --build --wait postgres
+          docker compose up -d --build --wait postgres seaweedfs
           docker compose up -d --build sourceafis-sidecar
           for i in $(seq 60); do
             curl -fsS "$FINGERPRINT_SIDECAR_URL/healthz" && exit 0
@@ -61,7 +66,7 @@ jobs:
         with:
           version: '0.13.7'
       - run: go vet ./...
-      - name: Test (no skipped database, sidecar, ffmpeg or uv tests)
+      - name: Test (no skipped database, S3, sidecar, ffmpeg or uv tests)
         run: |
           go test -v ./... 2>&1 | tee test.log
           status=${PIPESTATUS[0]}

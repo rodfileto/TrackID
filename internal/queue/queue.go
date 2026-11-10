@@ -24,3 +24,13 @@ func OpenServer(redisURL string, cfg asynq.Config) (*asynq.Server, error) {
 	}
 	return asynq.NewServer(opt, cfg), nil
 }
+
+// OpenInspector parses redisURL and returns an Asynq inspector, for reading the queues' state.
+// Callers must Close it when done.
+func OpenInspector(redisURL string) (*asynq.Inspector, error) {
+	opt, err := asynq.ParseRedisURI(redisURL)
+	if err != nil {
+		return nil, err
+	}
+	return asynq.NewInspector(opt), nil
+}

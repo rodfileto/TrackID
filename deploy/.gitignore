@@ -1,4 +1,4 @@
-.env
-certs/
-models/
 backups/
+certs/
+.env
+models/

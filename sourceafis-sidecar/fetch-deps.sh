@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Fetch SourceAFIS for Java (Apache-2.0) and its runtime dependencies from
 # Maven Central into lib/. No Maven needed; versions are those SourceAFIS
-# 3.18.1's POM pins. Re-running is a no-op once the jars are present.
+# 3.18.1's POM pins, except Jackson: 2.18.11 rather than 2.18.11, for the
+# vulnerabilities fixed since (the release image scan fails on them), and a
+# patch line of the same 2.x API. Re-running is a no-op once the jars are present.
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p lib
@@ -18,10 +20,10 @@ com/machinezoo/fingerprintio/fingerprintio/1.3.1/fingerprintio-1.3.1.jar
 it/unimi/dsi/fastutil/8.5.12/fastutil-8.5.12.jar
 commons-io/commons-io/2.15.0/commons-io-2.15.0.jar
 com/google/code/gson/gson/2.10.1/gson-2.10.1.jar
-com/fasterxml/jackson/core/jackson-databind/2.15.3/jackson-databind-2.15.3.jar
-com/fasterxml/jackson/core/jackson-core/2.15.3/jackson-core-2.15.3.jar
-com/fasterxml/jackson/core/jackson-annotations/2.15.3/jackson-annotations-2.15.3.jar
-com/fasterxml/jackson/dataformat/jackson-dataformat-cbor/2.15.3/jackson-dataformat-cbor-2.15.3.jar
+com/fasterxml/jackson/core/jackson-databind/2.18.11/jackson-databind-2.18.11.jar
+com/fasterxml/jackson/core/jackson-core/2.18.11/jackson-core-2.18.11.jar
+com/fasterxml/jackson/core/jackson-annotations/2.18.11/jackson-annotations-2.18.11.jar
+com/fasterxml/jackson/dataformat/jackson-dataformat-cbor/2.18.11/jackson-dataformat-cbor-2.18.11.jar
 com/github/mhshams/jnbis/2.1.2/jnbis-2.1.2.jar
 org/slf4j/slf4j-api/2.0.9/slf4j-api-2.0.9.jar
 JARS

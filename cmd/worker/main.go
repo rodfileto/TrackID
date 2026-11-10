@@ -37,10 +37,17 @@ import (
 
 func main() {
 	check := flag.Bool("check", false, "check that the database and Redis answer, then exit: 0 if both do (the container's healthcheck)")
+	queues := flag.Bool("queues", false, "print each task queue's state (waiting, running, retrying, failed today) and exit")
 	flag.Parse()
 	env.Load()
 
 	configuration := config.Load()
+	if *queues {
+		if err := printQueues(configuration.RedisURL); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if *check {
 		if err := healthCheck(configuration); err != nil {
 			log.Fatal(err)
@@ -192,6 +199,36 @@ func healthCheck(configuration config.Config) error {
 	defer client.Close()
 	if err := client.Ping(); err != nil {
 		return fmt.Errorf("redis: %w", err)
+	}
+	return nil
+}
+
+// printQueues prints each queue's tasks by state, and those processed and failed today: what an
+// operator needs to see whether the worker keeps up and whether tasks fail (docs/deployment.md).
+func printQueues(redisURL string) error {
+	if redisURL == "" {
+		return errors.New("REDIS_URL must be set")
+	}
+	inspector, err := queue.OpenInspector(redisURL)
+	if err != nil {
+		return err
+	}
+	defer inspector.Close()
+	names, err := inspector.Queues()
+	if err != nil {
+		return err
+	}
+	if len(names) == 0 {
+		fmt.Println("no queues yet")
+		return nil
+	}
+	fmt.Printf("%-12s %8s %8s %8s %9s %9s %11s %11s\n", "queue", "waiting", "running", "retrying", "scheduled", "failed", "done today", "failed today")
+	for _, name := range names {
+		info, err := inspector.GetQueueInfo(name)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%-12s %8d %8d %8d %9d %9d %11d %11d\n", name, info.Pending, info.Active, info.Retry, info.Scheduled, info.Archived, info.Processed, info.Failed)
 	}
 	return nil
 }

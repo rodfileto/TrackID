@@ -33,6 +33,24 @@ The intelligence pages (`/intelligence/map`) draw with [MapLibre GL JS](https://
 every map must credit "© OpenStreetMap contributors", which the map's attribution control
 does. By default the tiles come from OpenStreetMap's own servers, whose
 [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) allows light use
-only: a deployment sets `VITE_MAP_TILE_URL` (an XYZ template, `{z}/{x}/{y}`) and, if its
-provider requires it, `VITE_MAP_TILE_ATTRIBUTION`, at frontend build time. The same applies to
+only: a deployment sets `MAP_TILE_URL` (an XYZ template, `{z}/{x}/{y}`) and, if its
+provider requires it, `MAP_TILE_ATTRIBUTION` on the server, which serves them to the frontend
+at `/api/config` (`VITE_MAP_TILE_*` still set a build's default). The same applies to
 geocoding (`geocode/`, see `.env.example`).
+
+## What the published images contain
+
+The images published from a release tag (`.github/workflows/images.yml`) hold TrackID's own code
+(Apache-2.0) and third-party software under its own licence. No model weights and no data are in
+them: `deploy/fetch-models.sh` downloads the weights on the deployment's server.
+
+| Image | Third-party software | Licences |
+|---|---|---|
+| `trackid` | Debian 12 base; FFmpeg (Debian's build); ONNX Runtime 1.22.0 (Microsoft's release); the Go and npm modules in `go.sum` and `frontend/package-lock.json`; the Outfit font | Debian packages under their own licences, FFmpeg LGPL-2.1+/GPL-2+, ONNX Runtime MIT, Outfit SIL OFL 1.1 |
+| `trackid-postgres` | the pgvector image (PostgreSQL 16, pgvector); PostGIS from PGDG | PostgreSQL licence, pgvector PostgreSQL licence, PostGIS GPL-2+ |
+| `trackid-sourceafis` | Eclipse Temurin JRE 21; SourceAFIS and its dependencies (`sourceafis-sidecar/fetch-deps.sh`) | GPL-2 with Classpath Exception, Apache-2.0 |
+
+The GPL and LGPL components are unmodified binaries from their distributions: their source is
+available from Debian (`apt-get source <package>`, or sources.debian.org at the version the
+image's SBOM lists) and from PGDG (apt.postgresql.org). Each image's SBOM, attached to it at
+publication, lists every package and version.

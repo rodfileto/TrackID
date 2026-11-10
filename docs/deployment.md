@@ -50,8 +50,20 @@ docker compose ps                # every service running or healthy; migrate and
 To try it out without a certificate, `./make-test-cert.sh <host name>` makes a self-signed one,
 valid 30 days. Browsers warn about it. Never use it in production.
 
-Until release images are published, set `TRACKID_VERSION=local` and run `docker compose build`
-before `up`.
+**Check the images before running them.** Each release's images are signed by the workflow that
+built them from the tagged code (`.github/workflows/images.yml`). With
+[cosign](https://docs.sigstore.dev/cosign/system_config/installation/):
+
+```sh
+for image in trackid trackid-postgres trackid-sourceafis; do
+  cosign verify "ghcr.io/rodfileto/$image:<version>" \
+    --certificate-identity-regexp '^https://github.com/rodfileto/trackid/\.github/workflows/images\.yml@refs/tags/v' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null && echo "$image: ok"
+done
+```
+
+To build the images on the server instead of pulling them, set `TRACKID_VERSION=local` and run
+`docker compose build` before `up`.
 
 ## Production mode
 
@@ -131,36 +143,121 @@ alongside the SHA-256 each file is recorded with.
   (default 5). Uploads then fail and nothing stored is lost. Watch the volume's disk, and grow it
   before that happens.
 
+## Reports (WordCraft)
+
+The image doesn't include [WordCraft](https://github.com/storytold/wordcraft), the report editor
+and PDF renderer. Without it, reports can be drafted but not edited in the app or issued. A
+deployment that issues reports builds WordCraft itself: `wordcraft-cli` for a Linux x86-64 glibc
+system, and the web editor with trunk. It then mounts the build into the `api` service with a
+compose override, and sets `WORDCRAFT_CLI` (e.g. `/opt/wordcraft/wordcraft-cli`) and
+`WORDCRAFT_WEB_DIR` (e.g. `/opt/wordcraft/web`) in `.env`.
+
+This hasn't been tried with `deploy/` yet. The editor is served at `/wordcraft/`, and its page
+may need the Content-Security-Policy in `deploy/nginx/templates/` relaxed for that path.
+
 ## Using your own S3 server
 
 An institute that already runs S3 storage (with object lock) can use it instead of `seaweedfs`.
 Remove the `seaweedfs` service and the `init-storage` dependency on it from `compose.yml`, and set
 `S3_ENDPOINT` for the app services to your server. `init-storage` then creates the bucket there,
-with the same lock and retention, provided the keys are allowed to.
+with the same lock and retention, provided the keys are allowed to. Set `S3_ENDPOINT_FOR_TOOLS`
+in `.env` to the same address, for the backup and restore scripts.
 
 ## Backups
 
-Two things make up a deployment's data: the Postgres database and the evidence bucket. Back up
-both, at the same moment, and keep copies off the server. Until `deploy/backup.sh` exists
-(production plan, phase 4), this does it:
+The database and the evidence bucket make up a deployment's data. `deploy/backup.sh` backs up
+both, from `deploy/`, with the stack running:
 
 ```sh
-docker compose exec -T postgres pg_dump -U trackid -Fc trackid > trackid-$(date +%F).dump
-docker run --rm --network trackid_internal -v "$PWD/backups/s3:/out" \
-  -e RCLONE_CONFIG_S_TYPE=s3 -e RCLONE_CONFIG_S_PROVIDER=Other \
-  -e RCLONE_CONFIG_S_ENDPOINT=http://seaweedfs:8333 \
-  -e RCLONE_CONFIG_S_ACCESS_KEY_ID="$(grep ^S3_ACCESS_KEY= .env | cut -d= -f2)" \
-  -e RCLONE_CONFIG_S_SECRET_ACCESS_KEY="$(grep ^S3_SECRET_KEY= .env | cut -d= -f2)" \
-  rclone/rclone:1.71.2 copy --checksum "s:$(grep ^S3_BUCKET= .env | cut -d= -f2)" /out
+./backup.sh
 ```
 
-Encrypt the copies, which hold biometric data, before they leave the server. **Test a restore**
-into a separate stack: a backup that has never been restored is not a backup.
+It writes into `BACKUP_DIR` (default `./backups`):
+
+- `<date>_<time>/postgres.dump`: the database, with a `manifest.txt` of what was backed up and
+  its checksums. The last `BACKUP_KEEP` dumps are kept (default 14).
+- `objects/<bucket>/`: every stored file. Shared by every backup, it only grows, like the bucket,
+  so each run copies only what is new. It is checked against the bucket at each run.
+
+The database is dumped first. Stored files are only ever added, under the hash of their content,
+so the bucket copied afterwards holds every file the dump refers to.
+
+**Encryption.** Set `BACKUP_AGE_RECIPIENT` to an [age](https://age-encryption.org) public key
+(`age-keygen -o backup.key` on another machine; `apt install age` here). The dump is then
+encrypted as it is written, as `postgres.dump.age`, and never touches the disk in clear. Keep
+the private key off this server, and keep a copy of it somewhere a restore can reach.
+The `objects` directory holds evidence in clear. Keep `BACKUP_DIR` on an encrypted disk, and copy
+it off the server with the institute's encrypted backup tool.
+
+**Every night**, from the deployment's owner's crontab (`crontab -e`):
+
+```cron
+30 2 * * *  cd /srv/trackid/deploy && ./backup.sh >> backups/backup.log 2>&1
+```
+
+### Restoring, and the restore drill
+
+`deploy/restore.sh` restores a backup into the stack its `deploy/` runs:
+
+```sh
+./restore.sh backups/20261110_023000Z --identity /path/to/backup.key
+```
+
+It runs these steps in order:
+1. Checks the dump against its manifest.
+2. Stops the API and the worker.
+3. Replaces the database.
+4. Copies the stored files into the bucket, locked again from that day.
+5. Starts the stack.
+6. Ends with `verify-storage` (below), which must report no problems.
+
+**Test a restore before the first real case, and then regularly.** Use a second copy of
+`deploy/` with its own `.env`: another `COMPOSE_PROJECT_NAME`, other ports and other secrets.
+Never use the production stack for this, since a restore replaces its database. A backup that
+has never been restored is not a backup.
+
+## Checking the stored evidence
+
+`verify-storage` reads every file the database refers to and checks it is there. For case
+files, which the database records with their SHA-256, it also checks the content is unchanged:
+
+```sh
+docker compose run --rm --no-deps api verify-storage              # everything
+docker compose run --rm --no-deps api verify-storage -limit 1000  # a quick sample
+```
+
+It writes nothing. It names the rows of any file that is `MISSING` or has a `HASH_MISMATCH`, and
+exits 1. Run it after every restore and from time to time (weekly from cron, say), and keep its
+output with the deployment's records.
+
+**If it reports a problem**, someone with the storage keys has deleted or overwritten a file.
+Object lock keeps the original version, so it can be brought back from the moment before:
+
+```sh
+key=trackid-evidence/evidence/<case>/<sha256>   # the row's storage_ref
+docker compose --profile ops run --rm -T rclone cat --s3-version-at "2026-11-10 19:00:00" "store:$key" > original
+sha256sum original                               # must equal the <sha256> in the key
+docker compose --profile ops run --rm -T rclone rcat "store:$key" < original
+```
+
+Then run `verify-storage` again. Find out how it happened: the storage keys are in `.env`.
+
+## Monitoring
+
+- **The services:** `docker compose ps` shows every service healthy. The API's healthcheck is
+  `/ready` (database, storage, queue), and the worker's is `worker -check`.
+- **Background work:** `docker compose exec worker worker -queues` lists the tasks waiting,
+  running, retrying and failed. A queue that keeps growing means the worker doesn't keep up. Tasks
+  failing means `docker compose logs worker` has something to say.
+- **Disk:** the volumes `postgres` and `seaweedfs` (`docker system df -v`), and `BACKUP_DIR`.
+  Storage turns read-only below `SEAWEEDFS_MIN_FREE` percent free.
+- **The certificate:** its expiry (`openssl x509 -enddate -noout -in certs/tls.crt`).
+- **Backups:** that `backup.log` ends each night with "done", and that restores are drilled.
 
 ## Upgrading
 
 1. Read the release's CHANGELOG entry, especially any database migration.
-2. Take a backup.
+2. Take a backup: `./backup.sh`.
 3. Set the new `TRACKID_VERSION` in `.env`, then `docker compose pull && docker compose up -d`.
    `migrate` brings the schema up before the API starts.
 4. Check `docker compose ps` and sign in.
