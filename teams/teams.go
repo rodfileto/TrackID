@@ -365,7 +365,7 @@ func card(title, text, actionTitle, appURL string) map[string]any {
 		},
 	}
 	if appURL != "" {
-		c["actions"] = []map[string]any{{"type": "Action.OpenURL", "title": actionTitle, "url": appURL + "/?notifications=1"}}
+		c["actions"] = []map[string]any{{"type": "Action.OpenUrl", "title": actionTitle, "url": appURL + "/?notifications=1"}}
 	}
 	return c
 }
