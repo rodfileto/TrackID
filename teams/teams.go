@@ -1,6 +1,6 @@
-// Package teams tells users of their notifications in Microsoft Teams, through a webhook each user sets: a Power
-// Automate flow ("post card in a chat or channel when a webhook request is received") that takes an Adaptive Card at
-// its root (docs/follow-plan.md, "Teams").
+// Package teams tells users of their notifications in Microsoft Teams, through a webhook each user sets: a Teams
+// Workflows flow such as "Send webhook alerts to a chat", whose trigger ("When a Teams webhook request is received")
+// takes a message holding Adaptive Cards as attachments (docs/follow-plan.md, "Teams").
 //
 // Teams is outside TrackID, so a message says only what kind of notification is waiting, with a button that opens
 // the app: no person, cluster or case, not even in the link.
@@ -314,7 +314,7 @@ func (s *Service) deliver(ctx context.Context, userID int64, sealed []byte, titl
 
 // post sends the Adaptive Card. Its errors never carry the URL, which is a credential.
 func (s *Service) post(ctx context.Context, webhook, title string) error {
-	body, err := json.Marshal(card(title, s.text("body"), s.text("open"), s.appURL))
+	body, err := json.Marshal(message(card(title, s.text("body"), s.text("open"), s.appURL)))
 	if err != nil {
 		return err
 	}
@@ -339,7 +339,21 @@ func (s *Service) post(ctx context.Context, webhook, title string) error {
 	return nil
 }
 
-// card is the Adaptive Card Power Automate's webhook trigger takes at its root.
+// message wraps a card as the Teams webhook trigger documents it: a message whose attachments are Adaptive Cards
+// (learn.microsoft.com/connectors/teams, "When a Teams webhook request is received"). Teams' own templates post each
+// attachment's content; a bare card leaves them nothing to post.
+func message(c map[string]any) map[string]any {
+	return map[string]any{
+		"type": "message",
+		"attachments": []map[string]any{{
+			"contentType": "application/vnd.microsoft.card.adaptive",
+			"contentUrl":  nil,
+			"content":     c,
+		}},
+	}
+}
+
+// card is the Adaptive Card a message carries.
 func card(title, text, actionTitle, appURL string) map[string]any {
 	c := map[string]any{
 		"$schema": "http://adaptivecards.io/schemas/adaptive-card.json",

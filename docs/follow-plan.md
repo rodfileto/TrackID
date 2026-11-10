@@ -76,8 +76,14 @@ notification still reports.
 
 ## Teams
 
-Based on naturaliza's `send_teams_message` (`apps/users/services.py`): an Adaptive Card posted to a Power Automate
-"post card in a chat or channel when a webhook request is received" flow.
+Based on naturaliza's `send_teams_message` (`apps/users/services.py`), for a Teams Workflows flow such as "Send
+webhook alerts to a chat". Its trigger, "When a Teams webhook request is received", takes a message whose attachments
+are Adaptive Cards (`{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive",
+"contentUrl":null,"content":<card>}]}`), and the template posts each attachment's content. Naturaliza posts the bare
+card, which only a flow built to post the whole request body accepts.
+
+The flow must post where Microsoft Graph allows: a group chat, a channel, or the chat with the Flow bot. Teams' chat
+with yourself fails with "Call made for a thread which is not a ChatThread".
 
 - **No content.** The card says only what kind of notification is waiting ("a person you follow has changes") and its
   button opens `APP_URL/?notifications=1`, which opens the bell. No person, cluster or case, not even in the link.
