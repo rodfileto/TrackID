@@ -10,11 +10,18 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ## [Unreleased]
 
+### Changed
+
+- A report's number is now its issuing unit's, by discipline and year, rather than global per report type (migration
+  021): `analysis_reports` keeps `issuing_unit_id` and a `discipline` derived from the type, so a facial review and
+  comparison share a sequence and two units can issue the same number. A report issued in TrackID takes its case's
+  unit; `reports.ImportedReport.IssuingUnitID` names another. Reports already numbered keep their numbers.
+
 ### Added
 
 - Live notifications (`docs/realtime-plan.md`): a bell in the header tells examiners, without reloading, when an
   analysis step is assigned to them, manually or by distribution. Rows are written in the assignment's transaction
-  (`notifications`, migration 021) and reach the browser over a WebSocket (`realtime`, `/api/realtime`) opened with a
+  (`notifications`, migration 022) and reach the browser over a WebSocket (`realtime`, `/api/realtime`) opened with a
   one-time ticket; Postgres `LISTEN/NOTIFY` carries them across processes, so this needs no Redis. What a notification
   says is built when it is read, under the reader's current access, and shows no case identity during blind work.
   The API now also shuts down cleanly on SIGINT and SIGTERM.

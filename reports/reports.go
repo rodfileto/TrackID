@@ -471,13 +471,15 @@ func (s Service) Issue(ctx context.Context, user auth.UserProfile, analysisID in
 
 // ImportedReport is a report issued elsewhere, for an analysis recorded as concluded. Year and Number
 // are its own number, zero when it has none, and PDFFileID its original document on the case.
+// IssuingUnitID is the unit that issued it, whose sequence the number belongs to; zero is the case's.
 type ImportedReport struct {
-	AnalysisID int64
-	Year       int32
-	Number     int32
-	IssuedAt   time.Time
-	PDFFileID  int64
-	PDFSHA256  string
+	AnalysisID    int64
+	IssuingUnitID int64
+	Year          int32
+	Number        int32
+	IssuedAt      time.Time
+	PDFFileID     int64
+	PDFSHA256     string
 }
 
 // RecordImported makes an imported report the analysis's issued one, whose document is its original
@@ -495,9 +497,15 @@ func RecordImported(ctx context.Context, sqlDB *sql.DB, in ImportedReport, now t
 	if err != nil {
 		return "", err
 	}
+	unit := in.IssuingUnitID
+	if unit == 0 {
+		if unit, err = q.CaseUnitOfAnalysis(ctx, in.AnalysisID); err != nil {
+			return "", err
+		}
+	}
 	year, number := sql.NullInt32{}, sql.NullInt32{}
 	if in.Year != 0 && in.Number != 0 {
-		taken, err := q.ReportNumberTaken(ctx, db.ReportNumberTakenParams{ReportType: d.ReportType, ReportYear: in.Year, ReportNumber: in.Number, CaseAnalysisID: in.AnalysisID})
+		taken, err := q.ReportNumberTaken(ctx, db.ReportNumberTakenParams{IssuingUnitID: unit, ReportType: d.ReportType, ReportYear: in.Year, ReportNumber: in.Number, CaseAnalysisID: in.AnalysisID})
 		if err != nil {
 			return "", err
 		}
@@ -515,6 +523,7 @@ func RecordImported(ctx context.Context, sqlDB *sql.DB, in ImportedReport, now t
 		ReportYear: year, ReportNumber: number, IssuedAt: sql.NullTime{Time: in.IssuedAt, Valid: true},
 		CaseFileID: sql.NullInt64{Int64: in.PDFFileID, Valid: in.PDFFileID != 0},
 		Snapshot:   pqtype.NullRawMessage{RawMessage: snapshot, Valid: true}, CaseAnalysisID: in.AnalysisID,
+		IssuingUnitID: unit,
 	})
 	if err != nil {
 		return "", fmt.Errorf("reports: record imported: %w", err)

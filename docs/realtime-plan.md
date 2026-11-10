@@ -133,7 +133,7 @@ the middleware and the hub call, so the two can't drift apart.
 
 ## Data
 
-Migrations continue from `021`, one per phase, with queries through sqlc.
+Migrations continue from `022`, one per phase, with queries through sqlc.
 
 | Table | Columns | Notes |
 |---|---|---|

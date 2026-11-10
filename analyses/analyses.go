@@ -606,7 +606,11 @@ func IssueReport(ctx context.Context, sqlDB *sql.DB, analysisID int64, user auth
 		return Report{}, err
 	}
 	year := int32(now.Year())
-	max, err := q.MaxReportNumber(ctx, db.MaxReportNumberParams{ReportType: t.Type.ReportType(), ReportYear: sql.NullInt32{Int32: year, Valid: true}})
+	unit, err := q.CaseUnitOfAnalysis(ctx, analysisID)
+	if err != nil {
+		return Report{}, err
+	}
+	max, err := q.MaxReportNumber(ctx, db.MaxReportNumberParams{IssuingUnitID: unit, ReportType: t.Type.ReportType(), ReportYear: year})
 	if err != nil {
 		return Report{}, err
 	}
@@ -636,6 +640,7 @@ func IssueReport(ctx context.Context, sqlDB *sql.DB, analysisID int64, user auth
 		ReportNumber:   sql.NullInt32{Int32: max + 1, Valid: true},
 		IssuedBy:       sql.NullInt64{Int64: user.ID, Valid: true},
 		IssuedAt:       sql.NullTime{Time: now, Valid: true},
+		IssuingUnitID:  sql.NullInt64{Int64: unit, Valid: true},
 	}); errors.Is(err, sql.ErrNoRows) {
 		return Report{}, ErrNotDraft
 	} else if err != nil {

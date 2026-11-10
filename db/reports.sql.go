@@ -13,6 +13,17 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+const caseUnitOfAnalysis = `-- name: CaseUnitOfAnalysis :one
+SELECT bc.unit_id FROM case_analyses ca JOIN biometric_cases bc ON bc.id = ca.biometric_case_id WHERE ca.id = $1
+`
+
+func (q *Queries) CaseUnitOfAnalysis(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, caseUnitOfAnalysis, id)
+	var unit_id int64
+	err := row.Scan(&unit_id)
+	return unit_id, err
+}
+
 const getAnalysisReport = `-- name: GetAnalysisReport :one
 
 SELECT ar.id, ar.case_analysis_id, ar.report_type, ar.status, ar.report_year, ar.report_number, ar.issued_at,
@@ -201,7 +212,7 @@ func (q *Queries) InsertReportVersion(ctx context.Context, arg InsertReportVersi
 
 const issueAnalysisReport = `-- name: IssueAnalysisReport :one
 UPDATE analysis_reports
-SET status = 'ISSUED', report_year = $2, report_number = $3, issued_by = $4, issued_at = $5
+SET status = 'ISSUED', report_year = $2, report_number = $3, issued_by = $4, issued_at = $5, issuing_unit_id = $6
 WHERE case_analysis_id = $1 AND status = 'DRAFT'
 RETURNING report_type, report_year, report_number, issued_at
 `
@@ -212,6 +223,7 @@ type IssueAnalysisReportParams struct {
 	ReportNumber   sql.NullInt32 `db:"report_number" json:"report_number"`
 	IssuedBy       sql.NullInt64 `db:"issued_by" json:"issued_by"`
 	IssuedAt       sql.NullTime  `db:"issued_at" json:"issued_at"`
+	IssuingUnitID  sql.NullInt64 `db:"issuing_unit_id" json:"issuing_unit_id"`
 }
 
 type IssueAnalysisReportRow struct {
@@ -228,6 +240,7 @@ func (q *Queries) IssueAnalysisReport(ctx context.Context, arg IssueAnalysisRepo
 		arg.ReportNumber,
 		arg.IssuedBy,
 		arg.IssuedAt,
+		arg.IssuingUnitID,
 	)
 	var i IssueAnalysisReportRow
 	err := row.Scan(
@@ -386,16 +399,19 @@ func (q *Queries) LockReportNumbering(ctx context.Context) error {
 const maxReportNumber = `-- name: MaxReportNumber :one
 SELECT COALESCE(MAX(report_number), 0)::integer
 FROM analysis_reports
-WHERE report_type = $1 AND report_year = $2
+WHERE issuing_unit_id = $1::bigint AND discipline = report_discipline($2::text)
+    AND report_year = $3::int
 `
 
 type MaxReportNumberParams struct {
-	ReportType string        `db:"report_type" json:"report_type"`
-	ReportYear sql.NullInt32 `db:"report_year" json:"report_year"`
+	IssuingUnitID int64  `db:"issuing_unit_id" json:"issuing_unit_id"`
+	ReportType    string `db:"report_type" json:"report_type"`
+	ReportYear    int32  `db:"report_year" json:"report_year"`
 }
 
+// The last number of a unit's sequence for the report type's discipline in a year.
 func (q *Queries) MaxReportNumber(ctx context.Context, arg MaxReportNumberParams) (int32, error) {
-	row := q.db.QueryRowContext(ctx, maxReportNumber, arg.ReportType, arg.ReportYear)
+	row := q.db.QueryRowContext(ctx, maxReportNumber, arg.IssuingUnitID, arg.ReportType, arg.ReportYear)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -404,8 +420,8 @@ func (q *Queries) MaxReportNumber(ctx context.Context, arg MaxReportNumberParams
 const recordImportedReport = `-- name: RecordImportedReport :execrows
 UPDATE analysis_reports SET status = 'ISSUED', imported = TRUE, report_year = $1::int,
     report_number = $2::int, issued_at = $3, case_file_id = $4::bigint,
-    snapshot = $5
-WHERE case_analysis_id = $6 AND (status = 'DRAFT' OR imported)
+    snapshot = $5, issuing_unit_id = $6::bigint
+WHERE case_analysis_id = $7 AND (status = 'DRAFT' OR imported)
 `
 
 type RecordImportedReportParams struct {
@@ -414,6 +430,7 @@ type RecordImportedReportParams struct {
 	IssuedAt       sql.NullTime          `db:"issued_at" json:"issued_at"`
 	CaseFileID     sql.NullInt64         `db:"case_file_id" json:"case_file_id"`
 	Snapshot       pqtype.NullRawMessage `db:"snapshot" json:"snapshot"`
+	IssuingUnitID  int64                 `db:"issuing_unit_id" json:"issuing_unit_id"`
 	CaseAnalysisID int64                 `db:"case_analysis_id" json:"case_analysis_id"`
 }
 
@@ -425,6 +442,7 @@ func (q *Queries) RecordImportedReport(ctx context.Context, arg RecordImportedRe
 		arg.IssuedAt,
 		arg.CaseFileID,
 		arg.Snapshot,
+		arg.IssuingUnitID,
 		arg.CaseAnalysisID,
 	)
 	if err != nil {
@@ -434,11 +452,13 @@ func (q *Queries) RecordImportedReport(ctx context.Context, arg RecordImportedRe
 }
 
 const reportNumberTaken = `-- name: ReportNumberTaken :one
-SELECT EXISTS (SELECT 1 FROM analysis_reports WHERE report_type = $1 AND report_year = $2::int
-    AND report_number = $3::int AND case_analysis_id <> $4)::bool AS taken
+SELECT EXISTS (SELECT 1 FROM analysis_reports WHERE issuing_unit_id = $1::bigint
+    AND discipline = report_discipline($2::text) AND report_year = $3::int
+    AND report_number = $4::int AND case_analysis_id <> $5)::bool AS taken
 `
 
 type ReportNumberTakenParams struct {
+	IssuingUnitID  int64  `db:"issuing_unit_id" json:"issuing_unit_id"`
 	ReportType     string `db:"report_type" json:"report_type"`
 	ReportYear     int32  `db:"report_year" json:"report_year"`
 	ReportNumber   int32  `db:"report_number" json:"report_number"`
@@ -447,6 +467,7 @@ type ReportNumberTakenParams struct {
 
 func (q *Queries) ReportNumberTaken(ctx context.Context, arg ReportNumberTakenParams) (bool, error) {
 	row := q.db.QueryRowContext(ctx, reportNumberTaken,
+		arg.IssuingUnitID,
 		arg.ReportType,
 		arg.ReportYear,
 		arg.ReportNumber,

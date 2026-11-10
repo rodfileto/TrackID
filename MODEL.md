@@ -211,7 +211,9 @@ protected read-only), which WordCraft's web build enforces in the analysis page 
 checks again on every save (`analysis_report_versions`). Issuing (`reports.Service.Issue`, which
 calls `analyses.IssueReport`) refuses a draft whose locked text no longer matches the data (the
 examiner refreshes it, keeping their text) or a laudo with an empty exam or answer; then, in one
-transaction, it numbers the report `"<year>.<sequence>"` per type, freezes the data as
+transaction, it numbers the report `"<year>.<sequence>"` in its issuing unit's sequence for the
+discipline and year (the case's unit, kept as `issuing_unit_id`; a facial review and comparison share
+a sequence, and `report_discipline` says which discipline a type is), freezes the data as
 `snapshot`, puts the number and date in the examiner's document, renders the PDF with
 `wordcraft-cli` (the same layout as the editor) and keeps the .docx and the PDF as
 `forensic_report` files with their SHA-256 (`docx_file_id`, `case_file_id`), and closes the
