@@ -77,6 +77,19 @@ server {
         proxy_send_timeout 1h;
     }
 
+    # The report editor (WordCraft), when compose.wordcraft.yml mounts it. Its page starts its
+    # WebAssembly from an inline script whose hash changes with every build, so this path allows
+    # inline scripts; it is a static page on this origin, with no user content in it. A location
+    # that sets a header drops the server's, so all of them again.
+    location /wordcraft/ {
+        proxy_pass http://trackid_api;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "same-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; worker-src 'self' blob:; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" always;
+    }
+
     # The API's own health and readiness are for the stack, not the outside.
     location /health {
         return 404;

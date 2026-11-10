@@ -153,14 +153,76 @@ alongside the SHA-256 each file is recorded with.
 ## Reports (WordCraft)
 
 The image doesn't include [WordCraft](https://github.com/storytold/wordcraft), the report editor
-and PDF renderer. Without it, reports can be drafted but not edited in the app or issued. A
-deployment that issues reports builds WordCraft itself: `wordcraft-cli` for a Linux x86-64 glibc
-system, and the web editor with trunk. It then mounts the build into the `api` service with a
-compose override, and sets `WORDCRAFT_CLI` (e.g. `/opt/wordcraft/wordcraft-cli`) and
-`WORDCRAFT_WEB_DIR` (e.g. `/opt/wordcraft/web`) in `.env`.
+and PDF renderer. Without it, reports can be drafted but not edited in the app or issued. To add
+it, build it from a WordCraft checkout and mount it into the API:
 
-This hasn't been tried with `deploy/` yet. The editor is served at `/wordcraft/`, and its page
-may need the Content-Security-Policy in `deploy/nginx/templates/` relaxed for that path.
+```sh
+# in the checkout, once per WordCraft version: the web editor (needs trunk and the wasm32 target)
+(cd /path/to/wordcraft/apps/wordcraft-web && trunk build --release)
+# here: the renderer, compiled for the image, and the editor copied beside it, into ./wordcraft
+./build-wordcraft.sh /path/to/wordcraft [/path/to/craft-i18n]
+docker compose -f compose.yml -f compose.wordcraft.yml up -d
+```
+
+`build-wordcraft.sh` compiles `wordcraft-cli` in a Debian 12 Rust container, because the image is
+Debian 12: a binary built on a newer system won't run in it (it needs a newer glibc). Pass the
+craft-i18n checkout for the editor's interface in other languages; without it the interface is
+English, and the reports it renders are the same. nginx serves the editor at `/wordcraft/` with a
+policy that allows its inline start-up script.
+
+## GPU
+
+Face detection and embedding run on the CPU by default. With an NVIDIA GPU (a driver for CUDA 12
+and the NVIDIA Container Toolkit on the host), build the GPU image from the release's and run with
+`compose.gpu.yml`:
+
+```sh
+docker build -f ../Dockerfile.gpu --build-arg TRACKID_IMAGE=ghcr.io/rodfileto/trackid:<version> \
+  -t trackid:<version>-cuda ..
+# .env: TRACKID_GPU_IMAGE=trackid:<version>-cuda
+docker compose -f compose.yml -f compose.gpu.yml up -d
+```
+
+`docker compose logs api worker` then says "CUDA execution provider enabled". In production mode,
+a GPU the models can't use stops them instead of leaving them on the CPU. The GPU image isn't
+published: it is about 10 GB, nearly all of it NVIDIA's CUDA and cuDNN, and only an institute with a
+GPU needs it. Rebuild it for each release.
+
+## A geocoder of your own (Nominatim)
+
+The census address list (above) finds most urban addresses. For named places (an airport, a
+square), streets without census addresses, and clicks on the map, run a Nominatim of your own
+rather than OpenStreetMap's public one, which then receives every address typed:
+
+```sh
+# .env: NOMINATIM_PBF_URL=https://download.geofabrik.de/south-america/brazil/sudeste-latest.osm.pbf
+#       NOMINATIM_PASSWORD=<openssl rand -hex 24>
+#       GEOCODER_URL=http://nominatim:8080
+docker compose --profile nominatim up -d
+```
+
+The first start downloads and imports the extract: minutes for a small state, hours for a region
+or the country, with tens of GB of disk. `docker compose logs -f nominatim` shows it. Its
+healthcheck turns healthy when it answers. Set `NOMINATIM_REPLICATION_URL` and
+`NOMINATIM_UPDATE_MODE=continuous` to keep it current. Geofabrik publishes the updates beside each
+extract. The extract is OpenStreetMap data (ODbL, `docs/MODELS.md`). TrackID asks it for
+Brazilian results only, so import a Brazilian extract.
+
+## A language model of your own
+
+Drafting registrations from a request's files and the AI mode need a language model server
+speaking the OpenAI protocol. The `llm` profile runs Ollama inside the stack, so nothing leaves
+the network:
+
+```sh
+docker compose --profile llm up -d
+docker compose exec ollama ollama pull <model>
+# .env: ASSIST_ENDPOINT=http://ollama:11434/v1 and ASSIST_MODEL=<model>; then
+docker compose up -d api worker
+```
+
+With `compose.gpu.yml` it runs on the GPU. A server elsewhere on the institute's network works the
+same way through `ASSIST_ENDPOINT`.
 
 ## Using your own S3 server
 

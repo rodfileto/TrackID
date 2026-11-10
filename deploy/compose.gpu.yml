@@ -1,0 +1,31 @@
+# The GPU for face detection and embedding (and the language model, with --profile llm), on top of
+# compose.yml:
+#
+#   docker compose -f compose.yml -f compose.gpu.yml up -d
+#
+# TRACKID_GPU_IMAGE is the image Dockerfile.gpu builds. The host needs an NVIDIA driver and the
+# NVIDIA Container Toolkit. In production mode, a GPU the vision models can't use stops the API and
+# the worker, rather than leaving them on the CPU unnoticed.
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+
+services:
+  api:
+    <<: *gpu
+    image: ${TRACKID_GPU_IMAGE:?set TRACKID_GPU_IMAGE in deploy/.env (docs/deployment.md, "GPU")}
+    environment:
+      VISION_USE_GPU: "true"
+  worker:
+    <<: *gpu
+    image: ${TRACKID_GPU_IMAGE:?set TRACKID_GPU_IMAGE in deploy/.env (docs/deployment.md, "GPU")}
+    environment:
+      VISION_USE_GPU: "true"
+  ollama:
+    <<: *gpu

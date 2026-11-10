@@ -2,3 +2,4 @@ backups/
 certs/
 .env
 models/
+wordcraft/

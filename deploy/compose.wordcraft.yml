@@ -1,0 +1,14 @@
+# WordCraft for the API: editing reports in the app and issuing them as PDF. Build it first with
+# ./build-wordcraft.sh, then:
+#
+#   docker compose -f compose.yml -f compose.wordcraft.yml up -d
+#
+# (add -f compose.gpu.yml too when using the GPU).
+services:
+  api:
+    volumes:
+      - ${MODELS_DIR:-./models}:/models:ro
+      - ${WORDCRAFT_DIR:-./wordcraft}:/opt/wordcraft:ro
+    environment:
+      WORDCRAFT_CLI: /opt/wordcraft/wordcraft-cli
+      WORDCRAFT_WEB_DIR: /opt/wordcraft/web

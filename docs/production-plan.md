@@ -14,7 +14,15 @@ tested on two stacks: an encrypted backup of a loaded one, restored into a fresh
 served the same rows and evidence byte for byte. `verify-storage` caught a file overwritten and
 another deleted with the storage keys, and both were brought back from their locked versions.
 `asynqmon` was left out: it hasn't been released since 2023, so `worker -queues` reports the
-queues instead. Phase 5 is still a proposal.
+queues instead. **Phase 5 is built** the same day and was tested on the development machine. The
+GPU image (`Dockerfile.gpu`, `deploy/compose.gpu.yml`) ran the API and the worker on CUDA, with the
+same clustering results as on the CPU. The `nominatim` profile imported an extract and answered
+the API on the internal network. The `llm` profile served a model on the GPU to the API's
+container. WordCraft, built for the image by `deploy/build-wordcraft.sh` and mounted with
+`deploy/compose.wordcraft.yml`, rendered a PDF inside the image, and its editor started behind
+nginx with no CSP violation. A WordCraft built on a newer system doesn't run in the image (it
+needs glibc 2.43; the image has 2.36), which is why the script compiles it in a Debian 12
+container.
 
 The goal: an institute that has never seen the code can go from a release tag to a running,
 hardened TrackID on one server of its own, by following one document and editing one
@@ -201,6 +209,7 @@ single-node only and points to SeaweedFS's documentation for anything bigger.
 
 - CUDA image variant (`-cuda` tag) for the `gpu` profile.
 - `nominatim` and `llm` profiles with sizing notes.
+- A documented GPU image build (`Dockerfile.gpu`), not published: it is about 10 GB.
 
 WordCraft is not in the image (decided 2026-11-10, question 4). A deployment that edits and
 issues reports builds WordCraft itself and mounts the build into the API container
@@ -224,6 +233,5 @@ probably the first an institute will ask for.
    deployment. This goes in phase 1, since the published image depends on it.
 4. *Decided 2026-11-10:* WordCraft stays out of the image. Each deployment that issues reports
    builds it, at the revision and with the language data it wants, and mounts it.
-5. **CUDA variant.** Is a GPU image worth maintaining in core, or is CPU-only plus a documented
-   way to build the GPU one enough? CPU suffices for small galleries; the large-gallery plan
-   points to GPU at scale.
+5. *Decided 2026-11-10:* a documented GPU build (`Dockerfile.gpu`) on top of the published CPU
+   image, not a published GPU image.

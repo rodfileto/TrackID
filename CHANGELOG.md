@@ -39,6 +39,13 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- Optional pieces for a deployment (`docs/production-plan.md` phase 5, `docs/deployment.md`). `Dockerfile.gpu`
+  builds a CUDA variant of a release's image, and `deploy/compose.gpu.yml` runs the API, the worker and the language
+  model on the GPU. The `nominatim` and `llm` compose profiles run a Nominatim and an Ollama inside the stack.
+  `deploy/build-wordcraft.sh` builds WordCraft for the image (its CLI in a Debian 12 container, since a newer
+  system's build needs a newer glibc), `deploy/compose.wordcraft.yml` mounts it, and nginx serves its editor at
+  `/wordcraft/` with a policy that allows its inline start-up script.
+
 - Geocoding on IBGE's census address list (`docs/geocoding-plan.md` phase 1). `cmd/load-cnefe` loads a state's
   CNEFE (Censo 2022) into TrackID's database (migration 024), and `scripts/load_cnefe.sh <UF>` fetches and loads one
   in development. `geocode.Layered`, now the API's geocoder, searches the list (number, nearest number, quadra/lote),

@@ -191,6 +191,53 @@ services:
     networks:
       - internal
 
+  # Optional: a geocoder of the institute's own (profile "nominatim"; docs/deployment.md). It imports
+  # NOMINATIM_PBF_URL (an OpenStreetMap extract, e.g. from Geofabrik) at its first start, which takes
+  # minutes for a small state and hours for a country, then serves the API at
+  # GEOCODER_URL=http://nominatim:8080. Start it with `docker compose --profile nominatim up -d`.
+  nominatim:
+    image: mediagis/nominatim:5.3.3
+    profiles: ["nominatim"]
+    environment:
+      PBF_URL: ${NOMINATIM_PBF_URL:-}
+      REPLICATION_URL: ${NOMINATIM_REPLICATION_URL:-}
+      UPDATE_MODE: ${NOMINATIM_UPDATE_MODE:-none}
+      NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD:-}
+      IMPORT_STYLE: ${NOMINATIM_IMPORT_STYLE:-full}
+    volumes:
+      - nominatim:/var/lib/postgresql/16/main
+    shm_size: ${NOMINATIM_SHM_SIZE:-1g}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 24h
+    restart: unless-stopped
+    # outside: the extract and its updates are downloaded.
+    networks:
+      - internal
+      - outside
+
+  # Optional: a language model server of the institute's own (profile "llm"), for drafting
+  # registrations and the AI mode, at ASSIST_ENDPOINT=http://ollama:11434/v1. Pull a model into it
+  # once: `docker compose exec ollama ollama pull <model>`. compose.gpu.yml gives it the GPU.
+  ollama:
+    image: ollama/ollama:0.40.12
+    profiles: ["llm"]
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    # outside: models are pulled from the Ollama library.
+    networks:
+      - internal
+      - outside
+
   # Tools for deploy/backup.sh and deploy/restore.sh (profile "ops": never started by `up`). rclone
   # reaches object storage on the internal network and reads or writes the backup directory.
   rclone:
@@ -219,3 +266,5 @@ volumes:
   postgres:
   redis:
   seaweedfs:
+  nominatim:
+  ollama:
