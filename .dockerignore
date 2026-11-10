@@ -1,0 +1,25 @@
+# What the image build must not see: secrets, local data, and what the build makes itself.
+.git
+.env
+.env.*
+!.env.example
+.run
+backups
+**/node_modules
+frontend/dist
+deploy/.env
+deploy/certs
+deploy/models
+deploy/backups
+logs
+venv
+__pycache__
+.pytest_cache
+.DS_Store
+# Not part of the build: Python tools with their data, papers, and images built elsewhere.
+tools
+quarto
+papers
+sourceafis-sidecar
+db/postgres
+deploy

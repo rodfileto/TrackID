@@ -39,7 +39,7 @@ fi
 
 cd "$ROOT_DIR"
 echo "Starting TrackID infrastructure..."
-docker compose up -d postgres redis minio
+docker compose up -d --wait postgres redis seaweedfs
 # The worker checks the fingerprint sidecar once, at startup, and runs without
 # fingerprint handlers when it is down, so start it before the worker.
 FINGERPRINT_SIDECAR_URL="${FINGERPRINT_SIDECAR_URL:-}"

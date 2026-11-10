@@ -12,12 +12,43 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Changed
 
+- Object storage is SeaweedFS instead of MinIO, whose community edition no longer publishes images
+  (`docs/production-plan.md`, decision 11). The dev stack's `minio` service is now `seaweedfs`, on the same host
+  port and keys, so `.env` doesn't change. Its data doesn't move by itself:
+  `scripts/migrate_minio_to_seaweedfs.sh` copies the old volume's buckets across and leaves the volume in place.
+  `scripts/backup_data.sh` and `restore_data.sh` copy the bucket with rclone instead of MinIO's `mc`.
+- The map's tile server is read at runtime from `/api/config` (`MAP_TILE_URL`, `MAP_TILE_ATTRIBUTION` on the
+  server), so one frontend build fits every deployment. `VITE_MAP_TILE_*` still sets a build's default.
+- The Outfit font is bundled (`@fontsource-variable/outfit`) instead of loaded from Google Fonts, so the app's pages
+  ask nothing of an outside server.
+- The Postgres image is pinned to pgvector 0.8.7 (`db/postgres/Dockerfile`).
+
 - A report's number is now its issuing unit's, by discipline and year, rather than global per report type (migration
   021): `analysis_reports` keeps `issuing_unit_id` and a `discipline` derived from the type, so a facial review and
   comparison share a sequence and two units can issue the same number. A report issued in TrackID takes its case's
   unit; `reports.ImportedReport.IssuingUnitID` names another. Reports already numbered keep their numbers.
 
 ### Added
+
+- Production mode (`TRACKID_ENV=production`, `docs/production-plan.md` phase 2): the API and the worker refuse to
+  start without the database, Redis and object storage, a JWT_SECRET of 32 bytes or more and an https APP_URL
+  (`config.CheckProduction`), and stop when an integration they were configured with doesn't come up
+  (`config.Unavailable`), instead of running without it. Development is unchanged. `deploy/compose.yml` sets it.
+- Secrets from files: each of `env.Secrets` may be given as `<NAME>_FILE`, the path of a file holding it, as Docker
+  and Kubernetes secrets provide them.
+- `GET /ready`, which checks the database, object storage and the task queue (`/health` stays liveness only), and
+  `worker -check`, the worker's healthcheck.
+- A request body limit on every route (`api.DefaultMaxBodyBytes`, 128 MiB), except those that take videos, which
+  keep `video.MaxBytes`. A test fails if a route that takes videos is left out.
+- `TRUSTED_PROXIES`: the API believes `X-Forwarded-For` only from these addresses, rather than gin's default of
+  any.
+
+- A production deployment (`docs/deployment.md`, `docs/production-plan.md` phase 1): an application image
+  (`Dockerfile`: every command under `cmd/`, the frontend, and onnxruntime checked against its SHA-256) and
+  `deploy/` with nginx (TLS, a rate limit on sign-in, security headers), the app services, and Postgres, Redis,
+  SeaweedFS and the fingerprint sidecar on a network with no route outside. Evidence is stored with S3 object lock:
+  `cmd/init-storage` (`storage.EnsureLockedBucket`) creates the bucket in COMPLIANCE mode with the retention the
+  institute sets (`S3_RETENTION_DAYS`, no default), and refuses an existing bucket without lock.
 
 - Live notifications (`docs/realtime-plan.md`): a bell in the header tells examiners, without reloading, when an
   analysis step is assigned to them, manually or by distribution. Rows are written in the assignment's transaction

@@ -15,7 +15,7 @@ import {
   type NearbyLocation,
   type PlaceInput,
 } from "../../services/occurrences";
-import { TILE_ATTRIBUTION, TILE_URL } from "./tiles";
+import { tileAttribution, tileUrl } from "./tiles";
 
 interface Props {
   value: PlaceInput;
@@ -74,7 +74,7 @@ export default function LocationPicker({ value, onChange }: Props) {
       container: container.current,
       style: {
         version: 8,
-        sources: { base: { type: "raster", tiles: [TILE_URL], tileSize: 256, attribution: TILE_ATTRIBUTION, maxzoom: 19 } },
+        sources: { base: { type: "raster", tiles: [tileUrl()], tileSize: 256, attribution: tileAttribution(), maxzoom: 19 } },
         layers: [{ id: "base", type: "raster", source: "base" }],
       },
       center: [-43.4, -22.92],

@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
@@ -65,6 +66,11 @@ type Dependencies struct {
 	// Teams tells users of their notifications in Microsoft Teams (teams package). Nil means Teams is off: the
 	// webhook routes report it unavailable or answer 503.
 	Teams *teams.Service
+	// TrustedProxies are the addresses and CIDR ranges whose X-Forwarded-For gives a client's
+	// address (config.Config.TrustedProxies). Empty trusts none, rather than gin's default of all.
+	TrustedProxies []string
+	// ClientConfig is the frontend's runtime configuration, served at /api/config.
+	ClientConfig ClientConfig
 	// Register is an optional hook called after the core routes are registered.
 	// It receives the engine and the authenticated route group (mounted under
 	// /api) so integrations can attach their own routes. May be nil.
@@ -73,8 +79,13 @@ type Dependencies struct {
 
 func NewRouter(deps Dependencies) *gin.Engine {
 	router := gin.New()
-	router.Use(gin.Recovery())
+	if err := router.SetTrustedProxies(deps.TrustedProxies); err != nil {
+		// config.Load checks the list, so this is a caller passing its own.
+		panic(fmt.Sprintf("api: trusted proxies: %v", err))
+	}
+	router.Use(gin.Recovery(), limitBody())
 	router.GET("/health", healthHandler)
+	router.GET("/ready", ReadyHandler(deps))
 	router.GET("/health/db", DatabaseHealthHandler(deps.DB))
 	if deps.WordcraftWebDir != "" {
 		router.Static("/wordcraft", deps.WordcraftWebDir)
@@ -85,6 +96,8 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	// There is no public sign-up: the first SUPER_ADMIN comes from cmd/create-superuser and
 	// admins create every other account.
 	api.POST("/auth/login", LoginHandler(authRepository, deps.JWTSecret))
+	// Read by the frontend before it renders, signed in or not.
+	api.GET("/config", ConfigHandler(deps.ClientConfig))
 	// Outside protected: browsers can't send Authorization on a WebSocket, so a ticket from
 	// realtime/ticket proves who is connecting.
 	api.GET("/realtime", RealtimeHandler(deps.Hub, authRepository))

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { LngLatBounds, Map as MapLibreMap, Marker, NavigationControl, Popup } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { TILE_ATTRIBUTION, TILE_URL } from "./tiles";
+import { tileAttribution, tileUrl } from "./tiles";
 
 export interface AskPoint {
   lat: number;
@@ -27,7 +27,7 @@ export default function AskPointsMap({ points }: { points: AskPoint[] }) {
       container: container.current,
       style: {
         version: 8,
-        sources: { base: { type: "raster", tiles: [TILE_URL], tileSize: 256, attribution: TILE_ATTRIBUTION, maxzoom: 19 } },
+        sources: { base: { type: "raster", tiles: [tileUrl()], tileSize: 256, attribution: tileAttribution(), maxzoom: 19 } },
         layers: [{ id: "base", type: "raster", source: "base" }],
       },
       center: [list[0].lon, list[0].lat],

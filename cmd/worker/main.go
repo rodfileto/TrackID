@@ -13,6 +13,9 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -33,9 +36,20 @@ import (
 )
 
 func main() {
+	check := flag.Bool("check", false, "check that the database and Redis answer, then exit: 0 if both do (the container's healthcheck)")
+	flag.Parse()
 	env.Load()
 
 	configuration := config.Load()
+	if *check {
+		if err := healthCheck(configuration); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if err := configuration.CheckProduction(config.ProcessWorker); err != nil {
+		log.Fatal(err)
+	}
 
 	if configuration.DatabaseURL == "" {
 		log.Fatal("DATABASE_URL is not configured")
@@ -66,7 +80,7 @@ func main() {
 		store, err = storage.NewClient(ctx, configuration.S3Endpoint, configuration.S3AccessKey, configuration.S3SecretKey, configuration.S3Bucket)
 		cancel()
 		if err != nil {
-			log.Printf("object storage is configured but unreachable; embedding tasks will fail: %v", err)
+			configuration.Unavailable("object storage is configured but unreachable; embedding tasks will fail: %v", err)
 		}
 	} else {
 		log.Printf("object storage is not configured; embedding tasks will fail")
@@ -85,7 +99,7 @@ func main() {
 			UseGPU:            configuration.VisionUseGPU,
 		})
 		if err != nil {
-			log.Printf("vision service unavailable; %s will not be processed: %v", embedding.TaskTypeComputeCodification, err)
+			configuration.Unavailable("vision service unavailable; %s will not be processed: %v", embedding.TaskTypeComputeCodification, err)
 		} else {
 			defer vis.Close()
 			mux.HandleFunc(embedding.TaskTypeComputeCodification, embedding.HandleComputeCodification(sqlDB, store, vis, queueClient))
@@ -121,7 +135,7 @@ func main() {
 		fp, err := fingerprint.NewClient(ctx, configuration.FingerprintSidecarURL)
 		cancel()
 		if err != nil {
-			log.Printf("fingerprint sidecar unavailable; fingerprint tasks will not be processed: %v", err)
+			configuration.Unavailable("fingerprint sidecar unavailable; fingerprint tasks will not be processed: %v", err)
 		} else {
 			mux.HandleFunc(fingerprint.TaskTypeExtractCodification, fingerprint.HandleExtractCodification(sqlDB, store, fp, queueClient))
 			mux.HandleFunc(fingerprint.TaskTypeExtractIdentityFeature, fingerprint.HandleExtractIdentityFeature(sqlDB, store, fp, queueClient))
@@ -152,4 +166,32 @@ func main() {
 	if err := srv.Run(mux); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// healthCheck pings the database and Redis, which the worker can't do anything without. It runs
+// as its own process (worker -check), so it says nothing about the running worker's state beyond
+// what it depends on; a worker that crashed is restarted by its container's restart policy.
+func healthCheck(configuration config.Config) error {
+	if configuration.DatabaseURL == "" || configuration.RedisURL == "" {
+		return errors.New("DATABASE_URL and REDIS_URL must be set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sqlDB, err := database.Open(configuration.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer sqlDB.Close()
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return fmt.Errorf("database: %w", err)
+	}
+	client, err := queue.OpenClient(configuration.RedisURL)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	if err := client.Ping(); err != nil {
+		return fmt.Errorf("redis: %w", err)
+	}
+	return nil
 }

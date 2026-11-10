@@ -1,0 +1,204 @@
+# TrackID in production, on one host (docs/deployment.md; docs/production-plan.md).
+#
+#   cd deploy
+#   cp .env.example .env            # then fill it in: every empty value is required
+#   ./fetch-models.sh               # the face models, into ./models
+#   docker compose up -d
+#
+# Only the proxy publishes ports (80 and 443). The database, Redis, object storage and the
+# fingerprint sidecar sit on a network with no route outside and no published port.
+
+name: trackid
+
+x-app: &app
+  image: ${TRACKID_IMAGE:-ghcr.io/rodfileto/trackid}:${TRACKID_VERSION:?set TRACKID_VERSION in deploy/.env}
+  build:
+    context: ..
+  env_file: ${DEPLOY_ENV_FILE:-.env}
+  environment:
+    DATABASE_URL: postgres://trackid:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}@postgres:5432/trackid?sslmode=disable
+    REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/.env}@redis:6379/0
+    S3_ENDPOINT: http://seaweedfs:8333
+    FINGERPRINT_SIDECAR_URL: http://sourceafis-sidecar:8090
+    # A missing setting, or an integration configured here that doesn't come up, stops the process
+    # instead of leaving a feature quietly off (docs/deployment.md, "Production mode").
+    TRACKID_ENV: production
+    # Docker's own address ranges, where the proxy is: the API believes the client address nginx
+    # passes in X-Forwarded-For from there only.
+    TRUSTED_PROXIES: ${TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16,10.0.0.0/8}
+  volumes:
+    - ${MODELS_DIR:-./models}:/models:ro
+  # Nothing in the image is written to; videos being processed go to /tmp, kept in memory up to
+  # its size (a video can be 1 GiB).
+  read_only: true
+  tmpfs:
+    - /tmp:size=${TMP_SIZE:-3g}
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  networks:
+    - internal
+    - outside
+
+services:
+  proxy:
+    image: nginx:1.30.6-alpine
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      SERVER_NAME: ${SERVER_NAME:?set SERVER_NAME in deploy/.env}
+      HTTPS_PORT: ${HTTPS_PORT:-443}
+      MAP_TILE_ORIGIN: ${MAP_TILE_ORIGIN:-https://tile.openstreetmap.org}
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${TLS_CERT_DIR:-./certs}:/etc/nginx/certs:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - outside
+
+  api:
+    <<: *app
+    command: ["trackid"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      init-storage:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      sourceafis-sidecar:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8082/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  worker:
+    <<: *app
+    command: ["worker"]
+    healthcheck:
+      test: ["CMD", "worker", "-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      init-storage:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      sourceafis-sidecar:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Brings the schema up to the image's version, then exits. Back up before changing
+  # TRACKID_VERSION: migrations only go forward (docs/deployment.md, "Upgrading").
+  migrate:
+    <<: *app
+    command: ["migrate", "up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # Makes sure the evidence bucket exists with object lock and S3_RETENTION_DAYS, then exits.
+  init-storage:
+    <<: *app
+    command: ["init-storage"]
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    restart: "no"
+
+  postgres:
+    image: ${TRACKID_IMAGE:-ghcr.io/rodfileto/trackid}-postgres:${TRACKID_VERSION}
+    build:
+      context: ../db/postgres
+    environment:
+      POSTGRES_DB: trackid
+      POSTGRES_USER: trackid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    shm_size: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trackid -d trackid"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      - internal
+
+  redis:
+    image: redis:7.4.12-alpine
+    command: ["sh", "-c", 'exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes']
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      - internal
+
+  # Object storage (decision 11). An institute with an S3 server of its own leaves this service
+  # out and sets S3_ENDPOINT for the app services instead (docs/deployment.md).
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.51
+    entrypoint: ["/bin/sh", "/start.sh"]
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in deploy/.env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY in deploy/.env}
+      SEAWEEDFS_VOLUME_SIZE_MB: ${SEAWEEDFS_VOLUME_SIZE_MB:-4096}
+      SEAWEEDFS_MIN_FREE: ${SEAWEEDFS_MIN_FREE:-5}
+    volumes:
+      - ../seaweedfs/start.sh:/start.sh:ro
+      - seaweedfs:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8333/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      - internal
+
+  sourceafis-sidecar:
+    image: ${TRACKID_IMAGE:-ghcr.io/rodfileto/trackid}-sourceafis:${TRACKID_VERSION}
+    build:
+      context: ../sourceafis-sidecar
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8090/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+    restart: unless-stopped
+    networks:
+      - internal
+
+networks:
+  # No route outside: the data services are reachable only from the app services.
+  internal:
+    internal: true
+  # The proxy's ports, and the app services' way out (a geocoder, a language model, Teams).
+  outside: {}
+
+volumes:
+  postgres:
+  redis:
+  seaweedfs:

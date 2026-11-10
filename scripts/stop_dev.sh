@@ -38,7 +38,7 @@ stop_process "Go API" "$RUN_DIR/backend.pid"
 if command -v docker >/dev/null 2>&1; then
   echo "Stopping TrackID infrastructure..."
   cd "$ROOT_DIR"
-  docker compose stop postgres redis minio sourceafis-sidecar
+  docker compose stop postgres redis seaweedfs sourceafis-sidecar
 fi
 
 echo "TrackID development stack stopped."

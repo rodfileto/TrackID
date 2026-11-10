@@ -1,12 +1,24 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"log"
+	"net"
 	"os"
+	"strings"
 	"time"
 )
 
 type Config struct {
+	// Environment is TRACKID_ENV: "development" (the default) or "production". In production a
+	// setting the deployment can't do without, or an integration it configured that doesn't come
+	// up, stops the process (CheckProduction, Unavailable) instead of leaving a feature off.
+	Environment string
+	// TrustedProxies are the addresses or CIDR ranges (TRUSTED_PROXIES, comma-separated) whose
+	// X-Forwarded-For the API believes for a client's address. Empty trusts none.
+	TrustedProxies []string
+
 	Port        string
 	DatabaseURL string
 	RedisURL    string
@@ -74,6 +86,11 @@ type Config struct {
 	AppURL            string
 	TeamsWebhookHosts string
 	TeamsLanguage     string
+
+	// The frontend's base map, served to it at runtime by /api/config (MAP_TILE_URL, a raster tile URL
+	// template, and MAP_TILE_ATTRIBUTION, its credit as HTML). Empty means OpenStreetMap's public tiles.
+	MapTileURL         string
+	MapTileAttribution string
 }
 
 func Load() Config {
@@ -118,7 +135,23 @@ func Load() Config {
 		askEndpoint, askModel, askAPIKey = os.Getenv("ASSIST_ENDPOINT"), os.Getenv("ASSIST_MODEL"), os.Getenv("ASSIST_API_KEY")
 	}
 
+	environment := os.Getenv("TRACKID_ENV")
+	switch environment {
+	case "":
+		environment = EnvironmentDevelopment
+	case EnvironmentDevelopment, EnvironmentProduction:
+	default:
+		log.Fatalf("TRACKID_ENV must be %q or %q, got %q", EnvironmentDevelopment, EnvironmentProduction, environment)
+	}
+	trustedProxies, err := parseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
+	if err != nil {
+		log.Fatalf("TRUSTED_PROXIES: %v", err)
+	}
+
 	return Config{
+		Environment:    environment,
+		TrustedProxies: trustedProxies,
+
 		Port:        port,
 		DatabaseURL: os.Getenv("DATABASE_URL"),
 		RedisURL:    os.Getenv("REDIS_URL"),
@@ -133,6 +166,9 @@ func Load() Config {
 		AppURL:            os.Getenv("APP_URL"),
 		TeamsWebhookHosts: os.Getenv("TEAMS_WEBHOOK_HOSTS"),
 		TeamsLanguage:     os.Getenv("TEAMS_LANGUAGE"),
+
+		MapTileURL:         os.Getenv("MAP_TILE_URL"),
+		MapTileAttribution: os.Getenv("MAP_TILE_ATTRIBUTION"),
 
 		VisionDetector:          detector,
 		VisionDetectorPath:      os.Getenv("VISION_DETECTOR_PATH"),
@@ -158,4 +194,84 @@ func Load() Config {
 		AskExtraBody: os.Getenv("ASK_EXTRA_BODY"),
 		AskTimeout:   askTimeout,
 	}
+}
+
+// The values of TRACKID_ENV.
+const (
+	EnvironmentDevelopment = "development"
+	EnvironmentProduction  = "production"
+)
+
+// MinJWTSecretBytes is the shortest JWT_SECRET production accepts: 32 bytes, an HS256 key's size.
+const MinJWTSecretBytes = 32
+
+// Production reports whether TRACKID_ENV is production.
+func (c Config) Production() bool { return c.Environment == EnvironmentProduction }
+
+// Process names what CheckProduction checks the settings for.
+type Process int
+
+const (
+	ProcessAPI Process = iota
+	ProcessWorker
+)
+
+// CheckProduction returns what is missing or unfit, all of it, for process to run in production:
+// the database, the queue and object storage, and for the API a JWT_SECRET of at least
+// MinJWTSecretBytes and APP_URL over https. Nil outside production, where a missing setting only
+// turns its feature off.
+func (c Config) CheckProduction(process Process) error {
+	if !c.Production() {
+		return nil
+	}
+	var problems []error
+	require := func(name, value string) {
+		if value == "" {
+			problems = append(problems, fmt.Errorf("%s is not set", name))
+		}
+	}
+	require("DATABASE_URL", c.DatabaseURL)
+	require("REDIS_URL", c.RedisURL)
+	require("S3_ENDPOINT", c.S3Endpoint)
+	require("S3_ACCESS_KEY", c.S3AccessKey)
+	require("S3_SECRET_KEY", c.S3SecretKey)
+	require("S3_BUCKET", c.S3Bucket)
+	if process == ProcessAPI {
+		if len(c.JWTSecret) < MinJWTSecretBytes {
+			problems = append(problems, fmt.Errorf("JWT_SECRET must be at least %d bytes (openssl rand -hex 32)", MinJWTSecretBytes))
+		}
+		if !strings.HasPrefix(c.AppURL, "https://") {
+			problems = append(problems, errors.New("APP_URL must be the https:// address users open"))
+		}
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	return fmt.Errorf("TRACKID_ENV=production: %w", errors.Join(problems...))
+}
+
+// Unavailable reports that an integration the deployment configured did not come up. Outside
+// production it logs and the process goes on without it, as development expects; in production it
+// stops the process, since a feature someone set up would otherwise be off without anyone noticing.
+func (c Config) Unavailable(format string, args ...any) {
+	if c.Production() {
+		log.Fatalf("TRACKID_ENV=production, stopping: "+format, args...)
+	}
+	log.Printf(format, args...)
+}
+
+// parseTrustedProxies splits a comma-separated list of addresses and CIDR ranges, checking each.
+func parseTrustedProxies(value string) ([]string, error) {
+	var proxies []string
+	for _, item := range strings.Split(value, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, _, err := net.ParseCIDR(item); err != nil && net.ParseIP(item) == nil {
+			return nil, fmt.Errorf("%q is neither an address nor a CIDR range", item)
+		}
+		proxies = append(proxies, item)
+	}
+	return proxies, nil
 }

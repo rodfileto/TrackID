@@ -25,17 +25,25 @@ services:
     volumes:
       - trackid-redis:/data
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+  # Object storage: SeaweedFS's S3 gateway (docs/production-plan.md, decision 11). The bucket is
+  # created by the API at its first start, unlocked: development data can be thrown away. The host
+  # port is still 59000, as with MinIO before it, so S3_ENDPOINT stays the same.
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.51
+    entrypoint: ["/bin/sh", "/start.sh"]
     environment:
-      MINIO_ROOT_USER: trackid
-      MINIO_ROOT_PASSWORD: trackid_dev_storage
+      S3_ACCESS_KEY: trackid
+      S3_SECRET_KEY: trackid_dev_storage
     ports:
-      - "${MINIO_PORT:-59000}:9000"
-      - "${MINIO_CONSOLE_PORT:-59001}:9001"
+      - "${S3_PORT:-${MINIO_PORT:-59000}}:8333"
     volumes:
-      - trackid-minio:/data
+      - ./seaweedfs/start.sh:/start.sh:ro
+      - trackid-seaweedfs:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8333/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   # SourceAFIS fingerprint extraction/matching for the fingerprint package
   # (FINGERPRINT_SIDECAR_URL=http://localhost:58090). See sourceafis-sidecar/.
@@ -47,4 +55,4 @@ services:
 volumes:
   trackid-postgres:
   trackid-redis:
-  trackid-minio:
+  trackid-seaweedfs:

@@ -154,3 +154,18 @@ func (client *Client) readFile(path string) ([]byte, error) {
 	}
 	return nil, fmt.Errorf("storage: file %q is outside the allowed roots (%s)", path, FileRootsEnv)
 }
+
+// Ping checks that the object storage answers and the client's bucket exists.
+func (client *Client) Ping(ctx context.Context) error {
+	if client == nil || client.minio == nil {
+		return fmt.Errorf("object storage is not configured")
+	}
+	exists, err := client.minio.BucketExists(ctx, client.bucket)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("bucket %q does not exist", client.bucket)
+	}
+	return nil
+}

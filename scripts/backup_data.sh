@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dumps Postgres and mirrors the S3/MinIO bucket into a single, self-contained,
+# Dumps Postgres and copies the S3 bucket into a single, self-contained,
 # timestamped folder that can be copied to another machine and fed to
 # restore_data.sh there.
 set -euo pipefail
@@ -19,6 +19,8 @@ S3_ACCESS_KEY="${S3_ACCESS_KEY:-trackid}"
 S3_SECRET_KEY="${S3_SECRET_KEY:-trackid_dev_storage}"
 S3_BUCKET="${S3_BUCKET:-trackid-local}"
 
+RCLONE_IMAGE="rclone/rclone:1.71.2"
+
 OUT_DIR="${1:-$ROOT_DIR/backups/$(date +%Y%m%d_%H%M%S)}"
 mkdir -p "$OUT_DIR/s3/$S3_BUCKET"
 
@@ -36,17 +38,18 @@ docker run --rm --network host \
   > "$OUT_DIR/postgres.dump"
 echo "    -> $OUT_DIR/postgres.dump ($(du -h "$OUT_DIR/postgres.dump" | cut -f1))"
 
-echo "==> Mirroring S3 bucket '$S3_BUCKET' from $S3_ENDPOINT ..."
-S3_HOST_NO_SCHEME="${S3_ENDPOINT#http://}"
-S3_HOST_NO_SCHEME="${S3_HOST_NO_SCHEME#https://}"
+echo "==> Copying S3 bucket '$S3_BUCKET' from $S3_ENDPOINT ..."
+# rclone speaks plain S3, so this works with SeaweedFS, MinIO or any other S3 server.
 docker run --rm --network host \
   --user "$(id -u):$(id -g)" \
-  -e HOME=/tmp \
-  -e "MC_HOST_backupsrc=${S3_ENDPOINT%%://*}://${S3_ACCESS_KEY}:${S3_SECRET_KEY}@${S3_HOST_NO_SCHEME}" \
+  -e RCLONE_CONFIG_SRC_TYPE=s3 \
+  -e RCLONE_CONFIG_SRC_PROVIDER=Other \
+  -e "RCLONE_CONFIG_SRC_ENDPOINT=$S3_ENDPOINT" \
+  -e "RCLONE_CONFIG_SRC_ACCESS_KEY_ID=$S3_ACCESS_KEY" \
+  -e "RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY=$S3_SECRET_KEY" \
   -v "$OUT_DIR/s3/$S3_BUCKET:/out" \
-  --entrypoint mc \
-  minio/mc:latest \
-  mirror --overwrite "backupsrc/$S3_BUCKET" /out
+  "$RCLONE_IMAGE" \
+  copy --checksum "src:$S3_BUCKET" /out
 
 echo "    -> $OUT_DIR/s3/$S3_BUCKET ($(du -sh "$OUT_DIR/s3/$S3_BUCKET" | cut -f1))"
 

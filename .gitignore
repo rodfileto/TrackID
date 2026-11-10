@@ -19,8 +19,6 @@ frontend/.env.local
 *.log
 logs/
 
-# Docker
-.dockerignore
 
 # Quarto (papers/)
 papers/.quarto/

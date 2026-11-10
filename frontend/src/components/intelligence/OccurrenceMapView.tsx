@@ -13,7 +13,7 @@ import type {
   OccurrenceMap,
 } from "../../services/occurrences";
 import { GROUP_COLORS, OTHER_COLOR } from "./groupColors";
-import { TILE_ATTRIBUTION, TILE_URL } from "./tiles";
+import { tileAttribution, tileUrl } from "./tiles";
 
 export type MapMode = "points" | "heatmap";
 
@@ -55,9 +55,9 @@ export default function OccurrenceMapView({
         sources: {
           base: {
             type: "raster",
-            tiles: [TILE_URL],
+            tiles: [tileUrl()],
             tileSize: 256,
-            attribution: TILE_ATTRIBUTION,
+            attribution: tileAttribution(),
             maxzoom: 19,
           },
         },

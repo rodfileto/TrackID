@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Map as MapLibreMap, Marker, NavigationControl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { TILE_ATTRIBUTION, TILE_URL } from "./tiles";
+import { tileAttribution, tileUrl } from "./tiles";
 
 interface Props {
   lon: number;
@@ -26,7 +26,7 @@ export default function OccurrencePointMap({ lon, lat, precision }: Props) {
       container: container.current,
       style: {
         version: 8,
-        sources: { base: { type: "raster", tiles: [TILE_URL], tileSize: 256, attribution: TILE_ATTRIBUTION, maxzoom: 19 } },
+        sources: { base: { type: "raster", tiles: [tileUrl()], tileSize: 256, attribution: tileAttribution(), maxzoom: 19 } },
         layers: [{ id: "base", type: "raster", source: "base" }],
       },
       center: [lon, lat],

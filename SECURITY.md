@@ -66,7 +66,9 @@ What the application itself enforces:
 ## What you must do when deploying
 
 The application does not, by itself, provide everything an operational deployment
-needs. Before casework use, an institute must:
+needs. [docs/deployment.md](docs/deployment.md) and `deploy/` do most of what follows: TLS at
+nginx, no exposed ports but the proxy's, a rate limit on sign-in, secrets that must be set, and
+evidence storage with object lock. Before casework use, an institute must:
 
 1. **Generate real secrets.** The values in `.env.example` and `docker-compose.yml`
    are development defaults. Set a strong `JWT_SECRET`, database password, MinIO

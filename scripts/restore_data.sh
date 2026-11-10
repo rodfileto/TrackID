@@ -53,15 +53,15 @@ docker run --rm --network host \
 
 if [[ -n "$S3_SRC_DIR" ]]; then
   echo "==> Restoring S3 bucket '$S3_BUCKET' from $S3_SRC_DIR ..."
-  S3_HOST_NO_SCHEME="${S3_ENDPOINT#http://}"
-  S3_HOST_NO_SCHEME="${S3_HOST_NO_SCHEME#https://}"
   docker run --rm --network host \
-    -e HOME=/tmp \
-    -e "MC_HOST_restoredst=${S3_ENDPOINT%%://*}://${S3_ACCESS_KEY}:${S3_SECRET_KEY}@${S3_HOST_NO_SCHEME}" \
+    -e RCLONE_CONFIG_DST_TYPE=s3 \
+    -e RCLONE_CONFIG_DST_PROVIDER=Other \
+    -e "RCLONE_CONFIG_DST_ENDPOINT=$S3_ENDPOINT" \
+    -e "RCLONE_CONFIG_DST_ACCESS_KEY_ID=$S3_ACCESS_KEY" \
+    -e "RCLONE_CONFIG_DST_SECRET_ACCESS_KEY=$S3_SECRET_KEY" \
     -v "$S3_SRC_DIR:/in:ro" \
-    --entrypoint /bin/sh \
-    minio/mc:latest \
-    -c "mc mb --ignore-existing restoredst/$S3_BUCKET && mc mirror --overwrite /in restoredst/$S3_BUCKET"
+    rclone/rclone:1.71.2 \
+    copy --checksum /in "dst:$S3_BUCKET"
 else
   echo "No S3 backup folder found under $IN_DIR/s3 — skipping S3 restore."
 fi

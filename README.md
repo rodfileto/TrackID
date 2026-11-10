@@ -72,6 +72,8 @@ needs [WordCraft](https://github.com/storytold/wordcraft) built beside this repo
 
 - [Architecture](docs/ARCHITECTURE.md): the reusable core, data flow, structure, extension
   contract and development setup.
+- [Deploying TrackID](docs/deployment.md): running it for casework on one server, from a release
+  (`deploy/`).
 - [Models and licences](docs/MODELS.md): the models TrackID runs, where their weights come from,
   and the licences of each, including the map tiles.
 - Plans, each with what is decided and what is built:

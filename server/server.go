@@ -54,6 +54,12 @@ func Run(options Options) error {
 	env.Load()
 
 	configuration := config.Load()
+	if err := configuration.CheckProduction(config.ProcessAPI); err != nil {
+		return err
+	}
+	if configuration.Production() {
+		gin.SetMode(gin.ReleaseMode)
+	}
 
 	var db *sql.DB
 	if configuration.DatabaseURL != "" {
@@ -69,10 +75,12 @@ func Run(options Options) error {
 	if configuration.S3Endpoint != "" && configuration.S3AccessKey != "" &&
 		configuration.S3SecretKey != "" && configuration.S3Bucket != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		store, _ = storage.NewClient(ctx, configuration.S3Endpoint, configuration.S3AccessKey, configuration.S3SecretKey, configuration.S3Bucket)
+		var err error
+		store, err = storage.NewClient(ctx, configuration.S3Endpoint, configuration.S3AccessKey, configuration.S3SecretKey, configuration.S3Bucket)
 		cancel()
-		if store == nil {
-			log.Printf("object storage is configured but unreachable; evidence uploads will return 503")
+		if err != nil {
+			store = nil
+			configuration.Unavailable("object storage is configured but unreachable; evidence uploads will return 503: %v", err)
 		}
 	} else {
 		log.Printf("object storage is not configured; evidence uploads will return 503")
@@ -83,7 +91,7 @@ func Run(options Options) error {
 		var err error
 		queueClient, err = queue.OpenClient(configuration.RedisURL)
 		if err != nil {
-			log.Printf("Redis is configured but the queue client could not be created; background jobs will not be enqueued: %v", err)
+			configuration.Unavailable("Redis is configured but the queue client could not be created; background jobs will not be enqueued: %v", err)
 		} else {
 			defer queueClient.Close()
 		}
@@ -104,7 +112,7 @@ func Run(options Options) error {
 			UseGPU:            configuration.VisionUseGPU,
 		})
 		if err != nil {
-			log.Printf("vision service unavailable; face detection and on-the-fly face comparison will return 503: %v", err)
+			configuration.Unavailable("vision service unavailable; face detection and on-the-fly face comparison will return 503: %v", err)
 		} else {
 			defer vis.Close()
 			faceVision = vis
@@ -122,7 +130,7 @@ func Run(options Options) error {
 		fp, err := fingerprint.NewClient(ctx, configuration.FingerprintSidecarURL)
 		cancel()
 		if err != nil {
-			log.Printf("fingerprint sidecar unavailable; the image lab will not compare: %v", err)
+			configuration.Unavailable("fingerprint sidecar unavailable; the image lab will not compare: %v", err)
 		} else {
 			fingerprintClient = fp
 		}
@@ -135,7 +143,7 @@ func Run(options Options) error {
 		BaseURL: configuration.GeocoderURL, UserAgent: configuration.GeocoderUserAgent,
 		Email: configuration.GeocoderEmail, MinInterval: configuration.GeocoderMinInterval,
 	}); err != nil {
-		log.Printf("geocoder unavailable; address search will return 503: %v", err)
+		configuration.Unavailable("geocoder unavailable; address search will return 503: %v", err)
 	} else {
 		geocoder = g
 	}
@@ -156,7 +164,7 @@ func Run(options Options) error {
 		ExtraBody: configuration.AskExtraBody, Timeout: configuration.AskTimeout,
 	})
 	if err != nil {
-		log.Printf("the AI mode is off: %v", err)
+		configuration.Unavailable("the AI mode is off: %v", err)
 	} else if askModel == nil {
 		log.Printf("ASK_ENDPOINT/ASK_MODEL not configured; the AI mode is off")
 	} else {
@@ -176,7 +184,9 @@ func Run(options Options) error {
 			SecretsKey: configuration.SecretsKey, AppURL: configuration.AppURL,
 			Hosts: teams.ParseHosts(configuration.TeamsWebhookHosts), Language: configuration.TeamsLanguage,
 		})
-		if err != nil {
+		if err != nil && configuration.SecretsKey != "" {
+			configuration.Unavailable("Teams messages are off: %v", err)
+		} else if err != nil {
 			log.Printf("Teams messages are off: %v", err)
 		} else {
 			teamsService.Run(signals)
@@ -217,6 +227,8 @@ func Run(options Options) error {
 		AssistModel:     configuration.AssistModel,
 		AskModel:        askModel,
 		VideoLab:        videoLab,
+		TrustedProxies:  configuration.TrustedProxies,
+		ClientConfig:    api.ClientConfig{MapTileURL: configuration.MapTileURL, MapTileAttribution: configuration.MapTileAttribution},
 	}
 	if options.Register != nil {
 		deps.Register = func(engine *gin.Engine, protected *gin.RouterGroup) {
