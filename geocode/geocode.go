@@ -61,7 +61,22 @@ type Result struct {
 	// Source identifies the provider's object, e.g. "osm:way/123456", for
 	// tracing a stored point back to where it came from.
 	Source string `json:"source"`
+
+	// Flags are reasons to check the point before trusting it (the Flag constants); empty when it
+	// is what the address asked for.
+	Flags []string `json:"flags,omitempty"`
 }
+
+// Flags on a Result: it may be right, but something about it is uncertain.
+const (
+	FlagNearestNumber    = "NEAREST_NUMBER"    // the number wasn't found; this is the nearest on the street
+	FlagStreetAdjusted   = "STREET_ADJUSTED"   // the street's spelling differs from the address's
+	FlagLocatorPartial   = "LOCATOR_PARTIAL"   // only part of the quadra, lote, casa was found: the point is that part
+	FlagStreetOnly       = "STREET_ONLY"       // the address has a number, the point only the street
+	FlagMunicipalityOnly = "MUNICIPALITY_ONLY" // only the municipality was found: the point is near its middle
+	FlagNamedPlace       = "NAMED_PLACE"       // found by name, with no municipality to confirm it
+	FlagSourcesDisagree  = "SOURCES_DISAGREE"  // the census list and the map are far apart
+)
 
 // Geocoder resolves addresses to points (Search) and points to addresses
 // (Reverse).

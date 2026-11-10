@@ -136,16 +136,21 @@ func Run(options Options) error {
 		}
 	}
 
-	// One client for the process, so its pacing keeps the whole API within the geocoding
-	// server's rate limit.
-	var geocoder geocode.Geocoder
+	// Addresses go through the census list in the database (cmd/load-cnefe), then Nominatim, then
+	// the municipality (geocode.Layered, docs/geocoding-plan.md). One Nominatim client for the
+	// process, so its pacing keeps the whole API within the server's rate limit.
+	var nominatim geocode.Geocoder
 	if g, err := geocode.NewNominatim(geocode.NominatimConfig{
 		BaseURL: configuration.GeocoderURL, UserAgent: configuration.GeocoderUserAgent,
 		Email: configuration.GeocoderEmail, MinInterval: configuration.GeocoderMinInterval,
 	}); err != nil {
-		configuration.Unavailable("geocoder unavailable; address search will return 503: %v", err)
+		configuration.Unavailable("Nominatim unavailable; addresses are found only in the census list and the municipalities: %v", err)
 	} else {
-		geocoder = g
+		nominatim = g
+	}
+	var geocoder geocode.Geocoder
+	if db != nil || nominatim != nil {
+		geocoder = geocode.NewLayered(db, nominatim)
 	}
 
 	// The assist lab's drafter: a local model that drafts registrations from uploaded files. Left

@@ -113,11 +113,18 @@ Then sign in at `https://<SERVER_NAME>` and create the other accounts from the a
 2. **Load the municipalities** (needed to place occurrences), from the GeoJSON that
    `tools/municipalities/fetch.py` writes:
    `docker compose run --rm -v /path/to/municipalities.geojson:/in.geojson:ro api load-municipalities -file /in.geojson -commit`.
-3. **Set a tile server and a geocoder of your own** (`MAP_TILE_URL`, `MAP_TILE_ORIGIN`,
+3. **Load the census address list** for the states the institute works in, which finds house
+   numbers and quadra/lote addresses without sending them anywhere (`docs/geocoding-plan.md`).
+   Get each state's file from IBGE
+   (`https://ftp.ibge.gov.br/Cadastro_Nacional_de_Enderecos_para_Fins_Estatisticos/Censo_Demografico_2022/Arquivos_CNEFE/CSV/UF/`,
+   e.g. `31_MG.zip`), then
+   `docker compose run --rm --no-deps -v /path/to/31_MG.zip:/in.zip:ro api load-cnefe -file /in.zip -commit`.
+   A large state takes a few GB of memory while it loads. The API uses it within a minute.
+4. **Set a tile server and a geocoder of your own** (`MAP_TILE_URL`, `MAP_TILE_ORIGIN`,
    `GEOCODER_URL`). Otherwise, users' browsers fetch map tiles from OpenStreetMap's public servers,
    and addresses typed into occurrences go to its public geocoder.
-4. **Review the model licences** (`docs/MODELS.md`).
-5. **Test a backup and a restore** (below) before the first real case.
+5. **Review the model licences** (`docs/MODELS.md`).
+6. **Test a backup and a restore** (below) before the first real case.
 
 ## Evidence retention
 

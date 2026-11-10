@@ -481,6 +481,33 @@ type ClusterMerge struct {
 	Reason        sql.NullString `db:"reason" json:"reason"`
 }
 
+type CnefeAddress struct {
+	MunicipalityCode string      `db:"municipality_code" json:"municipality_code"`
+	StreetKey        string      `db:"street_key" json:"street_key"`
+	LocalityKey      string      `db:"locality_key" json:"locality_key"`
+	Number           int32       `db:"number" json:"number"`
+	Street           string      `db:"street" json:"street"`
+	Lat              float64     `db:"lat" json:"lat"`
+	Lon              float64     `db:"lon" json:"lon"`
+	Level            int16       `db:"level" json:"level"`
+	Addresses        int32       `db:"addresses" json:"addresses"`
+	Locality         string      `db:"locality" json:"locality"`
+	Cep              string      `db:"cep" json:"cep"`
+	Geom             interface{} `db:"geom" json:"geom"`
+}
+
+type CnefePlace struct {
+	MunicipalityCode string  `db:"municipality_code" json:"municipality_code"`
+	PlaceKey         string  `db:"place_key" json:"place_key"`
+	LocalityKey      string  `db:"locality_key" json:"locality_key"`
+	Lat              float64 `db:"lat" json:"lat"`
+	Lon              float64 `db:"lon" json:"lon"`
+	Level            int16   `db:"level" json:"level"`
+	Addresses        int32   `db:"addresses" json:"addresses"`
+	Locality         string  `db:"locality" json:"locality"`
+	Cep              string  `db:"cep" json:"cep"`
+}
+
 type CodificationEmbedding struct {
 	ID             int64          `db:"id" json:"id"`
 	CodificationID int64          `db:"codification_id" json:"codification_id"`

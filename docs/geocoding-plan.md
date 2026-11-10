@@ -1,6 +1,9 @@
 # Geocoding: the census address list in core, Nominatim optional
 
-Proposed 2026-11-10. Nothing here is built yet. The design was decided the same day: IBGE's
+Proposed 2026-11-10. **Phase 1 is built** the same day (`geocode.Layered`, `cmd/load-cnefe`,
+migration 024) and was tested on synthetic addresses and on IBGE's real Distrito Federal file
+(1.3 million rows, loaded in 16 s into about 170 MB). Phases 2 to 4 are still proposals. The
+design was decided the same day: IBGE's
 census address list (CNEFE) becomes core's first source for addresses, both address → point and
 point → address, with a Nominatim server optional behind it. The questions at the end are about
 details.
@@ -97,6 +100,23 @@ large state reduces to about 1 GB in Postgres, and loading one takes a few GB of
 9. **Production plan.** `deploy/` documents loading CNEFE as a step after install (`load-cnefe`
    per state the institute works in). The `nominatim` profile moves to phase 5: optional, for
    named places, streets without census addresses, and other countries.
+
+## What phase 1 changed from the design
+
+- **Numbers are keyed by locality too.** One municipality can have streets of the same name in
+  different localities. In the Distrito Federal, 1% of the numbered keys (167 of 17,531) put
+  such streets more than a kilometre apart, and averaging them would place the address between
+  the two. An address that names its locality gets that one. One that names none gets the point
+  only when every locality's is the same place (within 500 m); otherwise CNEFE gives no answer
+  and the search goes on.
+- **No default state.** An address with no state finds its municipality only when one
+  municipality has that name; otherwise it needs the state (or, in phase 2, the map's view).
+- **The parser** reads every state by code and by name, roads of every state (SP-330), more street
+  types (viela, beco, ladeira, largo, vicinal, passagem, servidão, caminho), and the number after a
+  comma first, since a street's name can end in a number (Rua 24, Vicinal VC 201).
+- **The DF's `EDF` street type** is dropped from numbered streets as from places: it only says
+  the street field is a sector.
+- **Reverse stays the map server's** until phase 2.
 
 ## Phases
 

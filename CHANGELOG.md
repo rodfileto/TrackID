@@ -39,6 +39,14 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- Geocoding on IBGE's census address list (`docs/geocoding-plan.md` phase 1). `cmd/load-cnefe` loads a state's
+  CNEFE (Censo 2022) into TrackID's database (migration 024), and `scripts/load_cnefe.sh <UF>` fetches and loads one
+  in development. `geocode.Layered`, now the API's geocoder, searches the list (number, nearest number, quadra/lote),
+  then Nominatim, then the municipality's point from core's own table, keeping the first result that agrees with the
+  municipality and state the address names. Results carry `flags` saying how sure they are (`NEAREST_NUMBER`,
+  `STREET_ADJUSTED`, `LOCATOR_PARTIAL`, `STREET_ONLY`, `MUNICIPALITY_ONLY`, `NAMED_PLACE`, `SOURCES_DISAGREE`).
+  `geocode.ParseAddress` reads Brazilian addresses for all 27 states.
+
 - Backups and restores for a deployment (`docs/production-plan.md` phase 4). `deploy/backup.sh` dumps the database,
   encrypted to an age key when `BACKUP_AGE_RECIPIENT` is set, then copies the evidence bucket into a mirror that
   each run adds to and checks, and keeps `BACKUP_KEEP` dumps. `deploy/restore.sh` restores one into a stack and

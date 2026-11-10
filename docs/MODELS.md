@@ -38,6 +38,14 @@ provider requires it, `MAP_TILE_ATTRIBUTION` on the server, which serves them to
 at `/api/config` (`VITE_MAP_TILE_*` still set a build's default). The same applies to
 geocoding (`geocode/`, see `.env.example`).
 
+## Addresses (CNEFE)
+
+`cmd/load-cnefe` loads IBGE's *Cadastro Nacional de Endereços para Fins Estatísticos* from the
+Censo Demográfico 2022, published per state at ftp.ibge.gov.br. It is public data. Anything showing
+a point found in it should credit "Fonte: IBGE, Censo Demográfico 2022"; such results have a
+`source` starting with `cnefe2022:`. Points found by Nominatim are OpenStreetMap data (above), and a
+municipality's point comes from the boundaries `cmd/load-municipalities` loaded.
+
 ## What the published images contain
 
 The images published from a release tag (`.github/workflows/images.yml`) hold TrackID's own code
