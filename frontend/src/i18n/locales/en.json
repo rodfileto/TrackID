@@ -66,7 +66,25 @@
     "markAllRead": "Mark all as read",
     "assigned": "New assignment: {{type}}, case {{caseId}}",
     "assignedBlind": "New assignment: blind examination",
-    "assignmentMoved": "This assignment is no longer yours"
+    "assignmentMoved": "This assignment is no longer yours",
+    "person": "Person you follow: {{name}}",
+    "cluster": "Cluster #{{id}} you follow",
+    "followUnavailable": "Changes to something you follow",
+    "change": {
+      "CASE_LINKED_one": "New case: {{refs}}",
+      "CASE_LINKED_other": "{{count}} new cases: {{refs}}",
+      "CLUSTER_JOINED_one": "Joined cluster #{{refs}}",
+      "CLUSTER_JOINED_other": "Joined {{count}} clusters: #{{refs}}",
+      "DOCUMENT_ADDED_one": "1 new document",
+      "DOCUMENT_ADDED_other": "{{count}} new documents",
+      "MERGED_one": "Merged into cluster #{{refs}}",
+      "MERGED_other": "Merged into cluster #{{refs}}",
+      "MEMBER_ADDED_one": "1 new member",
+      "MEMBER_ADDED_other": "{{count}} new members",
+      "MEMBER_LEFT_one": "1 member left",
+      "MEMBER_LEFT_other": "{{count}} members left",
+      "other": "{{change}}: {{count}}"
+    }
   },
   "userMenu": {
     "editProfile": "Edit profile",
@@ -2077,5 +2095,32 @@
     "noCases": "No face of another case from this threshold.",
     "error": "Could not search from this face.",
     "open": "Search in TrackID"
+  },
+  "follow": {
+    "follow": "Follow",
+    "following": "Following",
+    "hint": "Be told in the bell, and in Teams if you set a webhook, when this changes",
+    "started": "You'll be told when this changes",
+    "stopped": "You no longer follow this",
+    "automaticCluster": "Follows the automatic cluster #{{id}}"
+  },
+  "teams": {
+    "title": "Microsoft Teams",
+    "desc": "Get each notification in Teams too. The message only says there is something to see in TrackID.",
+    "unavailable": "Teams messages are not configured on this server.",
+    "configured": "A webhook is set (since {{when}}).",
+    "notConfigured": "No webhook is set.",
+    "lastError": "The last message failed ({{when}}): {{error}}",
+    "url": "Webhook URL",
+    "replace": "Replace the webhook URL",
+    "hint": "In Power Automate, create a flow with the trigger \"When a Teams webhook request is received\" and the action \"Post card in a chat or channel\", and paste its URL here. Once saved, the URL is not shown again.",
+    "saved": "Teams webhook saved",
+    "removed": "Teams webhook removed",
+    "remove": "Remove",
+    "removing": "Removing…",
+    "test": "Send a test",
+    "testing": "Sending…",
+    "testSent": "Test message sent",
+    "loadError": "Could not load your Teams settings. Is the server up to date?"
   }
 }

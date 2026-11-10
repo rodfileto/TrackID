@@ -9,7 +9,8 @@ Redis for any of this.
 
 - **The push path exists, with one producer.** The hub (`realtime`), stored notifications
   (`notifications`) and the bell in the header are in place. Assigning an analysis step to someone
-  is the only event that notifies. Chat and cameras are not built.
+  notifies, as do changes to followed persons and clusters, which can also reach Teams
+  (`docs/follow-plan.md`). Chat and cameras are not built.
 - **Other pages still poll.** Pages that follow background work poll, as `CaseVideosCard` does
   every 3 seconds.
 - **Two processes.** The API (`cmd/trackid`, started by `server.Run`) and the worker

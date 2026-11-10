@@ -10,6 +10,7 @@ import { useCurrentUser } from "../context/CurrentUserContext";
 import { changeMyPassword, removeAvatar, updateMe, uploadAvatar } from "../services/auth";
 import FileDropzone from "../components/common/FileDropzone";
 import { AVATAR_FILES } from "../components/common/fileTypes";
+import TeamsWebhookCard from "../components/common/TeamsWebhookCard";
 
 const inputClass =
   "h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90";
@@ -192,6 +193,8 @@ export default function UserProfiles() {
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">{t("profile.managedByAdmin")}</p>
         </ComponentCard>
+
+        <TeamsWebhookCard />
 
         <ComponentCard title={t("profile.password.title")}>
           <form onSubmit={savePassword} className="grid max-w-xl gap-4">

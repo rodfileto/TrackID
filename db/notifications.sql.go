@@ -33,6 +33,37 @@ func (q *Queries) GetNotificationRecipient(ctx context.Context, id int64) (int64
 	return user_id, err
 }
 
+const getTeamsDelivery = `-- name: GetTeamsDelivery :one
+SELECT n.user_id, n.kind, n.read_at, n.teams_sent_at, u.teams_webhook, u.is_active
+FROM notifications n
+JOIN users u ON u.id = n.user_id
+WHERE n.id = $1
+`
+
+type GetTeamsDeliveryRow struct {
+	UserID       int64        `db:"user_id" json:"user_id"`
+	Kind         string       `db:"kind" json:"kind"`
+	ReadAt       sql.NullTime `db:"read_at" json:"read_at"`
+	TeamsSentAt  sql.NullTime `db:"teams_sent_at" json:"teams_sent_at"`
+	TeamsWebhook []byte       `db:"teams_webhook" json:"teams_webhook"`
+	IsActive     bool         `db:"is_active" json:"is_active"`
+}
+
+// What deciding on a Teams message for one notification needs.
+func (q *Queries) GetTeamsDelivery(ctx context.Context, id int64) (GetTeamsDeliveryRow, error) {
+	row := q.db.QueryRowContext(ctx, getTeamsDelivery, id)
+	var i GetTeamsDeliveryRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Kind,
+		&i.ReadAt,
+		&i.TeamsSentAt,
+		&i.TeamsWebhook,
+		&i.IsActive,
+	)
+	return i, err
+}
+
 const insertNotification = `-- name: InsertNotification :one
 INSERT INTO notifications (user_id, kind, subject) VALUES ($1, $2, $3) RETURNING id
 `
@@ -51,9 +82,9 @@ func (q *Queries) InsertNotification(ctx context.Context, arg InsertNotification
 }
 
 const listNotifications = `-- name: ListNotifications :many
-SELECT id, kind, subject, created_at, read_at FROM notifications
+SELECT id, kind, subject, created_at, updated_at, read_at, first_change_id, last_change_id FROM notifications
 WHERE user_id = $1
-ORDER BY id DESC
+ORDER BY updated_at DESC, id DESC
 LIMIT $2
 `
 
@@ -63,13 +94,17 @@ type ListNotificationsParams struct {
 }
 
 type ListNotificationsRow struct {
-	ID        int64        `db:"id" json:"id"`
-	Kind      string       `db:"kind" json:"kind"`
-	Subject   string       `db:"subject" json:"subject"`
-	CreatedAt time.Time    `db:"created_at" json:"created_at"`
-	ReadAt    sql.NullTime `db:"read_at" json:"read_at"`
+	ID            int64         `db:"id" json:"id"`
+	Kind          string        `db:"kind" json:"kind"`
+	Subject       string        `db:"subject" json:"subject"`
+	CreatedAt     time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt     time.Time     `db:"updated_at" json:"updated_at"`
+	ReadAt        sql.NullTime  `db:"read_at" json:"read_at"`
+	FirstChangeID sql.NullInt64 `db:"first_change_id" json:"first_change_id"`
+	LastChangeID  sql.NullInt64 `db:"last_change_id" json:"last_change_id"`
 }
 
+// Latest first, a grouped notification counting from its last update.
 func (q *Queries) ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]ListNotificationsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listNotifications, arg.UserID, arg.Limit)
 	if err != nil {
@@ -84,7 +119,10 @@ func (q *Queries) ListNotifications(ctx context.Context, arg ListNotificationsPa
 			&i.Kind,
 			&i.Subject,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 			&i.ReadAt,
+			&i.FirstChangeID,
+			&i.LastChangeID,
 		); err != nil {
 			return nil, err
 		}
@@ -122,6 +160,15 @@ func (q *Queries) MarkNotificationRead(ctx context.Context, arg MarkNotification
 	return err
 }
 
+const markTeamsSent = `-- name: MarkTeamsSent :exec
+UPDATE notifications SET teams_sent_at = NOW() WHERE id = $1
+`
+
+func (q *Queries) MarkTeamsSent(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, markTeamsSent, id)
+	return err
+}
+
 const signalLive = `-- name: SignalLive :exec
 SELECT pg_notify($1::text, $2::text)
 `
@@ -134,4 +181,34 @@ type SignalLiveParams struct {
 func (q *Queries) SignalLive(ctx context.Context, arg SignalLiveParams) error {
 	_, err := q.db.ExecContext(ctx, signalLive, arg.Channel, arg.Payload)
 	return err
+}
+
+const upsertSubjectNotification = `-- name: UpsertSubjectNotification :one
+INSERT INTO notifications (user_id, kind, subject, first_change_id, last_change_id)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id, kind, subject) WHERE read_at IS NULL AND kind IN ('PERSON_CHANGED', 'CLUSTER_CHANGED')
+DO UPDATE SET last_change_id = GREATEST(notifications.last_change_id, EXCLUDED.last_change_id), updated_at = NOW()
+RETURNING id
+`
+
+type UpsertSubjectNotificationParams struct {
+	UserID        int64         `db:"user_id" json:"user_id"`
+	Kind          string        `db:"kind" json:"kind"`
+	Subject       string        `db:"subject" json:"subject"`
+	FirstChangeID sql.NullInt64 `db:"first_change_id" json:"first_change_id"`
+	LastChangeID  sql.NullInt64 `db:"last_change_id" json:"last_change_id"`
+}
+
+// A user keeps one unread notification per followed subject: further changes extend it.
+func (q *Queries) UpsertSubjectNotification(ctx context.Context, arg UpsertSubjectNotificationParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertSubjectNotification,
+		arg.UserID,
+		arg.Kind,
+		arg.Subject,
+		arg.FirstChangeID,
+		arg.LastChangeID,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }

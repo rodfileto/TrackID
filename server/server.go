@@ -23,6 +23,7 @@ import (
 	"github.com/rodfileto/trackid/assist"
 	"github.com/rodfileto/trackid/cases"
 	"github.com/rodfileto/trackid/fingerprint"
+	"github.com/rodfileto/trackid/follows"
 	"github.com/rodfileto/trackid/geocode"
 	"github.com/rodfileto/trackid/internal/config"
 	"github.com/rodfileto/trackid/internal/database"
@@ -33,6 +34,7 @@ import (
 	"github.com/rodfileto/trackid/realtime"
 	"github.com/rodfileto/trackid/reports"
 	"github.com/rodfileto/trackid/storage"
+	"github.com/rodfileto/trackid/teams"
 	"github.com/rodfileto/trackid/video"
 )
 
@@ -166,11 +168,35 @@ func Run(options Options) error {
 
 	// Live updates: the hub pushes to browsers, and the listener brings in what the worker or any
 	// other process committed (docs/realtime-plan.md). Neither needs Redis.
+	// Teams tells users of their notifications through the webhook each sets (docs/follow-plan.md).
+	var teamsService *teams.Service
+	if db != nil {
+		var err error
+		teamsService, err = teams.New(db, teams.Settings{
+			SecretsKey: configuration.SecretsKey, AppURL: configuration.AppURL,
+			Hosts: teams.ParseHosts(configuration.TeamsWebhookHosts), Language: configuration.TeamsLanguage,
+		})
+		if err != nil {
+			log.Printf("Teams messages are off: %v", err)
+		} else {
+			teamsService.Run(signals)
+			if configuration.AppURL == "" {
+				log.Printf("APP_URL is not set; Teams messages will have no button to open the app")
+			}
+		}
+	}
+
 	var hub *realtime.Hub
 	if db != nil {
 		hub = realtime.NewHub(realtime.Options{})
 		defer hub.Close()
-		go realtime.Listen(signals, configuration.DatabaseURL, notifications.Channel, notifications.Relay(db, hub), hub.Resync)
+		relay := notifications.Relay(db, hub)
+		go realtime.Listen(signals, configuration.DatabaseURL, notifications.Channel, func(ctx context.Context, payload string) {
+			relay(ctx, payload)
+			teamsService.Notify(payload)
+		}, hub.Resync)
+		// Followed persons and clusters: what changed becomes notifications (follows package).
+		go follows.Run(signals, db, configuration.DatabaseURL)
 	}
 
 	deps := api.Dependencies{
@@ -180,6 +206,7 @@ func Run(options Options) error {
 		Storage:     store,
 		Queue:       queueClient,
 		Hub:         hub,
+		Teams:       teamsService,
 		FaceVision:  faceVision,
 		Geocoder:    geocoder,
 		Fingerprint: fingerprintClient,

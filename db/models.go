@@ -513,6 +513,13 @@ type FeatureEmbedding struct {
 	MatchPath          string         `db:"match_path" json:"match_path"`
 }
 
+type Follow struct {
+	UserID      int64     `db:"user_id" json:"user_id"`
+	SubjectKind string    `db:"subject_kind" json:"subject_kind"`
+	SubjectID   string    `db:"subject_id" json:"subject_id"`
+	CreatedAt   time.Time `db:"created_at" json:"created_at"`
+}
+
 type Gender struct {
 	Code  string `db:"code" json:"code"`
 	Label string `db:"label" json:"label"`
@@ -598,12 +605,16 @@ type Municipality struct {
 }
 
 type Notification struct {
-	ID        int64        `db:"id" json:"id"`
-	UserID    int64        `db:"user_id" json:"user_id"`
-	Kind      string       `db:"kind" json:"kind"`
-	Subject   string       `db:"subject" json:"subject"`
-	CreatedAt time.Time    `db:"created_at" json:"created_at"`
-	ReadAt    sql.NullTime `db:"read_at" json:"read_at"`
+	ID            int64         `db:"id" json:"id"`
+	UserID        int64         `db:"user_id" json:"user_id"`
+	Kind          string        `db:"kind" json:"kind"`
+	Subject       string        `db:"subject" json:"subject"`
+	CreatedAt     time.Time     `db:"created_at" json:"created_at"`
+	ReadAt        sql.NullTime  `db:"read_at" json:"read_at"`
+	UpdatedAt     time.Time     `db:"updated_at" json:"updated_at"`
+	FirstChangeID sql.NullInt64 `db:"first_change_id" json:"first_change_id"`
+	LastChangeID  sql.NullInt64 `db:"last_change_id" json:"last_change_id"`
+	TeamsSentAt   sql.NullTime  `db:"teams_sent_at" json:"teams_sent_at"`
 }
 
 type Occurrence struct {
@@ -680,6 +691,17 @@ type ReportDelivery struct {
 	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
 }
 
+type SubjectChange struct {
+	ID          int64        `db:"id" json:"id"`
+	SubjectKind string       `db:"subject_kind" json:"subject_kind"`
+	SubjectID   string       `db:"subject_id" json:"subject_id"`
+	Change      string       `db:"change" json:"change"`
+	Ref         string       `db:"ref" json:"ref"`
+	Amount      int32        `db:"amount" json:"amount"`
+	CreatedAt   time.Time    `db:"created_at" json:"created_at"`
+	FannedOutAt sql.NullTime `db:"fanned_out_at" json:"fanned_out_at"`
+}
+
 type Unit struct {
 	ID               int64          `db:"id" json:"id"`
 	OrganizationID   int64          `db:"organization_id" json:"organization_id"`
@@ -695,22 +717,26 @@ type Unit struct {
 }
 
 type User struct {
-	ID                  int64        `db:"id" json:"id"`
-	FirstName           string       `db:"first_name" json:"first_name"`
-	LastName            string       `db:"last_name" json:"last_name"`
-	StaffNumber         string       `db:"staff_number" json:"staff_number"`
-	JobTitle            string       `db:"job_title" json:"job_title"`
-	Username            string       `db:"username" json:"username"`
-	Email               string       `db:"email" json:"email"`
-	PasswordHash        string       `db:"password_hash" json:"password_hash"`
-	AccountRole         string       `db:"account_role" json:"account_role"`
-	ExaminesFingerprint bool         `db:"examines_fingerprint" json:"examines_fingerprint"`
-	ExaminesFacial      bool         `db:"examines_facial" json:"examines_facial"`
-	IntelligenceAnalyst bool         `db:"intelligence_analyst" json:"intelligence_analyst"`
-	Coordinator         bool         `db:"coordinator" json:"coordinator"`
-	IsActive            bool         `db:"is_active" json:"is_active"`
-	CreatedAt           time.Time    `db:"created_at" json:"created_at"`
-	UpdatedAt           time.Time    `db:"updated_at" json:"updated_at"`
-	Avatar              []byte       `db:"avatar" json:"avatar"`
-	AvatarUpdatedAt     sql.NullTime `db:"avatar_updated_at" json:"avatar_updated_at"`
+	ID                  int64          `db:"id" json:"id"`
+	FirstName           string         `db:"first_name" json:"first_name"`
+	LastName            string         `db:"last_name" json:"last_name"`
+	StaffNumber         string         `db:"staff_number" json:"staff_number"`
+	JobTitle            string         `db:"job_title" json:"job_title"`
+	Username            string         `db:"username" json:"username"`
+	Email               string         `db:"email" json:"email"`
+	PasswordHash        string         `db:"password_hash" json:"password_hash"`
+	AccountRole         string         `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool           `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool           `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool           `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool           `db:"coordinator" json:"coordinator"`
+	IsActive            bool           `db:"is_active" json:"is_active"`
+	CreatedAt           time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt           time.Time      `db:"updated_at" json:"updated_at"`
+	Avatar              []byte         `db:"avatar" json:"avatar"`
+	AvatarUpdatedAt     sql.NullTime   `db:"avatar_updated_at" json:"avatar_updated_at"`
+	TeamsWebhook        []byte         `db:"teams_webhook" json:"teams_webhook"`
+	TeamsWebhookSetAt   sql.NullTime   `db:"teams_webhook_set_at" json:"teams_webhook_set_at"`
+	TeamsLastError      sql.NullString `db:"teams_last_error" json:"teams_last_error"`
+	TeamsFailedAt       sql.NullTime   `db:"teams_failed_at" json:"teams_failed_at"`
 }

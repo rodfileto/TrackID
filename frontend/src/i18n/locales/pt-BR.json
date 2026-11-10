@@ -66,7 +66,25 @@
     "markAllRead": "Marcar todas como lidas",
     "assigned": "Nova atribuição: {{type}}, caso {{caseId}}",
     "assignedBlind": "Nova atribuição: exame às cegas",
-    "assignmentMoved": "Esta atribuição não é mais sua"
+    "assignmentMoved": "Esta atribuição não é mais sua",
+    "person": "Pessoa que você segue: {{name}}",
+    "cluster": "Cluster #{{id}} que você segue",
+    "followUnavailable": "Novidades de algo que você segue",
+    "change": {
+      "CASE_LINKED_one": "Novo caso: {{refs}}",
+      "CASE_LINKED_other": "{{count}} novos casos: {{refs}}",
+      "CLUSTER_JOINED_one": "Entrou no cluster #{{refs}}",
+      "CLUSTER_JOINED_other": "Entrou em {{count}} clusters: #{{refs}}",
+      "DOCUMENT_ADDED_one": "1 novo documento",
+      "DOCUMENT_ADDED_other": "{{count}} novos documentos",
+      "MERGED_one": "Fundido ao cluster #{{refs}}",
+      "MERGED_other": "Fundido ao cluster #{{refs}}",
+      "MEMBER_ADDED_one": "1 novo membro",
+      "MEMBER_ADDED_other": "{{count}} novos membros",
+      "MEMBER_LEFT_one": "1 membro saiu",
+      "MEMBER_LEFT_other": "{{count}} membros saíram",
+      "other": "{{change}}: {{count}}"
+    }
   },
   "userMenu": {
     "editProfile": "Editar perfil",
@@ -2077,5 +2095,32 @@
     "noCases": "Nenhum rosto de outro caso a partir deste limiar.",
     "error": "Não foi possível pesquisar a partir deste rosto.",
     "open": "Pesquisar no TrackID"
+  },
+  "follow": {
+    "follow": "Seguir",
+    "following": "Seguindo",
+    "hint": "Seja avisado no sino, e no Teams se tiver um webhook, quando isto mudar",
+    "started": "Você será avisado quando isto mudar",
+    "stopped": "Você deixou de seguir",
+    "automaticCluster": "Segue o cluster automático #{{id}}"
+  },
+  "teams": {
+    "title": "Microsoft Teams",
+    "desc": "Receba cada notificação também no Teams. A mensagem diz apenas que há algo para ver no TrackID.",
+    "unavailable": "As mensagens do Teams não estão configuradas neste servidor.",
+    "configured": "Há um webhook configurado (desde {{when}}).",
+    "notConfigured": "Nenhum webhook configurado.",
+    "lastError": "A última mensagem falhou ({{when}}): {{error}}",
+    "url": "URL do webhook",
+    "replace": "Substituir a URL do webhook",
+    "hint": "No Power Automate, crie um fluxo com o gatilho \"Quando uma solicitação de webhook do Teams for recebida\" e a ação \"Publicar cartão em um chat ou canal\", e cole a URL aqui. Depois de salva, a URL não é mostrada de novo.",
+    "saved": "Webhook do Teams salvo",
+    "removed": "Webhook do Teams removido",
+    "remove": "Remover",
+    "removing": "Removendo…",
+    "test": "Enviar um teste",
+    "testing": "Enviando…",
+    "testSent": "Mensagem de teste enviada",
+    "loadError": "Não foi possível carregar suas configurações do Teams. O servidor está atualizado?"
   }
 }

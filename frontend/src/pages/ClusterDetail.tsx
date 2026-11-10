@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import BackLink from "../components/common/BackLink";
+import FollowButton from "../components/common/FollowButton";
 import { useTranslation } from "react-i18next";
 import ForceGraph2D, {
   type ForceGraphMethods,
@@ -725,8 +726,9 @@ export default function ClusterDetailPage() {
     <>
       <PageMeta title={`${title} | TrackID`} description={t("clusterDetail.metaDescription")} />
       <PageBreadcrumb pageTitle={title} />
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <BackLink fallback="/clusters" label={t("clusterDetail.back")} />
+        {id > 0 && <FollowButton kind="CLUSTER" id={id} />}
       </div>
     </>
   );

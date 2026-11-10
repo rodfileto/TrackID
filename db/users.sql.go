@@ -12,6 +12,25 @@ import (
 	"github.com/lib/pq"
 )
 
+const clearTeamsFailure = `-- name: ClearTeamsFailure :exec
+UPDATE users SET teams_last_error = NULL, teams_failed_at = NULL WHERE id = $1 AND teams_failed_at IS NOT NULL
+`
+
+func (q *Queries) ClearTeamsFailure(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, clearTeamsFailure, id)
+	return err
+}
+
+const clearTeamsWebhook = `-- name: ClearTeamsWebhook :exec
+UPDATE users SET teams_webhook = NULL, teams_webhook_set_at = NULL, teams_last_error = NULL, teams_failed_at = NULL
+WHERE id = $1
+`
+
+func (q *Queries) ClearTeamsWebhook(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, clearTeamsWebhook, id)
+	return err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (first_name, last_name, staff_number, job_title, username, email, password_hash, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
@@ -81,6 +100,29 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		&i.Coordinator,
 		&i.IsActive,
 		&i.AvatarUpdatedAt,
+	)
+	return i, err
+}
+
+const getTeamsWebhook = `-- name: GetTeamsWebhook :one
+SELECT teams_webhook, teams_webhook_set_at, teams_last_error, teams_failed_at FROM users WHERE id = $1
+`
+
+type GetTeamsWebhookRow struct {
+	TeamsWebhook      []byte         `db:"teams_webhook" json:"teams_webhook"`
+	TeamsWebhookSetAt sql.NullTime   `db:"teams_webhook_set_at" json:"teams_webhook_set_at"`
+	TeamsLastError    sql.NullString `db:"teams_last_error" json:"teams_last_error"`
+	TeamsFailedAt     sql.NullTime   `db:"teams_failed_at" json:"teams_failed_at"`
+}
+
+func (q *Queries) GetTeamsWebhook(ctx context.Context, id int64) (GetTeamsWebhookRow, error) {
+	row := q.db.QueryRowContext(ctx, getTeamsWebhook, id)
+	var i GetTeamsWebhookRow
+	err := row.Scan(
+		&i.TeamsWebhook,
+		&i.TeamsWebhookSetAt,
+		&i.TeamsLastError,
+		&i.TeamsFailedAt,
 	)
 	return i, err
 }
@@ -372,6 +414,35 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordTeamsFailure = `-- name: RecordTeamsFailure :exec
+UPDATE users SET teams_last_error = $2, teams_failed_at = NOW() WHERE id = $1
+`
+
+type RecordTeamsFailureParams struct {
+	ID             int64          `db:"id" json:"id"`
+	TeamsLastError sql.NullString `db:"teams_last_error" json:"teams_last_error"`
+}
+
+func (q *Queries) RecordTeamsFailure(ctx context.Context, arg RecordTeamsFailureParams) error {
+	_, err := q.db.ExecContext(ctx, recordTeamsFailure, arg.ID, arg.TeamsLastError)
+	return err
+}
+
+const setTeamsWebhook = `-- name: SetTeamsWebhook :exec
+UPDATE users SET teams_webhook = $2, teams_webhook_set_at = NOW(), teams_last_error = NULL, teams_failed_at = NULL
+WHERE id = $1
+`
+
+type SetTeamsWebhookParams struct {
+	ID           int64  `db:"id" json:"id"`
+	TeamsWebhook []byte `db:"teams_webhook" json:"teams_webhook"`
+}
+
+func (q *Queries) SetTeamsWebhook(ctx context.Context, arg SetTeamsWebhookParams) error {
+	_, err := q.db.ExecContext(ctx, setTeamsWebhook, arg.ID, arg.TeamsWebhook)
+	return err
 }
 
 const setUserAvatar = `-- name: SetUserAvatar :execrows

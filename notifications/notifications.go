@@ -21,17 +21,25 @@ const (
 	EventChanged = "notifications.changed"
 	// KindAnalysisAssigned has an analysis ID as its subject.
 	KindAnalysisAssigned = "ANALYSIS_ASSIGNED"
+	// KindPersonChanged has a followed person's person_id as its subject, and KindClusterChanged a followed
+	// AUTOMATIC cluster's ID (follows package). Each reports a range of the subject's changes.
+	KindPersonChanged  = "PERSON_CHANGED"
+	KindClusterChanged = "CLUSTER_CHANGED"
 	// ListLimit is how many notifications a user is shown.
 	ListLimit = 30
 )
 
-// Item is one stored notification.
+// Item is one stored notification. FirstChangeID and LastChangeID bound the subject changes a PERSON_CHANGED or
+// CLUSTER_CHANGED notification reports; they are zero for other kinds.
 type Item struct {
-	ID        int64
-	Kind      string
-	Subject   string
-	CreatedAt time.Time
-	Read      bool
+	ID            int64
+	Kind          string
+	Subject       string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Read          bool
+	FirstChangeID int64
+	LastChangeID  int64
 }
 
 // Create records a notification on q, which should be the transaction of the action it reports:
@@ -41,6 +49,11 @@ func Create(ctx context.Context, q *db.Queries, userID int64, kind, subject stri
 	if err != nil {
 		return err
 	}
+	return Signal(ctx, q, id)
+}
+
+// Signal tells the API, once q's transaction commits, that a notification is new or has changed.
+func Signal(ctx context.Context, q *db.Queries, id int64) error {
 	return q.SignalLive(ctx, db.SignalLiveParams{Channel: Channel, Payload: strconv.FormatInt(id, 10)})
 }
 
@@ -76,7 +89,8 @@ func List(ctx context.Context, sqlDB *sql.DB, userID int64) ([]Item, int64, erro
 	}
 	items := make([]Item, len(rows))
 	for i, r := range rows {
-		items[i] = Item{ID: r.ID, Kind: r.Kind, Subject: r.Subject, CreatedAt: r.CreatedAt, Read: r.ReadAt.Valid}
+		items[i] = Item{ID: r.ID, Kind: r.Kind, Subject: r.Subject, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+			Read: r.ReadAt.Valid, FirstChangeID: r.FirstChangeID.Int64, LastChangeID: r.LastChangeID.Int64}
 	}
 	return items, unread, nil
 }

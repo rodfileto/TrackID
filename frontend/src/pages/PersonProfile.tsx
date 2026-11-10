@@ -16,6 +16,7 @@ import Badge from "../components/ui/badge/Badge";
 import IdentityFileThumbnail from "../components/persons/IdentityFileThumbnail";
 import CaseTraceThumbnail from "../components/cases/CaseTraceThumbnail";
 import { useCurrentUser } from "../context/CurrentUserContext";
+import FollowButton from "../components/common/FollowButton";
 import LinkBadge from "../components/analyses/LinkBadge";
 import PersonArticle from "../components/articles/PersonArticle";
 import { IdentityConflictList } from "../components/clusters/IdentityConflicts";
@@ -250,8 +251,9 @@ export default function PersonProfilePage() {
       />
       <PageBreadcrumb pageTitle={t("personProfile.title")} />
 
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <BackLink fallback="/persons" label={t("personProfile.backToLookup")} />
+        {profile && isIntelligence && <FollowButton kind="PERSON" id={profile.identity.personId} />}
       </div>
 
       {loading && !profile && (

@@ -55,3 +55,20 @@ SELECT id, username, first_name, last_name, staff_number, job_title FROM users W
 
 -- name: GetUsersByUsername :many
 SELECT id, username, first_name, last_name, staff_number, job_title FROM users WHERE username = ANY(@usernames::text[]);
+
+-- name: SetTeamsWebhook :exec
+UPDATE users SET teams_webhook = $2, teams_webhook_set_at = NOW(), teams_last_error = NULL, teams_failed_at = NULL
+WHERE id = $1;
+
+-- name: ClearTeamsWebhook :exec
+UPDATE users SET teams_webhook = NULL, teams_webhook_set_at = NULL, teams_last_error = NULL, teams_failed_at = NULL
+WHERE id = $1;
+
+-- name: GetTeamsWebhook :one
+SELECT teams_webhook, teams_webhook_set_at, teams_last_error, teams_failed_at FROM users WHERE id = $1;
+
+-- name: RecordTeamsFailure :exec
+UPDATE users SET teams_last_error = $2, teams_failed_at = NOW() WHERE id = $1;
+
+-- name: ClearTeamsFailure :exec
+UPDATE users SET teams_last_error = NULL, teams_failed_at = NULL WHERE id = $1 AND teams_failed_at IS NOT NULL;

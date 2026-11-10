@@ -10,23 +10,27 @@ import (
 
 	"github.com/rodfileto/trackid/analyses"
 	"github.com/rodfileto/trackid/distribution"
+	"github.com/rodfileto/trackid/follows"
 	"github.com/rodfileto/trackid/notifications"
 	"github.com/rodfileto/trackid/realtime"
 )
 
 // notificationView is one notification as its reader may see it now. The analysis fields are
 // present only while the reader still holds that analysis. Blind says to show no case identity,
-// as on the My analyses page.
+// as on the My analyses page. Changes is what a followed person or cluster went through, present
+// only while the reader is an intelligence analyst, who may open any of it.
 type notificationView struct {
-	ID           int64         `json:"id"`
-	Kind         string        `json:"kind"`
-	CreatedAt    time.Time     `json:"createdAt"`
-	Read         bool          `json:"read"`
-	CaseID       string        `json:"caseId,omitempty"`
-	AnalysisID   int64         `json:"analysisId,omitempty"`
-	AnalysisType analyses.Type `json:"analysisType,omitempty"`
-	Step         analyses.Step `json:"step,omitempty"`
-	Blind        bool          `json:"blind,omitempty"`
+	ID           int64            `json:"id"`
+	Kind         string           `json:"kind"`
+	CreatedAt    time.Time        `json:"createdAt"`
+	UpdatedAt    time.Time        `json:"updatedAt"`
+	Read         bool             `json:"read"`
+	CaseID       string           `json:"caseId,omitempty"`
+	AnalysisID   int64            `json:"analysisId,omitempty"`
+	AnalysisType analyses.Type    `json:"analysisType,omitempty"`
+	Step         analyses.Step    `json:"step,omitempty"`
+	Blind        bool             `json:"blind,omitempty"`
+	Changes      *follows.Summary `json:"changes,omitempty"`
 }
 
 // ListNotificationsHandler returns the signed-in user's latest notifications and unread count.
@@ -48,9 +52,19 @@ func ListNotificationsHandler(sqlDB *sql.DB) gin.HandlerFunc {
 		for _, analysis := range held {
 			byID[strconv.FormatInt(analysis.AnalysisID, 10)] = analysis
 		}
+		summaries := map[int64]follows.Summary{}
+		if user.IntelligenceAccess() {
+			if summaries, err = follows.Summarize(ctx, sqlDB, items); err != nil {
+				context.JSON(http.StatusInternalServerError, gin.H{"error": "could not list notifications"})
+				return
+			}
+		}
 		views := make([]notificationView, len(items))
 		for i, item := range items {
-			views[i] = notificationView{ID: item.ID, Kind: item.Kind, CreatedAt: item.CreatedAt, Read: item.Read}
+			views[i] = notificationView{ID: item.ID, Kind: item.Kind, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt, Read: item.Read}
+			if summary, ok := summaries[item.ID]; ok {
+				views[i].Changes = &summary
+			}
 			if analysis, ok := byID[item.Subject]; ok && item.Kind == notifications.KindAnalysisAssigned {
 				views[i].CaseID, views[i].AnalysisID = analysis.CaseID, analysis.AnalysisID
 				views[i].AnalysisType, views[i].Step, views[i].Blind = analysis.Type, analysis.Step, analysis.Blind

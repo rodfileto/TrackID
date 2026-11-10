@@ -10,6 +10,7 @@ import {
   type NotificationPage,
 } from "../../services/notifications";
 import { subscribeRealtime } from "../../services/realtime";
+import { useSearchParams } from "react-router";
 
 const refreshingEvents = new Set(["connected", "resync", "notifications.changed"]);
 
@@ -21,6 +22,16 @@ export default function NotificationDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const [page, setPage] = useState<NotificationPage>({ items: [], unread: 0 });
   const latestRequest = useRef(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // A Teams message's button opens the app with the bell open.
+  useEffect(() => {
+    if (searchParams.get("notifications") !== "1") return;
+    setIsOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("notifications");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const load = useCallback(async () => {
     latestRequest.current += 1;
@@ -64,7 +75,36 @@ export default function NotificationDropdown() {
     markAllNotificationsRead().catch(() => void load());
   };
 
+  const subjectTitle = (changes: NonNullable<AppNotification["changes"]>): string =>
+    changes.subjectKind === "PERSON"
+      ? t("notifications.person", { name: changes.name || changes.subjectId })
+      : t("notifications.cluster", { id: changes.subjectId });
+
+  const changeLine = (c: { change: string; count: number; refs?: string[] }): string => {
+    const refs = (c.refs ?? []).join(", ");
+    return t(`notifications.change.${c.change}`, {
+      count: c.count,
+      refs,
+      defaultValue: t("notifications.change.other", { count: c.count, change: c.change }),
+    });
+  };
+
+  const target = (item: AppNotification): string | undefined => {
+    if (item.changes) {
+      const c = item.changes;
+      if (c.subjectKind === "PERSON") return c.personNumber ? `/persons/${c.personNumber}` : undefined;
+      return `/clusters/${c.mergedInto ?? c.subjectId}`;
+    }
+    if (item.analysisId !== undefined) {
+      return `/cases/${encodeURIComponent(item.caseId ?? "")}/analyses/${item.analysisId}`;
+    }
+    return undefined;
+  };
+
   const message = (item: AppNotification): string => {
+    if (item.kind === "PERSON_CHANGED" || item.kind === "CLUSTER_CHANGED") {
+      return item.changes ? subjectTitle(item.changes) : t("notifications.followUnavailable");
+    }
     if (item.analysisId === undefined) return t("notifications.assignmentMoved");
     if (item.blind) return t("notifications.assignedBlind");
     return t("notifications.assigned", {
@@ -86,6 +126,15 @@ export default function NotificationDropdown() {
         >
           {message(item)}
         </span>
+        {item.changes && item.changes.changes.length > 0 && (
+          <span className="mb-1.5 block text-theme-xs text-gray-600 dark:text-gray-300">
+            {item.changes.changes.map((c) => (
+              <span key={c.change} className="block">
+                {changeLine(c)}
+              </span>
+            ))}
+          </span>
+        )}
         <span className="flex items-center gap-2 text-gray-500 text-theme-xs dark:text-gray-400">
           {item.step && (
             <>
@@ -93,7 +142,7 @@ export default function NotificationDropdown() {
               <span className="w-1 h-1 bg-gray-400 rounded-full"></span>
             </>
           )}
-          <span>{new Date(item.createdAt).toLocaleString(i18n.language)}</span>
+          <span>{new Date(item.updatedAt ?? item.createdAt).toLocaleString(i18n.language)}</span>
         </span>
       </span>
     </>
@@ -157,10 +206,10 @@ export default function NotificationDropdown() {
           <ul className="flex flex-col h-auto overflow-y-auto custom-scrollbar">
             {page.items.map((item) => (
               <li key={item.id}>
-                {item.analysisId !== undefined ? (
+                {target(item) !== undefined ? (
                   <DropdownItem
                     tag="a"
-                    to={`/cases/${encodeURIComponent(item.caseId ?? "")}/analyses/${item.analysisId}`}
+                    to={target(item)}
                     onClick={() => markRead(item)}
                     onItemClick={closeDropdown}
                     baseClassName=""

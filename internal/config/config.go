@@ -64,6 +64,16 @@ type Config struct {
 	AskExtraBody string
 	// AskTimeout bounds one question (ASK_TIMEOUT); zero means ask.DefaultTimeout.
 	AskTimeout time.Duration
+
+	// Teams: each user may set a Microsoft Teams webhook and be told of their notifications there (teams package,
+	// docs/follow-plan.md). SecretsKey encrypts the webhooks (SECRETS_KEY, 32 bytes in base64 or hex); without it
+	// Teams is off. AppURL is the frontend's base URL, which the message's button opens (APP_URL).
+	// TeamsWebhookHosts are the host suffixes a webhook may point at (TEAMS_WEBHOOK_HOSTS, comma-separated; empty
+	// means the teams package's default). TeamsLanguage is the messages' language (TEAMS_LANGUAGE: pt-BR or en).
+	SecretsKey        string
+	AppURL            string
+	TeamsWebhookHosts string
+	TeamsLanguage     string
 }
 
 func Load() Config {
@@ -118,6 +128,11 @@ func Load() Config {
 		S3AccessKey: os.Getenv("S3_ACCESS_KEY"),
 		S3SecretKey: os.Getenv("S3_SECRET_KEY"),
 		S3Bucket:    os.Getenv("S3_BUCKET"),
+
+		SecretsKey:        os.Getenv("SECRETS_KEY"),
+		AppURL:            os.Getenv("APP_URL"),
+		TeamsWebhookHosts: os.Getenv("TEAMS_WEBHOOK_HOSTS"),
+		TeamsLanguage:     os.Getenv("TEAMS_LANGUAGE"),
 
 		VisionDetector:          detector,
 		VisionDetectorPath:      os.Getenv("VISION_DETECTOR_PATH"),

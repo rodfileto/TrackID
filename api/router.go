@@ -15,6 +15,7 @@ import (
 	"github.com/rodfileto/trackid/realtime"
 	"github.com/rodfileto/trackid/reports"
 	"github.com/rodfileto/trackid/storage"
+	"github.com/rodfileto/trackid/teams"
 	"github.com/rodfileto/trackid/video"
 )
 
@@ -61,6 +62,9 @@ type Dependencies struct {
 	AssistModel string
 	// AskModel answers the AI mode's questions (ask package); nil means questions return 503.
 	AskModel *ask.Model
+	// Teams tells users of their notifications in Microsoft Teams (teams package). Nil means Teams is off: the
+	// webhook routes report it unavailable or answer 503.
+	Teams *teams.Service
 	// Register is an optional hook called after the core routes are registered.
 	// It receives the engine and the authenticated route group (mounted under
 	// /api) so integrations can attach their own routes. May be nil.
@@ -98,6 +102,10 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.GET("notifications", ListNotificationsHandler(deps.DB))
 	protected.PUT("notifications/read-all", MarkAllNotificationsReadHandler(deps.DB, deps.Hub))
 	protected.PUT("notifications/:notificationId/read", MarkNotificationReadHandler(deps.DB, deps.Hub))
+	protected.GET("me/teams-webhook", GetTeamsWebhookHandler(deps.Teams))
+	protected.PUT("me/teams-webhook", SetTeamsWebhookHandler(deps.Teams))
+	protected.DELETE("me/teams-webhook", ClearTeamsWebhookHandler(deps.Teams))
+	protected.POST("me/teams-webhook/test", TestTeamsWebhookHandler(deps.Teams))
 	// The home page's illustration, anonymous: every signed-in user sees it.
 	protected.GET("overview/graph", OverviewGraphHandler(deps.DB))
 
@@ -276,6 +284,12 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	intelligence.POST("operations", CreateOperationHandler(deps.DB))
 	intelligence.GET("operations/:slug", GetOperationHandler(deps.DB))
 	intelligence.PUT("operations/:slug", UpdateOperationHandler(deps.DB))
+
+	// Following persons and clusters (docs/follow-plan.md): :kind is person or cluster.
+	intelligence.GET("follows", ListFollowsHandler(deps.DB))
+	intelligence.GET("follows/:kind/:id", GetFollowHandler(deps.DB))
+	intelligence.PUT("follows/:kind/:id", FollowHandler(deps.DB))
+	intelligence.DELETE("follows/:kind/:id", UnfollowHandler(deps.DB))
 
 	intelligence.GET("clusters", ListClustersHandler(deps.DB))
 	intelligence.GET("clusters/graph", ClustersGraphHandler(deps.DB))
