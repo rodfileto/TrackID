@@ -884,7 +884,8 @@
     "newComparison": "Um novo exame",
     "addPairsButton_one": "Incluir {{count}} par",
     "addPairsButton_other": "Incluir {{count}} pares",
-    "choosePairs": "Escolher pares para exame"
+    "choosePairs": "Escolher pares para exame",
+    "noPairsScene": "Sem pares: liste-os acima se os fragmentos do local forem confrontados. Sem nenhum, envie para seguir ao laudo."
   },
   "distribution": {
     "title": "Distribuição",
@@ -2063,7 +2064,9 @@
     "team": "Equipe: {{names}}",
     "otherOfficers": "Também presentes: {{names}}",
     "playAudio": "Ouvir nota de áudio: {{name}}",
-    "audioError": "Não foi possível carregar a nota de áudio"
+    "audioError": "Não foi possível carregar a nota de áudio",
+    "openSceneExamination": "Abrir exame de local",
+    "sceneExaminationOpened": "Exame de local aberto e atribuído a você"
   },
   "scene": {
     "title": "Coleta em local",
@@ -2204,5 +2207,27 @@
     "register": "Registrar a coleta",
     "backToApp": "Voltar ao TrackID",
     "fromNote": "Preenchido a partir da nota de campo de {{when}}."
+  },
+  "analysisMaterial": {
+    "title": "Material",
+    "desc": "Marque os fragmentos nas imagens do caso, traga documentos padrão e liste os pares a confrontar. Cada par é decidido abaixo e seu texto vai para o laudo.",
+    "noEvidence": "O caso ainda não tem imagens.",
+    "broughtIn": "Trazido para este exame",
+    "fromCollection": "Coleta em local {{sequence}}",
+    "fromRequest": "Enviado com {{document}}",
+    "noOrigin": "Origem não registrada",
+    "mark": "Marcar vestígios",
+    "role": "Papel",
+    "lift": "Fragmento",
+    "reference": "Padrão",
+    "bringIn": "Trazer documento padrão",
+    "bringInHint": "Uma ficha decadactilar ou documento de identidade obtido para este exame. Seus vestígios são padrões.",
+    "broughtInDone_one": "Documento trazido.",
+    "broughtInDone_other": "{{count}} documentos trazidos.",
+    "pairsTitle": "Pares a confrontar",
+    "markFirst": "Marque um fragmento primeiro.",
+    "comparedWith": "Confrontado com",
+    "addPair": "Adicionar par",
+    "confirmRemovePair": "Remover este par?"
   }
 }

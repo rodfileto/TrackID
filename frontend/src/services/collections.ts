@@ -103,6 +103,8 @@ export interface RegisteredCollection {
 export interface MaterialOrigin {
   requestId?: number;
   collectionId?: number;
+  /** An analysis of the case that brought the material in (a reference document). */
+  analysisId?: number;
   vestigeId?: number;
 }
 
@@ -188,13 +190,14 @@ export async function receiveCollectionMaterial(
 
 /** Whether an upload says where it came from, as the server requires. */
 export function originChosen(o: MaterialOrigin | null): o is MaterialOrigin {
-  return !!o && (!!o.requestId || !!o.collectionId);
+  return !!o && (!!o.requestId || !!o.collectionId || !!o.analysisId);
 }
 
 /** Adds an origin to an upload's form. */
 export function appendOrigin(form: FormData, origin: MaterialOrigin): void {
   if (origin.requestId) form.append("requestId", String(origin.requestId));
   if (origin.collectionId) form.append("collectionId", String(origin.collectionId));
+  if (origin.analysisId) form.append("analysisId", String(origin.analysisId));
   if (origin.vestigeId) form.append("vestigeId", String(origin.vestigeId));
 }
 

@@ -123,6 +123,14 @@ export default function CaseCollectionsCard({
     void act(() => openFollowUp(caseId, "FINGERPRINT_COMPARISON", request.id), t("collections.comparisonOpened"));
   }
 
+  // The scene examination answers the request that formalized the scene, and takes the case's
+  // collections as its subject (docs/scene-examination-plan.md, decision 5).
+  function sceneExaminationFor(c: Collection) {
+    if (!c.request) return;
+    const request = c.request;
+    void act(() => openFollowUp(caseId, "CRIME_SCENE_EXAMINATION", request.id), t("collections.sceneExaminationOpened"));
+  }
+
   const originChoices = [
     ...requests.map((r) => ({ key: `r${r.id}`, label: t("origin.request", { sequence: r.sequence, document: r.documentReference }) })),
     ...collections.filter((c) => !c.nothingCollected).map((c) => ({ key: `c${c.id}`, label: t("collections.collectionN", { sequence: c.sequence }) })),
@@ -189,6 +197,11 @@ export default function CaseCollectionsCard({
               {c.request && !c.nothingCollected && modality === "FINGERPRINT" && canWrite && isFingerprintExaminer && (
                 <button type="button" className={smallButton} disabled={busy} onClick={() => comparisonFor(c)}>
                   {t("collections.openComparison")}
+                </button>
+              )}
+              {c.request && modality === "FINGERPRINT" && canWrite && isFingerprintExaminer && (
+                <button type="button" className={smallButton} disabled={busy} onClick={() => sceneExaminationFor(c)}>
+                  {t("collections.openSceneExamination")}
                 </button>
               )}
             </li>

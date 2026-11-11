@@ -66,7 +66,6 @@ const allNavSections: NavSection[] = [
         name: "nav.examinations",
         subItems: [
           { name: "nav.labExamination", path: "/examinations/laboratory", soon: true },
-          { name: "nav.crimeSceneExamination", path: "/examinations/crime-scene", soon: true },
         ],
       },
     ],

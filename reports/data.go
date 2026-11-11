@@ -68,6 +68,9 @@ type RequestInfo struct {
 	CitedInquiry      string     `json:"citedInquiryNumber,omitempty"`
 	Questions         []string   `json:"questions"`
 	Files             []FileInfo `json:"files"`
+	// References are other numbers the request goes by, labelled by the institute (a task in its
+	// case system): requests.Reference.
+	References []requests.Reference `json:"references"`
 }
 
 // FileInfo is one received file.
@@ -255,7 +258,10 @@ func Build(ctx context.Context, q *db.Queries, analysisID int64, images Images, 
 			}
 			info := &RequestInfo{Sequence: r.Sequence, Authority: r.Authority, DocumentReference: r.DocumentReference,
 				DocumentDate: r.DocumentDate, ReceivedOn: r.ReceivedOn, DueOn: r.DueOn, CitedReference: r.CitedReference,
-				CitedInquiry: r.CitedInquiry, Questions: r.Questions, Files: []FileInfo{}}
+				CitedInquiry: r.CitedInquiry, Questions: r.Questions, Files: []FileInfo{}, References: r.References}
+			if info.References == nil {
+				info.References = []requests.Reference{}
+			}
 			for _, f := range r.Files {
 				info.Files = append(info.Files, FileInfo{Filename: f.Filename, SHA256: f.SHA256})
 			}

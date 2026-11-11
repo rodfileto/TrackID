@@ -126,4 +126,13 @@ CREATE TABLE case_collection_members (collection_id, user_id, PRIMARY KEY (colle
   `Data.Scene` (occurrence, collections and team, vestiges and seals); a scene examination's report
   lists every lift marked on the case. Core registers no scene layout: drafting one without a
   layout is refused (`ErrNoLayout`). Checked by `api/scene_examination_db_test.go`.
+- 2026-11-11: **Phase 3, frontend**: the workspace's material panel (`AnalysisMaterialPanel`) for
+  the first examiner of a fingerprint comparison or scene examination while examining: the case's
+  images with their origin and vestige, marking traces (the case page's marker), a trace's role,
+  bringing in a reference document (its traces become references), and listing or taking back
+  pairs. The collections card opens the scene examination for a formalized collection, and the
+  "coming soon" entry is gone. Report data carries the request's references (its task number).
+  Checked in a headless browser on the built frontend: a scene case with a sealed lift, its request,
+  the scene examination opened from the API, a card brought in and marked as reference, a pair
+  listed, decided with notes and submitted to verification.
 

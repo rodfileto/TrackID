@@ -884,7 +884,8 @@
     "newComparison": "A new comparison",
     "addPairsButton_one": "Add {{count}} pair",
     "addPairsButton_other": "Add {{count}} pairs",
-    "choosePairs": "Choose comparison pairs"
+    "choosePairs": "Choose comparison pairs",
+    "noPairsScene": "No pairs: list them above if the scene's lifts are to be compared. With none, submit to go to the laudo."
   },
   "distribution": {
     "title": "Distribution",
@@ -2063,7 +2064,9 @@
     "team": "Team: {{names}}",
     "otherOfficers": "Also present: {{names}}",
     "playAudio": "Play audio note: {{name}}",
-    "audioError": "Could not load the audio note"
+    "audioError": "Could not load the audio note",
+    "openSceneExamination": "Open scene examination",
+    "sceneExaminationOpened": "Scene examination opened and assigned to you"
   },
   "scene": {
     "title": "Scene collection",
@@ -2204,5 +2207,27 @@
     "register": "Register the collection",
     "backToApp": "Back to TrackID",
     "fromNote": "Filled from the field note of {{when}}."
+  },
+  "analysisMaterial": {
+    "title": "Material",
+    "desc": "Mark the lifts on the case's images, bring in reference documents, and list the pairs to compare. Each pair is decided below and its text goes to the laudo.",
+    "noEvidence": "The case has no images yet.",
+    "broughtIn": "Brought in for this examination",
+    "fromCollection": "Scene collection {{sequence}}",
+    "fromRequest": "Sent with {{document}}",
+    "noOrigin": "Origin not recorded",
+    "mark": "Mark traces",
+    "role": "Role",
+    "lift": "Lift",
+    "reference": "Reference",
+    "bringIn": "Bring in a reference document",
+    "bringInHint": "A fingerprint card or an identity document fetched for this examination. Its traces are references.",
+    "broughtInDone_one": "Document brought in.",
+    "broughtInDone_other": "{{count}} documents brought in.",
+    "pairsTitle": "Pairs to compare",
+    "markFirst": "Mark a lift first.",
+    "comparedWith": "Compared with",
+    "addPair": "Add pair",
+    "confirmRemovePair": "Remove this pair?"
   }
 }

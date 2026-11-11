@@ -692,7 +692,7 @@ SELECT f.id, f.biometric_case_id, f.category, f.media_type, f.hash_id, f.filenam
        f.content_type, f.size_bytes, f.created_at,
        r.id AS request_id, r.document_reference AS request_document, r.received_on AS request_received_on,
        cc.id AS collection_id, cc.sequence AS collection_sequence, cc.collected_from AS collection_collected_from,
-       v.id AS vestige_id, v.sequence AS vestige_sequence
+       v.id AS vestige_id, v.sequence AS vestige_sequence, f.case_analysis_id
 FROM case_files f
 LEFT JOIN case_requests r ON r.id = f.case_request_id
 LEFT JOIN case_collections cc ON cc.id = f.collection_id
@@ -721,6 +721,7 @@ type ListCaseFilesByBiometricCaseRow struct {
 	CollectionCollectedFrom sql.NullTime   `db:"collection_collected_from" json:"collection_collected_from"`
 	VestigeID               sql.NullInt64  `db:"vestige_id" json:"vestige_id"`
 	VestigeSequence         sql.NullInt16  `db:"vestige_sequence" json:"vestige_sequence"`
+	CaseAnalysisID          sql.NullInt64  `db:"case_analysis_id" json:"case_analysis_id"`
 }
 
 // With where each file came from, if recorded: the request that sent it in or the collection that
@@ -754,6 +755,7 @@ func (q *Queries) ListCaseFilesByBiometricCase(ctx context.Context, biometricCas
 			&i.CollectionCollectedFrom,
 			&i.VestigeID,
 			&i.VestigeSequence,
+			&i.CaseAnalysisID,
 		); err != nil {
 			return nil, err
 		}

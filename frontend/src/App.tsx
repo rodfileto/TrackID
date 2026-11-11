@@ -82,7 +82,6 @@ export default function App() {
               <Route path="/video-lab" element={<VideoLab />} />
               <Route path="/assist-lab" element={<AssistLab />} />
               <Route path="/examinations/laboratory" element={<ComingSoon kind="laboratory" />} />
-              <Route path="/examinations/crime-scene" element={<ComingSoon kind="crimeScene" />} />
               <Route element={<RequireCapability need="coordinator" />}>
                 <Route path="/admin/distribution" element={<Distribution />} />
                 <Route path="/requests" element={<Requests />} />

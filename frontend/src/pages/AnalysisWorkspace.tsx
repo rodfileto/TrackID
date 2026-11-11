@@ -29,8 +29,10 @@ import {
   type Worksheet,
   taskModality,
   traceKey,
+  examinerListsPairs,
 } from "../services/analyses";
 import { listCaseMaterial, type MaterialTrace } from "../services/requests";
+import AnalysisMaterialPanel from "../components/analyses/AnalysisMaterialPanel";
 import type { TraceLink } from "../services/cases";
 
 function pairKey(p: { featureA: string; featureB: string }): string {
@@ -318,6 +320,10 @@ export default function AnalysisWorkspace() {
     (worksheet?.yourStep === "VERIFICATOR" || analysis.stage === "REPORT");
   const materialByFeature = new Map(material.map((m) => [m.featureId, m]));
   const showReport = !blind && !!analysis && (analysis.stage === "REPORT" || analysis.status === "CLOSED");
+  // The first examiner of a fingerprint examination marks the material and lists the pairs while
+  // examining (docs/scene-examination-plan.md, decision 6).
+  const listsPairs = !blind && !!analysis && examinerListsPairs(analysis.type) && worksheet?.yourStep === "VERIFICATOR" &&
+    analysis.stage === "EXAMINATION";
 
   return (
     <>
@@ -386,8 +392,14 @@ export default function AnalysisWorkspace() {
             />
           )}
 
+          {listsPairs && (
+            <AnalysisMaterialPanel caseId={caseId} analysisId={id} material={material} pairs={worksheet.pairs} onChanged={load} />
+          )}
+
           {worksheet.pairs.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">{t("analyses.noPairs")}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {worksheet.type === "CRIME_SCENE_EXAMINATION" ? t("analyses.noPairsScene") : t("analyses.noPairs")}
+            </p>
           ) : (
             worksheet.pairs.map((pair, index) => (
               <PairCard

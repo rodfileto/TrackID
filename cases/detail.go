@@ -33,6 +33,9 @@ type File struct {
 	Collection *FileCollection `json:"collection,omitempty"`
 	// Vestige is the physical item it was taken from, when recorded.
 	Vestige *FileVestige `json:"vestige,omitempty"`
+	// AnalysisID is the analysis that brought it in, when one did: a reference document an
+	// examiner fetched for a comparison.
+	AnalysisID int64 `json:"analysisId,omitempty"`
 }
 
 // FileCollection names the scene collection a file was gathered in.
@@ -302,5 +305,6 @@ func fileFromRow(r db.ListCaseFilesByBiometricCaseRow) File {
 	if r.VestigeID.Valid {
 		f.Vestige = &FileVestige{ID: r.VestigeID.Int64, Label: fmt.Sprintf("V%d", r.VestigeSequence.Int16)}
 	}
+	f.AnalysisID = r.CaseAnalysisID.Int64
 	return f
 }

@@ -11,8 +11,8 @@ export type AnalysisType =
   | "FINGERPRINT_LAB_EXAMINATION"
   | "CRIME_SCENE_EXAMINATION";
 
-export const offeredTasks: AnalysisType[] = ["FACIAL_REVIEW", "FACIAL_COMPARISON", "FINGERPRINT_COMPARISON"];
-export const comingSoonTasks: AnalysisType[] = ["FINGERPRINT_LAB_EXAMINATION", "CRIME_SCENE_EXAMINATION"];
+export const offeredTasks: AnalysisType[] = ["FACIAL_REVIEW", "FACIAL_COMPARISON", "FINGERPRINT_COMPARISON", "CRIME_SCENE_EXAMINATION"];
+export const comingSoonTasks: AnalysisType[] = ["FINGERPRINT_LAB_EXAMINATION"];
 
 /** The modality of a task: what a new case it opens is, and what an existing one must be. */
 export function taskModality(type: AnalysisType): "FACIAL" | "FINGERPRINT" {
@@ -22,6 +22,35 @@ export function taskModality(type: AnalysisType): "FACIAL" | "FINGERPRINT" {
 /** A one-to-one examination whose pairs the coordinator lists, leading to a laudo. */
 export function isComparison(type: AnalysisType): boolean {
   return type === "FACIAL_COMPARISON" || type === "FINGERPRINT_COMPARISON";
+}
+
+/** An examination whose first examiner lists its pairs while examining, from the traces they mark
+ * and the references they bring in (docs/scene-examination-plan.md, decision 6). */
+export function examinerListsPairs(type: AnalysisType): boolean {
+  return type === "FINGERPRINT_COMPARISON" || type === "CRIME_SCENE_EXAMINATION";
+}
+
+/** The first examiner lists pairs (examinerListsPairs). */
+export async function addExaminerPairs(caseId: string, analysisId: number, pairs: FeaturePair[]): Promise<void> {
+  await examinerPairsCall(caseId, analysisId, "POST", { pairs });
+}
+
+/** The first examiner takes back a pair nothing was decided on. */
+export async function removeExaminerPair(caseId: string, analysisId: number, pair: FeaturePair): Promise<void> {
+  await examinerPairsCall(caseId, analysisId, "DELETE", pair);
+}
+
+async function examinerPairsCall(caseId: string, analysisId: number, method: string, body: unknown): Promise<void> {
+  const token = getToken();
+  const response = await apiFetch(`${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/analyses/${analysisId}/examiner-pairs`, {
+    method,
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? "The pairs could not be changed");
+  }
 }
 export type AnalysisStage = "EXAMINATION" | "VERIFICATION" | "INCONSISTENCE" | "REPORT";
 /** An examiner's part in an analysis, named after the decision role it records:

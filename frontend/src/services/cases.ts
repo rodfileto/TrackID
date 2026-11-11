@@ -29,6 +29,8 @@ export interface Evidence {
   collection?: { id: number; sequence: number; collectedFrom: string };
   /** The physical item it was taken from, when recorded. */
   vestige?: { id: number; label: string };
+  /** Or the analysis that brought it in: a reference document an examiner fetched. */
+  analysisId?: number;
 }
 
 export interface CaseDetail {
