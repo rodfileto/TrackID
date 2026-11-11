@@ -102,3 +102,10 @@ ORDER BY f.collection_id, f.id;
 SELECT f.id, f.filename, f.content_type, f.storage_ref
 FROM case_files f JOIN biometric_cases bc ON bc.id = f.biometric_case_id
 WHERE f.id = $1 AND bc.case_id = $2 AND f.category = 'collection_note';
+
+-- name: ListFingerprintExaminers :many
+-- Who can be at a scene: active users who examine fingerprints. A device keeps this list to name a
+-- note's team with no signal.
+SELECT id, username, first_name, last_name FROM users
+WHERE is_active AND examines_fingerprint
+ORDER BY first_name, last_name, id;

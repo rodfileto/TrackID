@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -32,11 +33,36 @@ function maplibreWorker(): Plugin {
   };
 }
 
+// The application opens with no signal (docs/scene-examination-plan.md): a service worker, written
+// here for each build, keeps the build's own files. A page asked for with no network gets the
+// kept index.html, and the API is never kept: only the field notes work offline, from what the
+// browser stores for them (src/offline/fieldNotesStore.ts).
+function offlineShell(): Plugin {
+  return {
+    name: "offline-shell",
+    apply: "build",
+    enforce: "post",
+    generateBundle(_, bundle) {
+      const files = Object.keys(bundle)
+        .filter((name) => /\.(js|mjs|css|woff2?|svg|png)$/.test(name) && !name.endsWith(".map"))
+        .map((name) => "/" + name)
+        .sort();
+      files.push("/favicon.svg");
+      const version = createHash("sha256").update(files.join("\n")).digest("hex").slice(0, 16);
+      const source = readFileSync(join(import.meta.dirname, "src/offline/sw.template.js"), "utf8")
+        .replace("__VERSION__", version)
+        .replace("__FILES__", JSON.stringify(files));
+      this.emitFile({ type: "asset", fileName: "sw.js", source });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     maplibreWorker(),
+    offlineShell(),
     svgr({
       svgrOptions: {
         icon: true,

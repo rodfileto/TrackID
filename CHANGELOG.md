@@ -45,6 +45,14 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- Notes at a scene, written with no signal (`docs/scene-examination-plan.md`, phases 1 and 2). `/field-notes` is a
+  page for a phone: the place, the device's position, the times, the team, other officers, notes and recorded audio.
+  A service worker keeps the application's files, so the page opens offline, and the notes are kept in the browser
+  until synced; each note and audio has an id made on the device, so syncing twice keeps one. A synced note
+  (`scene_notes`, migration 027, `/api/scene-notes`) gets its address from its position on the server and stays a
+  draft until the scene collection form, which opens filled from it, registers it. A collection now records when
+  the team was called out, its team and other officers present, and keeps the audio notes as files of the case.
+
 - Optional pieces for a deployment (`docs/production-plan.md` phase 5, `docs/deployment.md`). `Dockerfile.gpu`
   builds a CUDA variant of a release's image, and `deploy/compose.gpu.yml` runs the API, the worker and the language
   model on the GPU. The `nominatim` and `llm` compose profiles run a Nominatim and an Ollama inside the stack.

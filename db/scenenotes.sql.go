@@ -365,6 +365,49 @@ func (q *Queries) ListCollectionNoteFiles(ctx context.Context, caseID string) ([
 	return items, nil
 }
 
+const listFingerprintExaminers = `-- name: ListFingerprintExaminers :many
+SELECT id, username, first_name, last_name FROM users
+WHERE is_active AND examines_fingerprint
+ORDER BY first_name, last_name, id
+`
+
+type ListFingerprintExaminersRow struct {
+	ID        int64  `db:"id" json:"id"`
+	Username  string `db:"username" json:"username"`
+	FirstName string `db:"first_name" json:"first_name"`
+	LastName  string `db:"last_name" json:"last_name"`
+}
+
+// Who can be at a scene: active users who examine fingerprints. A device keeps this list to name a
+// note's team with no signal.
+func (q *Queries) ListFingerprintExaminers(ctx context.Context) ([]ListFingerprintExaminersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFingerprintExaminers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFingerprintExaminersRow
+	for rows.Next() {
+		var i ListFingerprintExaminersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.FirstName,
+			&i.LastName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSceneNoteAudios = `-- name: ListSceneNoteAudios :many
 SELECT id, client_id, title, content_type, size_bytes, sha256, storage_ref, recorded_at
 FROM scene_note_audios WHERE scene_note_id = $1 ORDER BY recorded_at NULLS LAST, id

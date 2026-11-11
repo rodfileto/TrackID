@@ -198,6 +198,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	sceneNotes.Use(RequireSceneCollection(deps.DB))
 	sceneNotes.POST("", SyncSceneNoteHandler(deps.DB, deps.Storage, deps.Geocoder))
 	sceneNotes.GET("", ListSceneNotesHandler(deps.DB, deps.Storage))
+	sceneNotes.GET("team", SceneTeamHandler(deps.DB))
 	sceneNotes.GET("audios/:audioId", SceneNoteAudioHandler(deps.DB, deps.Storage))
 	sceneNotes.GET(":noteId", GetSceneNoteHandler(deps.DB, deps.Storage))
 	sceneNotes.DELETE(":noteId", DiscardSceneNoteHandler(deps.DB, deps.Storage))

@@ -43,6 +43,13 @@ export interface Collection {
   place?: string;
   /** The request that formalized it; absent while it is awaited. */
   request?: { id: number; documentReference: string; receivedOn: string };
+  /** When the team was called out. */
+  calledAt?: string;
+  otherOfficers?: string;
+  /** Users at the scene besides the collector. */
+  team: { id: number; username: string; name: string }[];
+  /** Audio the examiner recorded at the scene: their record, not evidence. */
+  audioNotes: { fileId: number; filename: string; contentType: string; sizeBytes: number; sha256: string; createdAt: string }[];
 }
 
 export interface CaseOrigins {
@@ -78,6 +85,11 @@ export interface RegisterCollectionInput {
   notes?: string;
   reportMode: ReportMode;
   vestiges: VestigeInput[];
+  calledAt?: string;
+  otherOfficers?: string;
+  team?: number[];
+  /** The field note (scene note) the collection is registered from. */
+  sceneNoteId?: number;
 }
 
 export interface RegisteredCollection {

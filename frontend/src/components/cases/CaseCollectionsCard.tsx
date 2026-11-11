@@ -1,3 +1,4 @@
+import CollectionAudioNote from "./CollectionAudioNote";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -166,7 +167,19 @@ export default function CaseCollectionsCard({
                   {c.registeredBy && c.registeredBy !== c.collectedBy && ` · ${t("collections.registeredBy", { by: c.registeredBy })}`}
                 </p>
                 {c.place && <p className="text-gray-600 dark:text-gray-400">{c.place}</p>}
-                {c.notes && <p className="text-gray-600 dark:text-gray-400">{c.notes}</p>}
+                {(c.calledAt || c.team.length > 0 || c.otherOfficers) && (
+                  <p className="text-gray-600 dark:text-gray-400">
+                    {[
+                      c.calledAt && t("collections.calledAt", { at: when(c.calledAt) }),
+                      c.team.length > 0 && t("collections.team", { names: c.team.map((m) => m.name || m.username).join(", ") }),
+                      c.otherOfficers && t("collections.otherOfficers", { names: c.otherOfficers }),
+                    ].filter(Boolean).join(" · ")}
+                  </p>
+                )}
+                {c.notes && <p className="whitespace-pre-line text-gray-600 dark:text-gray-400">{c.notes}</p>}
+                {c.audioNotes.map((a) => (
+                  <CollectionAudioNote key={a.fileId} caseId={caseId} fileId={a.fileId} filename={a.filename} />
+                ))}
                 {c.request && (
                   <p className="text-gray-600 dark:text-gray-400">
                     {t("collections.formalizedBy", { document: c.request.documentReference, date: c.request.receivedOn })}

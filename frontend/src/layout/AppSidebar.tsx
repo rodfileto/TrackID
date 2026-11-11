@@ -49,6 +49,7 @@ const allNavSections: NavSection[] = [
     items: [
       { icon: <FolderIcon />, name: "nav.criminalCases", path: "/cases" },
       { icon: <TaskIcon />, name: "nav.sceneCollection", path: "/collections/new", requires: "scene" },
+      { icon: <TaskIcon />, name: "nav.fieldNotes", path: "/field-notes", requires: "scene" },
       { icon: <ListIcon />, name: "nav.myAnalyses", path: "/analyses" },
       {
         icon: <ShootingStarIcon />,

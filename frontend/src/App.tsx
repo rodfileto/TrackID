@@ -56,6 +56,7 @@ function lazyPage<T extends React.ComponentType>(load: () => Promise<{ default: 
 const OccurrenceMap = lazyPage(() => import("./pages/OccurrenceMap"));
 const NewOccurrence = lazyPage(() => import("./pages/NewOccurrence"));
 const VideoLab = lazyPage(() => import("./pages/VideoLab"));
+const FieldNotes = lazyPage(() => import("./pages/FieldNotes"));
 import { useTheme } from "./context/ThemeContext";
 
 export default function App() {
@@ -134,6 +135,10 @@ export default function App() {
 
           {/* Auth Layout */}
           <Route path="/signin" element={<SignIn />} />
+
+          {/* Notes at a scene: outside the session's guard, since they are written with no signal
+              and a session that ended must not lose them (docs/scene-examination-plan.md). */}
+          <Route path="/field-notes" element={<FieldNotes />} />
 
           {/* Fallback Route */}
           <Route path="*" element={<NotFound />} />

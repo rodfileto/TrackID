@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import PageMeta from "../components/common/PageMeta";
@@ -14,6 +14,8 @@ import { useCurrentUser } from "../context/CurrentUserContext";
 import { getDistributionStatus, type DistributionExaminer } from "../services/analyses";
 import { listOccurrenceTypes, searchOccurrences, type OccurrenceSummary, type OccurrenceType } from "../services/occurrences";
 import { receiveCollectionMaterial, registerCollection, type ReportMode } from "../services/collections";
+import { fetchTeam, getSceneNote, type SceneNote } from "../services/sceneNotes";
+import type { TeamUser } from "../offline/fieldNotesStore";
 
 const inputClass =
   "h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90";
@@ -34,6 +36,13 @@ interface MaterialFile {
 /** A datetime-local value for now, to the minute, in local time. */
 function localNow(): string {
   const d = new Date();
+  d.setSeconds(0, 0);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+/** A datetime-local value for an ISO instant. */
+function localOf(iso: string): string {
+  const d = new Date(iso);
   d.setSeconds(0, 0);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
@@ -66,7 +75,14 @@ export default function NewSceneCollection() {
     notes: "",
     nothingCollected: false,
     reportMode: "SEPARATE" as ReportMode,
+    calledAt: "",
+    otherOfficers: "",
   });
+  const [team, setTeam] = useState<number[]>([]);
+  const [teamList, setTeamList] = useState<TeamUser[]>([]);
+  // The field note this collection is registered from (?note=), when it comes from one.
+  const [params] = useSearchParams();
+  const [note, setNote] = useState<SceneNote | null>(null);
   const [vestiges, setVestiges] = useState<VestigeRow[]>([{ description: "", sealNumber: "" }]);
   const [files, setFiles] = useState<MaterialFile[]>([]);
   const [saving, setSaving] = useState(false);
@@ -84,6 +100,41 @@ export default function NewSceneCollection() {
       .then((s) => setExaminers(s.examiners.filter((e) => e.examinesFingerprint)))
       .catch(() => setExaminers([]));
   }, [isCoordinator]);
+
+  useEffect(() => {
+    fetchTeam().then(setTeamList).catch(() => setTeamList([]));
+  }, []);
+
+  // A field note fills the form: its place and time for a new occurrence, and the collection's
+  // own times, team and notes. Everything stays editable.
+  useEffect(() => {
+    const id = Number(params.get("note"));
+    if (!id) return;
+    getSceneNote(id)
+      .then((n) => {
+        if (n.collectionId) return;
+        setNote(n);
+        setCreating(true);
+        setDraft((d) => ({
+          ...d,
+          occurredFrom: n.occurredAt ? localOf(n.occurredAt) : d.occurredFrom,
+          place: n.lon !== undefined && n.lat !== undefined
+            ? { lon: n.lon, lat: n.lat, precision: "EXACT", address: n.address, neighbourhood: n.neighbourhood, placeType: n.placeType,
+                name: n.placeName, geocodeSource: n.geocodeSource, geocodeFlags: n.geocodeFlags }
+            : d.place,
+        }));
+        setForm((f) => ({
+          ...f,
+          collectedFrom: n.examinedAt ? localOf(n.examinedAt) : f.collectedFrom,
+          calledAt: n.calledAt ? localOf(n.calledAt) : "",
+          otherOfficers: n.otherOfficers ?? "",
+          notes: n.notes ?? "",
+          collectedById: isCoordinator ? n.authorId : f.collectedById,
+        }));
+        setTeam(n.team.map((m) => m.id));
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+  }, [params, isCoordinator]);
 
   const collector = form.collectedById || (isFingerprintExaminer ? user?.id ?? 0 : 0);
 
@@ -119,6 +170,10 @@ export default function NewSceneCollection() {
         notes: form.notes || undefined,
         reportMode: form.reportMode,
         vestiges: form.nothingCollected ? [] : kept.map(({ v }) => ({ description: v.description, sealNumber: v.sealNumber || undefined })),
+        calledAt: form.calledAt ? new Date(form.calledAt).toISOString() : undefined,
+        otherOfficers: form.otherOfficers || undefined,
+        team: team.filter((id) => id !== collector),
+        sceneNoteId: note?.id,
       });
       toast.success(t("scene.registered", { caseId: registered.caseId }));
 
@@ -150,6 +205,12 @@ export default function NewSceneCollection() {
       <PageMeta title={`${t("scene.title")} | TrackID`} description={t("scene.desc")} />
       <PageBreadcrumb pageTitle={t("scene.title")} />
       <form onSubmit={submit} className="space-y-6">
+        {note && (
+          <p className="rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-700 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300">
+            {t("fieldNotes.fromNote", { when: new Date(note.writtenAt).toLocaleString() })}
+            {note.audioCount > 0 && ` ${t("fieldNotes.audios", { count: note.audioCount })}.`}
+          </p>
+        )}
         <ComponentCard title={t("scene.occurrenceCard")} desc={t("scene.occurrenceCardDesc")}>
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-64 flex-1">
@@ -232,6 +293,32 @@ export default function NewSceneCollection() {
               </select>
             </div>
           </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div>
+              <Label htmlFor="scene-called">{t("scene.calledAt")}</Label>
+              <input id="scene-called" type="datetime-local" className={inputClass} value={form.calledAt}
+                onChange={(e) => setForm({ ...form, calledAt: e.target.value })} />
+            </div>
+            <div className="md:col-span-1 xl:col-span-2">
+              <Label htmlFor="scene-officers">{t("scene.otherOfficers")}</Label>
+              <input id="scene-officers" className={inputClass} value={form.otherOfficers}
+                onChange={(e) => setForm({ ...form, otherOfficers: e.target.value })} />
+            </div>
+          </div>
+          {teamList.filter((m) => m.id !== collector).length > 0 && (
+            <fieldset>
+              <legend className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">{t("scene.team")}</legend>
+              <div className="flex flex-wrap gap-x-5 gap-y-2">
+                {teamList.filter((m) => m.id !== collector).map((m) => (
+                  <label key={m.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input type="checkbox" checked={team.includes(m.id)}
+                      onChange={(e) => setTeam(e.target.checked ? [...team, m.id] : team.filter((id) => id !== m.id))} />
+                    {m.name || m.username}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
           <div>
             <Label htmlFor="scene-notes">{t("scene.notes")}</Label>
             <textarea id="scene-notes" rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}

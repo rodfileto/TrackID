@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -221,5 +222,26 @@ func CollectionNoteFileHandler(sqlDB *sql.DB, store *storage.Client) gin.Handler
 		}
 		context.Header("Cache-Control", "private, no-store")
 		context.Data(http.StatusOK, file.ContentType.String, content)
+	}
+}
+
+// SceneTeamHandler lists who can be named in a note's or a collection's team: the active
+// fingerprint examiners.
+func SceneTeamHandler(sqlDB *sql.DB) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if sqlDB == nil {
+			context.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is not configured"})
+			return
+		}
+		users, err := db.New(sqlDB).ListFingerprintExaminers(context.Request.Context())
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not list the examiners"})
+			return
+		}
+		items := make([]scenenotes.Member, 0, len(users))
+		for _, u := range users {
+			items = append(items, scenenotes.Member{ID: u.ID, Username: u.Username, Name: strings.TrimSpace(u.FirstName + " " + u.LastName)})
+		}
+		context.JSON(http.StatusOK, gin.H{"items": items})
 	}
 }

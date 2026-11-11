@@ -10,6 +10,9 @@ import "./i18n";
 import App from "./App.tsx";
 import { ThemeProvider } from "./context/ThemeContext.tsx";
 import { loadRuntimeConfig } from "./runtimeConfig";
+import { registerServiceWorker } from "./offline/registerServiceWorker";
+
+registerServiceWorker();
 
 // The server's runtime configuration first, so nothing renders with a build's defaults by mistake.
 loadRuntimeConfig().then(() => {

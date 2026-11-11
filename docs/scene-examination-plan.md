@@ -109,3 +109,11 @@ CREATE TABLE case_collection_members (collection_id, user_id, PRIMARY KEY (colle
   (sync, list, get, discard, audio), a collection's call-out time, team, other officers and audio
   notes, and a note converted by `collections.Register` (`SceneNoteID`). `verify-storage` reads the
   audio notes too. Checked by `collections/scenenotes_db_test.go`.
+- 2026-11-11: **Phase 2 done**: the service worker (`frontend/src/offline/sw.template.js`, written
+  into each build by `vite.config.ts`), the device's store (`fieldNotesStore.ts`), the page
+  (`/field-notes`, outside the session's guard), and the collection form filled from a note
+  (`/collections/new?note=`), with the call-out time, team and other officers; the case page shows
+  them and plays the audio notes. Checked in a headless browser on the built frontend: with the
+  server stopped and the browser offline, the page opened, a note with a recorded audio was kept
+  with the team list; when the server and the network came back it synced by itself, got its
+  address from the census list, and was registered as a collection through the form.
