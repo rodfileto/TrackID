@@ -2,10 +2,13 @@
 // locations (see MODEL.md section 2.3): the future address and coordinate
 // picker, and importers that only have an address.
 //
-// Geocoder is the boundary; Nominatim (OpenStreetMap) is its implementation.
-// Results are OpenStreetMap data, under the ODbL: whatever displays them must
-// credit "© OpenStreetMap contributors", and a database built from them is a
-// derived database under the same licence.
+// Geocoder is the boundary. Layered is what the API uses: IBGE's census
+// address list (CNEFE) in TrackID's database, then an optional Nominatim, then
+// the municipality (docs/geocoding-plan.md). A result's Source says where it
+// came from. CNEFE results credit "Fonte: IBGE, Censo Demográfico 2022".
+// Nominatim results are OpenStreetMap data, under the ODbL: whatever displays
+// them must credit "© OpenStreetMap contributors", and a database built from
+// them is a derived database under the same licence.
 package geocode
 
 import (

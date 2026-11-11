@@ -116,11 +116,22 @@ func TestNominatim(t *testing.T) {
 }
 
 func TestNominatimPublicDefaults(t *testing.T) {
-	n, err := NewNominatim(NominatimConfig{UserAgent: "x"})
-	if err != nil {
-		t.Fatal(err)
+	if _, err := NewNominatim(NominatimConfig{UserAgent: "x"}); err != ErrNoNominatim {
+		t.Errorf("no URL is no Nominatim, not the public one: %v", err)
 	}
-	if n.baseURL != PublicNominatimURL || n.minInterval != time.Second {
-		t.Errorf("public defaults: url %q, interval %v", n.baseURL, n.minInterval)
+	for _, url := range []string{"public", "https://nominatim.openstreetmap.org/"} {
+		n, err := NewNominatim(NominatimConfig{BaseURL: url, UserAgent: "x"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n.baseURL != PublicNominatimURL || n.minInterval != time.Second {
+			t.Errorf("%s: url %q, interval %v", url, n.baseURL, n.minInterval)
+		}
+		if _, err := NewNominatim(NominatimConfig{BaseURL: url, UserAgent: "x", Bulk: true}); err == nil {
+			t.Errorf("%s: bulk geocoding on the public instance accepted", url)
+		}
+	}
+	if _, err := NewNominatim(NominatimConfig{BaseURL: "http://nominatim:8080", UserAgent: "x", Bulk: true}); err != nil {
+		t.Errorf("bulk on a server of one's own: %v", err)
 	}
 }

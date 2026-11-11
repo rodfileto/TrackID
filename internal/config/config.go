@@ -43,10 +43,11 @@ type Config struct {
 	// package). Left empty, fingerprint tasks aren't processed.
 	FingerprintSidecarURL string
 
-	// Geocoder: Nominatim (OpenStreetMap) for locations -- the address and
-	// coordinate picker, and importers with only an address (geocode package).
-	// GeocoderURL defaults to the public instance, whose usage policy forbids
-	// autocomplete: search-as-you-type needs a self-hosted one.
+	// Geocoder: Nominatim (OpenStreetMap) for locations, behind the census
+	// address list (geocode.Layered). Empty GeocoderURL means no Nominatim;
+	// "public" asks for OpenStreetMap's own instance, which then receives the
+	// addresses searched and the points clicked, and whose usage policy forbids
+	// autocomplete and bulk geocoding.
 	GeocoderURL         string
 	GeocoderUserAgent   string
 	GeocoderEmail       string

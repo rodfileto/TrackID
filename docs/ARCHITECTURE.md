@@ -120,9 +120,10 @@ organizations import to build their import commands) and an **internal** runtime
   template; `npm run build` produces the bundle `internal/web` serves
 - `quarto/` — technical report and ontology documentation
 - `scripts/` — development helpers (start and stop the stack, back up and restore data)
-- `geocode/` — addresses ↔ coordinates for locations, through Nominatim (OpenStreetMap; ODbL,
-  credit "© OpenStreetMap contributors"); the public instance forbids autocomplete, so a
-  search-as-you-type picker needs a self-hosted one (`GEOCODER_URL`)
+- `geocode/` — addresses ↔ coordinates for locations: IBGE's census address list in the database
+  (`cmd/load-cnefe`; credit "Fonte: IBGE, Censo Demográfico 2022"), then an optional Nominatim
+  (`GEOCODER_URL`; OpenStreetMap, ODbL, credit "© OpenStreetMap contributors"), then the
+  municipality (`docs/geocoding-plan.md`)
 - `tools/municipalities/` — writes IBGE municipality boundaries (geobr, MIT; data by IBGE) as
   GeoJSON for `cmd/load-municipalities`, so a location's municipality comes from its point:
   `uv run python fetch.py --states RJ`, then

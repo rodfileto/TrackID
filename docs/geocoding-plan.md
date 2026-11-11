@@ -1,15 +1,16 @@
 # Geocoding: the census address list in core, Nominatim optional
 
-Proposed 2026-11-10. **Phases 1 and 2 are built** the same day (`geocode.Layered`,
+Proposed 2026-11-10. **Phases 1 to 3 are built** the same day (`geocode.Layered`,
 `cmd/load-cnefe`, migrations 024 and 025, `CNEFE.Reverse`, `near`, the picker's flags) and were
 tested on synthetic addresses and on IBGE's real Distrito Federal file (1.3 million rows, loaded in
-16 s into about 170 MB; a click finds its address in under 1 ms). Phases 3 and 4 are still
-proposals. The design was decided the same day: IBGE's
+16 s into about 170 MB; a click finds its address in under 1 ms). Phase 4 is still a proposal. The design was decided the same day: IBGE's
 census address list (CNEFE) becomes core's first source for addresses, both address → point and
 point → address, with a Nominatim server optional behind it. The questions at the end are about
 details.
 
 ## What is there now
+
+*(This section describes core before phase 1.)*
 
 - **One geocoder, Nominatim.** `geocode.Geocoder` has `Search` and `Reverse`. Its only
   implementation is `geocode.Nominatim`, built once in `server.Run` from `GEOCODER_*`. An empty

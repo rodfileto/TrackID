@@ -3,6 +3,7 @@ package geocode
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,8 +19,19 @@ import (
 // most one request per second, requires an identifying User-Agent, and forbids
 // autocomplete (search-as-you-type) and systematic bulk geocoding: a picker
 // that suggests as the user types needs a self-hosted instance, set through
-// GEOCODER_URL.
+// GEOCODER_URL. It is used only when asked for by name (PublicNominatim).
 const PublicNominatimURL = "https://nominatim.openstreetmap.org"
+
+// PublicNominatim is the GEOCODER_URL, and NominatimConfig.BaseURL, that asks for
+// the public instance. An empty one means no Nominatim at all.
+const PublicNominatim = "public"
+
+// IsPublicNominatim reports whether a configured URL is OpenStreetMap's public
+// instance, by name or by address.
+func IsPublicNominatim(baseURL string) bool {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	return baseURL == PublicNominatim || strings.EqualFold(baseURL, PublicNominatimURL)
+}
 
 // Nominatim is a Geocoder backed by a Nominatim server.
 type Nominatim struct {
@@ -35,22 +47,36 @@ type Nominatim struct {
 	last time.Time
 }
 
-// NominatimConfig configures NewNominatim. Only UserAgent is required.
+// NominatimConfig configures NewNominatim. BaseURL and UserAgent are required.
 type NominatimConfig struct {
-	BaseURL     string        // defaults to PublicNominatimURL
+	BaseURL     string        // the server, or PublicNominatim for OpenStreetMap's own
 	UserAgent   string        // identifies the application, as the usage policy requires
 	Email       string        // optional contact sent with each request
 	Language    string        // Accept-Language for names; defaults to "pt-BR"
 	Countries   string        // comma-separated ISO 3166-1 codes searches are limited to; defaults to "br"
 	MinInterval time.Duration // minimum gap between requests; defaults to 1s on the public instance, 0 elsewhere
+
+	// Bulk is set by a command that geocodes many addresses at once (an importer): the public
+	// instance's policy forbids that, so NewNominatim refuses it.
+	Bulk bool
 }
+
+// ErrNoNominatim is NewNominatim's error when no server is configured.
+var ErrNoNominatim = errors.New("geocode: no Nominatim server configured")
 
 // NewNominatim returns a Nominatim client. Requests from one client are spaced
 // by MinInterval, so a single client shared by the process keeps it within the
 // server's rate limit.
 func NewNominatim(cfg NominatimConfig) (*Nominatim, error) {
+	if strings.TrimSpace(cfg.BaseURL) == "" {
+		return nil, ErrNoNominatim
+	}
 	if strings.TrimSpace(cfg.UserAgent) == "" {
 		return nil, fmt.Errorf("geocode: a User-Agent identifying the application is required")
+	}
+	public := IsPublicNominatim(cfg.BaseURL)
+	if public && cfg.Bulk {
+		return nil, fmt.Errorf("geocode: OpenStreetMap's public Nominatim forbids bulk geocoding; set GEOCODER_URL to a server of your own")
 	}
 	n := &Nominatim{
 		baseURL:     strings.TrimRight(cfg.BaseURL, "/"),
@@ -61,7 +87,7 @@ func NewNominatim(cfg NominatimConfig) (*Nominatim, error) {
 		minInterval: cfg.MinInterval,
 		http:        &http.Client{Timeout: 30 * time.Second},
 	}
-	if n.baseURL == "" {
+	if public {
 		n.baseURL = PublicNominatimURL
 	}
 	if n.language == "" {

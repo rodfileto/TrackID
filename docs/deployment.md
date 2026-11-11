@@ -120,9 +120,11 @@ Then sign in at `https://<SERVER_NAME>` and create the other accounts from the a
    e.g. `31_MG.zip`), then
    `docker compose run --rm --no-deps -v /path/to/31_MG.zip:/in.zip:ro api load-cnefe -file /in.zip -commit`.
    A large state takes a few GB of memory while it loads. The API uses it within a minute.
-4. **Set a tile server and a geocoder of your own** (`MAP_TILE_URL`, `MAP_TILE_ORIGIN`,
-   `GEOCODER_URL`). Otherwise, users' browsers fetch map tiles from OpenStreetMap's public servers,
-   and addresses typed into occurrences go to its public geocoder.
+4. **Set a tile server of your own** (`MAP_TILE_URL`, `MAP_TILE_ORIGIN`); otherwise users'
+   browsers fetch map tiles from OpenStreetMap's public servers. A Nominatim (`GEOCODER_URL`,
+   or the `nominatim` profile below) is optional: it finds named places and streets the census
+   list lacks. Without one, nothing typed leaves the network. `GEOCODER_URL=public` uses
+   OpenStreetMap's own, which then receives the addresses the census list can't answer.
 5. **Review the model licences** (`docs/MODELS.md`).
 6. **Test a backup and a restore** (below) before the first real case.
 
@@ -190,9 +192,10 @@ GPU needs it. Rebuild it for each release.
 
 ## A geocoder of your own (Nominatim)
 
-The census address list (above) finds most urban addresses. For named places (an airport, a
-square), streets without census addresses, and clicks on the map, run a Nominatim of your own
-rather than OpenStreetMap's public one, which then receives every address typed:
+The census address list (above) finds most urban addresses, and a click within 100 m of one. For
+named places (an airport, a square), streets and clicks the census list lacks, run a Nominatim of
+your own. `GEOCODER_URL=public` uses OpenStreetMap's public one instead, which then receives those
+addresses and clicks; with `GEOCODER_URL` empty there is none:
 
 ```sh
 # .env: NOMINATIM_PBF_URL=https://download.geofabrik.de/south-america/brazil/sudeste-latest.osm.pbf

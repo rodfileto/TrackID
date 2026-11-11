@@ -120,9 +120,11 @@ A case is linked from its page through `occurrences.LinkCase` (PUT
 `/api/cases/:caseId/occurrence`), which refuses a criminal case on a civil occurrence or the
 reverse.
 
-Addresses and points are converted by the `geocode` package: a `Geocoder` interface with a
-Nominatim (OpenStreetMap) implementation, configured by `GEOCODER_*` (see `.env.example`). Its
-results are ODbL data, to be credited as "© OpenStreetMap contributors" wherever shown.
+Addresses and points are converted by the `geocode` package: a `Geocoder` interface whose
+`Layered` implementation looks in IBGE's census address list loaded into the database, then in
+an optional Nominatim (OpenStreetMap, configured by `GEOCODER_*`, see `.env.example`), then
+takes the municipality (`docs/geocoding-plan.md`). Results credit their source wherever shown:
+"Fonte: IBGE, Censo Demográfico 2022" or "© OpenStreetMap contributors" (ODbL).
 
 `geography` has no sqlc type, so points cross into Go as `lon`/`lat` only, and spatial
 queries (`ListOccurrencesWithinRadius`) stay in SQL. This is where intelligence analysis by

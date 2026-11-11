@@ -12,6 +12,12 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Changed
 
+- **An empty `GEOCODER_URL` now means no Nominatim**, not OpenStreetMap's public instance
+  (`docs/geocoding-plan.md` phase 3). Addresses are still found in the census address list and as their
+  municipality. `GEOCODER_URL=public` asks for the public instance, and the server logs that addresses go to it.
+  `geocode.NominatimConfig.Bulk` makes an importer refuse the public instance, whose policy forbids bulk
+  geocoding. A deployment that relied on the old default sets `GEOCODER_URL=public`.
+
 - `golang.org/x/net` 0.62.0, for CVE-2026-78661 (HTML parsing; TrackID doesn't call the parser, but every binary
   carried it). The three images take their distribution's security updates when they are built.
 - The fingerprint sidecar runs Jackson 2.18.11 instead of the 2.15.3 SourceAFIS 3.18.1 names, for the
@@ -53,6 +59,11 @@ period; `0.x` patch releases fix defects without adding behaviour.
   municipality and state the address names. Results carry `flags` saying how sure they are (`NEAREST_NUMBER`,
   `STREET_ADJUSTED`, `LOCATOR_PARTIAL`, `STREET_ONLY`, `MUNICIPALITY_ONLY`, `NAMED_PLACE`, `SOURCES_DISAGREE`).
   `geocode.ParseAddress` reads Brazilian addresses for all 27 states.
+
+- A point clicked on the map gets the nearest census address within 100 m, a number on a street or a quadra and
+  lote, before Nominatim (`docs/geocoding-plan.md` phase 2, migration 025). An address searched with no
+  municipality is looked up in the one the map shows (`near=lon,lat` on `/api/geocode/search`). The location
+  picker shows each result's precision, its source's credit and its flags.
 
 - Backups and restores for a deployment (`docs/production-plan.md` phase 4). `deploy/backup.sh` dumps the database,
   encrypted to an age key when `BACKUP_AGE_RECIPIENT` is set, then copies the evidence bucket into a mirror that

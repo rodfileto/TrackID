@@ -138,15 +138,21 @@ func Run(options Options) error {
 
 	// Addresses go through the census list in the database (cmd/load-cnefe), then Nominatim, then
 	// the municipality (geocode.Layered, docs/geocoding-plan.md). One Nominatim client for the
-	// process, so its pacing keeps the whole API within the server's rate limit.
+	// process, so its pacing keeps the whole API within the server's rate limit. None unless
+	// GEOCODER_URL names one; the public instance only when it says "public".
 	var nominatim geocode.Geocoder
 	if g, err := geocode.NewNominatim(geocode.NominatimConfig{
 		BaseURL: configuration.GeocoderURL, UserAgent: configuration.GeocoderUserAgent,
 		Email: configuration.GeocoderEmail, MinInterval: configuration.GeocoderMinInterval,
-	}); err != nil {
+	}); errors.Is(err, geocode.ErrNoNominatim) {
+		log.Printf("GEOCODER_URL not configured; addresses are found only in the census list and the municipalities")
+	} else if err != nil {
 		configuration.Unavailable("Nominatim unavailable; addresses are found only in the census list and the municipalities: %v", err)
 	} else {
 		nominatim = g
+		if geocode.IsPublicNominatim(configuration.GeocoderURL) {
+			log.Printf("GEOCODER_URL=public: addresses searched and points clicked that the census list can't answer are sent to %s", geocode.PublicNominatimURL)
+		}
 	}
 	var geocoder geocode.Geocoder
 	if db != nil || nominatim != nil {
