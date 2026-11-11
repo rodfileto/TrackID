@@ -47,23 +47,29 @@ func keepLettersAndDigits(text string) []rune {
 	return out
 }
 
+// editDistance counts the letters to insert, delete or change, and neighbours to swap, to turn a
+// into b: a swap ("Saregnto") is one slip, not two.
 func editDistance(a, b []rune) int {
-	row := make([]int, len(b)+1)
-	for j := range row {
-		row[j] = j
+	// Three rows: the one before last, for swaps.
+	before, last, row := make([]int, len(b)+1), make([]int, len(b)+1), make([]int, len(b)+1)
+	for j := range last {
+		last[j] = j
 	}
 	for i := range a {
-		previous := row[0]
 		row[0] = i + 1
 		for j := range b {
 			cost := 1
 			if a[i] == b[j] {
 				cost = 0
 			}
-			previous, row[j+1] = row[j+1], min(row[j+1]+1, row[j]+1, previous+cost)
+			row[j+1] = min(last[j+1]+1, row[j]+1, last[j]+cost)
+			if i > 0 && j > 0 && a[i] == b[j-1] && a[i-1] == b[j] {
+				row[j+1] = min(row[j+1], before[j-1]+1)
+			}
 		}
+		before, last, row = last, row, before
 	}
-	return row[len(b)]
+	return last[len(b)]
 }
 
 // distanceMeters is the great-circle distance between two points.

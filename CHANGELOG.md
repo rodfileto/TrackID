@@ -60,7 +60,7 @@ period; `0.x` patch releases fix defects without adding behaviour.
   `STREET_ADJUSTED`, `LOCATOR_PARTIAL`, `STREET_ONLY`, `MUNICIPALITY_ONLY`, `NAMED_PLACE`, `SOURCES_DISAGREE`).
   `geocode.ParseAddress` reads Brazilian addresses for all 27 states.
 
-- A point clicked on the map gets the nearest census address within 100 m, a number on a street or a quadra and
+- A point clicked on the map gets the nearest census address within 50 m (measured, below), a number on a street or a quadra and
   lote, before Nominatim (`docs/geocoding-plan.md` phase 2, migration 025). An address searched with no
   municipality is looked up in the one the map shows (`near=lon,lat` on `/api/geocode/search`). The location
   picker shows each result's precision, its source's credit and its flags.

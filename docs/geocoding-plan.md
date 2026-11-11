@@ -1,9 +1,10 @@
 # Geocoding: the census address list in core, Nominatim optional
 
-Proposed 2026-11-10. **Phases 1 to 3 are built** the same day (`geocode.Layered`,
+Proposed 2026-11-10. **All four phases are done** the same day (`geocode.Layered`,
 `cmd/load-cnefe`, migrations 024 and 025, `CNEFE.Reverse`, `near`, the picker's flags) and were
 tested on synthetic addresses and on IBGE's real Distrito Federal file (1.3 million rows, loaded in
-16 s into about 170 MB; a click finds its address in under 1 ms). Phase 4 is still a proposal. The design was decided the same day: IBGE's
+16 s into about 170 MB; a click finds its address in under 1 ms), then measured on Rio de
+Janeiro's (phase 4, results below). The design was decided the same day: IBGE's
 census address list (CNEFE) becomes core's first source for addresses, both address → point and
 point → address, with a Nominatim server optional behind it. The questions at the end are about
 details.
@@ -84,7 +85,7 @@ large state reduces to about 1 GB in Postgres, and loading one takes a few GB of
    one, and the Distrito Federal's regions (Ceilândia/DF) as Brasília. This is what lets the
    picker's single search box reach CNEFE.
 6. **Point → address: the nearest CNEFE address within a limit, then Nominatim.** A click
-   returns the nearest CNEFE address within 100 m: its street and number, and the locality as
+   returns the nearest CNEFE address within 50 m (measured in phase 4; proposed as 100 m): its street and number, and the locality as
    neighbourhood. Further than that it returns no address rather than a wrong one, then asks
    Nominatim if configured. In cities a click lands on the building or a neighbour. In rural
    areas, or anywhere without census addresses nearby, the user types the address, as now when
@@ -148,7 +149,7 @@ large state reduces to about 1 GB in Postgres, and loading one takes a few GB of
 
 ### Phase 2: point → address and the picker
 
-- `Reverse` on CNEFE (nearest within 100 m), the `near` bias on search (decision 8), and the
+- `Reverse` on CNEFE (nearest within a limit, measured in phase 4), the `near` bias on search (decision 8), and the
   picker showing flags and the source (CNEFE or OpenStreetMap, each with its attribution).
 
 ### Phase 3: defaults and documentation
@@ -164,6 +165,77 @@ large state reduces to about 1 GB in Postgres, and loading one takes a few GB of
   addresses (trackid-sim's geography, once the simulator follows core again). The output is
   counts only, so it can be published.
 
+## Phase 4: what was measured
+
+`trackid-sim measure-geocoding` (seed 1), on IBGE's file for the state of Rio de Janeiro loaded
+with `load-cnefe` (8,962,200 rows, 87 s, 2.7 GB of memory at most) and the simulator's geography,
+the city of Rio de Janeiro (781,624 numbered census addresses; its boundary taken from the
+simulator's 41 police-station areas). No map server: nothing was sent outside, and the
+OpenStreetMap points compared are those the simulator cached when it built its bank branches.
+Counts only.
+
+**The reverse limit.** A click on a building whose address is not in the list gets the nearest
+one that is. Each of 50,000 census addresses was left out in turn and the nearest other one
+found. How often it is on the same street, by how far it is:
+
+| nearest other address | addresses | on the same street |
+|---|---:|---:|
+| ≤ 10 m | 36,508 | 88% |
+| 10–25 m | 11,726 | 83% |
+| 25–50 m | 1,413 | 65% |
+| 50–75 m | 208 | 58% |
+| 75–100 m | 70 | 50% |
+| 100–150 m | 50 | 46% |
+| farther | 25 | 64% |
+
+Past 50 m the street is right about half the time, so the limit is **50 m** (`ReverseMeters`).
+For the simulator's own occurrence points (2,000, placed as it places occurrences), the nearest
+census address is within 50 m for 56% and within 100 m for 67%: the rest are parks, hills,
+water and roads, where the user types the address.
+
+**Search**, on 2,000 census addresses written six ways. Steps: the number (`exact`), the nearest
+number (`nearest`), a street spelled differently (`adjusted`), a quadra/lote (`place`), the
+municipality alone, or nothing. Distances are the census list's answers from the address's
+point.
+
+| written | exact | nearest | adjusted | place | municipality | none | ≤ 50 m | 50–200 m | 0.2–1 km | farther |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| in full, with the neighbourhood | 1,983 | 1 | 0 | 6 | 10 | 0 | 1,983 | 3 | 3 | 1 |
+| abbreviated, no neighbourhood | 1,753 | 5 | 0 | 6 | 236 | 0 | 1,738 | 12 | 10 | 4 |
+| street and number only (`near`) | 1,762 | 0 | 0 | 6 | 0 | 232 | 1,749 | 10 | 9 | 0 |
+| a number not in the list | 93 | 1,892 | 0 | 6 | 9 | 0 | 1,722 | 214 | 44 | 11 |
+| two letters swapped | 193 | 0 | 1,687 | 6 | 114 | 0 | 1,880 | 3 | 3 | 0 |
+| no number | 7 | 6 | 0 | 6 | 1,981 | 0 | 6 | 4 | 4 | 5 |
+
+An address with no neighbourhood on a street whose name several neighbourhoods have (Rio has
+dozens of "Rua A" and "Travessa União") gets the municipality, or nothing when the
+municipality was only guessed from the map: by design. The far answers left are mostly streets
+literally called "Rua Sem Denominação" or "Rua Projetada A", many to a neighbourhood.
+
+The first run of this measurement found five defects, fixed in the same change: one-letter
+street names ("Rua A") and abbreviations (Tv., Estr., Al., Pç.) and types (Via, Vila, Escadaria,
+Entrada, Acesso, Travessia) the parser didn't read; a swap of two letters counted as two slips;
+a number taken from a same-named street in another neighbourhood when the named one lacks it;
+a locality named like the municipality ("Rio de Janeiro") or like the street (Rua Laranjeiras)
+taken for the neighbourhood the address names. Fully written addresses more than 1 km off went
+from 45 to 1 in 2,000.
+
+**The census list against OpenStreetMap**, on the simulator's 481 bank branches (addresses from
+the Banco Central's register; OpenStreetMap placed 125 by number, 285 by street and 71 by
+neighbourhood). The census list answered 343 (267 by number, 71 by the nearest number, 5 by
+another spelling) and gave the municipality for 138. Where both placed the number:
+
+| apart | branches |
+|---:|---:|
+| ≤ 50 m | 55 |
+| 50–200 m | 25 |
+| 0.2–1 km | 2 |
+| 1–2 km | 1 |
+| farther | 3 |
+
+So the 2 km at which a result says `SOURCES_DISAGREE` flags 3 of 86 addresses both sources
+placed by number.
+
 ## Organizations extending core
 
 An extension that already has its own CNEFE tables reloads the states into core's tables with
@@ -174,7 +246,7 @@ own (its importer, its corrections). Its version of core must include this plan'
 ## Decided questions (2026-11-10)
 
 1. **The reverse-lookup limit is measured,** in phase 4, not guessed or left to each deployment.
-   Until then the code uses 100 m.
+   It is 50 m (phase 4).
 2. **The new default is accepted.** `GEOCODER_URL` empty means no Nominatim before `1.0`; the
    CHANGELOG says so.
 3. **The dev stack loads no CNEFE state by default.** A script fetches and loads one state on

@@ -10,9 +10,10 @@ import (
 )
 
 // ReverseMeters is how far a clicked point may be from a census address and still be given its
-// address. Beyond it the click gets none rather than a wrong one. It stands until measured
-// (docs/geocoding-plan.md, phase 4).
-const ReverseMeters = 100
+// address. Beyond it the click gets none rather than a wrong one. Measured in Rio de Janeiro
+// (docs/geocoding-plan.md, phase 4): up to 50 m the nearest address is on the right street about
+// two times in three or more; past it, about half the time.
+const ReverseMeters = 50
 
 // reverseCandidates is how many of each table's nearest rows are compared: the index orders them
 // on the plane, the distance on the ellipsoid decides.

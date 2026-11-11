@@ -55,17 +55,19 @@ var stateNames = func() string {
 
 const (
 	// A street's type, as addresses write it, including state and federal roads (BR-040, SP-330).
-	streetTypes = `RUA|R\.|AVENIDA|AV\.?|PRA[CÇ]A|P[CÇ]A\.?|RODOVIA|ROD\.?|TRAVESSA|ALAMEDA|ESTRADA|VIELA|BECO|LADEIRA|LARGO|VICINAL|PASSAGEM|SERVID[ÃA]O|CAMINHO|BR[- ]?\d{3}`
+	// Abbreviations with a dot only where the bare word could be part of a name (AL, EST).
+	streetTypes = `RUA|R\.|AVENIDA|AV\.?|PRA[CÇ]A|P[CÇ]A?\.?|RODOVIA|ROD\.?|TRAVESSA|TV\.?|TRAV\.|ALAMEDA|AL\.|ESTRADA|ESTR?\.|` +
+		`VIELA|BECO|LADEIRA|LARGO|VICINAL|PASSAGEM|SERVID[ÃA]O|CAMINHO|VILA|VIA|TRAVESSIA|ESCADARIA|ENTRADA|ACESSO|BR[- ]?\d{3}`
 )
 
 var (
 	cityAndUF = regexp.MustCompile(`([A-ZÀ-Ú][A-ZÀ-Ú'. ]{2,40}?)\s*(?:[/,-]|\s-\s)\s*(` + ufCodes + `|` + stateNames + `)\s*[.)]*\s*$`)
 	// The street, then a comma and its number or "sem número": tried first, since a street's name
 	// may end in a number (RUA 24, VICINAL VC 201) and the comma says where the name ends.
-	streetCommaNumber = regexp.MustCompile(`^(?:.*?\b)?((?:` + streetTypes + `|(?:` + ufCodes + `)[- ]?\d{2,3})\s+[^,;:]{2,80}?)\s*,\s*(?:N[º°O.]*\s*)?(\d+[\w.-]*|S/?N[º°]?|SEM\s+N[ÚU]MERO|KM\s*\d+[\d,.]*)\b`)
+	streetCommaNumber = regexp.MustCompile(`^(?:.*?\b)?((?:` + streetTypes + `|(?:` + ufCodes + `)[- ]?\d{2,3})\s+[^,;:]{1,80}?)\s*,\s*(?:N[º°O.]*\s*)?(\d+[\w.-]*|S/?N[º°]?|SEM\s+N[ÚU]MERO|KM\s*\d+[\d,.]*)\b`)
 	// The street, up to a number or "sem número", with or without a comma.
-	streetAndNumber = regexp.MustCompile(`^(?:.*?\b)?((?:` + streetTypes + `|(?:` + ufCodes + `)[- ]?\d{2,3})\s+[^,;:]{2,80}?)[,\s]+(?:N[º°O.]*\s*)?(\d+[\w.-]*|S/?N[º°]?|SEM\s+N[ÚU]MERO|KM\s*\d+[\d,.]*)`)
-	streetAlone     = regexp.MustCompile(`^(?:.*?\b)?((?:` + streetTypes + `|(?:` + ufCodes + `)[- ]?\d{2,3})\s+[^,;:]{2,80})`)
+	streetAndNumber = regexp.MustCompile(`^(?:.*?\b)?((?:` + streetTypes + `|(?:` + ufCodes + `)[- ]?\d{2,3})\s+[^,;:]{1,80}?)[,\s]+(?:N[º°O.]*\s*)?(\d+[\w.-]*|S/?N[º°]?|SEM\s+N[ÚU]MERO|KM\s*\d+[\d,.]*)`)
+	streetAlone     = regexp.MustCompile(`^(?:.*?\b)?((?:` + streetTypes + `|(?:` + ufCodes + `)[- ]?\d{2,3})\s+[^,;:]{1,80})`)
 	// Words before a municipality's name. A bare "DE" isn't one: Juiz de Fora.
 	cityLeadIn   = regexp.MustCompile(`^(?:.*\s)?(?:NA CIDADE DE|NO MUNIC[ÍI]PIO DE|MUNIC[ÍI]PIO DE|CIDADE DE|EM)\s+`)
 	cepInAddress = regexp.MustCompile(`,?\s*CEP[:\s]*\d{2}\.?\d{3}-?\d{3}`)
@@ -77,6 +79,13 @@ var (
 // with the unit by its code or its name, a postcode or not, and a quadra, lote or casa in place of
 // the number. A named place, such as an airport, has no street to find.
 func ParseAddress(text string) ParsedAddress {
+	parsed, _ := parseAddress(text)
+	return parsed
+}
+
+// parseAddress is ParseAddress, and the address without its street and number: where it names its
+// neighbourhood or locality, apart from a street's name that is also one (Rua Laranjeiras).
+func parseAddress(text string) (ParsedAddress, string) {
 	flat := cepInAddress.ReplaceAllString(flatten(text), "")
 	flat = strings.TrimRight(flat, " .;,")
 	var parsed ParsedAddress
@@ -94,19 +103,22 @@ func ParseAddress(text string) ParsedAddress {
 			flat = strings.TrimRight(flat[:at[0]], " ,;-")
 		}
 	}
-	m := streetCommaNumber.FindStringSubmatch(flat)
+	rest := flat
+	m := streetCommaNumber.FindStringSubmatchIndex(flat)
 	if m == nil {
-		m = streetAndNumber.FindStringSubmatch(flat)
+		m = streetAndNumber.FindStringSubmatchIndex(flat)
 	}
 	if m != nil {
-		parsed.Street = expandStreetType(strings.TrimSpace(m[1]))
-		if number := m[2]; number != "" && number[0] >= '0' && number[0] <= '9' {
+		parsed.Street = expandStreetType(strings.TrimSpace(flat[m[2]:m[3]]))
+		if number := flat[m[4]:m[5]]; number != "" && number[0] >= '0' && number[0] <= '9' {
 			parsed.Number = strings.TrimRight(number, ".-")
 		}
-	} else if m := streetAlone.FindStringSubmatch(flat); m != nil {
-		parsed.Street = expandStreetType(strings.TrimSpace(m[1]))
+		rest = flat[:m[2]] + " " + flat[m[1]:]
+	} else if m := streetAlone.FindStringSubmatchIndex(flat); m != nil {
+		parsed.Street = expandStreetType(strings.TrimSpace(flat[m[2]:m[3]]))
+		rest = flat[:m[2]] + " " + flat[m[1]:]
 	}
-	return parsed
+	return parsed, rest
 }
 
 // expandStreetType writes out a street's abbreviated type. Only at its start: "R. " is also the end
@@ -114,6 +126,8 @@ func ParseAddress(text string) ParsedAddress {
 func expandStreetType(street string) string {
 	for _, abbreviation := range []struct{ short, full string }{
 		{"AV. ", "AVENIDA "}, {"AV ", "AVENIDA "}, {"R. ", "RUA "}, {"ROD. ", "RODOVIA "}, {"PÇA. ", "PRAÇA "}, {"PCA. ", "PRAÇA "}, {"PÇA ", "PRAÇA "}, {"PCA ", "PRAÇA "},
+		{"PÇ. ", "PRAÇA "}, {"PC. ", "PRAÇA "}, {"TV. ", "TRAVESSA "}, {"TV ", "TRAVESSA "}, {"TRAV. ", "TRAVESSA "}, {"AL. ", "ALAMEDA "},
+		{"EST. ", "ESTRADA "}, {"ESTR. ", "ESTRADA "},
 	} {
 		if strings.HasPrefix(street, abbreviation.short) {
 			return abbreviation.full + street[len(abbreviation.short):]
@@ -123,7 +137,7 @@ func expandStreetType(street string) string {
 }
 
 var streetWords = map[string]string{
-	"AV": "AVENIDA", "R": "RUA", "ROD": "RODOVIA", "TV": "TRAVESSA", "TRAV": "TRAVESSA", "PCA": "PRACA", "AL": "ALAMEDA", "EST": "ESTRADA",
+	"AV": "AVENIDA", "R": "RUA", "ROD": "RODOVIA", "TV": "TRAVESSA", "TRAV": "TRAVESSA", "PCA": "PRACA", "AL": "ALAMEDA", "EST": "ESTRADA", "ESTR": "ESTRADA", "PC": "PRACA",
 	"DR": "DOUTOR", "DRA": "DOUTORA", "PROF": "PROFESSOR", "PROFA": "PROFESSORA", "PRES": "PRESIDENTE", "CEL": "CORONEL",
 	"GAL": "GENERAL", "GEN": "GENERAL", "MAL": "MARECHAL", "SEN": "SENADOR", "DEP": "DEPUTADO", "VER": "VEREADOR",
 	"ENG": "ENGENHEIRO", "DES": "DESEMBARGADOR", "GOV": "GOVERNADOR", "PE": "PADRE", "STA": "SANTA", "STO": "SANTO", "S": "SAO",

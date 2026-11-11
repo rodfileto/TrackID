@@ -79,10 +79,21 @@ func (c *CNEFE) findNumber(ctx context.Context, place municipality, parsed Parse
 	if err != nil || street == "" {
 		return Result{}, "", false, err
 	}
+	// Where the address names its locality: after the street and number, and in its municipality's
+	// place (the Distrito Federal's addresses name the region there).
+	_, rest := parseAddress(text)
+	hint := " " + simplify(rest+" "+parsed.City) + " "
+	// The locality the address names, when the street has one there: another locality's
+	// street of the same name, kilometres away, has neither the number nor the nearest.
+	named, err := c.namedLocality(ctx, place, street, hint)
+	if err != nil {
+		return Result{}, "", false, err
+	}
 	// The nearest number first; at it, one row per locality the street name has there.
 	rows, err := c.db.QueryContext(ctx, `SELECT number, lat, lon, street, locality, locality_key, cep, addresses FROM cnefe_addresses
 		WHERE municipality_code = $1 AND street_key = $2 AND number BETWEEN $3::int - $4::int AND $3::int + $4::int
-		ORDER BY abs(number - $3::int), number`, place.code, street, number, cnefeNearNumbers)
+			AND ($5 = '' OR locality_key = $5)
+		ORDER BY abs(number - $3::int), number`, place.code, street, number, cnefeNearNumbers, named)
 	if err != nil {
 		return Result{}, "", false, fmt.Errorf("geocode: cnefe: %w", err)
 	}
@@ -105,7 +116,7 @@ func (c *CNEFE) findNumber(ctx context.Context, place municipality, parsed Parse
 		return Result{}, "", false, err
 	}
 	// The same street name in two localities: the one the address names, or none.
-	row, ok := pickLocality(atNumber, " "+simplify(text)+" ")
+	row, ok := pickLocality(atNumber, hint, place)
 	if !ok {
 		return Result{}, "", false, nil
 	}
@@ -123,6 +134,37 @@ func (c *CNEFE) findNumber(ctx context.Context, place municipality, parsed Parse
 	}
 	result.Precision, result.HouseNumber = PrecisionGeocoded, strconv.Itoa(found)
 	return result, stepCNEFENumber, true, nil
+}
+
+// namedLocality is the locality, of those a street is in, that the address names (localityScore).
+// Empty when it names none of them.
+func (c *CNEFE) namedLocality(ctx context.Context, place municipality, street, hint string) (string, error) {
+	rows, err := c.db.QueryContext(ctx, `SELECT DISTINCT locality_key FROM cnefe_addresses WHERE municipality_code = $1 AND street_key = $2`, place.code, street)
+	if err != nil {
+		return "", fmt.Errorf("geocode: cnefe: %w", err)
+	}
+	defer rows.Close()
+	named, best := "", 0
+	for rows.Next() {
+		var locality string
+		if err := rows.Scan(&locality); err != nil {
+			return "", err
+		}
+		if score := localityScore(locality, hint, place); score > best {
+			named, best = locality, score
+		}
+	}
+	return named, rows.Err()
+}
+
+// localityScore says how well an address names a locality: 0 when it doesn't, and otherwise its
+// name's length, so SOBRADINHO II wins over SOBRADINHO. A locality with the municipality's own name
+// (Rio de Janeiro has one) is never named: the address names its municipality anyway.
+func localityScore(locality, hint string, place municipality) int {
+	if locality == "" || locality == simplify(place.name) || !strings.Contains(hint, " "+locality+" ") {
+		return 0
+	}
+	return len(locality)
 }
 
 // street finds the table's spelling of a street in a municipality: the same, or the only one close
@@ -221,7 +263,7 @@ func (c *CNEFE) findPlace(ctx context.Context, place municipality, parsed Parsed
 	}
 	hint := " " + key.String() + " " + simplify(parsed.City) + " "
 	for _, candidate := range candidates {
-		row, ok := pickLocality(found[candidate.key], hint)
+		row, ok := pickLocality(found[candidate.key], hint, place)
 		if !ok {
 			continue
 		}
@@ -244,25 +286,24 @@ func (c *CNEFE) findPlace(ctx context.Context, place municipality, parsed Parsed
 }
 
 // pickLocality chooses among the localities a key is filed under: the only one, the one the address
-// names (the longest, so SOBRADINHO II isn't SOBRADINHO), or, when the address names none, all of
+// names (localityScore), or, when the address names none, all of
 // them if they are one place filed under spellings of its locality. The same quadra in two towns is
 // neither.
-func pickLocality(rows []placeRow, hint string) (placeRow, bool) {
+func pickLocality(rows []placeRow, hint string, place municipality) (placeRow, bool) {
 	switch len(rows) {
 	case 0:
 		return placeRow{}, false
 	case 1:
 		return rows[0], true
 	}
-	best, tie := -1, false
+	best, bestScore, tie := -1, 0, false
 	for i, row := range rows {
-		if row.localityKey == "" || !strings.Contains(hint, " "+row.localityKey+" ") {
-			continue
-		}
+		score := localityScore(row.localityKey, hint, place)
 		switch {
-		case best < 0 || len(row.localityKey) > len(rows[best].localityKey):
-			best, tie = i, false
-		case len(row.localityKey) == len(rows[best].localityKey):
+		case score == 0:
+		case score > bestScore:
+			best, bestScore, tie = i, score, false
+		case score == bestScore:
 			tie = true
 		}
 	}

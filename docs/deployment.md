@@ -192,7 +192,7 @@ GPU needs it. Rebuild it for each release.
 
 ## A geocoder of your own (Nominatim)
 
-The census address list (above) finds most urban addresses, and a click within 100 m of one. For
+The census address list (above) finds most urban addresses, and a click within 50 m of one. For
 named places (an airport, a square), streets and clicks the census list lacks, run a Nominatim of
 your own. `GEOCODER_URL=public` uses OpenStreetMap's public one instead, which then receives those
 addresses and clicks; with `GEOCODER_URL` empty there is none:

@@ -78,6 +78,11 @@ const cnefeSample = "COD_MUNICIPIO;DSC_LOCALIDADE;NOM_TIPO_SEGLOGR;NOM_TITULO_SE
 	// One street name in two localities far apart, and one place under two spellings of its locality.
 	"5208707;VILA ALFA;RUA;;BELA VISTA;10;;;;;;;-16.6000;-49.3000;1;74000001\n" +
 	"5208707;VILA BETA;RUA;;BELA VISTA;10;;;;;;;-16.7500;-49.1000;1;74000002\n" +
+	"5208707;VILA GAMA;RUA;;BELA VISTA;30;;;;;;;-16.7800;-49.4500;1;74000004\n" + // a number only another locality has
+	"5208707;GOIANIA;RUA;;BELA VISTA;10;;;;;;;-16.6500;-49.2500;1;74000005\n" + // a locality named as the municipality
+	// A street named as another locality.
+	"5208707;CENTRO;RUA;;SETOR OESTE;7;;;;;;;-16.6700;-49.2550;1;74000006\n" +
+	"5208707;SETOR OESTE;RUA;;SETOR OESTE;7;;;;;;;-16.6900;-49.2700;1;74000007\n" +
 	"5208707;SETOR NOVO;RUA;;PERTO;5;;;;;;;-16.7000;-49.2000;1;74000003\n" +
 	"5208707;SETOR NOVO I;RUA;;PERTO;5;;;;;;;-16.7001;-49.2001;1;74000003\n"
 
@@ -116,7 +121,7 @@ func TestReadCNEFE(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.Rows != 20 || stats.Located != 10 || stats.Coarse != 1 || stats.NoNumber != 1 || stats.Entries != 7 {
+	if stats.Rows != 24 || stats.Located != 10 || stats.Coarse != 1 || stats.NoNumber != 1 || stats.Entries != 11 {
 		t.Fatalf("stats %+v", stats)
 	}
 	// Each place under its whole key and its shorter ones; a key in two localities twice.
@@ -164,8 +169,12 @@ func TestCNEFEFind(t *testing.T) {
 		{"R. Dr. João da Silva, 100, Goiânia/GO", PrecisionGeocoded, -16.6801, nil},
 		{"Rua Doutor Joao Silva 120, Goiânia - Goiás", PrecisionStreet, -16.6801, []string{FlagNearestNumber}}, // 100 and 140 tie: the lower
 		{"Rua Dr. Joao Silvva, 140, Goiânia/GO", PrecisionGeocoded, -16.6810, []string{FlagStreetAdjusted}},
-		{"Rua Bela Vista, 10, Vila Beta, Goiânia/GO", PrecisionGeocoded, -16.75, nil}, // the locality named
-		{"Rua Perto, 5, Goiânia/GO", PrecisionGeocoded, -16.70005, nil},               // two spellings of one place
+		{"Rua Bela Vista, 10, Vila Beta, Goiânia/GO", PrecisionGeocoded, -16.75, nil},                      // the locality named
+		{"Rua Bela Vista, 30, Vila Alfa, Goiânia/GO", PrecisionStreet, -16.6, []string{FlagNearestNumber}}, // not Vila Gama's 30
+		{"Rua Bela Vista, 10, Vila Beta, Goiânia, GO", PrecisionGeocoded, -16.75, nil},                     // not the locality named Goiânia
+		{"Rua Setor Oeste, 7 - Centro, Goiânia/GO", PrecisionGeocoded, -16.67, nil},                        // the street's name is not its locality
+		{"Centro, Rua Setor Oeste, 7, Goiânia/GO", PrecisionGeocoded, -16.67, nil},                         // named before the street
+		{"Rua Perto, 5, Goiânia/GO", PrecisionGeocoded, -16.70005, nil},                                    // two spellings of one place
 
 	} {
 		results, err := layered.Search(ctx, Query{Text: c.address})
@@ -281,7 +290,7 @@ func TestCNEFEReverse(t *testing.T) {
 	}{
 		{-49.2604, -16.6803, "RUA DOUTOR JOÃO DA SILVA", "100", PrecisionGeocoded, "Goiânia"},         // about 40 m away
 		{-48.0746, -15.8773, "QR 308 CONJUNTO 13 LOTE 8", "", PrecisionGeocoded, "Brasília"},          // the lote, not its conjunto
-		{-49.2210, -16.6815, "AVENIDA URUGUAIANA QUADRA 22 LOTE 6", "", PrecisionGeocoded, "Goiânia"}, // a lote on a street
+		{-49.2210, -16.6813, "AVENIDA URUGUAIANA QUADRA 22 LOTE 6", "", PrecisionGeocoded, "Goiânia"}, // a lote on a street
 	} {
 		got, err := layered.Reverse(ctx, c.lon, c.lat)
 		if err != nil || got.Street != c.street || got.HouseNumber != c.number || got.Precision != c.precision || got.City != c.city ||

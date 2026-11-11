@@ -16,6 +16,12 @@ func TestParseAddress(t *testing.T) {
 		"Rua Sem Número, s/n, CEP 70000-000, Brasília/DF":     {Street: "RUA SEM NÚMERO", City: "BRASÍLIA", UF: "DF"},
 		"Aeroporto Internacional, Confins/MG":                 {City: "CONFINS", UF: "MG"},
 		"Rua Goiás 120":                                       {Street: "RUA GOIÁS", Number: "120"},
+		"Rua A, 730 - Senador Camará, Rio de Janeiro/RJ":      {Street: "RUA A", Number: "730", City: "RIO DE JANEIRO", UF: "RJ"},
+		"R. L 40, Rio de Janeiro - RJ":                        {Street: "RUA L", Number: "40", City: "RIO DE JANEIRO", UF: "RJ"},
+		"Tv. União 31, Rio de Janeiro - RJ":                   {Street: "TRAVESSA UNIÃO", Number: "31", City: "RIO DE JANEIRO", UF: "RJ"},
+		"Estr. do Guandu 8301, Rio de Janeiro - RJ":           {Street: "ESTRADA DO GUANDU", Number: "8301", City: "RIO DE JANEIRO", UF: "RJ"},
+		"Via B Oito, 6 - Maré, Rio de Janeiro/RJ":             {Street: "VIA B OITO", Number: "6", City: "RIO DE JANEIRO", UF: "RJ"},
+		"Escadaria Selarón, 12, Rio de Janeiro/RJ":            {Street: "ESCADARIA SELARÓN", Number: "12", City: "RIO DE JANEIRO", UF: "RJ"},
 		"QR 308, CONJ. 13, LT. 08 - Samambaia, Brasília/DF":   {City: "BRASÍLIA", UF: "DF", Place: "QR 308 CONJUNTO 13 LOTE 8 SAMAMBAIA"},
 		"SQN 103 BLOCO B APTO 401, ASA NORTE, BRASILIA-DF":    {City: "BRASILIA", UF: "DF", Place: "SQN 103 BLOCO B ASA NORTE"},
 		"Avenida Brasil, 100, casa 2, Betim/MG":               {Street: "AVENIDA BRASIL", Number: "100", City: "BETIM", UF: "MG", Place: "AVENIDA BRASIL 100 CASA 2"},
@@ -60,6 +66,9 @@ func TestSimilarity(t *testing.T) {
 	}
 	if s := similarity("RUA GOIAZ", "RUA GOIAS"); s < 0.85 || s >= 1 {
 		t.Errorf("one letter apart: %v", s)
+	}
+	if s, one := similarity("RUA SAREGNTO REGO", "RUA SARGENTO REGO"), similarity("RUA SARGENTO REG", "RUA SARGENTO REGO"); s != one {
+		t.Errorf("two neighbours swapped is one slip: %v, one letter missing %v", s, one)
 	}
 	if s := similarity("RUA A", "AVENIDA BRASIL"); s > 0.5 {
 		t.Errorf("unrelated: %v", s)
