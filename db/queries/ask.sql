@@ -1,7 +1,9 @@
 -- The AI mode's read-only queries (ask package, docs/ask-plan.md). The model never writes SQL: it
 -- chooses a tool, and a tool's filters reach these parameterized queries. An empty array or a NULL
 -- leaves a filter off. occurred_after is inclusive and occurred_before exclusive; a period counts
--- by occurred_from, the start of an occurrence's window.
+-- by occurred_from, the start of an occurrence's window. A location of precision JURISDICTION is the investigating
+-- unit's municipality, not a place (migration 030): every join to locations leaves it out, so its occurrence counts as
+-- one with no place.
 
 -- name: AskOccurrenceSummary :one
 -- How many occurrences match, and how many a period or a place filter left out only because the
@@ -16,9 +18,9 @@ WITH base AS (
             AND (sqlc.narg(neighbourhood)::text IS NULL OR lower(l.neighbourhood) = lower(sqlc.narg(neighbourhood)::text))
             AND (cardinality(@place_types::text[]) = 0 OR l.place_type = ANY(@place_types::text[])), FALSE)::bool AS place_ok,
         (o.occurred_from IS NULL)::bool AS undated,
-        (o.location_id IS NULL)::bool AS unplaced
+        (l.id IS NULL)::bool AS unplaced
     FROM occurrences o
-    LEFT JOIN locations l ON l.id = o.location_id
+    LEFT JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
     WHERE (cardinality(@types::text[]) = 0 OR EXISTS (
             SELECT 1 FROM occurrence_classifications c WHERE c.occurrence_id = o.id AND c.type_code = ANY(@types::text[])))
       AND (cardinality(@groups::text[]) = 0 OR EXISTS (
@@ -41,7 +43,7 @@ FROM base;
 WITH matched AS (
     SELECT o.id, o.occurred_from, o.status, o.agency, l.uf, l.municipality_code, l.neighbourhood, l.place_type
     FROM occurrences o
-    LEFT JOIN locations l ON l.id = o.location_id
+    LEFT JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
     WHERE (cardinality(@types::text[]) = 0 OR EXISTS (
             SELECT 1 FROM occurrence_classifications c WHERE c.occurrence_id = o.id AND c.type_code = ANY(@types::text[])))
       AND (cardinality(@groups::text[]) = 0 OR EXISTS (
@@ -92,7 +94,7 @@ SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
     COALESCE((SELECT json_agg(b.case_id ORDER BY b.case_id) FROM biometric_cases b
               WHERE b.occurrence_id = o.id), '[]')::jsonb AS cases
 FROM occurrences o
-LEFT JOIN locations l ON l.id = o.location_id
+LEFT JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
 WHERE (cardinality(@types::text[]) = 0 OR EXISTS (
         SELECT 1 FROM occurrence_classifications c WHERE c.occurrence_id = o.id AND c.type_code = ANY(@types::text[])))
   AND (cardinality(@groups::text[]) = 0 OR EXISTS (
@@ -165,7 +167,7 @@ SELECT
 -- Municipalities whose name contains q, ignoring case and accents, with how many occurrences each
 -- holds. When the deployment has loaded no boundaries this finds nothing.
 SELECT mu.code::text AS code, mu.name, mu.uf::text AS uf,
-    (SELECT COUNT(*) FROM occurrences o JOIN locations l ON l.id = o.location_id
+    (SELECT COUNT(*) FROM occurrences o JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
      WHERE l.municipality_code = mu.code)::bigint AS occurrences
 FROM municipalities mu
 WHERE translate(lower(mu.name), 'áàâãéêíóôõúüç', 'aaaaeeiooouuc')
@@ -278,7 +280,7 @@ ORDER BY case_id;
 SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.inquiry_number,
     o.occurred_from, o.occurred_to, o.reported_at, o.registered_at, o.attempted, o.offender_count, o.victim_count,
     o.status, o.description,
-    (o.location_id IS NOT NULL)::bool AS has_place,
+    (l.id IS NOT NULL)::bool AS has_place,
     l.name AS place_name, l.address, l.neighbourhood, l.municipality_code, l.uf, l.place_type, l.precision,
     COALESCE(ST_X(l.geom::geometry), 0)::float8 AS lon,
     COALESCE(ST_Y(l.geom::geometry), 0)::float8 AS lat,
@@ -286,7 +288,7 @@ SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
     COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
 FROM occurrences o
-LEFT JOIN locations l ON l.id = o.location_id
+LEFT JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
 LEFT JOIN municipalities mu ON mu.code = l.municipality_code
 WHERE o.id = ANY(@ids::bigint[])
 ORDER BY o.occurred_from DESC NULLS LAST, o.id DESC;
@@ -307,7 +309,7 @@ SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types,
     (SELECT COUNT(*) FROM biometric_cases b WHERE b.occurrence_id = o.id)::bigint AS linked_cases
 FROM occurrences o
-JOIN locations l ON l.id = o.location_id
+JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
 WHERE ST_DWithin(l.geom, ST_SetSRID(ST_MakePoint(@lon::float8, @lat::float8), 4326)::geography, @radius_m::float8)
   AND l.precision <> 'MUNICIPALITY'
   AND o.id <> @except_id::bigint
@@ -331,7 +333,7 @@ SELECT
     COUNT(*) FILTER (WHERE l.precision <> 'MUNICIPALITY' AND o.occurred_from IS NULL
         AND (sqlc.narg(occurred_after)::timestamptz IS NOT NULL OR sqlc.narg(occurred_before)::timestamptz IS NOT NULL))::bigint AS undated
 FROM occurrences o
-JOIN locations l ON l.id = o.location_id
+JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
 WHERE ST_DWithin(l.geom, ST_SetSRID(ST_MakePoint(@lon::float8, @lat::float8), 4326)::geography, @radius_m::float8)
   AND o.id <> @except_id::bigint
   AND (cardinality(@types::text[]) = 0 OR EXISTS (

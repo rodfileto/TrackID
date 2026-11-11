@@ -15,11 +15,17 @@ import (
 
 // LocationInput is a place, keyed by the caller's LocationID: two reports at the same place
 // share it. Lon/Lat are WGS 84.
+// PrecisionJurisdiction is a location that is not where the occurrence happened but the municipality of the unit
+// investigating it, for an occurrence imported with no place (db/migrations/030_jurisdiction_precision.sql). Only
+// Ingest writes one; the map, the searches by distance, the AI mode's place filters and the laudo leave it out, and
+// SetPlace replaces it with the real place.
+const PrecisionJurisdiction = "JURISDICTION"
+
 type LocationInput struct {
 	LocationID       string
 	Name             string // optional
 	Lon, Lat         float64
-	Precision        string // EXACT, GEOCODED, STREET, NEIGHBOURHOOD or MUNICIPALITY
+	Precision        string // EXACT, GEOCODED, STREET, NEIGHBOURHOOD, MUNICIPALITY or PrecisionJurisdiction
 	MunicipalityCode string // IBGE, 7 digits
 	UF               string
 	Neighbourhood    string // optional

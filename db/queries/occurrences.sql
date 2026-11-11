@@ -121,6 +121,7 @@ FROM occurrences o
 JOIN locations l ON l.id = o.location_id
 WHERE ST_DWithin(l.geom, ST_SetSRID(ST_MakePoint(sqlc.arg(lon)::float8, sqlc.arg(lat)::float8), 4326)::geography, sqlc.arg(radius_m)::float8)
   AND (sqlc.arg(include_municipality_centroids)::bool OR l.precision <> 'MUNICIPALITY')
+  AND l.precision <> 'JURISDICTION'
 ORDER BY distance_m, o.id;
 
 -- name: GetOccurrenceIDByNumber :one
@@ -134,7 +135,7 @@ WHERE inquiry_number = $1 AND occurrence_number IS NULL AND occurrence_seq IS NU
 -- name: ListOccurrencesForMap :many
 -- Occurrences with their point, types and linked cases, for the occurrence map. NULL bounds are
 -- open. types is a JSON array of occurrence_types codes; cases a JSON array of
--- {caseId, modality, caseType}.
+-- {caseId, modality, caseType}. A JURISDICTION location is no place, so its occurrence is not on the map.
 SELECT o.id, o.agency, o.occurrence_number, o.occurrence_year, o.occurrence_seq,
     o.occurred_from, o.occurred_to, o.registered_at,
     o.attempted, o.status, o.description,
@@ -148,7 +149,7 @@ SELECT o.id, o.agency, o.occurrence_number, o.occurrence_year, o.occurrence_seq,
                               ORDER BY b.case_id)
               FROM biometric_cases b WHERE b.occurrence_id = o.id), '[]')::jsonb AS cases
 FROM occurrences o
-JOIN locations l ON l.id = o.location_id
+JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
 WHERE (sqlc.narg(occurred_after)::timestamptz IS NULL OR o.occurred_from >= sqlc.narg(occurred_after))
   AND (sqlc.narg(occurred_before)::timestamptz IS NULL OR o.occurred_from < sqlc.narg(occurred_before))
 ORDER BY o.occurred_from NULLS LAST, o.id
@@ -187,6 +188,7 @@ SELECT l.id, l.location_id, l.name, l.address, l.neighbourhood, l.place_type, l.
     (SELECT COUNT(*) FROM occurrences o WHERE o.location_id = l.id)::int4 AS occurrence_count
 FROM locations l
 WHERE ST_DWithin(l.geom, ST_SetSRID(ST_MakePoint(sqlc.arg(lon)::float8, sqlc.arg(lat)::float8), 4326)::geography, sqlc.arg(radius_m)::float8)
+  AND l.precision <> 'JURISDICTION'
 ORDER BY distance_m, l.id
 LIMIT 10;
 
@@ -198,7 +200,7 @@ SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
     COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
 FROM occurrences o
-LEFT JOIN locations l ON l.id = o.location_id
+LEFT JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
 WHERE (o.occurrence_year::text || '.' || lpad(o.occurrence_seq::text, 4, '0')) ILIKE '%' || sqlc.arg(q)::text || '%'
    OR o.occurrence_number ILIKE '%' || sqlc.arg(q)::text || '%'
    OR o.inquiry_number ILIKE '%' || sqlc.arg(q)::text || '%'

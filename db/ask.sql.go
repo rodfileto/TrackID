@@ -375,7 +375,7 @@ func (q *Queries) AskDataCoverage(ctx context.Context) (AskDataCoverageRow, erro
 
 const askFindMunicipalities = `-- name: AskFindMunicipalities :many
 SELECT mu.code::text AS code, mu.name, mu.uf::text AS uf,
-    (SELECT COUNT(*) FROM occurrences o JOIN locations l ON l.id = o.location_id
+    (SELECT COUNT(*) FROM occurrences o JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
      WHERE l.municipality_code = mu.code)::bigint AS occurrences
 FROM municipalities mu
 WHERE translate(lower(mu.name), 'áàâãéêíóôõúüç', 'aaaaeeiooouuc')
@@ -446,7 +446,7 @@ SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
     COALESCE((SELECT json_agg(b.case_id ORDER BY b.case_id) FROM biometric_cases b
               WHERE b.occurrence_id = o.id), '[]')::jsonb AS cases
 FROM occurrences o
-LEFT JOIN locations l ON l.id = o.location_id
+LEFT JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
 WHERE (cardinality($1::text[]) = 0 OR EXISTS (
         SELECT 1 FROM occurrence_classifications c WHERE c.occurrence_id = o.id AND c.type_code = ANY($1::text[])))
   AND (cardinality($2::text[]) = 0 OR EXISTS (
@@ -559,7 +559,7 @@ const askOccurrenceBreakdown = `-- name: AskOccurrenceBreakdown :many
 WITH matched AS (
     SELECT o.id, o.occurred_from, o.status, o.agency, l.uf, l.municipality_code, l.neighbourhood, l.place_type
     FROM occurrences o
-    LEFT JOIN locations l ON l.id = o.location_id
+    LEFT JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
     WHERE (cardinality($3::text[]) = 0 OR EXISTS (
             SELECT 1 FROM occurrence_classifications c WHERE c.occurrence_id = o.id AND c.type_code = ANY($3::text[])))
       AND (cardinality($4::text[]) = 0 OR EXISTS (
@@ -666,7 +666,7 @@ const askOccurrenceDetails = `-- name: AskOccurrenceDetails :many
 SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.inquiry_number,
     o.occurred_from, o.occurred_to, o.reported_at, o.registered_at, o.attempted, o.offender_count, o.victim_count,
     o.status, o.description,
-    (o.location_id IS NOT NULL)::bool AS has_place,
+    (l.id IS NOT NULL)::bool AS has_place,
     l.name AS place_name, l.address, l.neighbourhood, l.municipality_code, l.uf, l.place_type, l.precision,
     COALESCE(ST_X(l.geom::geometry), 0)::float8 AS lon,
     COALESCE(ST_Y(l.geom::geometry), 0)::float8 AS lat,
@@ -674,7 +674,7 @@ SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
     COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types
 FROM occurrences o
-LEFT JOIN locations l ON l.id = o.location_id
+LEFT JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
 LEFT JOIN municipalities mu ON mu.code = l.municipality_code
 WHERE o.id = ANY($1::bigint[])
 ORDER BY o.occurred_from DESC NULLS LAST, o.id DESC
@@ -806,9 +806,9 @@ WITH base AS (
             AND ($5::text IS NULL OR lower(l.neighbourhood) = lower($5::text))
             AND (cardinality($6::text[]) = 0 OR l.place_type = ANY($6::text[])), FALSE)::bool AS place_ok,
         (o.occurred_from IS NULL)::bool AS undated,
-        (o.location_id IS NULL)::bool AS unplaced
+        (l.id IS NULL)::bool AS unplaced
     FROM occurrences o
-    LEFT JOIN locations l ON l.id = o.location_id
+    LEFT JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
     WHERE (cardinality($7::text[]) = 0 OR EXISTS (
             SELECT 1 FROM occurrence_classifications c WHERE c.occurrence_id = o.id AND c.type_code = ANY($7::text[])))
       AND (cardinality($8::text[]) = 0 OR EXISTS (
@@ -848,7 +848,9 @@ type AskOccurrenceSummaryRow struct {
 // The AI mode's read-only queries (ask package, docs/ask-plan.md). The model never writes SQL: it
 // chooses a tool, and a tool's filters reach these parameterized queries. An empty array or a NULL
 // leaves a filter off. occurred_after is inclusive and occurred_before exclusive; a period counts
-// by occurred_from, the start of an occurrence's window.
+// by occurred_from, the start of an occurrence's window. A location of precision JURISDICTION is the investigating
+// unit's municipality, not a place (migration 030): every join to locations leaves it out, so its occurrence counts as
+// one with no place.
 // How many occurrences match, and how many a period or a place filter left out only because the
 // occurrence has no date or no place: an answer has to be able to say so.
 func (q *Queries) AskOccurrenceSummary(ctx context.Context, arg AskOccurrenceSummaryParams) (AskOccurrenceSummaryRow, error) {
@@ -881,7 +883,7 @@ SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number,
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types,
     (SELECT COUNT(*) FROM biometric_cases b WHERE b.occurrence_id = o.id)::bigint AS linked_cases
 FROM occurrences o
-JOIN locations l ON l.id = o.location_id
+JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
 WHERE ST_DWithin(l.geom, ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography, $3::float8)
   AND l.precision <> 'MUNICIPALITY'
   AND o.id <> $4::bigint
@@ -991,7 +993,7 @@ SELECT
     COUNT(*) FILTER (WHERE l.precision <> 'MUNICIPALITY' AND o.occurred_from IS NULL
         AND ($1::timestamptz IS NOT NULL OR $2::timestamptz IS NOT NULL))::bigint AS undated
 FROM occurrences o
-JOIN locations l ON l.id = o.location_id
+JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
 WHERE ST_DWithin(l.geom, ST_SetSRID(ST_MakePoint($3::float8, $4::float8), 4326)::geography, $5::float8)
   AND o.id <> $6::bigint
   AND (cardinality($7::text[]) = 0 OR EXISTS (

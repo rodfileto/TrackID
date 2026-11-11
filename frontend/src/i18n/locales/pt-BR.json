@@ -694,7 +694,8 @@
     "GEOCODED": "Endereço geocodificado",
     "STREET": "Apenas a rua",
     "NEIGHBOURHOOD": "Apenas o bairro",
-    "MUNICIPALITY": "Apenas o município"
+    "MUNICIPALITY": "Apenas o município",
+    "JURISDICTION": "Município da unidade que investiga"
   },
   "occurrenceForm": {
     "title": "Nova ocorrência",
@@ -759,7 +760,8 @@
     "searchError": "Não foi possível buscar ocorrências",
     "registerNew": "Registrar nova ocorrência",
     "mapLabel": "Onde a ocorrência aconteceu",
-    "approximate": "Ponto aproximado ({{precision}})."
+    "approximate": "Ponto aproximado ({{precision}}).",
+    "jurisdiction": "O local do fato não é conhecido. A ocorrência está no município da unidade que a investiga ({{unit}}), por isso fica fora do mapa e das análises geográficas até que o local seja informado."
   },
   "analyses": {
     "title": "Análises",

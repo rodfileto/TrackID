@@ -47,8 +47,9 @@ function occurrenceLabel(o: { id: number; trackidNumber?: string; agency?: strin
 }
 
 function pointOf(o: AskOccurrence): AskPoint | null {
-  // A point known only to the municipality is its centre, not a place to mark.
-  if (o.lat == null || o.lon == null || o.precision === "MUNICIPALITY") return null;
+  // A point known only to the municipality is its centre, and a JURISDICTION one the investigating unit's: neither
+  // is a place to mark.
+  if (o.lat == null || o.lon == null || o.precision === "MUNICIPALITY" || o.precision === "JURISDICTION") return null;
   return { lat: o.lat, lon: o.lon, label: occurrenceLabel(o) };
 }
 

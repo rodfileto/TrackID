@@ -119,7 +119,7 @@ SELECT o.occurred_from, o.occurred_to, o.inquiry_number, o.description, o.agency
        COALESCE(ST_X(l.geom::geometry), 0)::float8 AS lon, COALESCE(ST_Y(l.geom::geometry), 0)::float8 AS lat,
        (l.id IS NOT NULL)::bool AS has_place
 FROM occurrences o
-LEFT JOIN locations l ON l.id = o.location_id
+LEFT JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
 LEFT JOIN municipalities m ON m.code = l.municipality_code
 WHERE o.id = $1
 `

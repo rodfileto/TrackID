@@ -133,8 +133,14 @@ export default function CaseOccurrenceCard({ caseId }: { caseId: string }) {
                   </button>
                 )}
               </div>
-              {linked.lon !== undefined && linked.lat !== undefined && (
-                <OccurrencePointMap lon={linked.lon} lat={linked.lat} precision={linked.precision} />
+              {linked.precision === "JURISDICTION" ? (
+                // The investigating unit's municipality, not the place: never drawn as one.
+                <p className="text-theme-xs text-gray-500 dark:text-gray-400">
+                  {t("caseOccurrence.jurisdiction", { unit: linked.placeName ?? "" })}
+                </p>
+              ) : (
+                linked.lon !== undefined &&
+                linked.lat !== undefined && <OccurrencePointMap lon={linked.lon} lat={linked.lat} precision={linked.precision} />
               )}
             </div>
           ) : (

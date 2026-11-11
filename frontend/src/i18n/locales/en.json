@@ -694,7 +694,8 @@
     "GEOCODED": "Geocoded address",
     "STREET": "Street only",
     "NEIGHBOURHOOD": "Neighbourhood only",
-    "MUNICIPALITY": "Municipality only"
+    "MUNICIPALITY": "Municipality only",
+    "JURISDICTION": "The investigating unit's municipality"
   },
   "occurrenceForm": {
     "title": "New occurrence",
@@ -759,7 +760,8 @@
     "searchError": "Could not search occurrences",
     "registerNew": "Register a new occurrence",
     "mapLabel": "Where the occurrence happened",
-    "approximate": "Approximate point ({{precision}})."
+    "approximate": "Approximate point ({{precision}}).",
+    "jurisdiction": "Where it happened is not known. The occurrence is filed under the municipality of the unit investigating it ({{unit}}), so it is left off the map and out of geographic analysis until its place is set."
   },
   "analyses": {
     "title": "Analyses",

@@ -49,6 +49,11 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- **A location of precision `JURISDICTION`** (migration 030, `occurrences.PrecisionJurisdiction`): the municipality of the
+  unit investigating an occurrence imported with no place, not where it happened. The occurrence keeps a municipality
+  and a state, but the occurrence map, the searches by distance, the nearby locations offered for reuse, the AI mode's
+  place filters and breakdowns, and the laudo treat it as having no place; the case page says so instead of drawing a
+  map. Setting the real place replaces it.
 - **Organizations, units and where each user works** (`docs/organizations-plan.md`, decided 2026-11-11). An
   Organizations and units page (`/admin/organizations`) manages organizations (a SUPER_ADMIN) and the tree of units in
   each (every admin); a unit in use is deactivated rather than deleted. On the Users page each user has a dated
