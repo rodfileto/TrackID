@@ -12,6 +12,10 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Changed
 
+- **A positive fingerprint decision is reported as an identification.** A fingerprint decision has no level on the
+  facial conclusion scale, so `reports` read every positive fingerprint comparison as support below the
+  identification level ("Suporte (abaixo do nível de identificação)"). Only facial comparisons are graded.
+
 - **An empty `GEOCODER_URL` now means no Nominatim**, not OpenStreetMap's public instance
   (`docs/geocoding-plan.md` phase 3). Addresses are still found in the census address list and as their
   municipality. `GEOCODER_URL=public` asks for the public instance, and the server logs that addresses go to it.
@@ -44,6 +48,13 @@ period; `0.x` patch releases fix defects without adding behaviour.
   unit; `reports.ImportedReport.IssuingUnitID` names another. Reports already numbered keep their numbers.
 
 ### Added
+
+- The scene examination and its laudo (`docs/scene-examination-plan.md`, phases 3 and 4). `CRIME_SCENE_EXAMINATION` is
+  offered; it may hold pairs, and with none goes from examination to its report. In the analysis workspace the first
+  examiner of a fingerprint comparison or scene examination marks lifts on the case's images, brings in reference
+  documents (migration 028: material whose origin is the analysis) and lists the pairs. `reports.RegisterLayout` lets a
+  deployment lay out a report type with `reports.Document`; core registers no scene laudo layout. Report data gains
+  the scene (occurrence, collections, team, vestiges and seals) and the request's references.
 
 - Notes at a scene, written with no signal (`docs/scene-examination-plan.md`, phases 1 and 2). `/field-notes` is a
   page for a phone: the place, the device's position, the times, the team, other officers, notes and recorded audio.

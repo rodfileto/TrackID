@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/rodfileto/trackid/analyses"
+	"github.com/rodfileto/trackid/auth"
 	"github.com/rodfileto/trackid/cluster"
 	"github.com/rodfileto/trackid/facecompare"
 )
@@ -367,7 +368,7 @@ func receivedFiles(out *doc, d Data) {
 // conclusion scale, or a FINGERPRINT_COMPARISON_REPORT (confronto papiloscópico), concluding
 // positive, negative or inconclusive.
 func laudo(out *doc, d Data, imgs map[string]Image) {
-	fingerprint := d.AnalysisType == analyses.FingerprintComparison
+	fingerprint := d.AnalysisType.Modality() == auth.ModalityFingerprint
 	exam := "exame de comparação facial"
 	if fingerprint {
 		exam = "confronto papiloscópico"

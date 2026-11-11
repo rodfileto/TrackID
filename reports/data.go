@@ -576,7 +576,8 @@ func result(t analyses.Type, decision string, level, identification cluster.Conc
 		return ResultExcluded
 	case decision == examination.Inconclusive:
 		return ResultInconclusive
-	case level.AtLeast(identification):
+	// A fingerprint decision has no level on the facial scale: positive is an identification.
+	case !t.GradedConclusion() || level.AtLeast(identification):
 		return ResultIdentified
 	}
 	return ResultSupported

@@ -135,4 +135,11 @@ CREATE TABLE case_collection_members (collection_id, user_id, PRIMARY KEY (colle
   Checked in a headless browser on the built frontend: a scene case with a sealed lift, its request,
   the scene examination opened from the API, a card brought in and marked as reference, a pair
   listed, decided with notes and submitted to verification.
+- 2026-11-11: **Phase 5** lives in the institute's extension: trackid-pf's `laudopf` registers the PF
+  scene laudo (preâmbulo, histórico, objetivos, exames in loco and de confronto, quesitos,
+  conclusão). Core gained `reports.Render` and `reports.Regions` for such a layout's tests. The
+  first full run found that `reports` read every positive fingerprint decision as support below
+  the identification level; fixed (only facial comparisons are graded). Checked end to end with
+  trackid-pf's server: a scene case's laudo drafted, its answers written, issued and rendered to
+  PDF by WordCraft.
 

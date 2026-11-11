@@ -196,9 +196,13 @@ report it leads to. For faces, following FISWG:
 | --- | --- | --- | --- |
 | `FACIAL_REVIEW` | one-to-many: the facial recognition system's candidates for the case's faces; an investigative lead or a negative result, not a forensic examination | automatically, one per FACIAL case (`analyses.OpenAutomatic`, from `cases.Create` and `cases.Ingest`) | `FACIAL_REVIEW_REPORT` |
 | `FACIAL_COMPARISON` | one-to-one forensic examination of specific pairs (`case_analysis_pairs`), each with a face of the case | by a coordinator (`analyses.Open`) | `FACIAL_COMPARISON_REPORT` (laudo) |
+| `FINGERPRINT_COMPARISON` | one-to-one comparison of lifts with references; its first examiner may list the pairs while examining | by a request, a coordinator, or as a follow-up of a scene | `FINGERPRINT_COMPARISON_REPORT` (laudo) |
+| `CRIME_SCENE_EXAMINATION` | the examination of a scene: the case's collections, every lift marked, and the comparisons it makes, if any (none: from examination straight to the report) | by a request, or as a follow-up on a case with a collection (`docs/scene-examination-plan.md`) | `CRIME_SCENE_EXAMINATION_REPORT` (laudo); laid out only where a deployment registers a layout (`reports.RegisterLayout`) |
 
-Fingerprint analyses (crime scene, laboratory, documents) are not modelled yet, so a FINGERPRINT
-case has none. An analysis is `OPEN` until its report is issued, and answers one of the case's
+The fingerprint laboratory examination is not offered yet. Material an examiner brings into an
+analysis (a reference document) has that analysis as its origin (`case_files.case_analysis_id`).
+Notes written at a scene with no signal are kept as drafts (`scene_notes`) until they become a
+collection. An analysis is `OPEN` until its report is issued, and answers one of the case's
 requests. In a comparison each pair is decided on the conclusion scale (`biometric_decisions.conclusion`),
 and the verifier must reach the same level for the pair to be settled; a different level is a
 disagreement for the third examiner. The first examiner records each questioned face's

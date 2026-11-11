@@ -100,3 +100,22 @@ func (d Data) IssueDateText() string { return d.issueDate() }
 
 // ResultText is a pair's result in the words core's laudos use.
 func (d Data) ResultText(result string) string { return resultLabel(d.AnalysisType, result) }
+
+// Render lays out d as a .docx with the layout its report type has (a registered one first), as a
+// draft is generated: for a deployment's tests and previews of its own layout.
+func Render(d Data, imgs map[string]Image) ([]byte, error) {
+	out, err := render(d, imgs)
+	if err != nil {
+		return nil, err
+	}
+	return out.bytes()
+}
+
+// Regions are the keys of the editable regions a layout writes for d, in order.
+func Regions(d Data, imgs map[string]Image) ([]string, error) {
+	out, err := render(d, imgs)
+	if err != nil {
+		return nil, err
+	}
+	return out.regions, nil
+}
