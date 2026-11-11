@@ -112,6 +112,62 @@ func (q *Queries) GetCaseForReport(ctx context.Context, id int64) (GetCaseForRep
 	return i, err
 }
 
+const getOccurrenceForReport = `-- name: GetOccurrenceForReport :one
+SELECT o.occurred_from, o.occurred_to, o.inquiry_number, o.description, o.agency, o.occurrence_number,
+       l.name AS place_name, l.address, l.neighbourhood, l.place_type, l.precision, l.uf AS location_uf,
+       COALESCE(m.name, '')::text AS municipality,
+       COALESCE(ST_X(l.geom::geometry), 0)::float8 AS lon, COALESCE(ST_Y(l.geom::geometry), 0)::float8 AS lat,
+       (l.id IS NOT NULL)::bool AS has_place
+FROM occurrences o
+LEFT JOIN locations l ON l.id = o.location_id
+LEFT JOIN municipalities m ON m.code = l.municipality_code
+WHERE o.id = $1
+`
+
+type GetOccurrenceForReportRow struct {
+	OccurredFrom     sql.NullTime   `db:"occurred_from" json:"occurred_from"`
+	OccurredTo       sql.NullTime   `db:"occurred_to" json:"occurred_to"`
+	InquiryNumber    sql.NullString `db:"inquiry_number" json:"inquiry_number"`
+	Description      string         `db:"description" json:"description"`
+	Agency           sql.NullString `db:"agency" json:"agency"`
+	OccurrenceNumber sql.NullString `db:"occurrence_number" json:"occurrence_number"`
+	PlaceName        sql.NullString `db:"place_name" json:"place_name"`
+	Address          sql.NullString `db:"address" json:"address"`
+	Neighbourhood    sql.NullString `db:"neighbourhood" json:"neighbourhood"`
+	PlaceType        sql.NullString `db:"place_type" json:"place_type"`
+	Precision        sql.NullString `db:"precision" json:"precision"`
+	LocationUf       sql.NullString `db:"location_uf" json:"location_uf"`
+	Municipality     string         `db:"municipality" json:"municipality"`
+	Lon              float64        `db:"lon" json:"lon"`
+	Lat              float64        `db:"lat" json:"lat"`
+	HasPlace         bool           `db:"has_place" json:"has_place"`
+}
+
+// The occurrence a scene laudo describes: when, where and its inquiry.
+func (q *Queries) GetOccurrenceForReport(ctx context.Context, id int64) (GetOccurrenceForReportRow, error) {
+	row := q.db.QueryRowContext(ctx, getOccurrenceForReport, id)
+	var i GetOccurrenceForReportRow
+	err := row.Scan(
+		&i.OccurredFrom,
+		&i.OccurredTo,
+		&i.InquiryNumber,
+		&i.Description,
+		&i.Agency,
+		&i.OccurrenceNumber,
+		&i.PlaceName,
+		&i.Address,
+		&i.Neighbourhood,
+		&i.PlaceType,
+		&i.Precision,
+		&i.LocationUf,
+		&i.Municipality,
+		&i.Lon,
+		&i.Lat,
+		&i.HasPlace,
+	)
+	return i, err
+}
+
 const getReportNumber = `-- name: GetReportNumber :one
 SELECT report_type, report_year, report_number FROM analysis_reports WHERE id = $1
 `

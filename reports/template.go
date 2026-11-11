@@ -176,14 +176,22 @@ func (d Data) requiredRegions() []string {
 // render lays a report out: the executive summary, then the sections of its type. imgs are the
 // faces by feature id (Build's).
 func render(d Data, imgs map[string]Image) (*doc, error) {
-	out := &doc{}
-	layout(out, d, imgs)
-	return out, nil
+	return renderFilled(d, imgs, nil)
 }
 
-// renderFilled is render with the editable regions holding texts, in order (a refresh).
+// renderFilled is render with the editable regions holding texts, in order (a refresh). A layout a
+// deployment registered for the report type (RegisterLayout) comes first.
 func renderFilled(d Data, imgs map[string]Image, texts []string) (*doc, error) {
 	out := &doc{fill: texts}
+	if registered := registeredLayout(d.ReportType); registered != nil {
+		if err := registered(&Document{d: out}, d, imgs); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+	if !coreLayouts[d.ReportType] {
+		return nil, ErrNoLayout
+	}
 	layout(out, d, imgs)
 	return out, nil
 }

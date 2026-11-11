@@ -13,6 +13,27 @@ import (
 	"github.com/lib/pq"
 )
 
+const attachAnalysisFiles = `-- name: AttachAnalysisFiles :execrows
+UPDATE case_files SET case_analysis_id = $1::bigint, updated_at = NOW()
+WHERE biometric_case_id = $2::bigint AND category IN ('evidence', 'video')
+  AND case_request_id IS NULL AND collection_id IS NULL AND case_analysis_id IS NULL AND id = ANY($3::bigint[])
+`
+
+type AttachAnalysisFilesParams struct {
+	CaseAnalysisID  int64   `db:"case_analysis_id" json:"case_analysis_id"`
+	BiometricCaseID int64   `db:"biometric_case_id" json:"biometric_case_id"`
+	FileIds         []int64 `db:"file_ids" json:"file_ids"`
+}
+
+// Marks a case's evidence files, with no origin yet, as material an analysis of the case brought in.
+func (q *Queries) AttachAnalysisFiles(ctx context.Context, arg AttachAnalysisFilesParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, attachAnalysisFiles, arg.CaseAnalysisID, arg.BiometricCaseID, pq.Array(arg.FileIds))
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const attachCollectionFiles = `-- name: AttachCollectionFiles :execrows
 UPDATE case_files SET collection_id = $1::bigint, updated_at = NOW()
 WHERE biometric_case_id = $2::bigint AND category IN ('evidence', 'video')
@@ -54,6 +75,17 @@ func (q *Queries) BreakVestigeSeal(ctx context.Context, arg BreakVestigeSealPara
 	return result.RowsAffected()
 }
 
+const countCaseCollections = `-- name: CountCaseCollections :one
+SELECT COUNT(*) FROM case_collections WHERE biometric_case_id = $1
+`
+
+func (q *Queries) CountCaseCollections(ctx context.Context, biometricCaseID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countCaseCollections, biometricCaseID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countIssuedCaseReports = `-- name: CountIssuedCaseReports :one
 SELECT COUNT(*) FROM analysis_reports ar
 JOIN case_analyses ca ON ca.id = ar.case_analysis_id
@@ -87,6 +119,34 @@ func (q *Queries) FormalizeCollections(ctx context.Context, arg FormalizeCollect
 	return result.RowsAffected()
 }
 
+const getCaseAnalysisOfCase = `-- name: GetCaseAnalysisOfCase :one
+SELECT id, analysis_type, status, stage FROM case_analyses WHERE id = $1 AND biometric_case_id = $2
+`
+
+type GetCaseAnalysisOfCaseParams struct {
+	ID              int64 `db:"id" json:"id"`
+	BiometricCaseID int64 `db:"biometric_case_id" json:"biometric_case_id"`
+}
+
+type GetCaseAnalysisOfCaseRow struct {
+	ID           int64  `db:"id" json:"id"`
+	AnalysisType string `db:"analysis_type" json:"analysis_type"`
+	Status       string `db:"status" json:"status"`
+	Stage        string `db:"stage" json:"stage"`
+}
+
+func (q *Queries) GetCaseAnalysisOfCase(ctx context.Context, arg GetCaseAnalysisOfCaseParams) (GetCaseAnalysisOfCaseRow, error) {
+	row := q.db.QueryRowContext(ctx, getCaseAnalysisOfCase, arg.ID, arg.BiometricCaseID)
+	var i GetCaseAnalysisOfCaseRow
+	err := row.Scan(
+		&i.ID,
+		&i.AnalysisType,
+		&i.Status,
+		&i.Stage,
+	)
+	return i, err
+}
+
 const getCaseCollectionOfCase = `-- name: GetCaseCollectionOfCase :one
 SELECT id, case_request_id, nothing_collected FROM case_collections WHERE id = $1 AND biometric_case_id = $2
 `
@@ -110,7 +170,7 @@ func (q *Queries) GetCaseCollectionOfCase(ctx context.Context, arg GetCaseCollec
 }
 
 const getCaseFileOrigin = `-- name: GetCaseFileOrigin :one
-SELECT id, case_request_id, collection_id FROM case_files
+SELECT id, case_request_id, collection_id, case_analysis_id FROM case_files
 WHERE id = $1 AND biometric_case_id = $2 AND category IN ('evidence', 'video')
 `
 
@@ -120,15 +180,21 @@ type GetCaseFileOriginParams struct {
 }
 
 type GetCaseFileOriginRow struct {
-	ID            int64         `db:"id" json:"id"`
-	CaseRequestID sql.NullInt64 `db:"case_request_id" json:"case_request_id"`
-	CollectionID  sql.NullInt64 `db:"collection_id" json:"collection_id"`
+	ID             int64         `db:"id" json:"id"`
+	CaseRequestID  sql.NullInt64 `db:"case_request_id" json:"case_request_id"`
+	CollectionID   sql.NullInt64 `db:"collection_id" json:"collection_id"`
+	CaseAnalysisID sql.NullInt64 `db:"case_analysis_id" json:"case_analysis_id"`
 }
 
 func (q *Queries) GetCaseFileOrigin(ctx context.Context, arg GetCaseFileOriginParams) (GetCaseFileOriginRow, error) {
 	row := q.db.QueryRowContext(ctx, getCaseFileOrigin, arg.ID, arg.BiometricCaseID)
 	var i GetCaseFileOriginRow
-	err := row.Scan(&i.ID, &i.CaseRequestID, &i.CollectionID)
+	err := row.Scan(
+		&i.ID,
+		&i.CaseRequestID,
+		&i.CollectionID,
+		&i.CaseAnalysisID,
+	)
 	return i, err
 }
 
@@ -155,11 +221,11 @@ func (q *Queries) GetCaseVestigeOfCase(ctx context.Context, arg GetCaseVestigeOf
 }
 
 const inheritFileOrigin = `-- name: InheritFileOrigin :exec
-UPDATE case_files f SET case_request_id = s.case_request_id, collection_id = s.collection_id, vestige_id = s.vestige_id,
-    updated_at = NOW()
+UPDATE case_files f SET case_request_id = s.case_request_id, collection_id = s.collection_id,
+    case_analysis_id = s.case_analysis_id, vestige_id = s.vestige_id, updated_at = NOW()
 FROM case_files s
 WHERE f.id = $1::bigint AND s.id = $2::bigint AND s.biometric_case_id = f.biometric_case_id
-  AND f.case_request_id IS NULL AND f.collection_id IS NULL
+  AND f.case_request_id IS NULL AND f.collection_id IS NULL AND f.case_analysis_id IS NULL
 `
 
 type InheritFileOriginParams struct {

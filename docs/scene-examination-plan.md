@@ -117,3 +117,13 @@ CREATE TABLE case_collection_members (collection_id, user_id, PRIMARY KEY (colle
   server stopped and the browser offline, the page opened, a note with a recorded audio was kept
   with the team list; when the server and the network came back it synced by itself, got its
   address from the census list, and was registered as a collection through the form.
+- 2026-11-11: **Phases 3 and 4, backend**: the scene examination is offered (opened as a follow-up
+  only on a case with a collection; a request may still ask for one first), may hold pairs, and with
+  none goes from examination to its report. Migration 028 adds a third origin for material: the
+  analysis that brought it in (`case_files.case_analysis_id`; a reference document has no vestige).
+  The first examiner of a fingerprint examination lists and takes back pairs
+  (`/analyses/:id/examiner-pairs`). Reports: `reports.RegisterLayout`, `reports.Document`, and
+  `Data.Scene` (occurrence, collections and team, vestiges and seals); a scene examination's report
+  lists every lift marked on the case. Core registers no scene layout: drafting one without a
+  layout is refused (`ErrNoLayout`). Checked by `api/scene_examination_db_test.go`.
+

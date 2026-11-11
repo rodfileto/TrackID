@@ -402,7 +402,20 @@ func addVestige(ctx context.Context, q *db.Queries, caseRowID int64, v VestigeIn
 type Origin struct {
 	RequestID    int64
 	CollectionID int64
-	VestigeID    int64
+	// AnalysisID is an analysis of the case that brought the material in: a reference document the
+	// examiner fetched for a comparison (docs/scene-examination-plan.md, decision 6). It has no vestige.
+	AnalysisID int64
+	VestigeID  int64
+}
+
+func (o Origin) count() int {
+	n := 0
+	for _, id := range []int64{o.RequestID, o.CollectionID, o.AnalysisID} {
+		if id != 0 {
+			n++
+		}
+	}
+	return n
 }
 
 // caseRow finds a case by its case_id.
@@ -427,8 +440,23 @@ func CheckOrigin(ctx context.Context, sqlDB *sql.DB, caseID string, o Origin) er
 
 func checkOrigin(ctx context.Context, q *db.Queries, caseRowID int64, o Origin) error {
 	switch {
-	case (o.RequestID == 0) == (o.CollectionID == 0):
-		return ValidationError("say where the material came from: one of the case's requests or one of its collections")
+	case o.count() != 1:
+		return ValidationError("say where the material came from: one of the case's requests, collections or analyses")
+	case o.AnalysisID != 0:
+		a, err := q.GetCaseAnalysisOfCase(ctx, db.GetCaseAnalysisOfCaseParams{ID: o.AnalysisID, BiometricCaseID: caseRowID})
+		if errors.Is(err, sql.ErrNoRows) {
+			return ValidationError("the analysis is not one of this case")
+		}
+		if err != nil {
+			return err
+		}
+		if a.Status != "OPEN" {
+			return ValidationError("the analysis is closed")
+		}
+		if o.VestigeID != 0 {
+			return ValidationError("material an analysis brought in has no vestige")
+		}
+		return nil
 	case o.RequestID != 0:
 		if _, err := q.GetCaseRequestOfCase(ctx, db.GetCaseRequestOfCaseParams{CaseRequestID: o.RequestID, BiometricCaseID: caseRowID}); errors.Is(err, sql.ErrNoRows) {
 			return ValidationError("the request is not one of this case")
@@ -487,10 +515,15 @@ func Attach(ctx context.Context, sqlDB *sql.DB, caseID string, fileID int64, o O
 		return err
 	}
 	switch {
-	case f.CaseRequestID.Valid && f.CaseRequestID.Int64 == o.RequestID, f.CollectionID.Valid && f.CollectionID.Int64 == o.CollectionID:
+	case f.CaseRequestID.Valid && f.CaseRequestID.Int64 == o.RequestID, f.CollectionID.Valid && f.CollectionID.Int64 == o.CollectionID,
+		f.CaseAnalysisID.Valid && f.CaseAnalysisID.Int64 == o.AnalysisID:
 		// Already from there: only the vestige may change.
-	case f.CaseRequestID.Valid || f.CollectionID.Valid:
+	case f.CaseRequestID.Valid || f.CollectionID.Valid || f.CaseAnalysisID.Valid:
 		return ValidationError("the file already came from somewhere else")
+	case o.AnalysisID != 0:
+		if _, err := q.AttachAnalysisFiles(ctx, db.AttachAnalysisFilesParams{CaseAnalysisID: o.AnalysisID, BiometricCaseID: id, FileIds: []int64{fileID}}); err != nil {
+			return err
+		}
 	case o.RequestID != 0:
 		if _, err := q.AttachRequestFiles(ctx, db.AttachRequestFilesParams{CaseRequestID: o.RequestID, BiometricCaseID: id, FileIds: []int64{fileID}}); err != nil {
 			return err
@@ -638,7 +671,11 @@ func SetReportMode(ctx context.Context, sqlDB *sql.DB, caseID, mode string) erro
 
 // List returns a case's report mode, collections and vestiges with their seals.
 func List(ctx context.Context, sqlDB *sql.DB, caseID string) (Origins, error) {
-	q := db.New(sqlDB)
+	return ListWith(ctx, db.New(sqlDB), caseID)
+}
+
+// ListWith is List on the caller's queries (a report's data, inside its transaction).
+func ListWith(ctx context.Context, q *db.Queries, caseID string) (Origins, error) {
 	c, err := q.GetBiometricCaseByCaseID(ctx, caseID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Origins{}, ErrCaseNotFound

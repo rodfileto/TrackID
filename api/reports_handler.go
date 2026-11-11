@@ -52,7 +52,7 @@ func writeReportError(context *gin.Context, err error) bool {
 	case errors.Is(err, reports.ErrLockedChanged), errors.Is(err, reports.ErrRegionsChanged), errors.Is(err, reports.ErrNotDocx),
 		errors.As(err, &validation):
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-	case errors.Is(err, reports.ErrNoRenderer), errors.Is(err, reports.ErrNoStore):
+	case errors.Is(err, reports.ErrNoRenderer), errors.Is(err, reports.ErrNoStore), errors.Is(err, reports.ErrNoLayout):
 		context.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 	case errors.Is(err, reports.ErrNoDocument):
 		context.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

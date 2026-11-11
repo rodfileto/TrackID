@@ -290,8 +290,8 @@ func TestRegisterByInquiry(t *testing.T) {
 }
 
 // TestRegisterConcluded: an import of an old report records its analysis closed when it ended, even
-// of a type not offered yet, so nothing reaches the queues or can be worked. Without ConcludedAt the
-// type stays unavailable, and a second report on the same case joins it as its next request.
+// of a type not offered yet, so nothing reaches the queues or can be worked. Without ConcludedAt a
+// type not offered stays unavailable, and a second report on the same case joins it as its next request.
 func TestRegisterConcluded(t *testing.T) {
 	ctx := context.Background()
 	sqlDB := testDB(t)
@@ -302,8 +302,12 @@ func TestRegisterConcluded(t *testing.T) {
 		Occurrence: &occurrences.CreateInput{Types: []string{"UNDETERMINED"}, Description: "scene", InquiryNumber: "2026.0001234"},
 		Cases:      []requests.CaseInput{{Task: "CRIME_SCENE_EXAMINATION", Description: "Laudo local"}},
 	}
-	if _, err := requests.Register(ctx, sqlDB, in, 0, now); err == nil || !strings.Contains(err.Error(), "not available yet") {
-		t.Errorf("a scene examination that is not an import: %v", err)
+	// The laboratory examination is not offered yet (the scene examination is, since
+	// docs/scene-examination-plan.md).
+	lab := in
+	lab.Cases = []requests.CaseInput{{Task: "FINGERPRINT_LAB_EXAMINATION", Description: "Laudo laboratório"}}
+	if _, err := requests.Register(ctx, sqlDB, lab, 0, now); err == nil || !strings.Contains(err.Error(), "not available yet") {
+		t.Errorf("a laboratory examination that is not an import: %v", err)
 	}
 
 	in.ConcludedAt = &concluded

@@ -43,6 +43,8 @@ type Data struct {
 	Previous       []PriorReport      `json:"previous"`
 	Identification cluster.Conclusion `json:"identificationLevel"` // the lowest level that identifies
 	GeneratedAt    time.Time          `json:"generatedAt"`
+	// Scene is the case's scene, for a scene examination (docs/scene-examination-plan.md).
+	Scene *SceneInfo `json:"scene,omitempty"`
 }
 
 // CaseInfo is the case a report is about.
@@ -346,7 +348,9 @@ func Build(ctx context.Context, q *db.Queries, analysisID int64, images Images, 
 			}
 		}
 	}
-	if t.Type == analyses.FacialReview {
+	// A review is about every questioned face; a scene examination about every lift marked on the
+	// scene's material, paired or not: its laudo says what each gave.
+	if t.Type == analyses.FacialReview || t.Type == analyses.CrimeSceneExamination {
 		for _, m := range material {
 			if m.Role == cases.RoleQuestioned {
 				inReport[m.FeatureID] = true
@@ -491,6 +495,12 @@ func Build(ctx context.Context, q *db.Queries, analysisID int64, images Images, 
 				f.Result = ResultUnsuitable
 			}
 			d.Faces = append(d.Faces, f)
+		}
+	}
+
+	if t.Type == analyses.CrimeSceneExamination {
+		if d.Scene, err = buildScene(ctx, q, t.CaseID, c.OccurrenceID, d.Case.Occurrence, c.OccurrenceTypes); err != nil {
+			return Data{}, nil, err
 		}
 	}
 

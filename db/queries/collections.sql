@@ -122,13 +122,25 @@ JOIN case_analyses ca ON ca.id = ar.case_analysis_id
 WHERE ca.biometric_case_id = $1 AND ar.status = 'ISSUED';
 
 -- name: GetCaseFileOrigin :one
-SELECT id, case_request_id, collection_id FROM case_files
+SELECT id, case_request_id, collection_id, case_analysis_id FROM case_files
 WHERE id = $1 AND biometric_case_id = $2 AND category IN ('evidence', 'video');
 
 -- name: InheritFileOrigin :exec
 -- A file derived from another (a frame taken from a video) came from where its source did.
-UPDATE case_files f SET case_request_id = s.case_request_id, collection_id = s.collection_id, vestige_id = s.vestige_id,
-    updated_at = NOW()
+UPDATE case_files f SET case_request_id = s.case_request_id, collection_id = s.collection_id,
+    case_analysis_id = s.case_analysis_id, vestige_id = s.vestige_id, updated_at = NOW()
 FROM case_files s
 WHERE f.id = @id::bigint AND s.id = @source_id::bigint AND s.biometric_case_id = f.biometric_case_id
-  AND f.case_request_id IS NULL AND f.collection_id IS NULL;
+  AND f.case_request_id IS NULL AND f.collection_id IS NULL AND f.case_analysis_id IS NULL;
+
+-- name: AttachAnalysisFiles :execrows
+-- Marks a case's evidence files, with no origin yet, as material an analysis of the case brought in.
+UPDATE case_files SET case_analysis_id = @case_analysis_id::bigint, updated_at = NOW()
+WHERE biometric_case_id = @biometric_case_id::bigint AND category IN ('evidence', 'video')
+  AND case_request_id IS NULL AND collection_id IS NULL AND case_analysis_id IS NULL AND id = ANY(@file_ids::bigint[]);
+
+-- name: GetCaseAnalysisOfCase :one
+SELECT id, analysis_type, status, stage FROM case_analyses WHERE id = $1 AND biometric_case_id = $2;
+
+-- name: CountCaseCollections :one
+SELECT COUNT(*) FROM case_collections WHERE biometric_case_id = $1;

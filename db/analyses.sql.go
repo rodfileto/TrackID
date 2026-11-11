@@ -113,6 +113,30 @@ func (q *Queries) DeleteDecisionDrafts(ctx context.Context, arg DeleteDecisionDr
 	return err
 }
 
+const deleteUndecidedAnalysisPair = `-- name: DeleteUndecidedAnalysisPair :execrows
+DELETE FROM case_analysis_pairs p
+WHERE p.case_analysis_id = $1::bigint AND p.feature_a_id = $2::text AND p.feature_b_id = $3::text
+  AND NOT EXISTS (SELECT 1 FROM analysis_decision_drafts d WHERE d.case_analysis_id = p.case_analysis_id
+      AND d.feature_a_id = p.feature_a_id AND d.feature_b_id = p.feature_b_id)
+  AND NOT EXISTS (SELECT 1 FROM biometric_decisions b WHERE b.case_analysis_id = p.case_analysis_id
+      AND b.feature_a_id = p.feature_a_id AND b.feature_b_id = p.feature_b_id)
+`
+
+type DeleteUndecidedAnalysisPairParams struct {
+	CaseAnalysisID int64  `db:"case_analysis_id" json:"case_analysis_id"`
+	FeatureAID     string `db:"feature_a_id" json:"feature_a_id"`
+	FeatureBID     string `db:"feature_b_id" json:"feature_b_id"`
+}
+
+// Removes a pair from an analysis while nothing was decided or drafted on it there.
+func (q *Queries) DeleteUndecidedAnalysisPair(ctx context.Context, arg DeleteUndecidedAnalysisPairParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUndecidedAnalysisPair, arg.CaseAnalysisID, arg.FeatureAID, arg.FeatureBID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getCaseAccess = `-- name: GetCaseAccess :one
 SELECT bc.id, EXISTS (
     SELECT 1 FROM case_analyses ca

@@ -366,6 +366,7 @@ type CaseFile struct {
 	CaseRequestID   sql.NullInt64  `db:"case_request_id" json:"case_request_id"`
 	CollectionID    sql.NullInt64  `db:"collection_id" json:"collection_id"`
 	VestigeID       sql.NullInt64  `db:"vestige_id" json:"vestige_id"`
+	CaseAnalysisID  sql.NullInt64  `db:"case_analysis_id" json:"case_analysis_id"`
 }
 
 type CaseRequest struct {

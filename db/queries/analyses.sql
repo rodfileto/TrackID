@@ -231,3 +231,12 @@ SELECT DISTINCT system_source, threshold, related_reference
 FROM biometric_decisions
 WHERE role = 'SYSTEM' AND (feature_a_id = ANY(@feature_ids::text[]) OR feature_b_id = ANY(@feature_ids::text[]))
 ORDER BY system_source, threshold;
+
+-- name: DeleteUndecidedAnalysisPair :execrows
+-- Removes a pair from an analysis while nothing was decided or drafted on it there.
+DELETE FROM case_analysis_pairs p
+WHERE p.case_analysis_id = @case_analysis_id::bigint AND p.feature_a_id = @feature_a_id::text AND p.feature_b_id = @feature_b_id::text
+  AND NOT EXISTS (SELECT 1 FROM analysis_decision_drafts d WHERE d.case_analysis_id = p.case_analysis_id
+      AND d.feature_a_id = p.feature_a_id AND d.feature_b_id = p.feature_b_id)
+  AND NOT EXISTS (SELECT 1 FROM biometric_decisions b WHERE b.case_analysis_id = p.case_analysis_id
+      AND b.feature_a_id = p.feature_a_id AND b.feature_b_id = p.feature_b_id);

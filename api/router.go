@@ -240,6 +240,8 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	oneCase.GET("analyses/:analysisId/report/document", ReportDocumentHandler(deps.DB, deps.Storage))
 	oneCase.POST("analyses/:analysisId/report/deliveries", DeliverReportHandler(deps.DB))
 	oneCase.GET("analyses/:analysisId/pairs", AnalysisWorksheetHandler(deps.DB))
+	oneCase.POST("analyses/:analysisId/examiner-pairs", AddExaminerPairsHandler(deps.DB))
+	oneCase.DELETE("analyses/:analysisId/examiner-pairs", RemoveExaminerPairHandler(deps.DB))
 	oneCase.PUT("analyses/:analysisId/suitability", AssessTraceHandler(deps.DB))
 	oneCase.GET("analyses/:analysisId/pairs/image", PairImageHandler(deps.DB, deps.Storage))
 	oneCase.PUT("analyses/:analysisId/decisions", SaveDraftHandler(deps.DB))

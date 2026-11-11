@@ -213,11 +213,14 @@ func formID(context *gin.Context, field string) (int64, bool) {
 func materialOrigin(context *gin.Context, sqlDB *sql.DB, caseID string, base collections.Origin) (collections.Origin, bool) {
 	o := base
 	var ok bool
-	if o.RequestID == 0 && o.CollectionID == 0 {
+	if o.RequestID == 0 && o.CollectionID == 0 && o.AnalysisID == 0 {
 		if o.RequestID, ok = formID(context, "requestId"); !ok {
 			return o, false
 		}
 		if o.CollectionID, ok = formID(context, "collectionId"); !ok {
+			return o, false
+		}
+		if o.AnalysisID, ok = formID(context, "analysisId"); !ok {
 			return o, false
 		}
 	}

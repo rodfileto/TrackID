@@ -260,7 +260,7 @@ func OpenFollowUpHandler(sqlDB *sql.DB) gin.HandlerFunc {
 			return
 		}
 		if !request.Type.Comparison() {
-			context.JSON(http.StatusBadRequest, gin.H{"error": "only a comparison follows from what a case gave"})
+			context.JSON(http.StatusBadRequest, gin.H{"error": "only a comparison or a scene examination follows from what a case gave"})
 			return
 		}
 		if request.RequestID == 0 {
@@ -281,7 +281,7 @@ func OpenFollowUpHandler(sqlDB *sql.DB) gin.HandlerFunc {
 			return
 		case errors.Is(err, analyses.ErrInvalidType), errors.Is(err, analyses.ErrWrongModality), errors.Is(err, analyses.ErrNotOffered),
 			errors.Is(err, analyses.ErrUnexpectedPairs), errors.Is(err, analyses.ErrInvalidPair),
-			errors.Is(err, analyses.ErrUnknownRequest):
+			errors.Is(err, analyses.ErrUnknownRequest), errors.Is(err, analyses.ErrNoCollection):
 			context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		case err != nil:

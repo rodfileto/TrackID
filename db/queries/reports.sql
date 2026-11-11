@@ -96,3 +96,15 @@ WHERE case_analysis_id = @case_analysis_id AND (status = 'DRAFT' OR imported);
 SELECT EXISTS (SELECT 1 FROM analysis_reports WHERE issuing_unit_id = @issuing_unit_id::bigint
     AND discipline = report_discipline(@report_type::text) AND report_year = @report_year::int
     AND report_number = @report_number::int AND case_analysis_id <> @case_analysis_id)::bool AS taken;
+
+-- name: GetOccurrenceForReport :one
+-- The occurrence a scene laudo describes: when, where and its inquiry.
+SELECT o.occurred_from, o.occurred_to, o.inquiry_number, o.description, o.agency, o.occurrence_number,
+       l.name AS place_name, l.address, l.neighbourhood, l.place_type, l.precision, l.uf AS location_uf,
+       COALESCE(m.name, '')::text AS municipality,
+       COALESCE(ST_X(l.geom::geometry), 0)::float8 AS lon, COALESCE(ST_Y(l.geom::geometry), 0)::float8 AS lat,
+       (l.id IS NOT NULL)::bool AS has_place
+FROM occurrences o
+LEFT JOIN locations l ON l.id = o.location_id
+LEFT JOIN municipalities m ON m.code = l.municipality_code
+WHERE o.id = $1;

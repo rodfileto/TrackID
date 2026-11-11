@@ -53,16 +53,24 @@ func (t Type) Valid() bool {
 	return false
 }
 
-// Offered reports whether an analysis of type t can be opened: the laboratory and scene
-// examinations are reserved for later.
+// Offered reports whether an analysis of type t can be opened: the laboratory examination is
+// reserved for later.
 func (t Type) Offered() bool {
-	return t == FacialReview || t == FacialComparison || t == FingerprintComparison
+	return t == FacialReview || t == FacialComparison || t == FingerprintComparison || t == CrimeSceneExamination
 }
 
-// Comparison reports whether t is a one-to-one examination whose pairs the coordinator lists, and
-// which leads to a laudo.
+// Comparison reports whether t is an examination that may hold one-to-one pairs, each decided and
+// written into its laudo. The scene examination is one (docs/scene-examination-plan.md, decision 5):
+// the lifts it compares are its pairs, and with none it goes from examination to its report.
 func (t Type) Comparison() bool {
-	return t == FacialComparison || t == FingerprintComparison
+	return t == FacialComparison || t == FingerprintComparison || t == CrimeSceneExamination
+}
+
+// ExaminerPairs reports whether the first examiner of an analysis of type t lists its pairs while
+// examining, as the material shows them: the fingerprint examinations, where the examiner marks the
+// lifts and brings the references in. A facial comparison's pairs come from the coordinator.
+func (t Type) ExaminerPairs() bool {
+	return t == FingerprintComparison || t == CrimeSceneExamination
 }
 
 // GradedConclusion reports whether the decisions of an analysis of type t carry a level on the
@@ -168,6 +176,8 @@ var (
 	ErrNotDraft         = errors.New("the report is already issued")
 	ErrUnknownRequest   = errors.New("the request is not one of this case")
 	ErrBadComplement    = errors.New("a complement names an issued report of this case, of the same type")
+	ErrNoCollection     = errors.New("a scene examination needs a scene collection on the case")
+	ErrPairDecided      = errors.New("the pair has decisions or drafts and cannot be removed")
 )
 
 // Pair is two features, as biometric_decisions keys them (graph feature ids).
@@ -317,6 +327,16 @@ func OpenWith(ctx context.Context, sqlDB *sql.DB, caseID string, t Type, pairs [
 	ordered, err := validPairs(ctx, q, c.ID, pairs)
 	if err != nil {
 		return 0, err
+	}
+	// A scene examination examines a scene: the case's collections are its subject.
+	if t == CrimeSceneExamination {
+		n, err := q.CountCaseCollections(ctx, c.ID)
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 {
+			return 0, ErrNoCollection
+		}
 	}
 
 	requestID := sql.NullInt64{}
@@ -653,4 +673,61 @@ func IssueReport(ctx context.Context, sqlDB *sql.DB, analysisID int64, user auth
 		return Report{}, err
 	}
 	return report, nil
+}
+
+// ErrNotExaminerPairs is the refusal to an examiner listing pairs of an analysis whose pairs come
+// from the coordinator.
+var ErrNotExaminerPairs = errors.New("the coordinator lists this analysis's pairs")
+
+// examinerOfPairs checks that user is the first examiner of an analysis whose examiner lists its
+// pairs, working it at its examination stage.
+func examinerOfPairs(ctx context.Context, q *db.Queries, caseID string, analysisID int64, user auth.UserProfile) (Target, error) {
+	t, err := GetTarget(ctx, q, analysisID)
+	if errors.Is(err, ErrAnalysisNotFound) || (err == nil && t.CaseID != caseID) {
+		return Target{}, ErrAnalysisNotFound
+	}
+	if err != nil {
+		return Target{}, err
+	}
+	if !t.Type.ExaminerPairs() {
+		return Target{}, ErrNotExaminerPairs
+	}
+	if t.Status != StatusOpen || t.Stage != StageExamination {
+		return Target{}, ErrPairsClosed
+	}
+	if step, err := CanWork(user, t); err != nil || step != StepVerificator {
+		return Target{}, ErrCannotDecide
+	}
+	return t, nil
+}
+
+// AddExaminerPairs is the first examiner of a fingerprint examination listing pairs while examining
+// (docs/scene-examination-plan.md, decision 6): a lift they marked against a reference they marked
+// or brought in.
+func AddExaminerPairs(ctx context.Context, sqlDB *sql.DB, caseID string, analysisID int64, user auth.UserProfile, pairs []Pair) error {
+	if _, err := examinerOfPairs(ctx, db.New(sqlDB), caseID, analysisID, user); err != nil {
+		return err
+	}
+	return AddPairs(ctx, sqlDB, caseID, analysisID, pairs)
+}
+
+// RemoveExaminerPair is the first examiner taking a pair back while nothing was decided or drafted
+// on it.
+func RemoveExaminerPair(ctx context.Context, sqlDB *sql.DB, caseID string, analysisID int64, user auth.UserProfile, pair Pair) error {
+	q := db.New(sqlDB)
+	if _, err := examinerOfPairs(ctx, q, caseID, analysisID, user); err != nil {
+		return err
+	}
+	a, b := pair.FeatureA, pair.FeatureB
+	if b < a {
+		a, b = b, a
+	}
+	n, err := q.DeleteUndecidedAnalysisPair(ctx, db.DeleteUndecidedAnalysisPairParams{CaseAnalysisID: analysisID, FeatureAID: a, FeatureBID: b})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrPairDecided
+	}
+	return nil
 }
