@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 )
 
@@ -327,6 +328,13 @@ type CaseCollection struct {
 	CaseRequestID    sql.NullInt64  `db:"case_request_id" json:"case_request_id"`
 	RegisteredBy     sql.NullInt64  `db:"registered_by" json:"registered_by"`
 	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
+	CalledAt         sql.NullTime   `db:"called_at" json:"called_at"`
+	OtherOfficers    sql.NullString `db:"other_officers" json:"other_officers"`
+}
+
+type CaseCollectionMember struct {
+	CollectionID int64 `db:"collection_id" json:"collection_id"`
+	UserID       int64 `db:"user_id" json:"user_id"`
 }
 
 type CaseEvidence struct {
@@ -719,6 +727,43 @@ type ReportDelivery struct {
 	Notes            sql.NullString `db:"notes" json:"notes"`
 	RecordedBy       int64          `db:"recorded_by" json:"recorded_by"`
 	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
+}
+
+type SceneNote struct {
+	ID            int64           `db:"id" json:"id"`
+	ClientID      uuid.UUID       `db:"client_id" json:"client_id"`
+	AuthorID      int64           `db:"author_id" json:"author_id"`
+	PlaceType     sql.NullString  `db:"place_type" json:"place_type"`
+	PlaceName     sql.NullString  `db:"place_name" json:"place_name"`
+	Lon           sql.NullFloat64 `db:"lon" json:"lon"`
+	Lat           sql.NullFloat64 `db:"lat" json:"lat"`
+	Address       sql.NullString  `db:"address" json:"address"`
+	Neighbourhood sql.NullString  `db:"neighbourhood" json:"neighbourhood"`
+	GeocodeSource sql.NullString  `db:"geocode_source" json:"geocode_source"`
+	GeocodeFlags  []string        `db:"geocode_flags" json:"geocode_flags"`
+	CalledAt      sql.NullTime    `db:"called_at" json:"called_at"`
+	ExaminedAt    sql.NullTime    `db:"examined_at" json:"examined_at"`
+	OccurredAt    sql.NullTime    `db:"occurred_at" json:"occurred_at"`
+	Team          []int64         `db:"team" json:"team"`
+	OtherOfficers sql.NullString  `db:"other_officers" json:"other_officers"`
+	Notes         sql.NullString  `db:"notes" json:"notes"`
+	WrittenAt     time.Time       `db:"written_at" json:"written_at"`
+	SyncedAt      time.Time       `db:"synced_at" json:"synced_at"`
+	UpdatedAt     time.Time       `db:"updated_at" json:"updated_at"`
+	CollectionID  sql.NullInt64   `db:"collection_id" json:"collection_id"`
+}
+
+type SceneNoteAudio struct {
+	ID          int64          `db:"id" json:"id"`
+	SceneNoteID int64          `db:"scene_note_id" json:"scene_note_id"`
+	ClientID    uuid.UUID      `db:"client_id" json:"client_id"`
+	Title       sql.NullString `db:"title" json:"title"`
+	ContentType string         `db:"content_type" json:"content_type"`
+	SizeBytes   int64          `db:"size_bytes" json:"size_bytes"`
+	Sha256      string         `db:"sha256" json:"sha256"`
+	StorageRef  string         `db:"storage_ref" json:"storage_ref"`
+	RecordedAt  sql.NullTime   `db:"recorded_at" json:"recorded_at"`
+	CreatedAt   time.Time      `db:"created_at" json:"created_at"`
 }
 
 type SubjectChange struct {

@@ -176,11 +176,12 @@ func (q *Queries) InheritFileOrigin(ctx context.Context, arg InheritFileOriginPa
 const insertCaseCollection = `-- name: InsertCaseCollection :one
 
 INSERT INTO case_collections (biometric_case_id, sequence, location_id, collected_from, collected_to, collected_by,
-    nothing_collected, notes, registered_by)
+    nothing_collected, notes, registered_by, called_at, other_officers)
 VALUES ($1::bigint,
     (SELECT COALESCE(MAX(sequence), 0) + 1 FROM case_collections WHERE biometric_case_id = $1::bigint),
     $2, $3, $4, $5::bigint,
-    $6::boolean, $7, $8)
+    $6::boolean, $7, $8, $9,
+    $10)
 RETURNING id, sequence
 `
 
@@ -193,6 +194,8 @@ type InsertCaseCollectionParams struct {
 	NothingCollected bool           `db:"nothing_collected" json:"nothing_collected"`
 	Notes            sql.NullString `db:"notes" json:"notes"`
 	RegisteredBy     sql.NullInt64  `db:"registered_by" json:"registered_by"`
+	CalledAt         sql.NullTime   `db:"called_at" json:"called_at"`
+	OtherOfficers    sql.NullString `db:"other_officers" json:"other_officers"`
 }
 
 type InsertCaseCollectionRow struct {
@@ -212,6 +215,8 @@ func (q *Queries) InsertCaseCollection(ctx context.Context, arg InsertCaseCollec
 		arg.NothingCollected,
 		arg.Notes,
 		arg.RegisteredBy,
+		arg.CalledAt,
+		arg.OtherOfficers,
 	)
 	var i InsertCaseCollectionRow
 	err := row.Scan(&i.ID, &i.Sequence)
@@ -366,6 +371,7 @@ func (q *Queries) ListAwaitingCollections(ctx context.Context) ([]ListAwaitingCo
 
 const listCaseCollections = `-- name: ListCaseCollections :many
 SELECT cc.id, cc.sequence, cc.location_id, cc.collected_from, cc.collected_to, cc.nothing_collected, cc.notes,
+       cc.called_at, cc.other_officers,
        cc.created_at, cc.collected_by, cu.username AS collected_by_name, ru.username AS registered_by_name,
        cc.case_request_id, r.document_reference AS request_document, r.received_on AS request_received_on,
        l.name AS location_name, l.address AS location_address
@@ -387,6 +393,8 @@ type ListCaseCollectionsRow struct {
 	CollectedTo       sql.NullTime   `db:"collected_to" json:"collected_to"`
 	NothingCollected  bool           `db:"nothing_collected" json:"nothing_collected"`
 	Notes             sql.NullString `db:"notes" json:"notes"`
+	CalledAt          sql.NullTime   `db:"called_at" json:"called_at"`
+	OtherOfficers     sql.NullString `db:"other_officers" json:"other_officers"`
 	CreatedAt         time.Time      `db:"created_at" json:"created_at"`
 	CollectedBy       int64          `db:"collected_by" json:"collected_by"`
 	CollectedByName   string         `db:"collected_by_name" json:"collected_by_name"`
@@ -417,6 +425,8 @@ func (q *Queries) ListCaseCollections(ctx context.Context, caseID string) ([]Lis
 			&i.CollectedTo,
 			&i.NothingCollected,
 			&i.Notes,
+			&i.CalledAt,
+			&i.OtherOfficers,
 			&i.CreatedAt,
 			&i.CollectedBy,
 			&i.CollectedByName,

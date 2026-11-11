@@ -14,6 +14,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -55,6 +56,12 @@ type RegisterInput struct {
 	Notes            string
 	ReportMode       string // SEPARATE (default) or TOGETHER
 	Vestiges         []VestigeInput
+	CalledAt         *time.Time // when the team was called out
+	OtherOfficers    string     // others present, who are not users
+	Team             []int64    // users at the scene besides the collector
+	// SceneNoteID is the field note (scene_notes) this collection is registered from, 0 for none:
+	// the note is marked converted and its audio notes become the collection's.
+	SceneNoteID int64
 }
 
 // Registered is what registering a scene made.
@@ -79,6 +86,27 @@ type Collection struct {
 	CreatedAt        time.Time   `json:"createdAt"`
 	Place            string      `json:"place,omitempty"`   // when the scene is not the occurrence's place
 	Request          *RequestRef `json:"request,omitempty"` // the request that formalized it; nil while awaited
+	CalledAt         *time.Time  `json:"calledAt,omitempty"`
+	OtherOfficers    string      `json:"otherOfficers,omitempty"`
+	Team             []Member    `json:"team"`
+	AudioNotes       []AudioNote `json:"audioNotes"`
+}
+
+// Member is a user who was at a scene besides its collector.
+type Member struct {
+	ID       int64  `json:"id"`
+	Username string `json:"username"`
+	Name     string `json:"name"`
+}
+
+// AudioNote is an audio the examiner recorded at the scene: a file of the case, not evidence.
+type AudioNote struct {
+	FileID      int64     `json:"fileId"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"contentType"`
+	SizeBytes   int64     `json:"sizeBytes"`
+	SHA256      string    `json:"sha256"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // RequestRef names a request by its document.
@@ -164,7 +192,17 @@ func checkRegister(in *RegisterInput, now time.Time) error {
 		return ValidationError("collectedTo cannot be before collectedFrom")
 	case in.NothingCollected && len(in.Vestiges) > 0:
 		return ValidationError("a scene where nothing was collected has no vestiges")
+	case in.CalledAt != nil && in.CalledAt.After(in.CollectedFrom):
+		return ValidationError("the team is called out before it collects")
 	}
+	in.OtherOfficers = strings.TrimSpace(in.OtherOfficers)
+	team := in.Team[:0:0]
+	for _, id := range in.Team {
+		if id != in.CollectedBy && id > 0 && !slices.Contains(team, id) {
+			team = append(team, id)
+		}
+	}
+	in.Team = team
 	mode, err := ParseReportMode(in.ReportMode)
 	if err != nil {
 		return err
@@ -246,9 +284,13 @@ func register(ctx context.Context, sqlDB *sql.DB, in RegisterInput, registeredBy
 	}
 	params := db.InsertCaseCollectionParams{BiometricCaseID: caseRowID, CollectedFrom: in.CollectedFrom, CollectedBy: in.CollectedBy,
 		NothingCollected: in.NothingCollected, Notes: sql.NullString{String: in.Notes, Valid: in.Notes != ""},
-		RegisteredBy: sql.NullInt64{Int64: registeredBy, Valid: registeredBy != 0}}
+		RegisteredBy:  sql.NullInt64{Int64: registeredBy, Valid: registeredBy != 0},
+		OtherOfficers: sql.NullString{String: in.OtherOfficers, Valid: in.OtherOfficers != ""}}
 	if in.CollectedTo != nil {
 		params.CollectedTo = sql.NullTime{Time: *in.CollectedTo, Valid: true}
+	}
+	if in.CalledAt != nil {
+		params.CalledAt = sql.NullTime{Time: *in.CalledAt, Valid: true}
 	}
 	col, err := q.InsertCaseCollection(ctx, params)
 	if err != nil && strings.Contains(err.Error(), "case_collections_collected_by_fkey") {
@@ -271,10 +313,62 @@ func register(ctx context.Context, sqlDB *sql.DB, in RegisterInput, registeredBy
 		}
 		out.Vestiges = append(out.Vestiges, added)
 	}
+	for _, id := range in.Team {
+		if err := q.InsertCollectionMember(ctx, db.InsertCollectionMemberParams{CollectionID: col.ID, UserID: id}); err != nil {
+			if strings.Contains(err.Error(), "case_collection_members_user_id_fkey") {
+				return Registered{}, ValidationError("a member of the team is not a user")
+			}
+			return Registered{}, fmt.Errorf("collections: team: %w", err)
+		}
+	}
+	if in.SceneNoteID != 0 {
+		if err := convertNote(ctx, q, in.SceneNoteID, caseRowID, col.ID, in.CollectedBy, registeredBy); err != nil {
+			return Registered{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return Registered{}, err
 	}
 	return out, nil
+}
+
+// convertNote marks a field note as the collection's and takes its audio notes as files of the
+// case. The note must be the collector's or the registrar's, and not converted already.
+func convertNote(ctx context.Context, q *db.Queries, noteID, caseRowID, collectionID, collector, registeredBy int64) error {
+	note, err := q.GetSceneNote(ctx, noteID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ValidationError("the field note does not exist")
+	}
+	if err != nil {
+		return err
+	}
+	if note.AuthorID != collector && note.AuthorID != registeredBy {
+		return ValidationError("the field note is someone else's")
+	}
+	n, err := q.SetSceneNoteCollection(ctx, db.SetSceneNoteCollectionParams{ID: noteID, CollectionID: collectionID})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ValidationError("the field note is already a collection")
+	}
+	audios, err := q.ListSceneNoteAudios(ctx, noteID)
+	if err != nil {
+		return err
+	}
+	for i, a := range audios {
+		name := strings.TrimSpace(a.Title.String)
+		if name == "" {
+			name = fmt.Sprintf("nota-%d", i+1)
+		}
+		// The same recording twice in one case is one file.
+		if _, err := q.InsertCollectionNoteFile(ctx, db.InsertCollectionNoteFileParams{BiometricCaseID: caseRowID, HashID: a.Sha256,
+			Filename: name, StorageRef: a.StorageRef, ContentType: a.ContentType, SizeBytes: a.SizeBytes,
+			CollectionID: collectionID}); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("collections: audio note: %w", err)
+		}
+	}
+	return nil
 }
 
 // addVestige numbers a vestige in the case (whose lock the caller holds) and records its seal.
@@ -557,12 +651,40 @@ func List(ctx context.Context, sqlDB *sql.DB, caseID string) (Origins, error) {
 	if err != nil {
 		return Origins{}, err
 	}
+	members, err := q.ListCaseCollectionMembers(ctx, caseID)
+	if err != nil {
+		return Origins{}, err
+	}
+	team := map[int64][]Member{}
+	for _, m := range members {
+		team[m.CollectionID] = append(team[m.CollectionID], Member{ID: m.UserID, Username: m.Username,
+			Name: strings.TrimSpace(m.FirstName + " " + m.LastName)})
+	}
+	noteFiles, err := q.ListCollectionNoteFiles(ctx, caseID)
+	if err != nil {
+		return Origins{}, err
+	}
+	audio := map[int64][]AudioNote{}
+	for _, f := range noteFiles {
+		audio[f.CollectionID.Int64] = append(audio[f.CollectionID.Int64], AudioNote{FileID: f.ID, Filename: f.Filename.String,
+			ContentType: f.ContentType.String, SizeBytes: f.SizeBytes.Int64, SHA256: f.HashID.String, CreatedAt: f.CreatedAt})
+	}
 	for _, r := range cols {
 		col := Collection{ID: r.ID, Sequence: r.Sequence, CollectedFrom: r.CollectedFrom, CollectedBy: r.CollectedByName,
 			CollectedByID: r.CollectedBy, NothingCollected: r.NothingCollected, Notes: r.Notes.String,
-			RegisteredBy: r.RegisteredByName.String, CreatedAt: r.CreatedAt}
+			RegisteredBy: r.RegisteredByName.String, CreatedAt: r.CreatedAt, OtherOfficers: r.OtherOfficers.String,
+			Team: team[r.ID], AudioNotes: audio[r.ID]}
+		if col.Team == nil {
+			col.Team = []Member{}
+		}
+		if col.AudioNotes == nil {
+			col.AudioNotes = []AudioNote{}
+		}
 		if r.CollectedTo.Valid {
 			col.CollectedTo = &r.CollectedTo.Time
+		}
+		if r.CalledAt.Valid {
+			col.CalledAt = &r.CalledAt.Time
 		}
 		if r.LocationID.Valid {
 			col.Place = strings.TrimSpace(strings.Join([]string{r.LocationName.String, r.LocationAddress.String}, " "))

@@ -63,14 +63,17 @@ type reference struct {
 	size   int64  // 0 when unknown
 }
 
-// The tables that refer to stored files. Only case_files records a SHA-256; the others are
-// checked for presence and, when recorded, size.
+// The tables that refer to stored files. case_files and scene_note_audios record a SHA-256; the
+// others are checked for presence and, when recorded, size.
 const references = `
 SELECT 'case_files', id, storage_ref, COALESCE(hash_id, ''), COALESCE(size_bytes, 0)
   FROM case_files WHERE COALESCE(storage_ref, '') <> ''
 UNION ALL
 SELECT 'identity_files', id, storage_ref, '', COALESCE(size_bytes, 0)
   FROM identity_files WHERE storage_ref <> ''
+UNION ALL
+SELECT 'scene_note_audios', id, storage_ref, sha256, size_bytes
+  FROM scene_note_audios
 UNION ALL
 SELECT 'bulk_enroll_outcomes', biometric_feature_id, crop_ref, '', 0
   FROM bulk_enroll_outcomes WHERE COALESCE(crop_ref, '') <> ''

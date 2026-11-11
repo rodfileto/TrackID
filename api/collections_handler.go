@@ -49,6 +49,10 @@ type registerCollectionRequest struct {
 	Notes            string                     `json:"notes"`
 	ReportMode       string                     `json:"reportMode"`
 	Vestiges         []collections.VestigeInput `json:"vestiges"`
+	CalledAt         *time.Time                 `json:"calledAt"`
+	OtherOfficers    string                     `json:"otherOfficers"`
+	Team             []int64                    `json:"team"`
+	SceneNoteID      int64                      `json:"sceneNoteId"` // the field note it is registered from
 }
 
 // RegisterCollectionHandler records a scene examined on call, opening its fingerprint case
@@ -77,7 +81,8 @@ func RegisterCollectionHandler(sqlDB *sql.DB) gin.HandlerFunc {
 		}
 		in := collections.RegisterInput{OccurrenceID: body.OccurrenceID, Description: body.Description,
 			CollectedFrom: body.CollectedFrom, CollectedTo: body.CollectedTo, CollectedBy: collector,
-			NothingCollected: body.NothingCollected, Notes: body.Notes, ReportMode: body.ReportMode, Vestiges: body.Vestiges}
+			NothingCollected: body.NothingCollected, Notes: body.Notes, ReportMode: body.ReportMode, Vestiges: body.Vestiges,
+			CalledAt: body.CalledAt, OtherOfficers: body.OtherOfficers, Team: body.Team, SceneNoteID: body.SceneNoteID}
 		if body.Occurrence != nil {
 			o := body.Occurrence.input()
 			in.Occurrence = &o

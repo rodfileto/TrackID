@@ -3,17 +3,19 @@
 -- name: InsertCaseCollection :one
 -- The case's next collection; the caller holds the case's lock (LockBiometricCase).
 INSERT INTO case_collections (biometric_case_id, sequence, location_id, collected_from, collected_to, collected_by,
-    nothing_collected, notes, registered_by)
+    nothing_collected, notes, registered_by, called_at, other_officers)
 VALUES (@biometric_case_id::bigint,
     (SELECT COALESCE(MAX(sequence), 0) + 1 FROM case_collections WHERE biometric_case_id = @biometric_case_id::bigint),
     sqlc.narg('location_id'), @collected_from, sqlc.narg('collected_to'), @collected_by::bigint,
-    @nothing_collected::boolean, sqlc.narg('notes'), sqlc.narg('registered_by'))
+    @nothing_collected::boolean, sqlc.narg('notes'), sqlc.narg('registered_by'), sqlc.narg('called_at'),
+    sqlc.narg('other_officers'))
 RETURNING id, sequence;
 
 -- name: ListCaseCollections :many
 -- A case's collections in order, with who collected and registered each and the request that
 -- formalized it, if one has.
 SELECT cc.id, cc.sequence, cc.location_id, cc.collected_from, cc.collected_to, cc.nothing_collected, cc.notes,
+       cc.called_at, cc.other_officers,
        cc.created_at, cc.collected_by, cu.username AS collected_by_name, ru.username AS registered_by_name,
        cc.case_request_id, r.document_reference AS request_document, r.received_on AS request_received_on,
        l.name AS location_name, l.address AS location_address

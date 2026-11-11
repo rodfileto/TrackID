@@ -192,6 +192,16 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	// A case is opened by registering a request, or by registering a scene examined on call: nothing
 	// else (docs/scene-collection-plan.md).
 	protected.POST("collections", RequireSceneCollection(deps.DB), RegisterCollectionHandler(deps.DB))
+	// Notes written at a scene, synced from the device, each to become a collection
+	// (docs/scene-examination-plan.md).
+	sceneNotes := protected.Group("scene-notes")
+	sceneNotes.Use(RequireSceneCollection(deps.DB))
+	sceneNotes.POST("", SyncSceneNoteHandler(deps.DB, deps.Storage, deps.Geocoder))
+	sceneNotes.GET("", ListSceneNotesHandler(deps.DB, deps.Storage))
+	sceneNotes.GET("audios/:audioId", SceneNoteAudioHandler(deps.DB, deps.Storage))
+	sceneNotes.GET(":noteId", GetSceneNoteHandler(deps.DB, deps.Storage))
+	sceneNotes.DELETE(":noteId", DiscardSceneNoteHandler(deps.DB, deps.Storage))
+	sceneNotes.POST(":noteId/audios", AddSceneNoteAudioHandler(deps.DB, deps.Storage))
 	protected.GET("cases/years", ListCaseYearsHandler(deps.DB))
 	protected.GET("cases/states", ListCaseStatesHandler(deps.DB))
 
@@ -207,6 +217,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	oneCase.GET("requests", ListCaseRequestsHandler(deps.DB))
 	oneCase.GET("material", ListCaseMaterialHandler(deps.DB))
 	oneCase.GET("collections", ListCaseOriginsHandler(deps.DB))
+	oneCase.GET("collection-notes/:fileId", CollectionNoteFileHandler(deps.DB, deps.Storage))
 	oneCase.POST("collections/:collectionId/material", ReceiveCollectionMaterialHandler(deps.DB, deps.Storage, deps.Queue))
 	oneCase.POST("vestiges", AddVestigeHandler(deps.DB))
 	oneCase.POST("vestiges/:vestigeId/seals", ResealHandler(deps.DB))
