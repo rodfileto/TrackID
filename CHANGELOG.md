@@ -64,6 +64,10 @@ period; `0.x` patch releases fix defects without adding behaviour.
   lote, before Nominatim (`docs/geocoding-plan.md` phase 2, migration 025). An address searched with no
   municipality is looked up in the one the map shows (`near=lon,lat` on `/api/geocode/search`). The location
   picker shows each result's precision, its source's credit and its flags.
+- A location keeps what the geocoder said about it (migration 026: `geocode_source`, `geocode_flags`): the
+  occurrence form sends them with the place, importers through `occurrences.LocationInput`, and the case page's
+  occurrence card and the occurrence map show the source's credit and what to check. An address typed over one
+  filled from a click on the map drops them, since they were about that address.
 
 - Backups and restores for a deployment (`docs/production-plan.md` phase 4). `deploy/backup.sh` dumps the database,
   encrypted to an age key when `BACKUP_AGE_RECIPIENT` is set, then copies the evidence bucket into a mirror that

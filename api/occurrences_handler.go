@@ -55,6 +55,8 @@ type OccurrenceProperties struct {
 	PlaceType     string           `json:"placeType,omitempty"`
 	PlaceName     string           `json:"placeName,omitempty"`
 	Neighbourhood string           `json:"neighbourhood,omitempty"`
+	GeocodeSource string           `json:"geocodeSource,omitempty"` // where the point or address came from
+	GeocodeFlags  []string         `json:"geocodeFlags,omitempty"`  // what to check about it
 	Cases         []OccurrenceCase `json:"cases"`
 }
 
@@ -148,6 +150,7 @@ func occurrenceFeatures(rows []db.ListOccurrencesForMapRow, types []db.Occurrenc
 			Status:        r.Status, Description: r.Description,
 			LocationID: r.LocationID, Precision: r.Precision,
 			PlaceType: r.PlaceType.String, PlaceName: r.PlaceName.String, Neighbourhood: r.Neighbourhood.String,
+			GeocodeSource: r.GeocodeSource.String, GeocodeFlags: r.GeocodeFlags,
 		}
 		if r.OccurredFrom.Valid {
 			p.OccurredFrom = &r.OccurredFrom.Time

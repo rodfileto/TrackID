@@ -25,6 +25,10 @@ type LocationInput struct {
 	Neighbourhood    string // optional
 	Address          string // optional
 	PlaceType        string // optional: PUBLIC_ROAD, RESIDENCE, COMMERCE, BANK, TRANSPORT, RURAL, OTHER
+	// GeocodeSource and GeocodeFlags are what the geocoder said, when the importer geocoded the
+	// address (geocode.Result's Source and Flags); empty when the point came with the report.
+	GeocodeSource string
+	GeocodeFlags  []string
 }
 
 // Input is one registered occurrence, keyed by (Agency, Number), its police report; or, when it
@@ -84,10 +88,14 @@ func Ingest(ctx context.Context, sqlDB *sql.DB, in Input) (Result, error) {
 	q := db.New(tx)
 
 	l := in.Location
+	if err := checkGeocode(l.GeocodeSource, l.GeocodeFlags); err != nil {
+		return Result{}, fmt.Errorf("occurrences: location %s: %w", l.LocationID, err)
+	}
 	loc, err := q.UpsertLocation(ctx, db.UpsertLocationParams{
 		LocationID: l.LocationID, Name: nullString(l.Name), Lon: l.Lon, Lat: l.Lat,
 		Precision: l.Precision, MunicipalityCode: l.MunicipalityCode, Uf: l.UF,
 		Neighbourhood: nullString(l.Neighbourhood), Address: nullString(l.Address), PlaceType: nullString(l.PlaceType),
+		GeocodeSource: nullString(l.GeocodeSource), GeocodeFlags: l.GeocodeFlags,
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("occurrences: location %s: %w", l.LocationID, err)

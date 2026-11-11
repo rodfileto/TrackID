@@ -88,6 +88,10 @@ const (
 	FlagSourcesDisagree  = "SOURCES_DISAGREE"  // the census list and the map are far apart
 )
 
+// Flags lists every Flag constant, for checking flags stored with a location.
+var Flags = []string{FlagNearestNumber, FlagStreetAdjusted, FlagLocatorPartial, FlagStreetOnly, FlagMunicipalityOnly,
+	FlagNamedPlace, FlagSourcesDisagree}
+
 // Geocoder resolves addresses to points (Search) and points to addresses
 // (Reverse).
 type Geocoder interface {

@@ -9,6 +9,7 @@ import OccurrenceMapView, {
   type MapMode,
 } from "../components/intelligence/OccurrenceMapView";
 import { GROUP_COLORS } from "../components/intelligence/groupColors";
+import { geocodeFlagLabels, geocodeSourceLabel } from "../components/intelligence/geocodeLabels";
 import {
   getOccurrenceMap,
   listOccurrenceYears,
@@ -283,6 +284,8 @@ function OccurrenceDetails({ feature, locale }: { feature: OccurrenceFeature | n
             "—",
         )}
         {row(t("occurrenceMap.precision"), t(`precision.${p.precision}`))}
+        {geocodeSourceLabel(t, p.geocodeSource) && row(t("occurrenceMap.geocodeSource"), geocodeSourceLabel(t, p.geocodeSource))}
+        {(p.geocodeFlags ?? []).length > 0 && row(t("occurrenceMap.geocodeCheck"), geocodeFlagLabels(t, p.geocodeFlags).join(", "))}
       </dl>
       <div className="flex flex-col gap-2">
         <h5 className="text-theme-xs text-gray-500 dark:text-gray-400">

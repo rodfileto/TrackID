@@ -1,7 +1,8 @@
 -- name: UpsertLocation :one
 -- geom never crosses into Go: sqlc has no type for geography, so a point goes in and out as
 -- lon/lat (WGS 84).
-INSERT INTO locations (location_id, name, geom, precision, municipality_code, uf, neighbourhood, address, place_type)
+INSERT INTO locations (location_id, name, geom, precision, municipality_code, uf, neighbourhood, address, place_type,
+    geocode_source, geocode_flags)
 VALUES (
     sqlc.arg(location_id),
     sqlc.narg(name),
@@ -11,7 +12,9 @@ VALUES (
     sqlc.arg(uf),
     sqlc.narg(neighbourhood),
     sqlc.narg(address),
-    sqlc.narg(place_type)
+    sqlc.narg(place_type),
+    sqlc.narg(geocode_source),
+    COALESCE(sqlc.arg(geocode_flags)::text[], '{}')
 )
 ON CONFLICT (location_id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -22,6 +25,8 @@ ON CONFLICT (location_id) DO UPDATE SET
     neighbourhood = EXCLUDED.neighbourhood,
     address = EXCLUDED.address,
     place_type = EXCLUDED.place_type,
+    geocode_source = EXCLUDED.geocode_source,
+    geocode_flags = EXCLUDED.geocode_flags,
     updated_at = NOW()
 RETURNING id, (xmax = 0) AS inserted;
 
@@ -29,7 +34,7 @@ RETURNING id, (xmax = 0) AS inserted;
 SELECT id, location_id, name,
     ST_X(geom::geometry)::float8 AS lon,
     ST_Y(geom::geometry)::float8 AS lat,
-    precision, municipality_code, uf, neighbourhood, address, place_type
+    precision, municipality_code, uf, neighbourhood, address, place_type, geocode_source, geocode_flags
 FROM locations
 WHERE location_id = $1;
 
@@ -136,6 +141,7 @@ SELECT o.id, o.agency, o.occurrence_number, o.occurrence_year, o.occurrence_seq,
     ST_X(l.geom::geometry)::float8 AS lon,
     ST_Y(l.geom::geometry)::float8 AS lat,
     l.location_id, l.precision, l.place_type, l.name AS place_name, l.neighbourhood, l.municipality_code,
+    l.geocode_source, l.geocode_flags,
     COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types,
     COALESCE((SELECT json_agg(json_build_object('caseId', b.case_id, 'modality', b.modality, 'caseType', b.case_type)
@@ -205,7 +211,8 @@ LIMIT 20;
 -- has a location (has_place).
 SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.inquiry_number, o.occurred_from, o.status,
     o.description,
-    l.name AS place_name, l.neighbourhood, l.address, l.precision,
+    l.name AS place_name, l.neighbourhood, l.address, l.precision, l.geocode_source,
+    COALESCE(l.geocode_flags, '{}')::text[] AS geocode_flags,
     (o.location_id IS NOT NULL)::bool AS has_place,
     COALESCE(ST_X(l.geom::geometry), 0)::float8 AS lon,
     COALESCE(ST_Y(l.geom::geometry), 0)::float8 AS lat,

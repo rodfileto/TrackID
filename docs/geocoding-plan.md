@@ -78,7 +78,9 @@ large state reduces to about 1 GB in Postgres, and loading one takes a few GB of
    - `SOURCES_DISAGREE`: CNEFE and Nominatim are more than 2 km apart, when both answer.
 
    `Source` says where the point came from (`cnefe2022:<municipality>:<key>` or `osm:way/…`). The
-   picker shows the flags beside a result; importers store them with the location.
+   picker shows the flags beside a result. The location keeps `Source` and `Flags`
+   (`locations.geocode_source`, `geocode_flags`, migration 026), from the occurrence form and from
+   importers (`occurrences.LocationInput`), and the case page and the occurrence map show them.
 5. **Address parsing is core's, for all of Brazil.** `geocode.ParseAddress` splits free text into
    street, number, quadra/lote chain, municipality and UF. It expands street abbreviations ("R.",
    "AV.", "DR.", …) and strips a postcode. It recognises all 27 states by name and by UF, not

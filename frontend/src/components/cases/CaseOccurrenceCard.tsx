@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import ComponentCard from "../common/ComponentCard";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import OccurrencePointMap from "../intelligence/OccurrencePointMap";
+import { geocodeFlagLabels, geocodeSourceLabel } from "../intelligence/geocodeLabels";
 import {
   getCaseOccurrence,
   linkCaseOccurrence,
@@ -106,6 +107,16 @@ export default function CaseOccurrenceCard({ caseId }: { caseId: string }) {
               <span className="text-sm text-gray-500 dark:text-gray-400">{describe(linked)}</span>
               {linked.address && (
                 <span className="text-sm text-gray-500 dark:text-gray-400">{linked.address}</span>
+              )}
+              {(geocodeSourceLabel(t, linked.geocodeSource) || (linked.geocodeFlags ?? []).length > 0) && (
+                <span className="text-theme-xs text-gray-500 dark:text-gray-400">
+                  {geocodeSourceLabel(t, linked.geocodeSource)}
+                  {(linked.geocodeFlags ?? []).length > 0 && (
+                    <span className="ml-2 text-warning-600 dark:text-warning-400">
+                      {t("occurrenceForm.checkPoint", { flags: geocodeFlagLabels(t, linked.geocodeFlags).join(", ") })}
+                    </span>
+                  )}
+                </span>
               )}
               {linked.description && (
                 <span className="text-sm text-gray-500 dark:text-gray-400">{linked.description}</span>

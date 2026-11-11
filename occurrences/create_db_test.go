@@ -32,7 +32,8 @@ func TestCreateAndLink(t *testing.T) {
 		Types: []string{"street_robbery", "STREET_ROBBERY"}, Attempted: &attempted,
 		OccurredFrom: now.Add(-2 * time.Hour), Description: " robbery at the bus stop ",
 		Agency: "DP-005", AgencyNumber: "005-01234/2026",
-		Place: occurrences.PlaceInput{Lon: -43.1773, Lat: -22.9104, Address: "Rua Senador Dantas", PlaceType: "government_office"},
+		Place: occurrences.PlaceInput{Lon: -43.1773, Lat: -22.9104, Address: "Rua Senador Dantas", PlaceType: "government_office",
+			GeocodeSource: "cnefe2022:3304557", GeocodeFlags: []string{"NEAREST_NUMBER"}},
 	}
 	first, err := occurrences.Create(ctx, sqlDB, in, now)
 	if err != nil {
@@ -41,10 +42,11 @@ func TestCreateAndLink(t *testing.T) {
 	if first.TrackIDNumber != "2026.0001" {
 		t.Errorf("first number %q", first.TrackIDNumber)
 	}
-	var muni, prec string
-	sqlDB.QueryRow(`SELECT municipality_code, precision FROM locations WHERE id = $1`, first.LocationID).Scan(&muni, &prec)
-	if muni != "3304557" || prec != "EXACT" {
-		t.Errorf("location: municipality %q, precision %q", muni, prec)
+	var muni, prec, source, flags string
+	sqlDB.QueryRow(`SELECT municipality_code, precision, geocode_source, array_to_string(geocode_flags, ',') FROM locations WHERE id = $1`,
+		first.LocationID).Scan(&muni, &prec, &source, &flags)
+	if muni != "3304557" || prec != "EXACT" || source != "cnefe2022:3304557" || flags != "NEAREST_NUMBER" {
+		t.Errorf("location: municipality %q, precision %q, geocoder %q %q", muni, prec, source, flags)
 	}
 
 	// The same police number again: refused. Without one, at the same place: 2026.0002.
@@ -69,6 +71,8 @@ func TestCreateAndLink(t *testing.T) {
 		"future":               func(c *occurrences.CreateInput) { c.OccurredFrom = now.Add(time.Hour) },
 		"agency alone":         func(c *occurrences.CreateInput) { c.AgencyNumber = "" },
 		"outside":              func(c *occurrences.CreateInput) { c.Place = occurrences.PlaceInput{Lon: -46.63, Lat: -23.55} },
+		"unknown flag":         func(c *occurrences.CreateInput) { c.Place.GeocodeFlags = []string{"PROBABLY_FINE"} },
+		"flags, no source":     func(c *occurrences.CreateInput) { c.Place.GeocodeSource = "" },
 	} {
 		c := in
 		c.AgencyNumber = "x-" + name

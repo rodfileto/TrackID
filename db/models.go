@@ -611,6 +611,8 @@ type Location struct {
 	PlaceType        sql.NullString `db:"place_type" json:"place_type"`
 	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
 	UpdatedAt        time.Time      `db:"updated_at" json:"updated_at"`
+	GeocodeSource    sql.NullString `db:"geocode_source" json:"geocode_source"`
+	GeocodeFlags     []string       `db:"geocode_flags" json:"geocode_flags"`
 }
 
 type MatchThreshold struct {

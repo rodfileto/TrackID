@@ -41,6 +41,9 @@ type createOccurrenceRequest struct {
 		Address       string  `json:"address"`
 		Neighbourhood string  `json:"neighbourhood"`
 		PlaceType     string  `json:"placeType"`
+		// What the geocoder said about the point or the address (geocode.Result), when it found them.
+		GeocodeSource string   `json:"geocodeSource"`
+		GeocodeFlags  []string `json:"geocodeFlags"`
 	} `json:"place"`
 }
 
@@ -58,6 +61,7 @@ func (r createOccurrenceRequest) input() occurrences.CreateInput {
 		Place: occurrences.PlaceInput{
 			ExistingID: r.Place.ExistingID, Lon: r.Place.Lon, Lat: r.Place.Lat, Precision: r.Place.Precision,
 			Name: r.Place.Name, Address: r.Place.Address, Neighbourhood: r.Place.Neighbourhood, PlaceType: r.Place.PlaceType,
+			GeocodeSource: r.Place.GeocodeSource, GeocodeFlags: r.Place.GeocodeFlags,
 		},
 	}
 }
@@ -124,6 +128,10 @@ type OccurrenceSummary struct {
 	Precision   string   `json:"precision,omitempty"`
 	Lon         *float64 `json:"lon,omitempty"`
 	Lat         *float64 `json:"lat,omitempty"`
+	// What the geocoder said about the point or the address, when it found them: its source, to
+	// credit, and what to check (geocode.Result's Source and Flags).
+	GeocodeSource string   `json:"geocodeSource,omitempty"`
+	GeocodeFlags  []string `json:"geocodeFlags,omitempty"`
 }
 
 func summarize(id int64, year, seq sql.NullInt32, agency, number, inquiry sql.NullString, from sql.NullTime, status string,
@@ -204,6 +212,7 @@ func CaseOccurrenceHandler(sqlDB *sql.DB) gin.HandlerFunc {
 		}
 		if r.HasPlace {
 			s.Address, s.Precision, s.Lon, s.Lat = r.Address.String, r.Precision.String, &r.Lon, &r.Lat
+			s.GeocodeSource, s.GeocodeFlags = r.GeocodeSource.String, r.GeocodeFlags
 		} else {
 			s.Description = r.Description
 		}

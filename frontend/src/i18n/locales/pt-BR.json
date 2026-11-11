@@ -613,7 +613,9 @@
     "noCases": "Nenhum caso biométrico vinculado ainda.",
     "showAll": "Todos",
     "showNone": "Nenhum",
-    "newOccurrence": "Nova ocorrência"
+    "newOccurrence": "Nova ocorrência",
+    "geocodeSource": "Origem do endereço",
+    "geocodeCheck": "Conferir"
   },
   "occurrenceType": {
     "HOMICIDE": "Homicídio doloso",

@@ -32,6 +32,9 @@ export interface OccurrenceProperties {
   placeType?: string;
   placeName?: string;
   neighbourhood?: string;
+  /** What the geocoder said about the point or the address: see GeocodeResult. */
+  geocodeSource?: string;
+  geocodeFlags?: string[];
   cases: OccurrenceCase[];
 }
 
@@ -108,6 +111,8 @@ export interface OccurrenceSummary {
   precision?: string;
   lon?: number;
   lat?: number;
+  geocodeSource?: string;
+  geocodeFlags?: string[];
 }
 
 /** Where a new occurrence happened: an existing location, or a point. */
@@ -120,6 +125,9 @@ export interface PlaceInput {
   address?: string;
   neighbourhood?: string;
   placeType?: string;
+  /** What the geocoder said about the point or the address, when it found them. */
+  geocodeSource?: string;
+  geocodeFlags?: string[];
 }
 
 export interface CreateOccurrenceInput {

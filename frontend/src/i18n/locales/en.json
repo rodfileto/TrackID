@@ -613,7 +613,9 @@
     "noCases": "No biometric case linked yet.",
     "showAll": "All",
     "showNone": "None",
-    "newOccurrence": "New occurrence"
+    "newOccurrence": "New occurrence",
+    "geocodeSource": "Address source",
+    "geocodeCheck": "Check"
   },
   "occurrenceType": {
     "HOMICIDE": "Homicide",

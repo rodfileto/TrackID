@@ -4,7 +4,7 @@ import ComponentCard from "../common/ComponentCard";
 import Label from "../form/Label";
 import LocationPicker from "./LocationPicker";
 import { GROUP_COLORS } from "./groupColors";
-import type { OccurrenceType } from "../../services/occurrences";
+import type { OccurrenceType, PlaceInput } from "../../services/occurrences";
 import { occurrenceNature, type OccurrenceDraft } from "./occurrenceDraft";
 
 const GROUPS = Object.keys(GROUP_COLORS);
@@ -104,7 +104,7 @@ export default function OccurrenceFields({
             <div>
               <Label htmlFor="place-address">{t("occurrenceForm.address")}</Label>
               <input id="place-address" className={inputClass} value={place.address ?? ""} disabled={place.existingId !== undefined}
-                onChange={(e) => set({ place: { ...place, address: e.target.value } })} />
+                onChange={(e) => set({ place: withAddress(place, e.target.value) })} />
             </div>
             <div>
               <Label htmlFor="place-neighbourhood">{t("occurrenceForm.neighbourhood")}</Label>
@@ -186,4 +186,11 @@ export default function OccurrenceFields({
 
     </>
   );
+}
+
+// A typed address replaces the geocoder's. After a click on the map (precision EXACT) the geocoder
+// gave only the address, so what it said goes with it; a searched point keeps its source.
+function withAddress(place: PlaceInput, address: string): PlaceInput {
+  if (place.precision !== "EXACT") return { ...place, address };
+  return { ...place, address, geocodeSource: undefined, geocodeFlags: undefined };
 }

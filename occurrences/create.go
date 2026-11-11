@@ -10,8 +10,10 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/rodfileto/trackid/db"
+	"github.com/rodfileto/trackid/geocode"
 )
 
 // ValidationError is a create or link error caused by bad input. HTTP handlers map it to a 400.
@@ -38,6 +40,11 @@ type PlaceInput struct {
 	Address       string
 	Neighbourhood string
 	PlaceType     string
+
+	// GeocodeSource and GeocodeFlags are the geocoder's Source and Flags for the point or the
+	// address (geocode.Result), kept with a new location; empty when both were placed by hand.
+	GeocodeSource string
+	GeocodeFlags  []string
 }
 
 // located reports whether the input names a place at all; (0, 0) is in the ocean, not a place.
@@ -195,7 +202,7 @@ func normalizePlace(p *PlaceInput) error {
 		return nil
 	}
 	if !p.located() {
-		if p.Name != "" || p.Address != "" || p.Neighbourhood != "" || p.PlaceType != "" || p.Precision != "" {
+		if p.Name != "" || p.Address != "" || p.Neighbourhood != "" || p.PlaceType != "" || p.Precision != "" || p.GeocodeSource != "" {
 			return ValidationError("a place needs a point on the map or an existing location")
 		}
 		return nil
@@ -213,6 +220,23 @@ func normalizePlace(p *PlaceInput) error {
 		return ValidationError("unknown place type " + p.PlaceType)
 	}
 	p.Name, p.Address, p.Neighbourhood = strings.TrimSpace(p.Name), strings.TrimSpace(p.Address), strings.TrimSpace(p.Neighbourhood)
+	p.GeocodeSource = strings.TrimSpace(p.GeocodeSource)
+	return checkGeocode(p.GeocodeSource, p.GeocodeFlags)
+}
+
+// checkGeocode checks what a geocoder said about a location: a short source and known flags.
+func checkGeocode(source string, flags []string) error {
+	if len(source) > 200 || strings.ContainsFunc(source, unicode.IsControl) {
+		return ValidationError("the geocoder source is not one")
+	}
+	if len(flags) > 0 && source == "" {
+		return ValidationError("geocoder flags need the source they came from")
+	}
+	for _, flag := range flags {
+		if !slices.Contains(geocode.Flags, flag) {
+			return ValidationError("unknown geocoder flag " + flag)
+		}
+	}
 	return nil
 }
 
@@ -309,6 +333,7 @@ func placeLocation(ctx context.Context, q *db.Queries, p PlaceInput) (int64, err
 		LocationID: "TID-L-" + hex.EncodeToString(key), Name: nullString(p.Name), Lon: p.Lon, Lat: p.Lat,
 		Precision: p.Precision, MunicipalityCode: m.Code, Uf: m.Uf,
 		Neighbourhood: nullString(p.Neighbourhood), Address: nullString(p.Address), PlaceType: nullString(p.PlaceType),
+		GeocodeSource: nullString(p.GeocodeSource), GeocodeFlags: p.GeocodeFlags,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("occurrences: location: %w", err)

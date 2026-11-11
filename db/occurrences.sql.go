@@ -10,6 +10,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const addOccurrenceClassification = `-- name: AddOccurrenceClassification :exec
@@ -141,7 +143,7 @@ const getLocationByLocationID = `-- name: GetLocationByLocationID :one
 SELECT id, location_id, name,
     ST_X(geom::geometry)::float8 AS lon,
     ST_Y(geom::geometry)::float8 AS lat,
-    precision, municipality_code, uf, neighbourhood, address, place_type
+    precision, municipality_code, uf, neighbourhood, address, place_type, geocode_source, geocode_flags
 FROM locations
 WHERE location_id = $1
 `
@@ -158,6 +160,8 @@ type GetLocationByLocationIDRow struct {
 	Neighbourhood    sql.NullString `db:"neighbourhood" json:"neighbourhood"`
 	Address          sql.NullString `db:"address" json:"address"`
 	PlaceType        sql.NullString `db:"place_type" json:"place_type"`
+	GeocodeSource    sql.NullString `db:"geocode_source" json:"geocode_source"`
+	GeocodeFlags     []string       `db:"geocode_flags" json:"geocode_flags"`
 }
 
 func (q *Queries) GetLocationByLocationID(ctx context.Context, locationID string) (GetLocationByLocationIDRow, error) {
@@ -175,6 +179,8 @@ func (q *Queries) GetLocationByLocationID(ctx context.Context, locationID string
 		&i.Neighbourhood,
 		&i.Address,
 		&i.PlaceType,
+		&i.GeocodeSource,
+		pq.Array(&i.GeocodeFlags),
 	)
 	return i, err
 }
@@ -236,7 +242,8 @@ func (q *Queries) GetOccurrenceIDByNumber(ctx context.Context, arg GetOccurrence
 const getOccurrenceSummary = `-- name: GetOccurrenceSummary :one
 SELECT o.id, o.occurrence_year, o.occurrence_seq, o.agency, o.occurrence_number, o.inquiry_number, o.occurred_from, o.status,
     o.description,
-    l.name AS place_name, l.neighbourhood, l.address, l.precision,
+    l.name AS place_name, l.neighbourhood, l.address, l.precision, l.geocode_source,
+    COALESCE(l.geocode_flags, '{}')::text[] AS geocode_flags,
     (o.location_id IS NOT NULL)::bool AS has_place,
     COALESCE(ST_X(l.geom::geometry), 0)::float8 AS lon,
     COALESCE(ST_Y(l.geom::geometry), 0)::float8 AS lat,
@@ -261,6 +268,8 @@ type GetOccurrenceSummaryRow struct {
 	Neighbourhood    sql.NullString  `db:"neighbourhood" json:"neighbourhood"`
 	Address          sql.NullString  `db:"address" json:"address"`
 	Precision        sql.NullString  `db:"precision" json:"precision"`
+	GeocodeSource    sql.NullString  `db:"geocode_source" json:"geocode_source"`
+	GeocodeFlags     []string        `db:"geocode_flags" json:"geocode_flags"`
 	HasPlace         bool            `db:"has_place" json:"has_place"`
 	Lon              float64         `db:"lon" json:"lon"`
 	Lat              float64         `db:"lat" json:"lat"`
@@ -286,6 +295,8 @@ func (q *Queries) GetOccurrenceSummary(ctx context.Context, id int64) (GetOccurr
 		&i.Neighbourhood,
 		&i.Address,
 		&i.Precision,
+		&i.GeocodeSource,
+		pq.Array(&i.GeocodeFlags),
 		&i.HasPlace,
 		&i.Lon,
 		&i.Lat,
@@ -485,6 +496,7 @@ SELECT o.id, o.agency, o.occurrence_number, o.occurrence_year, o.occurrence_seq,
     ST_X(l.geom::geometry)::float8 AS lon,
     ST_Y(l.geom::geometry)::float8 AS lat,
     l.location_id, l.precision, l.place_type, l.name AS place_name, l.neighbourhood, l.municipality_code,
+    l.geocode_source, l.geocode_flags,
     COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
               WHERE c.occurrence_id = o.id), '[]')::jsonb AS types,
     COALESCE((SELECT json_agg(json_build_object('caseId', b.case_id, 'modality', b.modality, 'caseType', b.case_type)
@@ -524,6 +536,8 @@ type ListOccurrencesForMapRow struct {
 	PlaceName        sql.NullString  `db:"place_name" json:"place_name"`
 	Neighbourhood    sql.NullString  `db:"neighbourhood" json:"neighbourhood"`
 	MunicipalityCode string          `db:"municipality_code" json:"municipality_code"`
+	GeocodeSource    sql.NullString  `db:"geocode_source" json:"geocode_source"`
+	GeocodeFlags     []string        `db:"geocode_flags" json:"geocode_flags"`
 	Types            json.RawMessage `db:"types" json:"types"`
 	Cases            json.RawMessage `db:"cases" json:"cases"`
 }
@@ -560,6 +574,8 @@ func (q *Queries) ListOccurrencesForMap(ctx context.Context, arg ListOccurrences
 			&i.PlaceName,
 			&i.Neighbourhood,
 			&i.MunicipalityCode,
+			&i.GeocodeSource,
+			pq.Array(&i.GeocodeFlags),
 			&i.Types,
 			&i.Cases,
 		); err != nil {
@@ -795,7 +811,8 @@ func (q *Queries) UpdateOccurrenceDetails(ctx context.Context, arg UpdateOccurre
 }
 
 const upsertLocation = `-- name: UpsertLocation :one
-INSERT INTO locations (location_id, name, geom, precision, municipality_code, uf, neighbourhood, address, place_type)
+INSERT INTO locations (location_id, name, geom, precision, municipality_code, uf, neighbourhood, address, place_type,
+    geocode_source, geocode_flags)
 VALUES (
     $1,
     $2,
@@ -805,7 +822,9 @@ VALUES (
     $7,
     $8,
     $9,
-    $10
+    $10,
+    $11,
+    COALESCE($12::text[], '{}')
 )
 ON CONFLICT (location_id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -816,6 +835,8 @@ ON CONFLICT (location_id) DO UPDATE SET
     neighbourhood = EXCLUDED.neighbourhood,
     address = EXCLUDED.address,
     place_type = EXCLUDED.place_type,
+    geocode_source = EXCLUDED.geocode_source,
+    geocode_flags = EXCLUDED.geocode_flags,
     updated_at = NOW()
 RETURNING id, (xmax = 0) AS inserted
 `
@@ -831,6 +852,8 @@ type UpsertLocationParams struct {
 	Neighbourhood    sql.NullString `db:"neighbourhood" json:"neighbourhood"`
 	Address          sql.NullString `db:"address" json:"address"`
 	PlaceType        sql.NullString `db:"place_type" json:"place_type"`
+	GeocodeSource    sql.NullString `db:"geocode_source" json:"geocode_source"`
+	GeocodeFlags     []string       `db:"geocode_flags" json:"geocode_flags"`
 }
 
 type UpsertLocationRow struct {
@@ -852,6 +875,8 @@ func (q *Queries) UpsertLocation(ctx context.Context, arg UpsertLocationParams) 
 		arg.Neighbourhood,
 		arg.Address,
 		arg.PlaceType,
+		arg.GeocodeSource,
+		pq.Array(arg.GeocodeFlags),
 	)
 	var i UpsertLocationRow
 	err := row.Scan(&i.ID, &i.Inserted)

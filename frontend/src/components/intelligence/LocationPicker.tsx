@@ -16,6 +16,7 @@ import {
   type PlaceInput,
 } from "../../services/occurrences";
 import { tileAttribution, tileUrl } from "./tiles";
+import { geocodeFlagLabels, geocodeSourceLabel } from "./geocodeLabels";
 
 interface Props {
   value: PlaceInput;
@@ -52,6 +53,8 @@ export default function LocationPicker({ value, onChange }: Props) {
       lon,
       lat,
       precision: from ? from.precision : "EXACT",
+      geocodeSource: from?.source,
+      geocodeFlags: from?.flags,
     };
     latest.current.onChange(base);
     setMessage("");
@@ -64,6 +67,8 @@ export default function LocationPicker({ value, onChange }: Props) {
           ...base,
           address: [address.street, address.houseNumber].filter(Boolean).join(", ") || address.displayName,
           neighbourhood: address.neighbourhood ?? base.neighbourhood,
+          geocodeSource: address.source,
+          geocodeFlags: address.flags,
         });
       }
     } catch {
@@ -153,15 +158,8 @@ export default function LocationPicker({ value, onChange }: Props) {
     });
   }
 
-  // The source's credit: IBGE's census and OpenStreetMap each require theirs.
-  function sourceLabel(r: GeocodeResult): string {
-    const kind = r.source?.startsWith("cnefe") ? "cnefe" : r.source?.split(":")[0];
-    return kind === "cnefe" || kind === "osm" || kind === "ibge" ? t(`geocodeSource.${kind}`) : "";
-  }
-
-  function flagLabels(r: GeocodeResult): string[] {
-    return (r.flags ?? []).map((f) => t(`geocodeFlag.${f}`, f));
-  }
+  const sourceLabel = (r: GeocodeResult) => geocodeSourceLabel(t, r.source);
+  const flagLabels = (r: GeocodeResult) => geocodeFlagLabels(t, r.flags);
 
   const inputClass =
     "h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90";
