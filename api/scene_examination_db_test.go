@@ -222,7 +222,7 @@ func TestSceneExamination(t *testing.T) {
 
 	// A fingerprint case with no scene has no scene examination.
 	plain, err := requests.Register(ctx, sqlDB, requests.RegisterInput{
-		Input: requests.Input{Authority: "DPF", DocumentReference: "Ofício 2/2026", ReceivedOn: time.Now().Format("2006-01-02")},
+		Input:    requests.Input{Authority: "DPF", DocumentReference: "Ofício 2/2026", ReceivedOn: time.Now().Format("2006-01-02")},
 		CaseType: "CRIMINAL", Cases: []requests.CaseInput{{Task: "FINGERPRINT_COMPARISON", Description: "Confronto"}},
 	}, coordinator.ID, time.Now())
 	if err != nil {
