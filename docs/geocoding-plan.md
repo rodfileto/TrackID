@@ -1,9 +1,10 @@
 # Geocoding: the census address list in core, Nominatim optional
 
-Proposed 2026-11-10. **Phase 1 is built** the same day (`geocode.Layered`, `cmd/load-cnefe`,
-migration 024) and was tested on synthetic addresses and on IBGE's real Distrito Federal file
-(1.3 million rows, loaded in 16 s into about 170 MB). Phases 2 to 4 are still proposals. The
-design was decided the same day: IBGE's
+Proposed 2026-11-10. **Phases 1 and 2 are built** the same day (`geocode.Layered`,
+`cmd/load-cnefe`, migrations 024 and 025, `CNEFE.Reverse`, `near`, the picker's flags) and were
+tested on synthetic addresses and on IBGE's real Distrito Federal file (1.3 million rows, loaded in
+16 s into about 170 MB; a click finds its address in under 1 ms). Phases 3 and 4 are still
+proposals. The design was decided the same day: IBGE's
 census address list (CNEFE) becomes core's first source for addresses, both address → point and
 point → address, with a Nominatim server optional behind it. The questions at the end are about
 details.
@@ -117,6 +118,18 @@ large state reduces to about 1 GB in Postgres, and loading one takes a few GB of
 - **The DF's `EDF` street type** is dropped from numbered streets as from places: it only says
   the street field is a sector.
 - **Reverse stays the map server's** until phase 2.
+
+## What phase 2 changed from the design
+
+- **Places have a point too** (migration 025), so a click in the Distrito Federal finds its quadra
+  and lote, not only numbered streets. The nearest row wins, the longer key on a tie, so a click on
+  a lote gets the lote rather than its conjunto. A quadra or conjunto alone is `STREET` precision.
+- **A municipality guessed from the map is never the answer.** When `near` supplies the
+  municipality, the census list and the map server's number-and-street steps use it; if they find
+  nothing, the map server's free-text search runs as if there were no `near` (so "Aeroporto de
+  Confins" is still found from Belo Horizonte), and the municipality's centre is not returned.
+- **The picker** shows each result's precision, source credit and flags, and, after a click or a
+  pick, where the address came from and what to check.
 
 ## Phases
 

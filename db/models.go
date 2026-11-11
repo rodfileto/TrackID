@@ -497,15 +497,16 @@ type CnefeAddress struct {
 }
 
 type CnefePlace struct {
-	MunicipalityCode string  `db:"municipality_code" json:"municipality_code"`
-	PlaceKey         string  `db:"place_key" json:"place_key"`
-	LocalityKey      string  `db:"locality_key" json:"locality_key"`
-	Lat              float64 `db:"lat" json:"lat"`
-	Lon              float64 `db:"lon" json:"lon"`
-	Level            int16   `db:"level" json:"level"`
-	Addresses        int32   `db:"addresses" json:"addresses"`
-	Locality         string  `db:"locality" json:"locality"`
-	Cep              string  `db:"cep" json:"cep"`
+	MunicipalityCode string      `db:"municipality_code" json:"municipality_code"`
+	PlaceKey         string      `db:"place_key" json:"place_key"`
+	LocalityKey      string      `db:"locality_key" json:"locality_key"`
+	Lat              float64     `db:"lat" json:"lat"`
+	Lon              float64     `db:"lon" json:"lon"`
+	Level            int16       `db:"level" json:"level"`
+	Addresses        int32       `db:"addresses" json:"addresses"`
+	Locality         string      `db:"locality" json:"locality"`
+	Cep              string      `db:"cep" json:"cep"`
+	Geom             interface{} `db:"geom" json:"geom"`
 }
 
 type CodificationEmbedding struct {

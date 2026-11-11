@@ -254,12 +254,21 @@ export interface GeocodeResult {
   houseNumber?: string;
   neighbourhood?: string;
   city?: string;
+  /** Where the point came from: "cnefe2022:…" (IBGE's census), "osm:…", "ibge:…" (a municipality). */
+  source?: string;
+  /** Reasons to check the point (geocode.Flag*), e.g. NEAREST_NUMBER. */
+  flags?: string[];
 }
 
-/** Geocodes an address. Called on an explicit search, never while typing. */
-export async function geocodeSearch(q: string): Promise<GeocodeResult[]> {
+/**
+ * Geocodes an address. Called on an explicit search, never while typing. near
+ * ([lon, lat], the map's centre) is the municipality an address naming none is
+ * looked up in.
+ */
+export async function geocodeSearch(q: string, near?: [number, number]): Promise<GeocodeResult[]> {
+  const nearParam = near ? `&near=${near[0]},${near[1]}` : "";
   const { items } = await requestApi<{ items: GeocodeResult[] }>(
-    `/geocode/search?q=${encodeURIComponent(q)}`,
+    `/geocode/search?q=${encodeURIComponent(q)}${nearParam}`,
     { headers: authHeaders() },
   );
   return items;

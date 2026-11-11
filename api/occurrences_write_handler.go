@@ -286,7 +286,8 @@ func parsePoint(c *gin.Context) (lon, lat float64, ok bool) {
 	return lon, lat, true
 }
 
-// GeocodeSearchHandler geocodes ?q= (up to 5 results). The form calls it when the user presses
+// GeocodeSearchHandler geocodes ?q= (up to 5 results), with the optional ?near=lon,lat (the map's
+// centre) for an address that names no municipality. The form calls it when the user presses
 // Search, never while typing: the public Nominatim forbids autocomplete.
 func GeocodeSearchHandler(g geocode.Geocoder) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -299,7 +300,18 @@ func GeocodeSearchHandler(g geocode.Geocoder) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "q is required"})
 			return
 		}
-		res, err := g.Search(c.Request.Context(), geocode.Query{Text: q, Limit: 5})
+		query := geocode.Query{Text: q, Limit: 5}
+		if near := c.Query("near"); near != "" {
+			lonText, latText, _ := strings.Cut(near, ",")
+			lon, err1 := strconv.ParseFloat(lonText, 64)
+			lat, err2 := strconv.ParseFloat(latText, 64)
+			if err1 != nil || err2 != nil || lon < -180 || lon > 180 || lat < -90 || lat > 90 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "near must be lon,lat"})
+				return
+			}
+			query.Near = &geocode.Point{Lon: lon, Lat: lat}
+		}
+		res, err := g.Search(c.Request.Context(), query)
 		if errors.Is(err, geocode.ErrNotFound) {
 			c.JSON(http.StatusOK, gin.H{"items": []geocode.Result{}})
 			return

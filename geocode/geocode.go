@@ -38,7 +38,14 @@ type Query struct {
 	Country  string // defaults to "Brasil" for structured queries
 
 	Limit int // results wanted; defaults to 1
+
+	// Near is where the user is looking (the map's centre): an address that names no municipality
+	// is looked up first in the one there. Nil for none; Nominatim ignores it.
+	Near *Point
 }
+
+// Point is a longitude and latitude.
+type Point struct{ Lon, Lat float64 }
 
 // Result is one geocoded place.
 type Result struct {

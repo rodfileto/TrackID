@@ -60,11 +60,25 @@ func (l *Layered) Search(ctx context.Context, q Query) ([]Result, error) {
 	parsed := ParseAddress(text)
 
 	var place municipality
-	var placeKnown bool
+	var placeKnown, inferred bool
 	if l.Municipalities != nil && parsed.City != "" {
 		var err error
 		if place, placeKnown, err = l.Municipalities.find(ctx, parsed.City, parsed.UF); err != nil {
 			return nil, err
+		}
+	}
+	// No municipality named: the one the user is looking at, for the census list and the map's
+	// number and street. It is a guess, so the map's free-text search still runs after, and the
+	// municipality alone is never the answer.
+	biased := parsed
+	if l.Municipalities != nil && parsed.City == "" && q.Near != nil {
+		var err error
+		if place, inferred, err = l.Municipalities.at(ctx, q.Near.Lon, q.Near.Lat); err != nil {
+			return nil, err
+		}
+		if inferred {
+			placeKnown = true
+			biased.City, biased.UF = place.name, place.uf
 		}
 	}
 
@@ -74,31 +88,37 @@ func (l *Layered) Search(ctx context.Context, q Query) ([]Result, error) {
 			return nil, err
 		}
 		if loaded {
-			result, _, found, err := l.CNEFE.find(ctx, place, parsed, text)
+			result, _, found, err := l.CNEFE.find(ctx, place, biased, text)
 			if err != nil {
 				return nil, err
 			}
 			if found {
-				l.crossCheck(ctx, text, parsed, &result)
+				l.crossCheck(ctx, text, biased, &result)
 				return []Result{result}, nil
 			}
 		}
 	}
 
 	if l.Nominatim != nil {
-		results, step, err := l.searchNominatim(ctx, text, parsed, limit)
-		if err != nil {
-			return nil, err
+		passes := []ParsedAddress{parsed}
+		if inferred && parsed.Street != "" {
+			passes = []ParsedAddress{biased, parsed}
 		}
-		if len(results) > 0 {
-			for i := range results {
-				results[i].Flags = append(results[i].Flags, stepFlags(step, parsed, results[i])...)
+		for _, pass := range passes {
+			results, step, err := l.searchNominatim(ctx, text, pass, limit)
+			if err != nil {
+				return nil, err
 			}
-			return results, nil
+			if len(results) > 0 {
+				for i := range results {
+					results[i].Flags = append(results[i].Flags, stepFlags(step, pass, results[i])...)
+				}
+				return results, nil
+			}
 		}
 	}
 
-	if placeKnown {
+	if placeKnown && !inferred {
 		result, err := l.Municipalities.point(ctx, place)
 		if err != nil {
 			return nil, err
@@ -109,8 +129,25 @@ func (l *Layered) Search(ctx context.Context, q Query) ([]Result, error) {
 	return nil, ErrNotFound
 }
 
-// Reverse is the map server's, when there is one.
+// Reverse gives the census address nearest to the point, within ReverseMeters, and otherwise asks
+// the map server, when there is one. Further than that from any census address, and with no map
+// server, a point has no address: better none than a neighbour's from a block away.
 func (l *Layered) Reverse(ctx context.Context, lon, lat float64) (Result, error) {
+	if l.CNEFE != nil {
+		loaded, err := l.CNEFE.Loaded(ctx)
+		if err != nil {
+			return Result{}, err
+		}
+		if loaded {
+			result, found, err := l.CNEFE.Reverse(ctx, lon, lat, ReverseMeters)
+			if err != nil {
+				return Result{}, err
+			}
+			if found {
+				return result, nil
+			}
+		}
+	}
 	if l.Nominatim == nil {
 		return Result{}, ErrNotFound
 	}

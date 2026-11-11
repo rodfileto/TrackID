@@ -739,7 +739,8 @@
     "forCase": "Esta ocorrência será vinculada ao caso {{caseId}} ao salvar; só podem ser escolhidos tipos da natureza do caso.",
     "caseAlreadyLinked": "O caso {{caseId}} já está vinculado a uma ocorrência: desvincule-o primeiro na página do caso.",
     "backToCase": "Voltar ao caso",
-    "caseError": "Não foi possível carregar o caso"
+    "caseError": "Não foi possível carregar o caso",
+    "checkPoint": "Confira: {{flags}}"
   },
   "caseOccurrence": {
     "title": "Ocorrência",
@@ -2122,5 +2123,19 @@
     "testing": "Enviando…",
     "testSent": "Mensagem de teste enviada",
     "loadError": "Não foi possível carregar suas configurações do Teams. O servidor está atualizado?"
+  },
+  "geocodeFlag": {
+    "NEAREST_NUMBER": "número mais próximo na rua",
+    "STREET_ADJUSTED": "rua grafada de outro modo",
+    "LOCATOR_PARTIAL": "só parte da quadra ou lote encontrada",
+    "STREET_ONLY": "a rua, não o número",
+    "MUNICIPALITY_ONLY": "só o município",
+    "NAMED_PLACE": "achado pelo nome: confira a cidade",
+    "SOURCES_DISAGREE": "o censo e o mapa divergem em mais de 2 km"
+  },
+  "geocodeSource": {
+    "cnefe": "Fonte: IBGE, Censo Demográfico 2022",
+    "osm": "© colaboradores do OpenStreetMap",
+    "ibge": "Malha municipal do IBGE"
   }
 }

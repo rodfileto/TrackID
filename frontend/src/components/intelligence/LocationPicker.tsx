@@ -26,7 +26,8 @@ interface Props {
 // filled by reverse geocoding), or search an address and pick a result. Existing
 // locations within 50 m are offered for reuse, so a place hit again stays one
 // location. The address search runs on the button only: the public Nominatim
-// forbids search-as-you-type.
+// forbids search-as-you-type. An address that names no city is looked up in the
+// one the map shows. Each address says where it came from and what to check.
 export default function LocationPicker({ value, onChange }: Props) {
   const { t } = useTranslation();
   const container = useRef<HTMLDivElement>(null);
@@ -40,6 +41,7 @@ export default function LocationPicker({ value, onChange }: Props) {
   const [searching, setSearching] = useState(false);
   const [nearby, setNearby] = useState<NearbyLocation[]>([]);
   const [message, setMessage] = useState("");
+  const [chosen, setChosen] = useState<GeocodeResult | null>(null);
 
   // A point chosen on the map or from a search: reverse-geocode a click, then
   // look for existing locations around it.
@@ -53,8 +55,10 @@ export default function LocationPicker({ value, onChange }: Props) {
     };
     latest.current.onChange(base);
     setMessage("");
+    setChosen(null);
     try {
       const address = from ?? (await geocodeReverse(lon, lat));
+      setChosen(address);
       if (address) {
         latest.current.onChange({
           ...base,
@@ -115,7 +119,8 @@ export default function LocationPicker({ value, onChange }: Props) {
     setSearching(true);
     setMessage("");
     try {
-      const found = await geocodeSearch(query.trim());
+      const centre = map.current?.getCenter();
+      const found = await geocodeSearch(query.trim(), centre ? [centre.lng, centre.lat] : undefined);
       setResults(found);
       if (found.length > 0 && map.current) {
         const b = new LngLatBounds();
@@ -146,6 +151,16 @@ export default function LocationPicker({ value, onChange }: Props) {
       name: l.name,
       placeType: l.placeType,
     });
+  }
+
+  // The source's credit: IBGE's census and OpenStreetMap each require theirs.
+  function sourceLabel(r: GeocodeResult): string {
+    const kind = r.source?.startsWith("cnefe") ? "cnefe" : r.source?.split(":")[0];
+    return kind === "cnefe" || kind === "osm" || kind === "ibge" ? t(`geocodeSource.${kind}`) : "";
+  }
+
+  function flagLabels(r: GeocodeResult): string[] {
+    return (r.flags ?? []).map((f) => t(`geocodeFlag.${f}`, f));
   }
 
   const inputClass =
@@ -189,12 +204,25 @@ export default function LocationPicker({ value, onChange }: Props) {
                 className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/[0.03]"
               >
                 {r.displayName}
+                <span className="block text-theme-xs text-gray-500 dark:text-gray-400">
+                  {[t(`precision.${r.precision}`, r.precision), sourceLabel(r), ...flagLabels(r)].filter(Boolean).join(" · ")}
+                </span>
               </button>
             </li>
           ))}
         </ul>
       )}
       {message && <p className="text-sm text-warning-600 dark:text-warning-400">{message}</p>}
+      {chosen && (sourceLabel(chosen) || flagLabels(chosen).length > 0) && (
+        <p className="text-theme-xs text-gray-500 dark:text-gray-400">
+          {sourceLabel(chosen)}
+          {flagLabels(chosen).length > 0 && (
+            <span className="ml-2 text-warning-600 dark:text-warning-400">
+              {t("occurrenceForm.checkPoint", { flags: flagLabels(chosen).join(", ") })}
+            </span>
+          )}
+        </p>
+      )}
 
       <div
         ref={container}

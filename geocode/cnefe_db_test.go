@@ -93,13 +93,19 @@ func loadSample(t *testing.T, sqlDB *sql.DB) {
 	if err := LoadCNEFE(context.Background(), sqlDB, data); err != nil {
 		t.Fatalf("loading again replaces: %v", err)
 	}
-	for _, m := range []struct{ code, name, uf string }{
-		{"5300108", "Brasília", "DF"}, {"5208707", "Goiânia", "GO"}, {"5200258", "Águas Lindas de Goiás", "GO"},
-		{"3106200", "Belo Horizonte", "MG"}, {"3500000", "Campo Grande", "SP"}, {"5002704", "Campo Grande", "MS"},
+	// Each municipality a box around its sample addresses.
+	for _, m := range []struct {
+		code, name, uf           string
+		west, south, east, north float64
+	}{
+		{"5300108", "Brasília", "DF", -48.3, -16.1, -47.3, -15.5}, {"5208707", "Goiânia", "GO", -49.5, -16.8, -49.0, -16.5},
+		{"5200258", "Águas Lindas de Goiás", "GO", -48.4, -15.8, -48.3, -15.7},
+		{"3106200", "Belo Horizonte", "MG", -44.1, -20.1, -43.8, -19.8}, {"3500000", "Campo Grande", "SP", -47.0, -23.0, -46.9, -22.9},
+		{"5002704", "Campo Grande", "MS", -54.7, -20.5, -54.5, -20.4},
 	} {
 		if _, err := sqlDB.Exec(`INSERT INTO municipalities (code, name, uf, geom, source) VALUES ($1, $2, $3,
-			ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON('{"type":"Polygon","coordinates":[[[-50,-17],[-48,-17],[-48,-15],[-50,-15],[-50,-17]]]}'), 4326))::geography, 'test')`,
-			m.code, m.name, m.uf); err != nil {
+			ST_Multi(ST_MakeEnvelope($4, $5, $6, $7, 4326))::geography, 'test')`,
+			m.code, m.name, m.uf, m.west, m.south, m.east, m.north); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -198,6 +204,7 @@ func TestCNEFEFind(t *testing.T) {
 // fakeMap answers searches from a table of structured streets and free text.
 type fakeMap struct {
 	results map[string][]Result
+	reverse *Result
 	asked   []string
 }
 
@@ -214,6 +221,9 @@ func (f *fakeMap) Search(_ context.Context, q Query) ([]Result, error) {
 }
 
 func (f *fakeMap) Reverse(context.Context, float64, float64) (Result, error) {
+	if f.reverse != nil {
+		return *f.reverse, nil
+	}
 	return Result{}, ErrNotFound
 }
 
@@ -257,5 +267,78 @@ func TestLayeredWithAMapServer(t *testing.T) {
 	}
 	if !slices.Equal(fake.asked, []string{"9 RUA INEXISTENTE|BELO HORIZONTE", "RUA INEXISTENTE|BELO HORIZONTE"}) {
 		t.Errorf("steps asked of the map: %q", fake.asked)
+	}
+}
+
+func TestCNEFEReverse(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	loadSample(t, sqlDB)
+	layered := NewLayered(sqlDB, nil)
+	for _, c := range []struct {
+		lon, lat                        float64
+		street, number, precision, city string
+	}{
+		{-49.2604, -16.6803, "RUA DOUTOR JOÃO DA SILVA", "100", PrecisionGeocoded, "Goiânia"},         // about 40 m away
+		{-48.0746, -15.8773, "QR 308 CONJUNTO 13 LOTE 8", "", PrecisionGeocoded, "Brasília"},          // the lote, not its conjunto
+		{-49.2210, -16.6815, "AVENIDA URUGUAIANA QUADRA 22 LOTE 6", "", PrecisionGeocoded, "Goiânia"}, // a lote on a street
+	} {
+		got, err := layered.Reverse(ctx, c.lon, c.lat)
+		if err != nil || got.Street != c.street || got.HouseNumber != c.number || got.Precision != c.precision || got.City != c.city ||
+			!strings.HasPrefix(got.Source, "cnefe2022:") {
+			t.Errorf("%v,%v: %+v %v", c.lon, c.lat, got, err)
+		}
+	}
+	// A kilometre from any census address, with no map server: no address.
+	if got, err := layered.Reverse(ctx, -49.40, -16.55); err != ErrNotFound {
+		t.Errorf("far from everything: %+v %v", got, err)
+	}
+	// With one, the map server's.
+	layered = NewLayered(sqlDB, &fakeMap{reverse: &Result{Street: "Rua do Mapa", Source: "osm:way/2"}})
+	if got, err := layered.Reverse(ctx, -49.40, -16.55); err != nil || got.Source != "osm:way/2" {
+		t.Errorf("far from the census list, the map: %+v %v", got, err)
+	}
+	if got, err := layered.Reverse(ctx, -49.2604, -16.6803); err != nil || !strings.HasPrefix(got.Source, "cnefe2022:") {
+		t.Errorf("near a census address, the census list first: %+v %v", got, err)
+	}
+}
+
+func TestLayeredNear(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	loadSample(t, sqlDB)
+	goiania, brasilia := &Point{Lon: -49.25, Lat: -16.65}, &Point{Lon: -47.9, Lat: -15.8}
+	layered := NewLayered(sqlDB, nil)
+	results, err := layered.Search(ctx, Query{Text: "Rua Doutor Joao Silva 100", Near: goiania})
+	if err != nil || results[0].Precision != PrecisionGeocoded || results[0].City != "Goiânia" {
+		t.Errorf("no city, looking at Goiânia: %+v %v", results, err)
+	}
+	results, err = layered.Search(ctx, Query{Text: "QR 308 CONJUNTO 13 LOTE 8", Near: brasilia})
+	if err != nil || results[0].Precision != PrecisionGeocoded {
+		t.Errorf("no city, looking at Brasília: %+v %v", results, err)
+	}
+	// Not found where the user looks: nothing, not that municipality.
+	if results, err = layered.Search(ctx, Query{Text: "Rua Doutor Joao Silva 100", Near: brasilia}); err != ErrNotFound {
+		t.Errorf("a guessed municipality is never the answer: %+v %v", results, err)
+	}
+	// A city named wins over where the user looks.
+	results, err = layered.Search(ctx, Query{Text: "Rua Doutor Joao Silva 100, Goiânia/GO", Near: brasilia})
+	if err != nil || results[0].City != "Goiânia" {
+		t.Errorf("the city named: %+v %v", results, err)
+	}
+
+	fake := &fakeMap{results: map[string][]Result{
+		"500 RUA GOIÁS|Belo Horizonte":       {{Lat: -19.92, Precision: PrecisionGeocoded, City: "Belo Horizonte", StateCode: "BR-MG"}},
+		"Aeroporto Internacional de Confins": {{Lat: -19.63, Precision: PrecisionGeocoded, City: "Confins", StateCode: "BR-MG"}},
+	}}
+	layered = NewLayered(sqlDB, fake)
+	bh := &Point{Lon: -43.94, Lat: -19.92}
+	results, err = layered.Search(ctx, Query{Text: "Rua Goiás 500", Near: bh})
+	if err != nil || results[0].Lat != -19.92 || len(results[0].Flags) != 0 {
+		t.Errorf("the map, in the municipality looked at: %+v %v", results, err)
+	}
+	results, err = layered.Search(ctx, Query{Text: "Aeroporto Internacional de Confins", Near: bh})
+	if err != nil || results[0].City != "Confins" || !slices.Equal(results[0].Flags, []string{FlagNamedPlace}) {
+		t.Errorf("a named place elsewhere is still found: %+v %v", results, err)
 	}
 }

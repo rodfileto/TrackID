@@ -739,7 +739,8 @@
     "forCase": "This occurrence will be linked to case {{caseId}} when saved; only types of the case's nature can be chosen.",
     "caseAlreadyLinked": "Case {{caseId}} is already linked to an occurrence: unlink it on the case page first.",
     "backToCase": "Back to the case",
-    "caseError": "Could not load the case"
+    "caseError": "Could not load the case",
+    "checkPoint": "Check: {{flags}}"
   },
   "caseOccurrence": {
     "title": "Occurrence",
@@ -2122,5 +2123,19 @@
     "testing": "Sending…",
     "testSent": "Test message sent",
     "loadError": "Could not load your Teams settings. Is the server up to date?"
+  },
+  "geocodeFlag": {
+    "NEAREST_NUMBER": "nearest number on the street",
+    "STREET_ADJUSTED": "street spelled differently",
+    "LOCATOR_PARTIAL": "only part of the quadra or lote found",
+    "STREET_ONLY": "the street, not the number",
+    "MUNICIPALITY_ONLY": "only the municipality",
+    "NAMED_PLACE": "found by name: check the city",
+    "SOURCES_DISAGREE": "the census and the map are over 2 km apart"
+  },
+  "geocodeSource": {
+    "cnefe": "Source: IBGE, Censo Demográfico 2022",
+    "osm": "© OpenStreetMap contributors",
+    "ibge": "IBGE municipal boundaries"
   }
 }
