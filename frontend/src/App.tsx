@@ -29,6 +29,7 @@ import Operations from "./pages/Operations";
 import OperationDetail from "./pages/OperationDetail";
 import ComingSoon from "./pages/ComingSoon";
 import Users from "./pages/Users";
+import Organizations from "./pages/Organizations";
 import { extension } from "./extensions";
 // A lazy page whose code fails to load -- the tab predates a new build or a dev-server
 // restart, so the chunk it asks for no longer exists -- reloads once to fetch the current
@@ -101,6 +102,7 @@ export default function App() {
               )}
               <Route element={<RequireCapability need="admin" />}>
                 <Route path="/admin/users" element={<Users />} />
+                <Route path="/admin/organizations" element={<Organizations />} />
               </Route>
               <Route element={<RequireCapability need="persons" />}>
                 <Route path="/persons" element={<PersonLookup />} />

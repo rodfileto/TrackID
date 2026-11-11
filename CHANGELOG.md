@@ -49,6 +49,18 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- **Organizations, units and where each user works** (`docs/organizations-plan.md`, decided 2026-11-11). An
+  Organizations and units page (`/admin/organizations`) manages organizations (a SUPER_ADMIN) and the tree of units in
+  each (every admin); a unit in use is deactivated rather than deleted. On the Users page each user has a dated
+  posting (lotação) and missions (missão) in other units (`unit_assignments`, migration 029); a new posting after an
+  open one is a transfer. Routes under `/api/admin/organizations`, `/api/admin/units` and
+  `/api/admin/unit-assignments`.
+- **The laudo's header is the examiner's unit's.** A unit sets the laudo's header lines (`units.laudo_header`,
+  inherited from the unit above) and the name a preâmbulo gives it (`units.laudo_name`). The report data carries the
+  unit the examiner works in on the laudo's date, their mission's or else their posting's (`reports.Data.Unit`,
+  `organizations.UnitOn`), frozen when the laudo is issued, and core's laudos head with it. An examiner with no unit
+  keeps `reports.Institution`.
+
 - The scene examination and its laudo (`docs/scene-examination-plan.md`, phases 3 and 4). `CRIME_SCENE_EXAMINATION` is
   offered; it may hold pairs, and with none goes from examination to its report. In the analysis workspace the first
   examiner of a fingerprint comparison or scene examination marks lifts on the case's images, brings in reference

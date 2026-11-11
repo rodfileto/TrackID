@@ -2,6 +2,7 @@ package reports
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -199,7 +200,7 @@ func renderFilled(d Data, imgs map[string]Image, texts []string) (*doc, error) {
 
 func layout(out *doc, d Data, imgs map[string]Image) {
 	title := reportTypeText[d.ReportType]
-	out.header = []string{Institution, title + " nº " + d.number() + " — Caso " + d.Case.CaseID}
+	out.header = append(slices.Clone(d.HeaderLines()), title+" nº "+d.number()+" — Caso "+d.Case.CaseID)
 	out.footer = title + " nº " + d.number()
 	out.title(strings.ToUpper(title))
 	out.notice("Nº " + d.number() + " · Caso " + d.Case.CaseID + " · Emitido em " + d.issueDate())

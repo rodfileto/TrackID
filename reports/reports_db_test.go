@@ -25,6 +25,7 @@ import (
 	"github.com/rodfileto/trackid/distribution"
 	"github.com/rodfileto/trackid/examination"
 	"github.com/rodfileto/trackid/graph"
+	"github.com/rodfileto/trackid/organizations"
 	"github.com/rodfileto/trackid/reports"
 	"github.com/rodfileto/trackid/requests"
 )
@@ -114,6 +115,20 @@ func TestLaudoFlow(t *testing.T) {
 	chief := user("chief", false, true)
 	ana := user("ana", true, false)
 	caio := user("caio", true, false)
+	// Ana works in a unit of the installation's organization, whose header the laudo carries.
+	orgs := organizations.Service{DB: sqlDB}
+	var root int64
+	if err := sqlDB.QueryRowContext(ctx, `SELECT id FROM units WHERE parent_id IS NULL`).Scan(&root); err != nil {
+		t.Fatal(err)
+	}
+	nucleo, err := orgs.CreateUnit(ctx, organizations.UnitInput{ParentID: &root, Acronym: "NID", Name: "Núcleo de Identificação",
+		LaudoHeader: []string{"INSTITUTO DE TESTE", "Núcleo de Identificação"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := orgs.CreateAssignment(ctx, organizations.AssignmentInput{UserID: ana.ID, UnitID: nucleo, Kind: organizations.Posting, StartsOn: "2026-01-01"}, 0); err != nil {
+		t.Fatal(err)
+	}
 	check := func(what string, got, want error) {
 		t.Helper()
 		if !errors.Is(got, want) {
@@ -244,6 +259,13 @@ func TestLaudoFlow(t *testing.T) {
 	if !strings.Contains(text, "2026.0001") || !strings.Contains(text, "26/10/2026") || strings.Contains(text, "atribuído na emissão") ||
 		!strings.Contains(text, "Nariz e orelhas concordantes.") {
 		t.Fatal("the rendered document should carry the number, the date and the examiner's text, and no placeholder")
+	}
+	if !strings.Contains(text, "INSTITUTO DE TESTE") || strings.Contains(text, reports.Institution) {
+		t.Fatal("the header should be the examiner's unit's, not the installation's default")
+	}
+	var unit string
+	if err := sqlDB.QueryRowContext(ctx, `SELECT snapshot->'data'->'unit'->>'acronym' FROM analysis_reports WHERE case_analysis_id = $1`, cmp).Scan(&unit); err != nil || unit != "NID" {
+		t.Fatalf("the issued snapshot's unit = %q, %v; want NID", unit, err)
 	}
 	_, err = svc.Issue(ctx, ana, cmp)
 	check("issue twice", err, analyses.ErrNotDraft)

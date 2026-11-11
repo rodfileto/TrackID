@@ -130,6 +130,20 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	admin.POST("users", CreateUserHandler(authRepository, deps.EmailDomain))
 	admin.PATCH("users/:userId", UpdateUserAccessHandler(authRepository))
 	admin.PUT("users/:userId/password", SetUserPasswordHandler(authRepository))
+	// Organizations, units and who works where (docs/organizations-plan.md): every admin manages units and
+	// assignments; only a SUPER_ADMIN, organizations.
+	admin.GET("organizations", ListOrganizationsHandler(deps.DB))
+	admin.POST("organizations", RequireSuperAdmin(), CreateOrganizationHandler(deps.DB))
+	admin.PUT("organizations/:organizationId", RequireSuperAdmin(), UpdateOrganizationHandler(deps.DB))
+	admin.DELETE("organizations/:organizationId", RequireSuperAdmin(), DeleteOrganizationHandler(deps.DB))
+	admin.GET("units", ListUnitsHandler(deps.DB))
+	admin.POST("units", CreateUnitHandler(deps.DB))
+	admin.PUT("units/:unitId", UpdateUnitHandler(deps.DB))
+	admin.DELETE("units/:unitId", DeleteUnitHandler(deps.DB))
+	admin.GET("unit-assignments", ListUnitAssignmentsHandler(deps.DB))
+	admin.POST("unit-assignments", CreateUnitAssignmentHandler(deps.DB))
+	admin.PUT("unit-assignments/:assignmentId", UpdateUnitAssignmentHandler(deps.DB))
+	admin.DELETE("unit-assignments/:assignmentId", DeleteUnitAssignmentHandler(deps.DB))
 	// Coordination: handing out the work and opening comparisons. The paths keep their old
 	// admin/ prefix; the guard is the coordinator capability.
 	coordination := protected.Group("admin")

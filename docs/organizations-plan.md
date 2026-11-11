@@ -18,6 +18,25 @@ compartmentalise data access and case distribution.
   event, each in its own record.
 - **Later:** sealed cases (sigilo), and lending examiners between organizations or units.
 
+## Decided 2026-11-11
+
+- **Where a user works is dated.** A user has one **posting** (lotação) at a time and may be sent on
+  **mission** (missão) to another unit for a while (`unit_assignments`, migration 029). Both have a
+  start and an inclusive end, open while it lasts. A new posting after an open one is a transfer: the
+  open one ends the day before. Two postings, or two missions, of one user never overlap. History is
+  kept; a record is deleted only when it was entered by mistake.
+- **The laudo's header is the examiner's unit's, not the case's.** On the laudo's date the examiner
+  works in their mission's unit, else their posting's (`organizations.UnitOn`). That unit is in the
+  report data (`reports.Data.Unit`), so it is frozen with the rest when the laudo is issued: a later
+  transfer or a finished mission never changes an issued laudo. This replaces decision 7's "from the
+  organization and the case's unit". It applies to every laudo, facial and fingerprint, core's
+  and a deployment's.
+- **What a laudo says of a unit is set on the unit.** `units.laudo_header` holds the header's lines;
+  a unit with none takes its nearest ancestor's, and with none in its line the organization's name.
+  `units.laudo_name` is how a preâmbulo names the unit, the unit's name when empty. An examiner with
+  no unit keeps the installation's header (`reports.Institution`), so a single-organization
+  installation changes nothing until units are set.
+
 ## What exists
 
 - **No organization or unit anywhere.** One installation is one institute.
@@ -104,8 +123,8 @@ compartmentalise data access and case distribution.
    - Staff numbers are unique per organization. Sign-in then needs the organization, chosen on the
      sign-in page or taken from the address.
    - Usernames stay globally unique: they name the decider on every decision.
-   - The laudo's header (institution, unit, letterhead) comes from the organization and the
-     case's unit, not from a constant.
+   - The laudo's header (institution, unit, letterhead) comes from the examiner's unit on the
+     laudo's date, not from a constant (decided 2026-11-11, above).
 8. **Enforcement has one source and an exhaustive test.**
    - A single scope function, `access.Scope(user)`, returns the organizations and units a user
      reaches.
@@ -127,10 +146,11 @@ compartmentalise data access and case distribution.
    - `access_log` records the reader's organization and the case's organization.
    - Once sharing exists, a cross-organization read will be visible as such.
 11. **The UI:**
-    - **Organizations** (platform admin): name, acronym, type (federal, state), state, the
-      laudo's institution name and header, and active or not.
-    - **Units** (organization admin): the tree, its names, and active or not.
-    - **Users:** the organization (fixed for an organization admin) and the units.
+    - **Organizations** (platform admin): name, acronym, type (federal, state), state, and active
+      or not.
+    - **Units** (organization admin): the tree, its names, the laudo's header and preâmbulo name,
+      the unit receiving new cases, and active or not.
+    - **Users:** each user's posting and missions, dated.
     - **Registering a request:** the responsible unit, among the coordinator's units.
     - **Case lists and pages:** the unit, shown to whoever sees several.
     - **Distribution:** only examiners of the case's organization and unit scope.
@@ -146,8 +166,11 @@ compartmentalise data access and case distribution.
 1. **Organizations, units and membership.**
    - Done (`018_organizations.sql`): the tables, each case's unit, the receiving unit, and the
      requesting unit.
-   - To do: membership in `auth`, the Organizations and Units pages, units on the Users page, and
-     requests choosing the unit.
+   - Done (`029_unit_assignments.sql`, `organizations`): postings and missions, the Organizations
+     and units page (`/admin/organizations`; every admin manages units, a SUPER_ADMIN
+     organizations), each user's unit on the Users page, and the laudo's header from the examiner's
+     unit. Units in use are deactivated, not deleted.
+   - To do: requests choosing the unit.
 2. **Scope enforcement.** `access.Scope`, `Rights`, the lists, distribution, coordinators and
    requests, and the access-table test over two organizations.
 3. **The boundary.**

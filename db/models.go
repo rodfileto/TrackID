@@ -790,6 +790,21 @@ type Unit struct {
 	Active           bool           `db:"active" json:"active"`
 	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
 	UpdatedAt        time.Time      `db:"updated_at" json:"updated_at"`
+	LaudoHeader      []string       `db:"laudo_header" json:"laudo_header"`
+	LaudoName        string         `db:"laudo_name" json:"laudo_name"`
+}
+
+type UnitAssignment struct {
+	ID        int64         `db:"id" json:"id"`
+	UserID    int64         `db:"user_id" json:"user_id"`
+	UnitID    int64         `db:"unit_id" json:"unit_id"`
+	Kind      string        `db:"kind" json:"kind"`
+	StartsOn  time.Time     `db:"starts_on" json:"starts_on"`
+	EndsOn    sql.NullTime  `db:"ends_on" json:"ends_on"`
+	Note      string        `db:"note" json:"note"`
+	CreatedBy sql.NullInt64 `db:"created_by" json:"created_by"`
+	CreatedAt time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time     `db:"updated_at" json:"updated_at"`
 }
 
 type User struct {

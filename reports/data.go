@@ -16,6 +16,7 @@ import (
 	"github.com/rodfileto/trackid/db"
 	"github.com/rodfileto/trackid/examination"
 	"github.com/rodfileto/trackid/graph"
+	"github.com/rodfileto/trackid/organizations"
 	"github.com/rodfileto/trackid/requests"
 )
 
@@ -45,6 +46,18 @@ type Data struct {
 	GeneratedAt    time.Time          `json:"generatedAt"`
 	// Scene is the case's scene, for a scene examination (docs/scene-examination-plan.md).
 	Scene *SceneInfo `json:"scene,omitempty"`
+	// Unit is where the examiner worked on the report's date, on mission or posted, which the header and a
+	// deployment's preâmbulo name (docs/organizations-plan.md); nil when they have no unit, and on reports
+	// issued before units.
+	Unit *organizations.Placement `json:"unit,omitempty"`
+}
+
+// HeaderLines are the header's lines above the report's title: the examiner's unit's, or Institution.
+func (d Data) HeaderLines() []string {
+	if d.Unit != nil && len(d.Unit.Header) > 0 {
+		return d.Unit.Header
+	}
+	return []string{Institution}
 }
 
 // CaseInfo is the case a report is about.
@@ -314,6 +327,11 @@ func Build(ctx context.Context, q *db.Queries, analysisID int64, images Images, 
 	}
 	d.Examiners = Examiners{Examiner: people.byStep[analyses.StepVerificator], Verifier: people.byStep[analyses.StepReviewer],
 		Inconsistence: people.byStep[analyses.StepInconsistence]}
+	if id, ok := t.Examiners[analyses.StepVerificator]; ok {
+		if d.Unit, err = organizations.UnitOn(ctx, q, id, now.In(saoPaulo)); err != nil {
+			return Data{}, nil, err
+		}
+	}
 
 	imgs := map[string]Image{}
 	loadImage := func(featureID string) string {

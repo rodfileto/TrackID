@@ -60,5 +60,6 @@ export async function requestApi<T>(
     throw new Error(body.error ?? "The request could not be completed");
   }
 
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }

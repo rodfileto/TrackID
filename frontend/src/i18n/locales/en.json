@@ -58,7 +58,8 @@
     "labExamination": "Laboratory examination",
     "crimeSceneExamination": "Crime scene examination",
     "sceneCollection": "Scene collection",
-    "fieldNotes": "Field notes"
+    "fieldNotes": "Field notes",
+    "organizations": "Organizations and units"
   },
   "notifications": {
     "title": "Notifications",
@@ -945,7 +946,8 @@
       "name": "Name",
       "staffNumber": "Staff number",
       "role": "Role",
-      "active": "Active"
+      "active": "Active",
+      "unit": "Unit"
     },
     "fields": {
       "first_name": "First name",
@@ -965,6 +967,46 @@
       "examines_fingerprint": "Fingerprint",
       "intelligence_analyst": "Intelligence",
       "coordinator": "Coordinator"
+    },
+    "places": {
+      "manage": "Postings and missions",
+      "none": "no unit",
+      "until": "until {{date}}",
+      "title": "Where {{name}} works",
+      "desc": "Their posting (the unit they are assigned to) and missions (a while in another unit). A laudo is headed by the unit its examiner works in on its date: the mission's, else the posting's.",
+      "transfer": "Transfer",
+      "newPosting": "Post to a unit",
+      "newMission": "Send on mission",
+      "kinds": {
+        "POSTING": "Posting",
+        "MISSION": "Mission"
+      },
+      "unit": "Unit",
+      "chooseUnit": "Choose a unit",
+      "startsOn": "From",
+      "endsOn": "Until (last day)",
+      "note": "Act",
+      "notePlaceholder": {
+        "POSTING": "e.g. Portaria 123/2026",
+        "MISSION": "e.g. Ordem de missão 45/2026"
+      },
+      "help": {
+        "POSTING": "One posting at a time. A new one after an open posting is a transfer: the open one ends the day before. Leave \"until\" empty while it lasts.",
+        "MISSION": "While a mission lasts, the user's laudos are headed by the mission's unit. One user's missions never overlap."
+      },
+      "save": "Save",
+      "saved": "Saved.",
+      "deleted": "Deleted.",
+      "confirmDelete": "Delete this record? Delete only what was recorded by mistake; to finish one, end it.",
+      "empty": "No posting or mission yet: their laudos carry the installation's default header.",
+      "kind": "Kind",
+      "period": "Period",
+      "open": "open",
+      "current": "today",
+      "edit": "Edit",
+      "end": "End today",
+      "delete": "Delete",
+      "close": "Close"
     }
   },
   "links": {
@@ -2229,5 +2271,59 @@
     "comparedWith": "Compared with",
     "addPair": "Add pair",
     "confirmRemovePair": "Remove this pair?"
+  },
+  "organizations": {
+    "title": "Organizations and units",
+    "desc": "Organizations, their units and what a laudo says of each",
+    "organizations": "Organizations",
+    "organizationsDesc": "The bodies that own cases and issue laudos.",
+    "newOrganization": "New organization",
+    "newOrganizationDesc": "Its root unit is created with the same acronym and name.",
+    "units": "Units",
+    "unitsDesc": "Each unit's laudo header is its own or, when it has none, the one of the unit above (in italics).",
+    "filter": "Filter units",
+    "noUnits": "No units.",
+    "unitCount_one": "{{count}} unit",
+    "unitCount_other": "{{count}} units",
+    "members_one": "{{count}} person",
+    "members_other": "{{count}} people",
+    "below_one": "{{count}} below",
+    "below_other": "{{count}} below",
+    "inheritedFrom": "from {{unit}}",
+    "inactive": "inactive",
+    "receivesNewCases": "Receives new cases",
+    "receivesNewCasesHelp": "New cases that name no unit go to the one unit marked so; marking another takes it from the first.",
+    "addBelow": "Add below",
+    "edit": "Edit",
+    "delete": "Delete",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "newUnit": "New unit",
+    "laudo": "In the laudo",
+    "laudoDesc": "The header of the laudos of examiners working here, and how the preâmbulo names the unit.",
+    "laudoHeaderHelp": "One line each. Empty takes the header of the unit above, shown in grey.",
+    "laudoNameHelp": "e.g. Núcleo de Identificação da Delegacia Regional Executiva no estado de Minas Gerais. Empty is the unit's name.",
+    "fields": {
+      "acronym": "Acronym",
+      "name": "Name",
+      "kind": "Kind",
+      "uf": "State (UF)",
+      "active": "Active",
+      "parent": "Below",
+      "municipality": "Municipality (IBGE code)",
+      "laudoHeader": "Header lines",
+      "laudoName": "Name in the preâmbulo"
+    },
+    "kinds": {
+      "FEDERAL": "Federal",
+      "STATE": "State"
+    },
+    "save": "Save",
+    "cancel": "Cancel",
+    "saved": "{{name}} saved.",
+    "deleted": "{{name}} deleted.",
+    "confirmDelete": "Delete {{name}}? Only what nothing names can be deleted; otherwise deactivate it.",
+    "loadError": "Could not load the organizations.",
+    "saveError": "Could not save."
   }
 }

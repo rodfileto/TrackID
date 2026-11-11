@@ -58,7 +58,8 @@
     "labExamination": "Exame laboratorial",
     "crimeSceneExamination": "Exame de local",
     "sceneCollection": "Coleta em local",
-    "fieldNotes": "Notas de campo"
+    "fieldNotes": "Notas de campo",
+    "organizations": "Órgãos e unidades"
   },
   "notifications": {
     "title": "Notificações",
@@ -945,7 +946,8 @@
       "name": "Nome",
       "staffNumber": "Matrícula",
       "role": "Perfil",
-      "active": "Ativa"
+      "active": "Ativa",
+      "unit": "Unidade"
     },
     "fields": {
       "first_name": "Nome",
@@ -965,6 +967,46 @@
       "examines_fingerprint": "Papiloscopia",
       "intelligence_analyst": "Inteligência",
       "coordinator": "Coordenador"
+    },
+    "places": {
+      "manage": "Lotação e missões",
+      "none": "sem unidade",
+      "until": "até {{date}}",
+      "title": "Onde {{name}} trabalha",
+      "desc": "A lotação e as missões (um período em outra unidade). O laudo leva o cabeçalho da unidade em que o perito está na data do laudo: a da missão, ou a da lotação.",
+      "transfer": "Nova lotação (remoção)",
+      "newPosting": "Lotar em unidade",
+      "newMission": "Designar para missão",
+      "kinds": {
+        "POSTING": "Lotação",
+        "MISSION": "Missão"
+      },
+      "unit": "Unidade",
+      "chooseUnit": "Escolha a unidade",
+      "startsOn": "De",
+      "endsOn": "Até (último dia)",
+      "note": "Ato",
+      "notePlaceholder": {
+        "POSTING": "ex.: Portaria 123/2026",
+        "MISSION": "ex.: Ordem de missão 45/2026"
+      },
+      "help": {
+        "POSTING": "Uma lotação por vez. Uma nova lotação depois de outra em aberto é uma remoção: a anterior termina na véspera. Deixe \"até\" vazio enquanto durar.",
+        "MISSION": "Durante a missão, os laudos do servidor levam o cabeçalho da unidade da missão. As missões de um servidor não se sobrepõem."
+      },
+      "save": "Salvar",
+      "saved": "Salvo.",
+      "deleted": "Excluído.",
+      "confirmDelete": "Excluir este registro? Exclua só o que foi lançado por engano; para terminar, encerre.",
+      "empty": "Sem lotação nem missão: os laudos levam o cabeçalho padrão da instalação.",
+      "kind": "Tipo",
+      "period": "Período",
+      "open": "em aberto",
+      "current": "hoje",
+      "edit": "Editar",
+      "end": "Encerrar hoje",
+      "delete": "Excluir",
+      "close": "Fechar"
     }
   },
   "links": {
@@ -2229,5 +2271,59 @@
     "comparedWith": "Confrontado com",
     "addPair": "Adicionar par",
     "confirmRemovePair": "Remover este par?"
+  },
+  "organizations": {
+    "title": "Órgãos e unidades",
+    "desc": "Órgãos, suas unidades e o que o laudo diz de cada uma",
+    "organizations": "Órgãos",
+    "organizationsDesc": "As instituições que têm casos e emitem laudos.",
+    "newOrganization": "Novo órgão",
+    "newOrganizationDesc": "A unidade raiz é criada com a mesma sigla e o mesmo nome.",
+    "units": "Unidades",
+    "unitsDesc": "O cabeçalho do laudo de cada unidade é o dela ou, se não tiver, o da unidade acima (em itálico).",
+    "filter": "Filtrar unidades",
+    "noUnits": "Nenhuma unidade.",
+    "unitCount_one": "{{count}} unidade",
+    "unitCount_other": "{{count}} unidades",
+    "members_one": "{{count}} servidor",
+    "members_other": "{{count}} servidores",
+    "below_one": "{{count}} abaixo",
+    "below_other": "{{count}} abaixo",
+    "inheritedFrom": "de {{unit}}",
+    "inactive": "inativa",
+    "receivesNewCases": "Recebe casos novos",
+    "receivesNewCasesHelp": "Casos novos que não indicam unidade vão para a única unidade marcada; marcar outra tira a marca da primeira.",
+    "addBelow": "Adicionar abaixo",
+    "edit": "Editar",
+    "delete": "Excluir",
+    "expand": "Expandir",
+    "collapse": "Recolher",
+    "newUnit": "Nova unidade",
+    "laudo": "No laudo",
+    "laudoDesc": "O cabeçalho dos laudos dos peritos que trabalham aqui, e como o preâmbulo nomeia a unidade.",
+    "laudoHeaderHelp": "Uma linha por linha. Vazio usa o cabeçalho da unidade acima, mostrado em cinza.",
+    "laudoNameHelp": "ex.: Núcleo de Identificação da Delegacia Regional Executiva no estado de Minas Gerais. Vazio é o nome da unidade.",
+    "fields": {
+      "acronym": "Sigla",
+      "name": "Nome",
+      "kind": "Esfera",
+      "uf": "UF",
+      "active": "Ativa",
+      "parent": "Abaixo de",
+      "municipality": "Município (código IBGE)",
+      "laudoHeader": "Linhas do cabeçalho",
+      "laudoName": "Nome no preâmbulo"
+    },
+    "kinds": {
+      "FEDERAL": "Federal",
+      "STATE": "Estadual"
+    },
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "saved": "{{name}} salvo.",
+    "deleted": "{{name}} excluído.",
+    "confirmDelete": "Excluir {{name}}? Só se exclui o que nada referencia; caso contrário, desative.",
+    "loadError": "Não foi possível carregar os órgãos.",
+    "saveError": "Não foi possível salvar."
   }
 }

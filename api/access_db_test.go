@@ -189,6 +189,15 @@ func TestAccessProfiles(t *testing.T) {
 	allowed("/api/admin/distribution", get, coordinator)
 	allowed(fmt.Sprintf("/api/admin/analyses/%d/prior-deciders", held), get, coordinator)
 	allowed("/api/admin/users", get, admin)
+	// Organizations, units and assignments: admins only (TestOrganizationAdmin covers a plain ADMIN).
+	for _, path := range []string{"/api/admin/organizations", "/api/admin/units", "/api/admin/unit-assignments"} {
+		allowed(path, get, admin)
+		allowed(path, post, admin)
+	}
+	allowed("/api/admin/units/1", put, admin)
+	allowed("/api/admin/units/1", http.MethodDelete, admin)
+	allowed("/api/admin/unit-assignments/1", http.MethodDelete, admin)
+	allowed("/api/admin/organizations/1", put, admin)
 	// Blind work: only the workspace of the analysis, and no intelligence anywhere until they submit.
 	// (The examiner examined it first, so they read it too.)
 	allowed("/api/cases/BLIND", get, examiner, analyst, coordinator)
@@ -327,4 +336,46 @@ func openTask(t *testing.T, sqlDB *sql.DB, caseID string, typ analyses.Type) int
 		t.Fatal(err)
 	}
 	return aid
+}
+
+// TestOrganizationAdmin: a plain ADMIN manages units and who works where, but only a SUPER_ADMIN manages
+// organizations.
+func TestOrganizationAdmin(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	repo := auth.NewRepository(sqlDB)
+	u, err := repo.Create(ctx, auth.NewUser{FirstName: "a", LastName: "b", StaffNumber: "orgadmin", JobTitle: "test", Username: "orgadmin",
+		Password: "password1", Access: auth.Access{AccountRole: auth.AccountRoleAdmin, IsActive: true}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := NewRouter(Dependencies{DB: sqlDB, JWTSecret: testJWTSecret})
+	call := func(method, path string) int {
+		t.Helper()
+		token, err := IssueToken(u, testJWTSecret)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := httptest.NewRequest(method, path, nil)
+		request.Header.Set("Authorization", "Bearer "+token)
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		return recorder.Code
+	}
+	for _, c := range []struct {
+		method, path string
+		allowed      bool
+	}{
+		{http.MethodGet, "/api/admin/organizations", true},
+		{http.MethodPost, "/api/admin/organizations", false},
+		{http.MethodPut, "/api/admin/organizations/1", false},
+		{http.MethodDelete, "/api/admin/organizations/1", false},
+		{http.MethodPost, "/api/admin/units", true},
+		{http.MethodPut, "/api/admin/units/1", true},
+		{http.MethodPost, "/api/admin/unit-assignments", true},
+	} {
+		if got := call(c.method, c.path) != http.StatusForbidden; got != c.allowed {
+			t.Errorf("%s %s as ADMIN: allowed=%v, want %v", c.method, c.path, got, c.allowed)
+		}
+	}
 }

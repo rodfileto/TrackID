@@ -22,6 +22,20 @@ import {
   type NewUser,
   type UserAccess,
 } from "../services/users";
+import {
+  createAssignment,
+  deleteAssignment,
+  listAssignments,
+  listOrganizations,
+  listUnits,
+  placementOn,
+  today,
+  updateAssignment,
+  type Assignment,
+  type AssignmentInput,
+  type Organization,
+  type Unit,
+} from "../services/organizations";
 
 const headerClass = "px-4 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400";
 const cellClass = "px-4 py-3 text-start text-theme-sm text-gray-700 dark:text-gray-300";
@@ -64,6 +78,10 @@ export default function Users() {
   const [creating, setCreating] = useState<NewUser | null>(null);
   const [resetting, setResetting] = useState<{ user: UserProfile; password: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [placing, setPlacing] = useState<UserProfile | null>(null);
 
   const isSuper = me?.account_role === "SUPER_ADMIN";
 
@@ -74,6 +92,21 @@ export default function Users() {
   }, [t]);
 
   useEffect(load, [load]);
+
+  const loadPlaces = useCallback(() => {
+    Promise.all([listAssignments(), listUnits(), listOrganizations()])
+      .then(([a, u, o]) => {
+        setAssignments(a);
+        setUnits(u);
+        setOrgs(o);
+      })
+      .catch((err) => toast.error(err instanceof Error ? err.message : t("users.loadError")));
+  }, [t]);
+
+  useEffect(loadPlaces, [loadPlaces]);
+
+  const unitById = useMemo(() => new Map(units.map((u) => [u.id, u])), [units]);
+  const day = today();
 
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -159,6 +192,7 @@ export default function Users() {
                 <TableRow>
                   <TableCell isHeader className={headerClass}>{t("users.columns.name")}</TableCell>
                   <TableCell isHeader className={headerClass}>{t("users.columns.staffNumber")}</TableCell>
+                  <TableCell isHeader className={headerClass}>{t("users.columns.unit")}</TableCell>
                   <TableCell isHeader className={headerClass}>{t("users.columns.role")}</TableCell>
                   {flags.map((f) => (
                     <TableCell key={f} isHeader className={headerClass}>{t(`users.flags.${f}`)}</TableCell>
@@ -187,6 +221,16 @@ export default function Users() {
                         </div>
                       </TableCell>
                       <TableCell className={cellClass}>{u.staff_number}</TableCell>
+                      <TableCell className={cellClass}>
+                        <button
+                          type="button"
+                          className="text-start hover:underline"
+                          onClick={() => setPlacing(u)}
+                          title={t("users.places.manage")}
+                        >
+                          <UnitCell placement={placementOn(assignments, u.id, day)} unitById={unitById} />
+                        </button>
+                      </TableCell>
                       <TableCell className={cellClass}>
                         {isSuper && !self ? (
                           <select
@@ -307,6 +351,19 @@ export default function Users() {
         )}
       </Modal>
 
+      <Modal isOpen={!!placing} onClose={() => setPlacing(null)} className="max-w-[900px] m-4">
+        {placing && (
+          <Places
+            user={placing}
+            assignments={assignments.filter((a) => a.user_id === placing.id)}
+            units={units}
+            orgs={orgs}
+            onChange={loadPlaces}
+            onClose={() => setPlacing(null)}
+          />
+        )}
+      </Modal>
+
       <Modal isOpen={!!resetting} onClose={() => setResetting(null)} className="max-w-[500px] m-4">
         {resetting && (
           <form onSubmit={(event) => void submitReset(event)} className="p-6 lg:p-10">
@@ -354,5 +411,264 @@ function PasswordField({ value, onChange }: { value: string; onChange: (value: s
         </Button>
       </div>
     </label>
+  );
+}
+
+/** Where a user works today: the unit, marked when on mission. */
+function UnitCell({ placement, unitById }: { placement?: Assignment; unitById: Map<number, Unit> }) {
+  const { t } = useTranslation();
+  const unit = placement && unitById.get(placement.unit_id);
+  if (!placement || !unit) return <span className="text-gray-400">{t("users.places.none")}</span>;
+  return (
+    <span className="flex flex-col">
+      <span className="flex items-center gap-2">
+        {unit.acronym}
+        {placement.kind === "MISSION" && <Badge size="sm" color="warning">{t("users.places.kinds.MISSION")}</Badge>}
+      </span>
+      {placement.ends_on && (
+        <span className="text-theme-xs text-gray-500 dark:text-gray-400">{t("users.places.until", { date: formatDay(placement.ends_on) })}</span>
+      )}
+    </span>
+  );
+}
+
+const formatDay = (d: string) => d.split("-").reverse().join("/");
+
+const emptyPlace = (userId: number, kind: AssignmentInput["kind"]): AssignmentInput & { id?: number } => ({
+  user_id: userId,
+  unit_id: 0,
+  kind,
+  starts_on: today(),
+  ends_on: "",
+  note: "",
+});
+
+/** A user's postings (lotação) and missions (missão), past ones included. The laudo header is their
+ * mission's unit on the laudo's date, else their posting's. A new posting after an open one is a
+ * transfer: the server ends the open one the day before. */
+function Places({
+  user,
+  assignments,
+  units,
+  orgs,
+  onChange,
+  onClose,
+}: {
+  user: UserProfile;
+  assignments: Assignment[];
+  units: Unit[];
+  orgs: Organization[];
+  onChange: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [form, setForm] = useState<(AssignmentInput & { id?: number }) | null>(null);
+  const [saving, setSaving] = useState(false);
+  const unitById = useMemo(() => new Map(units.map((u) => [u.id, u])), [units]);
+  const day = today();
+  const current = placementOn(assignments, user.id, day);
+
+  const groups = useMemo(
+    () =>
+      orgs
+        .map((o) => ({
+          org: o,
+          units: units
+            .filter((u) => u.organization_id === o.id && (u.active || u.id === form?.unit_id))
+            .sort((a, b) => a.acronym.localeCompare(b.acronym)),
+        }))
+        .filter((g) => g.units.length > 0),
+    [orgs, units, form?.unit_id],
+  );
+
+  async function save(action: () => Promise<unknown>, done: string) {
+    setSaving(true);
+    try {
+      await action();
+      toast.success(done);
+      onChange();
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("users.saveError"));
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!form) return;
+    const { id, ...input } = form;
+    const ok = await save(
+      () => (id === undefined ? createAssignment(input) : updateAssignment(id, input)),
+      t("users.places.saved"),
+    );
+    if (ok) setForm(null);
+  }
+
+  // Ends an open-ended assignment today: today is its last day.
+  function end(a: Assignment) {
+    const endsOn = a.starts_on > day ? a.starts_on : day;
+    void save(() => updateAssignment(a.id, { ...a, ends_on: endsOn }), t("users.places.saved"));
+  }
+
+  function remove(a: Assignment) {
+    if (!window.confirm(t("users.places.confirmDelete"))) return;
+    void save(() => deleteAssignment(a.id), t("users.places.deleted"));
+  }
+
+  return (
+    <div className="p-6 lg:p-10">
+      <h4 className="mb-1 text-2xl font-semibold text-gray-800 dark:text-white/90">
+        {t("users.places.title", { name: `${user.first_name} ${user.last_name}` })}
+      </h4>
+      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">{t("users.places.desc")}</p>
+
+      <div className="mb-4 flex flex-wrap gap-3">
+        <Button size="sm" onClick={() => setForm(emptyPlace(user.id, "POSTING"))}>
+          {current?.kind === "POSTING" ? t("users.places.transfer") : t("users.places.newPosting")}
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => setForm(emptyPlace(user.id, "MISSION"))}>
+          {t("users.places.newMission")}
+        </Button>
+      </div>
+
+      {form && (
+        <form onSubmit={(event) => void submit(event)} className="mb-6 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+          <h5 className="mb-3 font-semibold text-gray-800 dark:text-white/90">{t(`users.places.kinds.${form.kind}`)}</h5>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className={`${labelClass} sm:col-span-2`}>
+              {t("users.places.unit")}
+              <select
+                required
+                value={form.unit_id || ""}
+                onChange={(event) => setForm({ ...form, unit_id: Number(event.target.value) })}
+                className={inputClass}
+              >
+                <option value="" disabled>
+                  {t("users.places.chooseUnit")}
+                </option>
+                {groups.map((g) => (
+                  <optgroup key={g.org.id} label={g.org.acronym}>
+                    {g.units.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.acronym} — {u.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+            <label className={labelClass}>
+              {t("users.places.startsOn")}
+              <input
+                required
+                type="date"
+                value={form.starts_on}
+                onChange={(event) => setForm({ ...form, starts_on: event.target.value })}
+                className={inputClass}
+              />
+            </label>
+            <label className={labelClass}>
+              {t("users.places.endsOn")}
+              <input
+                type="date"
+                required={form.kind === "MISSION"}
+                min={form.starts_on}
+                value={form.ends_on}
+                onChange={(event) => setForm({ ...form, ends_on: event.target.value })}
+                className={inputClass}
+              />
+            </label>
+            <label className={`${labelClass} sm:col-span-2`}>
+              {t("users.places.note")}
+              <input
+                value={form.note}
+                placeholder={t(`users.places.notePlaceholder.${form.kind}`)}
+                onChange={(event) => setForm({ ...form, note: event.target.value })}
+                className={inputClass}
+              />
+            </label>
+          </div>
+          <p className="mt-3 text-theme-xs text-gray-500 dark:text-gray-400">{t(`users.places.help.${form.kind}`)}</p>
+          <div className="mt-4 flex justify-end gap-3">
+            <Button type="button" size="sm" variant="outline" onClick={() => setForm(null)}>
+              {t("users.cancel")}
+            </Button>
+            <Button type="submit" size="sm" disabled={saving}>
+              {t("users.places.save")}
+            </Button>
+          </div>
+        </form>
+      )}
+
+      {assignments.length === 0 ? (
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t("users.places.empty")}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
+              <TableRow>
+                <TableCell isHeader className={headerClass}>{t("users.places.kind")}</TableCell>
+                <TableCell isHeader className={headerClass}>{t("users.places.unit")}</TableCell>
+                <TableCell isHeader className={headerClass}>{t("users.places.period")}</TableCell>
+                <TableCell isHeader className={headerClass}>{t("users.places.note")}</TableCell>
+                <TableCell isHeader className={headerClass}>{""}</TableCell>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+              {assignments.map((a) => {
+                const unit = unitById.get(a.unit_id);
+                const now = a.id === current?.id;
+                const open = !a.ends_on || a.ends_on >= day;
+                return (
+                  <TableRow key={a.id} className={open ? "" : "opacity-60"}>
+                    <TableCell className={cellClass}>
+                      <span className="flex items-center gap-2">
+                        {t(`users.places.kinds.${a.kind}`)}
+                        {now && <Badge size="sm" color="success">{t("users.places.current")}</Badge>}
+                      </span>
+                    </TableCell>
+                    <TableCell className={cellClass}>
+                      <div className="font-medium text-gray-800 dark:text-white/90">{unit?.acronym ?? a.unit_id}</div>
+                      <div className="text-theme-xs text-gray-500 dark:text-gray-400">{unit?.name}</div>
+                    </TableCell>
+                    <TableCell className={cellClass}>
+                      {formatDay(a.starts_on)} – {a.ends_on ? formatDay(a.ends_on) : t("users.places.open")}
+                    </TableCell>
+                    <TableCell className={cellClass}>{a.note}</TableCell>
+                    <TableCell className={cellClass}>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setForm({ id: a.id, user_id: a.user_id, unit_id: a.unit_id, kind: a.kind, starts_on: a.starts_on, ends_on: a.ends_on ?? "", note: a.note })}
+                        >
+                          {t("users.places.edit")}
+                        </Button>
+                        {!a.ends_on && (
+                          <Button size="sm" variant="outline" disabled={saving} onClick={() => end(a)}>
+                            {t("users.places.end")}
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" disabled={saving} onClick={() => remove(a)}>
+                          {t("users.places.delete")}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+      <div className="mt-6 flex justify-end">
+        <Button size="sm" variant="outline" onClick={onClose}>
+          {t("users.places.close")}
+        </Button>
+      </div>
+    </div>
   );
 }

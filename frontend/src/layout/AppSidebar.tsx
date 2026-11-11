@@ -94,6 +94,7 @@ const allNavSections: NavSection[] = [
       { icon: <DocsIcon />, name: "nav.requests", path: "/requests", requires: "coordinator" },
       { icon: <TableIcon />, name: "nav.distribution", path: "/admin/distribution", requires: "coordinator" },
       { icon: <LockIcon />, name: "nav.users", path: "/admin/users", requires: "admin" },
+      { icon: <GroupIcon />, name: "nav.organizations", path: "/admin/organizations", requires: "admin" },
       ...extension.navItems,
     ],
   },
