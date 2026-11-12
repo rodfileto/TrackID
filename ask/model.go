@@ -166,6 +166,9 @@ type conversation struct {
 	model    *Model
 	messages []chatMessage
 	tools    []chatTool
+	// final makes the next request one the model must answer in words: tool_choice "none". The
+	// last round asks for it, so a model still investigating gives what it has found.
+	final bool
 }
 
 func (m *Model) start(system string, tools []Tool, history []Message, question string) *conversation {
@@ -196,7 +199,7 @@ func (c *conversation) next(ctx context.Context, results []toolResult) (turn, er
 		}
 		c.messages = append(c.messages, chatMessage{Role: "tool", ToolCallID: r.CallID, Content: &content})
 	}
-	payload, err := c.model.body(c.messages, c.tools)
+	payload, err := c.model.body(c.messages, c.tools, c.final)
 	if err != nil {
 		return turn{}, fmt.Errorf("ask: marshal chat request: %w", err)
 	}
@@ -258,8 +261,12 @@ func (c *conversation) next(ctx context.Context, results []toolResult) (turn, er
 
 // body is the request as JSON with ASK_EXTRA_BODY's fields added. Those never replace what the
 // protocol exchange itself sets.
-func (m *Model) body(messages []chatMessage, tools []chatTool) ([]byte, error) {
-	request := map[string]any{"model": m.name, "messages": messages, "tools": tools, "tool_choice": "auto"}
+func (m *Model) body(messages []chatMessage, tools []chatTool, final bool) ([]byte, error) {
+	choice := "auto"
+	if final {
+		choice = "none"
+	}
+	request := map[string]any{"model": m.name, "messages": messages, "tools": tools, "tool_choice": choice}
 	for k, v := range m.extra {
 		if _, set := request[k]; !set {
 			request[k] = v

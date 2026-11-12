@@ -14,7 +14,10 @@ import (
 )
 
 // maxRounds bounds how many times one question may go back to the model.
-const maxRounds = 8
+// The last of them is asked to answer with what it has found, not to call another tool: a person's
+// question can take several lookups (the person, their cases, identities, clusters, then the detail
+// of each), and a model that was still investigating would otherwise lose all of it.
+const maxRounds = 12
 
 // ErrRealData refuses a question on a server outside the institute while the database holds
 // anything that is not synthetic.
@@ -119,6 +122,7 @@ func (s *Service) run(ctx context.Context, asker Asker, question string, history
 	conversation := s.model.start(systemPrompt(tax, s.now().In(reportZone))+focusPrompt(focus), catalog(), history, question)
 	var results []toolResult
 	for round := 0; round < maxRounds; round++ {
+		conversation.final = round == maxRounds-1
 		turn, err := conversation.next(ctx, results)
 		if err != nil {
 			return answer, err
@@ -245,7 +249,7 @@ func systemPrompt(tax taxonomy, today time.Time) string {
 	b.WriteString("You answer questions about the criminal scenario for the intelligence analysts of a forensic institute, using the data in its case system.\n\n")
 	b.WriteString("Rules:\n")
 	b.WriteString("- Every figure comes from a tool's result in this conversation. Never state a count from memory or estimate one. If the tools cannot answer, say what is missing rather than guessing.\n")
-	b.WriteString("- Call the tools you need before answering. A question about a number always needs a tool call, even if an earlier answer seems to have it.\n")
+	b.WriteString("- Call the tools you need before answering, and call independent ones together in the same turn. You have a limited number of turns: when the answer is covered, stop looking things up and answer. A question about a number always needs a tool call, even if an earlier answer seems to have it.\n")
 	b.WriteString("- Say which period and filters the figure covers. When a result reports undatedExcluded or unplacedExcluded above zero, or truncated as true, say so: those occurrences are not in the figure.\n")
 	b.WriteString("- If the question is ambiguous (a general word that could be a type or a whole group, a period not given), choose the plainest reading, answer it, and state the reading you chose.\n")
 	b.WriteString("- The data are occurrences registered in this system, not all the crime there is: do not present them as crime rates, and do not claim causes or predict from them.\n")

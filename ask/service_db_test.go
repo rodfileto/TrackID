@@ -307,7 +307,21 @@ func TestAsk(t *testing.T) {
 		t.Errorf("failure record: %s, %s", failure, rawSteps)
 	}
 
-	// A model that never stops calling tools stops.
+	// A model still investigating on the last round is told to answer, and its answer is kept.
+	investigating := make([]string, maxRounds)
+	for i := range investigating {
+		investigating[i] = callTool("c", "data_coverage", `{}`)
+	}
+	investigating[maxRounds-1] = reply("Resumo do que achei.")
+	fake := newFakeServer(t, investigating...)
+	if a, err := NewService(sqlDB, testModel(t, fake, Settings{})).Ask(ctx, asker, "longa?", nil, nil); err != nil || a.Answer != "Resumo do que achei." {
+		t.Errorf("last round: %v, %+v", err, a)
+	}
+	if fake.requests[0]["tool_choice"] != "auto" || fake.requests[maxRounds-1]["tool_choice"] != "none" {
+		t.Errorf("tool_choice: first %v, last %v", fake.requests[0]["tool_choice"], fake.requests[maxRounds-1]["tool_choice"])
+	}
+
+	// A model that never stops calling tools, even then, stops.
 	loops := make([]string, maxRounds)
 	for i := range loops {
 		loops[i] = callTool("c", "data_coverage", `{}`)
