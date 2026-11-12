@@ -32,7 +32,7 @@
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^19.3.1",
-    "react-dropzone": "^14.3.5",
+    "react-dropzone": "^20.1.4",
     "react-force-graph-2d": "^1.29.2",
     "react-i18next": "^17.1.9",
     "react-konva": "^19.3.2",
