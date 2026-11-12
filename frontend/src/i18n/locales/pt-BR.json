@@ -2328,5 +2328,26 @@
     "confirmDelete": "Excluir {{name}}? Só se exclui o que nada referencia; caso contrário, desative.",
     "loadError": "Não foi possível carregar os órgãos.",
     "saveError": "Não foi possível salvar."
+  },
+  "presence": {
+    "title": "Onde aparece",
+    "desc": {
+      "person": "As ocorrências dos casos em que esta pessoa tem vestígios. O ponto é onde a ocorrência aconteceu, não onde a pessoa mora ou foi vista.",
+      "cluster": "As ocorrências dos casos em que este cluster tem vestígios. O ponto é onde a ocorrência aconteceu."
+    },
+    "summary": "{{cases}} casos, {{occurrences}} ocorrências, {{drawn}} no mapa.",
+    "noOccurrence_one": "{{count}} caso não tem ocorrência.",
+    "noOccurrence_other": "{{count}} casos não têm ocorrência.",
+    "unplaced_one": "{{count}} ocorrência não tem local conhecido e não é desenhada.",
+    "unplaced_other": "{{count}} ocorrências não têm local conhecido e não são desenhadas.",
+    "noCases": "Nenhum caso tem vestígios dela ainda.",
+    "nothingToDraw": "Nenhuma de suas ocorrências tem local para desenhar.",
+    "loadError": "Não foi possível carregar as ocorrências.",
+    "mode": "Modo do mapa",
+    "inSet": "É um caso dela",
+    "modes": {
+      "points": "Pontos",
+      "heatmap": "Calor"
+    }
   }
 }

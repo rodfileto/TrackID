@@ -36,6 +36,8 @@ export interface OccurrenceProperties {
   geocodeSource?: string;
   geocodeFlags?: string[];
   cases: OccurrenceCase[];
+  /** On a person's or a cluster's map: which of its own cases this occurrence is of. */
+  inSet?: string[];
 }
 
 export interface OccurrenceFeature {
@@ -292,4 +294,24 @@ export async function geocodeReverse(
     { headers: authHeaders() },
   );
   return item;
+}
+
+/** Where a person or a cluster appears: the occurrences of the cases it has traces in, with what could not be drawn. */
+export interface PresenceMap extends OccurrenceMap {
+  /** Cases it has traces in. */
+  cases: number;
+  /** Of them, with an occurrence. */
+  withOccurrence: number;
+  /** Distinct occurrences those cases have. */
+  occurrences: number;
+  /** Of those, with no place to draw. */
+  unplaced: number;
+}
+
+export async function getPersonOccurrences(personId: string): Promise<PresenceMap> {
+  return requestApi<PresenceMap>(`/persons/${encodeURIComponent(personId)}/occurrences`, { headers: authHeaders() });
+}
+
+export async function getClusterOccurrences(clusterId: number): Promise<PresenceMap> {
+  return requestApi<PresenceMap>(`/clusters/${clusterId}/occurrences`, { headers: authHeaders() });
 }

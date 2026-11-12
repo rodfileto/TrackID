@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import PageMeta from "../components/common/PageMeta";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import ComponentCard from "../components/common/ComponentCard";
+import PresenceMapCard from "../components/intelligence/PresenceMapCard";
+import { getPersonOccurrences } from "../services/occurrences";
 import {
   Table,
   TableBody,
@@ -311,6 +313,10 @@ export default function PersonProfilePage() {
           </ComponentCard>
 
           <IntelligencePanels panels={extension.personPanels} props={{ personId: profile.identity.personId }} />
+
+          {isIntelligence && (
+            <PresenceMapCard subject="person" load={() => getPersonOccurrences(profile.identity.personId)} />
+          )}
 
           <ComponentCard
             title={t("personProfile.identity")}

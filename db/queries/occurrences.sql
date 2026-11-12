@@ -155,6 +155,38 @@ WHERE (sqlc.narg(occurred_after)::timestamptz IS NULL OR o.occurred_from >= sqlc
 ORDER BY o.occurred_from NULLS LAST, o.id
 LIMIT sqlc.arg(max_rows);
 
+-- name: ListOccurrencesForMapByCases :many
+-- ListOccurrencesForMap for the occurrences of some cases: where a person or a cluster appears, through the cases it has
+-- traces in. An occurrence with no place (or only its unit's municipality) is not here: PresenceCounts counts it.
+SELECT o.id, o.agency, o.occurrence_number, o.occurrence_year, o.occurrence_seq,
+    o.occurred_from, o.occurred_to, o.registered_at,
+    o.attempted, o.status, o.description,
+    ST_X(l.geom::geometry)::float8 AS lon,
+    ST_Y(l.geom::geometry)::float8 AS lat,
+    l.location_id, l.precision, l.place_type, l.name AS place_name, l.neighbourhood, l.municipality_code,
+    l.geocode_source, l.geocode_flags,
+    COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
+              WHERE c.occurrence_id = o.id), '[]')::jsonb AS types,
+    COALESCE((SELECT json_agg(json_build_object('caseId', b.case_id, 'modality', b.modality, 'caseType', b.case_type)
+                              ORDER BY b.case_id)
+              FROM biometric_cases b WHERE b.occurrence_id = o.id), '[]')::jsonb AS cases
+FROM occurrences o
+JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
+WHERE o.id IN (SELECT b.occurrence_id FROM biometric_cases b WHERE b.case_id = ANY(@case_ids::text[]) AND b.occurrence_id IS NOT NULL)
+ORDER BY o.occurred_from NULLS LAST, o.id;
+
+-- name: PresenceCounts :one
+-- What a set of cases gives a map: how many have an occurrence, how many distinct occurrences, and how many of those have
+-- no place to draw (none, or only their unit's municipality).
+SELECT COUNT(*)::bigint AS cases,
+    COUNT(b.occurrence_id)::bigint AS with_occurrence,
+    COUNT(DISTINCT b.occurrence_id)::bigint AS occurrences,
+    COUNT(DISTINCT b.occurrence_id) FILTER (WHERE b.occurrence_id IS NOT NULL AND l.id IS NULL)::bigint AS unplaced
+FROM biometric_cases b
+LEFT JOIN occurrences o ON o.id = b.occurrence_id
+LEFT JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
+WHERE b.case_id = ANY(@case_ids::text[]);
+
 -- name: ListOccurrenceYears :many
 SELECT DISTINCT EXTRACT(YEAR FROM occurred_from AT TIME ZONE 'America/Sao_Paulo')::int4 AS year
 FROM occurrences WHERE occurred_from IS NOT NULL ORDER BY year;

@@ -299,6 +299,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	intelligence.GET("persons/:personId", LogAccess(deps.DB, accessPerson, "personId"), GetPersonProfileHandler(deps.DB))
 	intelligence.GET("persons/:personId/clusters", LogAccess(deps.DB, accessPerson, "personId"), ListPersonClustersHandler(deps.DB))
 	intelligence.GET("persons/:personId/cases", LogAccess(deps.DB, accessPerson, "personId"), ListPersonCasesHandler(deps.DB))
+	intelligence.GET("persons/:personId/occurrences", LogAccess(deps.DB, accessPerson, "personId"), PersonOccurrencesHandler(deps.DB))
 	intelligence.GET("persons/:personId/case-links", LogAccess(deps.DB, accessPerson, "personId"), ListPersonCaseLinksHandler(deps.DB))
 
 	// Person articles (docs/person-article-plan.md): reading one is reading the person; a save
@@ -335,6 +336,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	intelligence.GET("clusters", ListClustersHandler(deps.DB))
 	intelligence.GET("clusters/graph", ClustersGraphHandler(deps.DB))
 	intelligence.GET("clusters/:clusterId", GetClusterHandler(deps.DB))
+	intelligence.GET("clusters/:clusterId/occurrences", ClusterOccurrencesHandler(deps.DB))
 
 	// What the occurrence form needs: a coordinator registering a request creates the occurrence
 	// it cites (docs/facial-reports-plan.md, "Request first"); the map and the rest stay

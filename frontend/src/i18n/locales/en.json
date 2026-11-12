@@ -2328,5 +2328,26 @@
     "confirmDelete": "Delete {{name}}? Only what nothing names can be deleted; otherwise deactivate it.",
     "loadError": "Could not load the organizations.",
     "saveError": "Could not save."
+  },
+  "presence": {
+    "title": "Where it appears",
+    "desc": {
+      "person": "The occurrences of the cases this person has traces in. A point is where the occurrence happened, not where the person lives or was seen.",
+      "cluster": "The occurrences of the cases this cluster has traces in. A point is where the occurrence happened."
+    },
+    "summary": "{{cases}} cases, {{occurrences}} occurrences, {{drawn}} on the map.",
+    "noOccurrence_one": "{{count}} case has no occurrence.",
+    "noOccurrence_other": "{{count}} cases have no occurrence.",
+    "unplaced_one": "{{count}} occurrence has no known place and is not drawn.",
+    "unplaced_other": "{{count}} occurrences have no known place and are not drawn.",
+    "noCases": "No case holds traces of it yet.",
+    "nothingToDraw": "None of its occurrences has a place to draw.",
+    "loadError": "Could not load the occurrences.",
+    "mode": "Map mode",
+    "inSet": "This is one of its own cases",
+    "modes": {
+      "points": "Points",
+      "heatmap": "Heatmap"
+    }
   }
 }

@@ -593,6 +593,100 @@ func (q *Queries) ListOccurrencesForMap(ctx context.Context, arg ListOccurrences
 	return items, nil
 }
 
+const listOccurrencesForMapByCases = `-- name: ListOccurrencesForMapByCases :many
+SELECT o.id, o.agency, o.occurrence_number, o.occurrence_year, o.occurrence_seq,
+    o.occurred_from, o.occurred_to, o.registered_at,
+    o.attempted, o.status, o.description,
+    ST_X(l.geom::geometry)::float8 AS lon,
+    ST_Y(l.geom::geometry)::float8 AS lat,
+    l.location_id, l.precision, l.place_type, l.name AS place_name, l.neighbourhood, l.municipality_code,
+    l.geocode_source, l.geocode_flags,
+    COALESCE((SELECT json_agg(c.type_code ORDER BY c.type_code) FROM occurrence_classifications c
+              WHERE c.occurrence_id = o.id), '[]')::jsonb AS types,
+    COALESCE((SELECT json_agg(json_build_object('caseId', b.case_id, 'modality', b.modality, 'caseType', b.case_type)
+                              ORDER BY b.case_id)
+              FROM biometric_cases b WHERE b.occurrence_id = o.id), '[]')::jsonb AS cases
+FROM occurrences o
+JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
+WHERE o.id IN (SELECT b.occurrence_id FROM biometric_cases b WHERE b.case_id = ANY($1::text[]) AND b.occurrence_id IS NOT NULL)
+ORDER BY o.occurred_from NULLS LAST, o.id
+`
+
+type ListOccurrencesForMapByCasesRow struct {
+	ID               int64           `db:"id" json:"id"`
+	Agency           sql.NullString  `db:"agency" json:"agency"`
+	OccurrenceNumber sql.NullString  `db:"occurrence_number" json:"occurrence_number"`
+	OccurrenceYear   sql.NullInt32   `db:"occurrence_year" json:"occurrence_year"`
+	OccurrenceSeq    sql.NullInt32   `db:"occurrence_seq" json:"occurrence_seq"`
+	OccurredFrom     sql.NullTime    `db:"occurred_from" json:"occurred_from"`
+	OccurredTo       sql.NullTime    `db:"occurred_to" json:"occurred_to"`
+	RegisteredAt     time.Time       `db:"registered_at" json:"registered_at"`
+	Attempted        sql.NullBool    `db:"attempted" json:"attempted"`
+	Status           string          `db:"status" json:"status"`
+	Description      string          `db:"description" json:"description"`
+	Lon              float64         `db:"lon" json:"lon"`
+	Lat              float64         `db:"lat" json:"lat"`
+	LocationID       string          `db:"location_id" json:"location_id"`
+	Precision        string          `db:"precision" json:"precision"`
+	PlaceType        sql.NullString  `db:"place_type" json:"place_type"`
+	PlaceName        sql.NullString  `db:"place_name" json:"place_name"`
+	Neighbourhood    sql.NullString  `db:"neighbourhood" json:"neighbourhood"`
+	MunicipalityCode string          `db:"municipality_code" json:"municipality_code"`
+	GeocodeSource    sql.NullString  `db:"geocode_source" json:"geocode_source"`
+	GeocodeFlags     []string        `db:"geocode_flags" json:"geocode_flags"`
+	Types            json.RawMessage `db:"types" json:"types"`
+	Cases            json.RawMessage `db:"cases" json:"cases"`
+}
+
+// ListOccurrencesForMap for the occurrences of some cases: where a person or a cluster appears, through the cases it has
+// traces in. An occurrence with no place (or only its unit's municipality) is not here: PresenceCounts counts it.
+func (q *Queries) ListOccurrencesForMapByCases(ctx context.Context, caseIds []string) ([]ListOccurrencesForMapByCasesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listOccurrencesForMapByCases, pq.Array(caseIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOccurrencesForMapByCasesRow
+	for rows.Next() {
+		var i ListOccurrencesForMapByCasesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Agency,
+			&i.OccurrenceNumber,
+			&i.OccurrenceYear,
+			&i.OccurrenceSeq,
+			&i.OccurredFrom,
+			&i.OccurredTo,
+			&i.RegisteredAt,
+			&i.Attempted,
+			&i.Status,
+			&i.Description,
+			&i.Lon,
+			&i.Lat,
+			&i.LocationID,
+			&i.Precision,
+			&i.PlaceType,
+			&i.PlaceName,
+			&i.Neighbourhood,
+			&i.MunicipalityCode,
+			&i.GeocodeSource,
+			pq.Array(&i.GeocodeFlags),
+			&i.Types,
+			&i.Cases,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOccurrencesWithinRadius = `-- name: ListOccurrencesWithinRadius :many
 SELECT o.id, o.agency, o.occurrence_number, o.occurred_from, o.status,
     l.location_id, l.precision,
@@ -681,6 +775,38 @@ func (q *Queries) MaxOccurrenceSeqForYear(ctx context.Context, occurrenceYear in
 	var max_seq int32
 	err := row.Scan(&max_seq)
 	return max_seq, err
+}
+
+const presenceCounts = `-- name: PresenceCounts :one
+SELECT COUNT(*)::bigint AS cases,
+    COUNT(b.occurrence_id)::bigint AS with_occurrence,
+    COUNT(DISTINCT b.occurrence_id)::bigint AS occurrences,
+    COUNT(DISTINCT b.occurrence_id) FILTER (WHERE b.occurrence_id IS NOT NULL AND l.id IS NULL)::bigint AS unplaced
+FROM biometric_cases b
+LEFT JOIN occurrences o ON o.id = b.occurrence_id
+LEFT JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
+WHERE b.case_id = ANY($1::text[])
+`
+
+type PresenceCountsRow struct {
+	Cases          int64 `db:"cases" json:"cases"`
+	WithOccurrence int64 `db:"with_occurrence" json:"with_occurrence"`
+	Occurrences    int64 `db:"occurrences" json:"occurrences"`
+	Unplaced       int64 `db:"unplaced" json:"unplaced"`
+}
+
+// What a set of cases gives a map: how many have an occurrence, how many distinct occurrences, and how many of those have
+// no place to draw (none, or only their unit's municipality).
+func (q *Queries) PresenceCounts(ctx context.Context, caseIds []string) (PresenceCountsRow, error) {
+	row := q.db.QueryRowContext(ctx, presenceCounts, pq.Array(caseIds))
+	var i PresenceCountsRow
+	err := row.Scan(
+		&i.Cases,
+		&i.WithOccurrence,
+		&i.Occurrences,
+		&i.Unplaced,
+	)
+	return i, err
 }
 
 const searchOccurrences = `-- name: SearchOccurrences :many

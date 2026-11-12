@@ -60,6 +60,12 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- **Where a person or a cluster appears**, on its page: the occurrences of the cases it has traces in, as points or a
+  heatmap (`GET /api/persons/:personId/occurrences`, `GET /api/clusters/:clusterId/occurrences`, intelligence only,
+  the person's read logged). The card says how many cases have no occurrence and how many occurrences have no place to
+  draw, so the map is not taken for the whole of the presence, and marks which cases on a point are the person's or
+  cluster's own. The occurrence page's detail panel is now a shared component. `docs/presence-areas-plan.md` plans the
+  next step, the main areas of presence by density-based clustering.
 - **The occurrence type `DAMAGE`** (dano, art. 163 of the Código Penal; migration 031), in the `OTHER` group, as
   ISP-RJ's classification has no category for it. A depredated agency or a broken ATM had to be `UNDETERMINED`, or
   was forced into a theft or a robbery. `assist.DefaultOccurrenceTypes`, the drafter's offline list, now also holds

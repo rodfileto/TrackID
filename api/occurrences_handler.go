@@ -58,6 +58,8 @@ type OccurrenceProperties struct {
 	GeocodeSource string           `json:"geocodeSource,omitempty"` // where the point or address came from
 	GeocodeFlags  []string         `json:"geocodeFlags,omitempty"`  // what to check about it
 	Cases         []OccurrenceCase `json:"cases"`
+	// InSet is, on a person's or a cluster's map, which of its own cases this occurrence is of (PresenceMapResponse).
+	InSet []string `json:"inSet,omitempty"`
 }
 
 // OccurrenceFeature is a GeoJSON point feature.

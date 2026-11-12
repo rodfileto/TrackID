@@ -22,6 +22,8 @@ interface Props {
   mode: MapMode;
   selectedId?: number;
   onSelect: (feature: OccurrenceFeature | null) => void;
+  /** The map's height class; the occurrence page's tall one by default. */
+  heightClass?: string;
 }
 
 const SOURCE = "occurrences";
@@ -39,6 +41,7 @@ export default function OccurrenceMapView({
   mode,
   selectedId,
   onSelect,
+  heightClass = "h-[560px]",
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
@@ -154,7 +157,7 @@ export default function OccurrenceMapView({
   return (
     <div
       ref={container}
-      className="h-[560px] w-full overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800"
+      className={`${heightClass} w-full overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800`}
       role="region"
       aria-label="Occurrence map"
     />
