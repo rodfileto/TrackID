@@ -2332,15 +2332,32 @@
   "presence": {
     "title": "Onde aparece",
     "desc": {
-      "person": "As ocorrências dos casos em que esta pessoa tem vestígios. O ponto é onde a ocorrência aconteceu, não onde a pessoa mora ou foi vista.",
-      "cluster": "As ocorrências dos casos em que este cluster tem vestígios. O ponto é onde a ocorrência aconteceu."
+      "person": "As ocorrências dos casos em que esta pessoa tem vestígios, faciais e papiloscópicos juntos. O ponto é onde a ocorrência aconteceu, não onde a pessoa mora ou foi vista.",
+      "cluster": "As ocorrências dos casos em que este cluster tem vestígios, faciais e papiloscópicos juntos. O ponto é onde a ocorrência aconteceu."
+    },
+    "linksLabel": "Vínculos seguidos",
+    "links": {
+      "all": "Todos os vínculos",
+      "reviewed": "Só vínculos revisados"
+    },
+    "areasLabel": "Áreas",
+    "noAreas": "Nenhuma",
+    "presets": {
+      "district": "Bairro",
+      "city": "Cidade",
+      "region": "Região"
     },
     "summary": "{{cases}} casos, {{occurrences}} ocorrências, {{drawn}} no mapa.",
+    "modalities": "{{facial}} faciais, {{fingerprint}} papiloscópicos",
+    "fused_one": "{{count}} ocorrência funde facial e papiloscopia",
+    "fused_other": "{{count}} ocorrências fundem facial e papiloscopia",
     "noOccurrence_one": "{{count}} caso não tem ocorrência.",
     "noOccurrence_other": "{{count}} casos não têm ocorrência.",
     "unplaced_one": "{{count}} ocorrência não tem local conhecido e não é desenhada.",
     "unplaced_other": "{{count}} ocorrências não têm local conhecido e não são desenhadas.",
     "noCases": "Nenhum caso tem vestígios dela ainda.",
+    "noReviewed": "Nenhum caso está ligado por um vínculo confirmado por peritos. Mostre todos os vínculos para ver os do sistema.",
+    "automaticCluster": "Este cluster é do sistema, então nenhum de seus vínculos foi revisado ainda.",
     "nothingToDraw": "Nenhuma de suas ocorrências tem local para desenhar.",
     "loadError": "Não foi possível carregar as ocorrências.",
     "mode": "Modo do mapa",
@@ -2348,6 +2365,25 @@
     "modes": {
       "points": "Pontos",
       "heatmap": "Calor"
-    }
+    },
+    "legend": {
+      "fused": "facial e papiloscopia na mesma ocorrência",
+      "unconfirmed": "vínculo não confirmado por peritos",
+      "area": "área"
+    },
+    "areasTitle": "Áreas de ocorrências a até {{eps}} umas das outras",
+    "area": "Área {{rank}}",
+    "main": "principal",
+    "areaCount": "{{count}} ocorrências ({{share}} % de {{total}})",
+    "radius": "raio {{radius}}",
+    "reviewedOf": "{{reviewed}} de {{count}} por vínculos confirmados",
+    "quotient": "{{value}}× a parcela de todas as ocorrências ali ({{base}} na área)",
+    "noQuotient": "Sem comparação: só {{base}} ocorrências na área.",
+    "tooFew": "Só {{count}} ocorrências com local: poucas para chamar uma área de principal.",
+    "noAreasFound": "Nenhuma ocorrência a menos de {{eps}} de outra.",
+    "isolated_one": "{{count}} ocorrência isolada não está em área nenhuma.",
+    "isolated_other": "{{count}} ocorrências isoladas não estão em área nenhuma.",
+    "areasNote": "As áreas agrupam onde as ocorrências aconteceram. Nada dizem de onde alguém mora; onde o instituto é chamado a periciar as molda, e a comparação acima põe cada uma frente a todas as ocorrências.",
+    "byMunicipality": "Por município"
   }
 }

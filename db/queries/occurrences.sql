@@ -187,6 +187,25 @@ LEFT JOIN occurrences o ON o.id = b.occurrence_id
 LEFT JOIN locations l ON l.id = o.location_id AND l.precision <> 'JURISDICTION'
 WHERE b.case_id = ANY(@case_ids::text[]);
 
+-- name: ListCaseOccurrenceIDs :many
+-- Which occurrence each of some cases is on, for the cases that have one.
+SELECT case_id, occurrence_id::bigint AS occurrence_id FROM biometric_cases
+WHERE case_id = ANY(@case_ids::text[]) AND occurrence_id IS NOT NULL;
+
+-- name: CountPlacedOccurrences :one
+-- Occurrences with a place to measure distances from: not at only their unit's municipality, nor the centre of one.
+SELECT COUNT(*)::bigint FROM occurrences o JOIN locations l ON l.id = o.location_id
+WHERE l.precision NOT IN ('JURISDICTION', 'MUNICIPALITY');
+
+-- name: CountPlacedOccurrencesNear :one
+-- CountPlacedOccurrences within radius_m metres of a point: what an area of presence is set against.
+SELECT COUNT(*)::bigint FROM occurrences o JOIN locations l ON l.id = o.location_id
+WHERE l.precision NOT IN ('JURISDICTION', 'MUNICIPALITY')
+  AND ST_DWithin(l.geom, ST_SetSRID(ST_MakePoint(sqlc.arg(lon)::float8, sqlc.arg(lat)::float8), 4326)::geography, sqlc.arg(radius_m)::float8);
+
+-- name: ListMunicipalityNames :many
+SELECT code::text AS code, name, uf::text AS uf FROM municipalities WHERE code = ANY(@codes::text[]);
+
 -- name: ListOccurrenceYears :many
 SELECT DISTINCT EXTRACT(YEAR FROM occurred_from AT TIME ZONE 'America/Sao_Paulo')::int4 AS year
 FROM occurrences WHERE occurred_from IS NOT NULL ORDER BY year;

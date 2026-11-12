@@ -64,8 +64,15 @@ period; `0.x` patch releases fix defects without adding behaviour.
   heatmap (`GET /api/persons/:personId/occurrences`, `GET /api/clusters/:clusterId/occurrences`, intelligence only,
   the person's read logged). The card says how many cases have no occurrence and how many occurrences have no place to
   draw, so the map is not taken for the whole of the presence, and marks which cases on a point are the person's or
-  cluster's own. The occurrence page's detail panel is now a shared component. `docs/presence-areas-plan.md` plans the
-  next step, the main areas of presence by density-based clustering.
+  cluster's own. The occurrence page's detail panel is now a shared component.
+- **Main areas of presence** on the same card (`GET /api/persons/:personId/presence-areas`,
+  `GET /api/clusters/:clusterId/presence-areas`): density-based clustering (DBSCAN, `presence.Areas`) of the
+  occurrences at a neighbourhood, city or region distance (500 m, 3 km, 25 km; any `eps` from 50 m to 100 km through the
+  API), each area with its outline, size, period, types, how many of its occurrences come from confirmed links, and how
+  its share compares with all occurrences around it, plus a count by municipality. Facial and fingerprint cases are
+  followed together and an occurrence both share is marked as fused. The links followed are all of them but those
+  examiners excluded, or only the confirmed ones; a link the matcher alone made is drawn fainter.
+  `docs/presence-areas-plan.md` has the method and what it must not claim.
 - **The occurrence type `DAMAGE`** (dano, art. 163 of the Código Penal; migration 031), in the `OTHER` group, as
   ISP-RJ's classification has no category for it. A depredated agency or a broken ATM had to be `UNDETERMINED`, or
   was forced into a theft or a robbery. `assist.DefaultOccurrenceTypes`, the drafter's offline list, now also holds

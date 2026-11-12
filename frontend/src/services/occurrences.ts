@@ -38,6 +38,11 @@ export interface OccurrenceProperties {
   cases: OccurrenceCase[];
   /** On a person's or a cluster's map: which of its own cases this occurrence is of. */
   inSet?: string[];
+  /** The best certainty of those links: confirmed, unreviewed (the matcher's) or uncertain. */
+  certainty?: "confirmed" | "unreviewed" | "uncertain";
+  /** The kinds of those cases; both when the occurrence fuses facial and fingerprint ones. */
+  modalities?: string[];
+  municipalityCode?: string;
 }
 
 export interface OccurrenceFeature {
@@ -296,22 +301,72 @@ export async function geocodeReverse(
   return item;
 }
 
+/** Which links a presence map follows: only those examiners confirmed, or every one but the excluded ones. */
+export type PresenceLinks = "reviewed" | "all";
+
 /** Where a person or a cluster appears: the occurrences of the cases it has traces in, with what could not be drawn. */
 export interface PresenceMap extends OccurrenceMap {
-  /** Cases it has traces in. */
+  links: PresenceLinks;
+  /** Of a cluster: AUTOMATIC (the matcher's) or REVIEWED (examiners'). */
+  basis?: string;
+  /** Cases it has traces in, and how many of them are facial and fingerprint. */
   cases: number;
+  facial: number;
+  fingerprint: number;
   /** Of them, with an occurrence. */
   withOccurrence: number;
   /** Distinct occurrences those cases have. */
   occurrences: number;
   /** Of those, with no place to draw. */
   unplaced: number;
+  /** Occurrences holding both a facial and a fingerprint case of the set. */
+  fused: number;
 }
 
-export async function getPersonOccurrences(personId: string): Promise<PresenceMap> {
-  return requestApi<PresenceMap>(`/persons/${encodeURIComponent(personId)}/occurrences`, { headers: authHeaders() });
+/** An area where its occurrences gather (presence.Area). */
+export interface PresenceArea {
+  rank: number;
+  main: boolean;
+  pointIds: number[];
+  centre: [number, number];
+  radiusM: number;
+  hull: [number, number][];
+  first?: string;
+  last?: string;
+  types: { type: string; count: number }[];
+  reviewed: number;
+  share: number;
+  baseInside: number;
+  /** Its share of the person's occurrences over its footprint's share of all of them; absent when the base is too small. */
+  quotient?: number;
+  fused: number;
 }
 
-export async function getClusterOccurrences(clusterId: number): Promise<PresenceMap> {
-  return requestApi<PresenceMap>(`/clusters/${clusterId}/occurrences`, { headers: authHeaders() });
+export interface PresenceAreas {
+  links: PresenceLinks;
+  basis?: string;
+  epsM: number;
+  minPts: number;
+  mapped: number;
+  areas: PresenceArea[];
+  noise: number[];
+  municipalities: { code: string; name: string; uf: string; count: number }[];
+  /** Fewer mapped occurrences than it takes to single out a main area. */
+  tooFew: boolean;
+}
+
+export async function getPersonOccurrences(personId: string, links: PresenceLinks = "all"): Promise<PresenceMap> {
+  return requestApi<PresenceMap>(`/persons/${encodeURIComponent(personId)}/occurrences?links=${links}`, { headers: authHeaders() });
+}
+
+export async function getClusterOccurrences(clusterId: number, links: PresenceLinks = "all"): Promise<PresenceMap> {
+  return requestApi<PresenceMap>(`/clusters/${clusterId}/occurrences?links=${links}`, { headers: authHeaders() });
+}
+
+export async function getPersonPresenceAreas(personId: string, links: PresenceLinks, epsM: number): Promise<PresenceAreas> {
+  return requestApi<PresenceAreas>(`/persons/${encodeURIComponent(personId)}/presence-areas?links=${links}&eps=${epsM}`, { headers: authHeaders() });
+}
+
+export async function getClusterPresenceAreas(clusterId: number, links: PresenceLinks, epsM: number): Promise<PresenceAreas> {
+  return requestApi<PresenceAreas>(`/clusters/${clusterId}/presence-areas?links=${links}&eps=${epsM}`, { headers: authHeaders() });
 }

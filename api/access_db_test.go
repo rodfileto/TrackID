@@ -158,6 +158,8 @@ func TestAccessProfiles(t *testing.T) {
 	// Where a person or a cluster appears: the cases' occurrences on a map, intelligence only like the person page.
 	allowed("/api/persons/P1/occurrences", get, analyst)
 	allowed("/api/clusters/1/occurrences", get, analyst)
+	allowed("/api/persons/P1/presence-areas", get, analyst)
+	allowed("/api/clusters/1/presence-areas", get, analyst)
 	// Person articles and their mentions: intelligence only, never someone working blind, and
 	// not an examiner even on a case they hold (docs/person-article-plan.md).
 	allowed("/api/persons/P1/article", get, analyst)

@@ -41,6 +41,39 @@ func (q *Queries) CountMunicipalities(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countPlacedOccurrences = `-- name: CountPlacedOccurrences :one
+SELECT COUNT(*)::bigint FROM occurrences o JOIN locations l ON l.id = o.location_id
+WHERE l.precision NOT IN ('JURISDICTION', 'MUNICIPALITY')
+`
+
+// Occurrences with a place to measure distances from: not at only their unit's municipality, nor the centre of one.
+func (q *Queries) CountPlacedOccurrences(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countPlacedOccurrences)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countPlacedOccurrencesNear = `-- name: CountPlacedOccurrencesNear :one
+SELECT COUNT(*)::bigint FROM occurrences o JOIN locations l ON l.id = o.location_id
+WHERE l.precision NOT IN ('JURISDICTION', 'MUNICIPALITY')
+  AND ST_DWithin(l.geom, ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography, $3::float8)
+`
+
+type CountPlacedOccurrencesNearParams struct {
+	Lon     float64 `db:"lon" json:"lon"`
+	Lat     float64 `db:"lat" json:"lat"`
+	RadiusM float64 `db:"radius_m" json:"radius_m"`
+}
+
+// CountPlacedOccurrences within radius_m metres of a point: what an area of presence is set against.
+func (q *Queries) CountPlacedOccurrencesNear(ctx context.Context, arg CountPlacedOccurrencesNearParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countPlacedOccurrencesNear, arg.Lon, arg.Lat, arg.RadiusM)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createOccurrence = `-- name: CreateOccurrence :one
 INSERT INTO occurrences (
     occurrence_year, occurrence_seq, agency, occurrence_number, inquiry_number, location_id, occurred_from, occurred_to,
@@ -305,6 +338,40 @@ func (q *Queries) GetOccurrenceSummary(ctx context.Context, id int64) (GetOccurr
 	return i, err
 }
 
+const listCaseOccurrenceIDs = `-- name: ListCaseOccurrenceIDs :many
+SELECT case_id, occurrence_id::bigint AS occurrence_id FROM biometric_cases
+WHERE case_id = ANY($1::text[]) AND occurrence_id IS NOT NULL
+`
+
+type ListCaseOccurrenceIDsRow struct {
+	CaseID       string `db:"case_id" json:"case_id"`
+	OccurrenceID int64  `db:"occurrence_id" json:"occurrence_id"`
+}
+
+// Which occurrence each of some cases is on, for the cases that have one.
+func (q *Queries) ListCaseOccurrenceIDs(ctx context.Context, caseIds []string) ([]ListCaseOccurrenceIDsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCaseOccurrenceIDs, pq.Array(caseIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCaseOccurrenceIDsRow
+	for rows.Next() {
+		var i ListCaseOccurrenceIDsRow
+		if err := rows.Scan(&i.CaseID, &i.OccurrenceID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLocationsNear = `-- name: ListLocationsNear :many
 SELECT l.id, l.location_id, l.name, l.address, l.neighbourhood, l.place_type, l.precision,
     ST_X(l.geom::geometry)::float8 AS lon,
@@ -362,6 +429,39 @@ func (q *Queries) ListLocationsNear(ctx context.Context, arg ListLocationsNearPa
 			&i.DistanceM,
 			&i.OccurrenceCount,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMunicipalityNames = `-- name: ListMunicipalityNames :many
+SELECT code::text AS code, name, uf::text AS uf FROM municipalities WHERE code = ANY($1::text[])
+`
+
+type ListMunicipalityNamesRow struct {
+	Code string `db:"code" json:"code"`
+	Name string `db:"name" json:"name"`
+	Uf   string `db:"uf" json:"uf"`
+}
+
+func (q *Queries) ListMunicipalityNames(ctx context.Context, codes []string) ([]ListMunicipalityNamesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMunicipalityNames, pq.Array(codes))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMunicipalityNamesRow
+	for rows.Next() {
+		var i ListMunicipalityNamesRow
+		if err := rows.Scan(&i.Code, &i.Name, &i.Uf); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

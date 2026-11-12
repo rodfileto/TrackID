@@ -52,6 +52,18 @@ func (q *Queries) DeleteClusterMember(ctx context.Context, arg DeleteClusterMemb
 	return err
 }
 
+const getClusterBasis = `-- name: GetClusterBasis :one
+SELECT basis FROM clusters WHERE id = $1
+`
+
+// AUTOMATIC (the matcher's) or REVIEWED (examiners'); no row when there is no such cluster.
+func (q *Queries) GetClusterBasis(ctx context.Context, id int64) (string, error) {
+	row := q.db.QueryRowContext(ctx, getClusterBasis, id)
+	var basis string
+	err := row.Scan(&basis)
+	return basis, err
+}
+
 const insertClusterMember = `-- name: InsertClusterMember :exec
 INSERT INTO cluster_members (cluster_id, feature_id, basis) VALUES ($1, $2, $3)
 `

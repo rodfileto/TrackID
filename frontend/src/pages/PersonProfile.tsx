@@ -6,7 +6,7 @@ import PageMeta from "../components/common/PageMeta";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import ComponentCard from "../components/common/ComponentCard";
 import PresenceMapCard from "../components/intelligence/PresenceMapCard";
-import { getPersonOccurrences } from "../services/occurrences";
+import { getPersonOccurrences, getPersonPresenceAreas } from "../services/occurrences";
 import {
   Table,
   TableBody,
@@ -315,7 +315,12 @@ export default function PersonProfilePage() {
           <IntelligencePanels panels={extension.personPanels} props={{ personId: profile.identity.personId }} />
 
           {isIntelligence && (
-            <PresenceMapCard subject="person" load={() => getPersonOccurrences(profile.identity.personId)} />
+            <PresenceMapCard
+              subject="person"
+              subjectKey={profile.identity.personId}
+              loadMap={(links) => getPersonOccurrences(profile.identity.personId, links)}
+              loadAreas={(links, epsM) => getPersonPresenceAreas(profile.identity.personId, links, epsM)}
+            />
           )}
 
           <ComponentCard

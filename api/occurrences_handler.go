@@ -58,8 +58,14 @@ type OccurrenceProperties struct {
 	GeocodeSource string           `json:"geocodeSource,omitempty"` // where the point or address came from
 	GeocodeFlags  []string         `json:"geocodeFlags,omitempty"`  // what to check about it
 	Cases         []OccurrenceCase `json:"cases"`
-	// InSet is, on a person's or a cluster's map, which of its own cases this occurrence is of (PresenceMapResponse).
-	InSet []string `json:"inSet,omitempty"`
+	// On a person's or a cluster's map (PresenceMapResponse): which of its own cases this occurrence is of, the best
+	// certainty of their links (confirmed, unreviewed or uncertain) and their modalities, both when the occurrence fuses
+	// facial and fingerprint cases.
+	InSet      []string `json:"inSet,omitempty"`
+	Certainty  string   `json:"certainty,omitempty"`
+	Modalities []string `json:"modalities,omitempty"`
+	// MunicipalityCode is IBGE's, to count occurrences by municipality.
+	MunicipalityCode string `json:"municipalityCode,omitempty"`
 }
 
 // OccurrenceFeature is a GeoJSON point feature.
@@ -152,7 +158,8 @@ func occurrenceFeatures(rows []db.ListOccurrencesForMapRow, types []db.Occurrenc
 			Status:        r.Status, Description: r.Description,
 			LocationID: r.LocationID, Precision: r.Precision,
 			PlaceType: r.PlaceType.String, PlaceName: r.PlaceName.String, Neighbourhood: r.Neighbourhood.String,
-			GeocodeSource: r.GeocodeSource.String, GeocodeFlags: r.GeocodeFlags,
+			MunicipalityCode: r.MunicipalityCode,
+			GeocodeSource:    r.GeocodeSource.String, GeocodeFlags: r.GeocodeFlags,
 		}
 		if r.OccurredFrom.Valid {
 			p.OccurredFrom = &r.OccurredFrom.Time

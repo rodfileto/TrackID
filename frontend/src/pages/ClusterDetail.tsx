@@ -12,7 +12,7 @@ import PageMeta from "../components/common/PageMeta";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import ComponentCard from "../components/common/ComponentCard";
 import PresenceMapCard from "../components/intelligence/PresenceMapCard";
-import { getClusterOccurrences } from "../services/occurrences";
+import { getClusterOccurrences, getClusterPresenceAreas } from "../services/occurrences";
 import {
   Table,
   TableBody,
@@ -805,7 +805,12 @@ export default function ClusterDetailPage() {
         )}
         <PersonsCard detail={detail} />
         <OtherModalitiesCard detail={detail} />
-        <PresenceMapCard subject="cluster" load={() => getClusterOccurrences(detail.clusterId)} />
+        <PresenceMapCard
+          subject="cluster"
+          subjectKey={detail.clusterId}
+          loadMap={(links) => getClusterOccurrences(detail.clusterId, links)}
+          loadAreas={(links, epsM) => getClusterPresenceAreas(detail.clusterId, links, epsM)}
+        />
         <IntelligencePanels panels={extension.clusterPanels} props={{ clusterId: detail.clusterId, modality: detail.modality }} />
         {detail.members.length > 1 && (
           <StructureGraph detail={detail} resolved={resolved} selected={selected} onSelect={setSelected} />

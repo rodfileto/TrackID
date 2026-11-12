@@ -2332,15 +2332,32 @@
   "presence": {
     "title": "Where it appears",
     "desc": {
-      "person": "The occurrences of the cases this person has traces in. A point is where the occurrence happened, not where the person lives or was seen.",
-      "cluster": "The occurrences of the cases this cluster has traces in. A point is where the occurrence happened."
+      "person": "The occurrences of the cases this person has traces in, facial and fingerprint together. A point is where the occurrence happened, not where the person lives or was seen.",
+      "cluster": "The occurrences of the cases this cluster has traces in, facial and fingerprint together. A point is where the occurrence happened."
+    },
+    "linksLabel": "Links followed",
+    "links": {
+      "all": "All links",
+      "reviewed": "Reviewed links only"
+    },
+    "areasLabel": "Areas",
+    "noAreas": "None",
+    "presets": {
+      "district": "Neighbourhood",
+      "city": "City",
+      "region": "Region"
     },
     "summary": "{{cases}} cases, {{occurrences}} occurrences, {{drawn}} on the map.",
+    "modalities": "{{facial}} facial, {{fingerprint}} fingerprint",
+    "fused_one": "{{count}} occurrence fuses facial and fingerprint",
+    "fused_other": "{{count}} occurrences fuse facial and fingerprint",
     "noOccurrence_one": "{{count}} case has no occurrence.",
     "noOccurrence_other": "{{count}} cases have no occurrence.",
     "unplaced_one": "{{count}} occurrence has no known place and is not drawn.",
     "unplaced_other": "{{count}} occurrences have no known place and are not drawn.",
     "noCases": "No case holds traces of it yet.",
+    "noReviewed": "No case is linked to it by a link examiners confirmed. Show all links to see the matcher's.",
+    "automaticCluster": "This cluster is the matcher's, so none of its links is reviewed yet.",
     "nothingToDraw": "None of its occurrences has a place to draw.",
     "loadError": "Could not load the occurrences.",
     "mode": "Map mode",
@@ -2348,6 +2365,25 @@
     "modes": {
       "points": "Points",
       "heatmap": "Heatmap"
-    }
+    },
+    "legend": {
+      "fused": "facial and fingerprint on one occurrence",
+      "unconfirmed": "link not confirmed by examiners",
+      "area": "area"
+    },
+    "areasTitle": "Areas of occurrences within {{eps}} of each other",
+    "area": "Area {{rank}}",
+    "main": "main",
+    "areaCount": "{{count}} occurrences ({{share}} % of {{total}})",
+    "radius": "radius {{radius}}",
+    "reviewedOf": "{{reviewed}} of {{count}} by confirmed links",
+    "quotient": "{{value}}× the share of all occurrences there ({{base}} in the area)",
+    "noQuotient": "No comparison: only {{base}} occurrences in the area.",
+    "tooFew": "Only {{count}} occurrences with a place: too few to call an area the main one.",
+    "noAreasFound": "No two occurrences within {{eps}} of each other.",
+    "isolated_one": "{{count}} isolated occurrence is in no area.",
+    "isolated_other": "{{count}} isolated occurrences are in no area.",
+    "areasNote": "Areas group where occurrences happened. They say nothing of where anyone lives; where the institute is asked to examine shapes them, and the comparison above sets each against all occurrences.",
+    "byMunicipality": "By municipality"
   }
 }

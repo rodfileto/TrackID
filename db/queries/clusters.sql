@@ -189,3 +189,7 @@ JOIN identity_documents d ON d.person_id = p.id
 JOIN identity_registers r ON r.document_id = d.id
 WHERE p.id = ANY(@person_numbers::bigint[])
 ORDER BY p.id, r.id;
+
+-- name: GetClusterBasis :one
+-- AUTOMATIC (the matcher's) or REVIEWED (examiners'); no row when there is no such cluster.
+SELECT basis FROM clusters WHERE id = $1;

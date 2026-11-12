@@ -1,8 +1,22 @@
 # Main areas of presence
 
-Proposed 2026-11-12, not built. The person and cluster pages now draw where the person or cluster appears: the
+Proposed 2026-11-12, built the same day (see "Decided" below). The person and cluster pages draw where the person or cluster appears: the
 occurrences of the cases it has traces in (`api/presence_handler.go`, `PresenceMapCard`). That is every point. This plan
 adds the summary an analyst asks next: **where is the main area, and is there more than one?**
+
+## Decided 2026-11-12
+
+- **Links are an option**: "all links" (the default) or "reviewed links only". Reviewed means *confirmed* in the person
+  profile's grading (`articles.PersonCaseLinks`); all means confirmed, the matcher's (unreviewed) and the disputed
+  (uncertain), never those examiners excluded. A cluster's links are all confirmed when it is REVIEWED and all the
+  matcher's when it is AUTOMATIC. On the map, a point whose best link is not confirmed is drawn fainter.
+- **Fingerprint cases join** the facial ones, since fusing information is the point: sometimes both share an occurrence.
+  Such an occurrence gets a ring on the map and is counted ("fused"), also per area.
+- **Distance presets are right**: 500 m, 3 km, 25 km.
+- **Built differently from the sketch below**: DBSCAN runs in Go (`presence.Areas`, haversine distances), not in
+  PostGIS. For a person's few dozen points it needs no projection and is tested on plain coordinates. The hull is a
+  convex one padded 60 m, a circle for fewer than three points. The comparison with all occurrences
+  (`quotient`) is built; the period filter is not yet.
 
 ## What a point is, and is not
 
@@ -31,8 +45,8 @@ and `minPts`.
 
 - **Projection.** `eps` is in metres, so points are projected to SIRGAS 2000 / Brazil Polyconic (EPSG:5880), one
   projection for the whole country, not geography degrees and not a UTM zone per state.
-- **Presets for `eps`**, not a free number by default: *quadra / bairro* 500 m, *cidade* 3 km, *região* 25 km, each with
-  `minPts` 2. Two occurrences within `eps` make an area: people usually have a handful of cases, so a higher `minPts`
+- **Presets for `eps`**, not a free number by default: *bairro* 500 m, *cidade* 3 km, *região* 25 km, each with
+  `minPts` 2. The API takes any `eps` from 50 m to 100 km and `minPts` from 2 to 50. Two occurrences within `eps` make an area: people usually have a handful of cases, so a higher `minPts`
   would find nothing. The analyst can change both.
 - **Per area**: its occurrences, weighted centre, a hull (`ST_ConcaveHull`, a convex hull for fewer than four points), the
   radius holding 80 % of its points, first and last date, the top types, and its share of the person's mapped
@@ -70,19 +84,19 @@ serve the occurrence map (hotspots of all occurrences, by type group) and the AI
 
 ## Phases
 
-1. `presence` package: the SQL (`ST_ClusterDBSCAN` over the projected points, hull, radius, centre) and the municipality
-   count; tests on made-up coordinates (two separated groups, one lone point, a single area, too few points, points on
-   the same spot, a point just inside and just outside `eps`).
-2. The two routes, the access-table test, and the reviewed-only and period filters.
-3. The card: layer, ranked list, presets, municipality bars.
-4. The location quotient and the reviewed counts.
-5. The AI mode tool and, in the report layer, a sentence for a person's page article.
+1. Done: `presence` package (`presence.Areas`) with tests on made-up coordinates: two separated groups and a lone point,
+   a point just inside and just outside `eps`, a chain, `minPts`, too few for a main area, points on the same spot,
+   nothing to cluster, a tie broken by the most recent.
+2. Done: `GET /api/persons/:personId/presence-areas` and `GET /api/clusters/:clusterId/presence-areas` (`eps`, `minPts`,
+   `links`), the access-table test, and a database test over a cluster with facial and fingerprint cases.
+3. Done: the card on both pages: outlined areas under the points, ranked list, presets, municipality bars.
+4. Done: the comparison with all occurrences, the confirmed counts and the fused counts per area.
+5. To do: the period filter (by year), which needs the counts to follow it.
+6. To do: the AI mode tool and, in the report layer, a sentence for a person's page article.
 
 ## Open
 
-- Whether `reviewedOnly` is on by default for a person, as persons are enrolled identities, or off, as most links are
-  automatic.
-- Whether fingerprint cases join a person's map. They reach a person through their own clusters, so they would, but
-  their places are mostly scene laudos' and the facial ones' are mostly unit municipalities: the map would look unlike
-  the facial one. Not decided.
-- The right `eps` presets for the institute's states (Minas Gerais is large; 25 km may be small).
+- The period filter: the card's counts are of all years, so a filter has to change them too, not only the points.
+- Whether the by-municipality bars should count `MUNICIPALITY`-precision points (they do now) apart from the others.
+- What to do with a person whose links are mostly the matcher's: the comparison and the faint points say so, but a
+  threshold for "too uncertain to call an area" may be needed once real persons are seen on it.
