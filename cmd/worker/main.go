@@ -31,6 +31,7 @@ import (
 	"github.com/rodfileto/trackid/internal/database"
 	"github.com/rodfileto/trackid/internal/env"
 	"github.com/rodfileto/trackid/internal/queue"
+	"github.com/rodfileto/trackid/llm"
 	"github.com/rodfileto/trackid/storage"
 	"github.com/rodfileto/trackid/video"
 )
@@ -122,16 +123,16 @@ func main() {
 	mux.HandleFunc(embedding.TaskTypeSyncFace, embedding.HandleSyncFace(sqlDB, queueClient))
 	log.Printf("registered handler for %s", embedding.TaskTypeSyncFace)
 
-	// Assist: a local language model drafting a registration from a request's files. Needs object
-	// storage and a configured local model endpoint; each is optional, and drafting is skipped
-	// without it.
-	if configuration.AssistEndpoint == "" || configuration.AssistModel == "" {
-		log.Printf("ASSIST_ENDPOINT/ASSIST_MODEL not configured; %s will not be processed", assist.TaskTypeBuildDraft)
+	// Assist: a language model drafting a registration from a request's files. Needs object
+	// storage and a configured model server; each is optional, and drafting is skipped without it.
+	draftModel, haveDraftModel := configuration.Models.For(llm.AssistDraft)
+	if !haveDraftModel {
+		log.Printf("ASSIST_ENDPOINT not configured; %s will not be processed", assist.TaskTypeBuildDraft)
 	} else if store == nil {
 		log.Printf("object storage is not configured; %s will not be processed", assist.TaskTypeBuildDraft)
 	} else {
-		mux.HandleFunc(assist.TaskTypeBuildDraft, assist.HandleBuildDraft(sqlDB, store, assist.OpenAIDrafter(configuration.AssistEndpoint, configuration.AssistModel, assist.OpenAIOptions{APIKey: configuration.AssistAPIKey, Timeout: configuration.AssistTimeout})))
-		log.Printf("registered handler for %s (model %s)", assist.TaskTypeBuildDraft, configuration.AssistModel)
+		mux.HandleFunc(assist.TaskTypeBuildDraft, assist.HandleBuildDraft(sqlDB, store, assist.OpenAIDrafter(draftModel.BaseURL, draftModel.Model, assist.OpenAIOptions{APIKey: draftModel.APIKey, Timeout: configuration.AssistTimeout})))
+		log.Printf("registered handler for %s (model %s)", assist.TaskTypeBuildDraft, draftModel.Model)
 	}
 
 	// Fingerprint doesn't need Vision: the sidecar extracts and matches.

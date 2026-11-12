@@ -12,6 +12,17 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Changed
 
+- **Each feature's model is chosen in code, by the new `llm` package.** A table (`llm/llm.go`) maps every use of
+  a model -- the AI mode, assist drafting, a light model, OCR, speech to text -- to an endpoint, a model alias and
+  its request fields, for the organisation's platform (one host, one path prefix per model, the public aliases
+  `llm`, `ocr`, `stt` and `default`). `ASSIST_ENDPOINT` is now that platform's host, with no path (a trailing
+  `/v1` is tolerated), and `ASSIST_MODEL` and `ASK_*` are no longer needed: they remain as overrides that send the
+  AI mode, or drafting too, to a server of another layout (Ollama, a relay, Claude), the endpoint taken as
+  given. A new feature gets a model by adding a `llm.Use` and its row. `ASSIST_INTERNAL=true` declares a host
+  with dots inside the institute, which the AI mode's guard on real data otherwise reads as outside. **A
+  deployment that set `ASSIST_MODEL` against the platform's host should drop it**; one against Ollama keeps
+  working unchanged.
+
 - **A positive fingerprint decision is reported as an identification.** A fingerprint decision has no level on the
   facial conclusion scale, so `reports` read every positive fingerprint comparison as support below the
   identification level ("Suporte (abaixo do nível de identificação)"). Only facial comparisons are graded.

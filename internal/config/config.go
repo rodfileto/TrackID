@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -8,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/rodfileto/trackid/llm"
 )
 
 type Config struct {
@@ -53,29 +56,25 @@ type Config struct {
 	GeocoderEmail       string
 	GeocoderMinInterval time.Duration // 0: the geocode package's default (1s on the public instance)
 
-	// Assist: a local language model that drafts a registration from a request's files (assist
-	// package). AssistEndpoint is the OpenAI-compatible base URL (e.g. "http://127.0.0.1:8080/v1")
-	// of a local server such as Strata or Ollama; AssistModel names the model. Both empty means
-	// drafting is disabled and the worker logs a warning rather than failing to start.
+	// Models says which model each feature calls (llm package): the table is in code, so only the
+	// server's address and key are configured. AssistEndpoint is the platform's host (ASSIST_ENDPOINT,
+	// e.g. "https://llm.mg.pf.gov.br"); empty leaves every feature that needs a model off, and
+	// drafting is disabled with the worker logging a warning rather than failing to start. A server
+	// that is not the platform's, such as Ollama, is set per feature by ASSIST_MODEL or ASK_* (see
+	// buildModels); Models is built from all of this and is never nil.
+	Models         *llm.Catalog
 	AssistEndpoint string
-	AssistModel    string
-	// AssistAPIKey is sent as a Bearer token when the local server requires one (Strata does);
-	// empty sends no Authorization header (Ollama needs none).
+	// AssistAPIKey is sent as a Bearer token when the server requires one; empty sends no
+	// Authorization header.
 	AssistAPIKey string
+	// AssistInternal (ASSIST_INTERNAL=true) says the host is inside the institute although its name
+	// has dots, which is how the AI mode tells an inside server from an outside one.
+	AssistInternal bool
 	// AssistTimeout bounds one draft (ASSIST_TIMEOUT, a Go duration such as "5m"); zero means
 	// assist.DefaultTimeout.
 	AssistTimeout time.Duration
 
-	// Ask: the AI mode's model (ask package), anything speaking the OpenAI chat protocol with tool
-	// calling, local or not. AskEndpoint and AskModel empty leave the AI mode off, unless the assist
-	// model is configured, which it then shares. An API key never crosses to another endpoint: the
-	// assist settings are taken together or not at all.
-	AskEndpoint string
-	AskModel    string
-	AskAPIKey   string
-	// AskExtraBody is a JSON object of request fields the server wants (ASK_EXTRA_BODY).
-	AskExtraBody string
-	// AskTimeout bounds one question (ASK_TIMEOUT); zero means ask.DefaultTimeout.
+	// AskTimeout bounds one AI mode question (ASK_TIMEOUT); zero means ask.DefaultTimeout.
 	AskTimeout time.Duration
 
 	// Teams: each user may set a Microsoft Teams webhook and be told of their notifications there (teams package,
@@ -131,11 +130,6 @@ func Load() Config {
 		}
 		askTimeout = d
 	}
-	askEndpoint, askModel, askAPIKey := os.Getenv("ASK_ENDPOINT"), os.Getenv("ASK_MODEL"), os.Getenv("ASK_API_KEY")
-	if askEndpoint == "" && askModel == "" {
-		askEndpoint, askModel, askAPIKey = os.Getenv("ASSIST_ENDPOINT"), os.Getenv("ASSIST_MODEL"), os.Getenv("ASSIST_API_KEY")
-	}
-
 	environment := os.Getenv("TRACKID_ENV")
 	switch environment {
 	case "":
@@ -184,17 +178,52 @@ func Load() Config {
 		GeocoderEmail:       os.Getenv("GEOCODER_EMAIL"),
 		GeocoderMinInterval: minInterval,
 
+		Models:         buildModels(),
 		AssistEndpoint: os.Getenv("ASSIST_ENDPOINT"),
-		AssistModel:    os.Getenv("ASSIST_MODEL"),
 		AssistAPIKey:   os.Getenv("ASSIST_API_KEY"),
+		AssistInternal: os.Getenv("ASSIST_INTERNAL") == "true",
 		AssistTimeout:  assistTimeout,
 
-		AskEndpoint:  askEndpoint,
-		AskModel:     askModel,
-		AskAPIKey:    askAPIKey,
-		AskExtraBody: os.Getenv("ASK_EXTRA_BODY"),
-		AskTimeout:   askTimeout,
+		AskTimeout: askTimeout,
 	}
+}
+
+// buildModels is the llm table over ASSIST_ENDPOINT, with the per-feature overrides for a server
+// that is not the platform's (Ollama, a relay), which are what ASSIST_MODEL and ASK_* now are:
+//
+//   - ASK_ENDPOINT or ASK_MODEL sends the AI mode to ASK_ENDPOINT, with ASK_MODEL, ASK_API_KEY and
+//     ASK_EXTRA_BODY (a JSON object of request fields);
+//   - otherwise ASSIST_MODEL sends the AI mode and drafting to ASSIST_ENDPOINT as given, with
+//     ASSIST_API_KEY. An API key never crosses to another endpoint, so each is taken with its own.
+//
+// Without those, every feature follows the table.
+func buildModels() *llm.Catalog {
+	endpoint, key := os.Getenv("ASSIST_ENDPOINT"), os.Getenv("ASSIST_API_KEY")
+	catalog := llm.New(endpoint, key, os.Getenv("ASSIST_INTERNAL") == "true")
+	override := func(use llm.Use, o llm.Override, name string) {
+		if err := catalog.Override(use, o); err != nil {
+			log.Fatalf("%s: %v", name, err)
+		}
+	}
+	if model := os.Getenv("ASSIST_MODEL"); model != "" {
+		o := llm.Override{Endpoint: endpoint, Model: model, APIKey: key}
+		override(llm.AssistDraft, o, "ASSIST_MODEL")
+		override(llm.Ask, o, "ASSIST_MODEL")
+	}
+	// ASK_EXTRA_BODY goes with whichever override serves the AI mode.
+	var askExtra map[string]any
+	if extra := strings.TrimSpace(os.Getenv("ASK_EXTRA_BODY")); extra != "" {
+		if err := json.Unmarshal([]byte(extra), &askExtra); err != nil {
+			log.Fatalf("ASK_EXTRA_BODY is not a JSON object: %v", err)
+		}
+	}
+	askEndpoint, askModel := os.Getenv("ASK_ENDPOINT"), os.Getenv("ASK_MODEL")
+	if askEndpoint != "" || askModel != "" {
+		override(llm.Ask, llm.Override{Endpoint: askEndpoint, Model: askModel, APIKey: os.Getenv("ASK_API_KEY"), Extra: askExtra}, "ASK_ENDPOINT/ASK_MODEL")
+	} else if model := os.Getenv("ASSIST_MODEL"); model != "" {
+		override(llm.Ask, llm.Override{Endpoint: endpoint, Model: model, APIKey: key, Extra: askExtra}, "ASSIST_MODEL")
+	}
+	return catalog
 }
 
 // The values of TRACKID_ENV.

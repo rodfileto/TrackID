@@ -208,3 +208,17 @@ func TestUnverifiedNumbers(t *testing.T) {
 		}
 	}
 }
+
+func TestInternalHostWithDotsIsNotExternal(t *testing.T) {
+	m, err := NewModel(Settings{Endpoint: "https://llm.example.gov.br/v1", Model: "llm", Internal: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.External() {
+		t.Error("a host declared internal counts as external")
+	}
+	outside, _ := NewModel(Settings{Endpoint: "https://llm.example.gov.br/v1", Model: "llm"})
+	if !outside.External() {
+		t.Error("a host with dots, not declared internal, counts as inside")
+	}
+}

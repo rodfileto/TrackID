@@ -44,6 +44,9 @@ type Settings struct {
 	// ExtraBody is a JSON object of request fields a server wants, such as temperature or
 	// max_tokens: servers disagree on which they require and which they reject.
 	ExtraBody string
+	// Internal says the server is inside the institute although its name has dots (a host such as
+	// llm.example.gov.br), which the name alone cannot show. Without it the address decides.
+	Internal bool
 	// Timeout bounds one question; zero means DefaultTimeout.
 	Timeout time.Duration
 }
@@ -54,6 +57,7 @@ type Model struct {
 	name     string
 	apiKey   string
 	extra    map[string]any
+	internal bool
 	timeout  time.Duration
 	http     *http.Client
 }
@@ -64,12 +68,13 @@ func NewModel(s Settings) (*Model, error) {
 		return nil, nil
 	}
 	if s.Endpoint == "" || s.Model == "" {
-		return nil, errors.New("the AI mode needs both ASK_ENDPOINT and ASK_MODEL")
+		return nil, errors.New("the AI mode needs both an endpoint and a model")
 	}
 	m := &Model{
 		endpoint: strings.TrimRight(s.Endpoint, "/"),
 		name:     s.Model,
 		apiKey:   s.APIKey,
+		internal: s.Internal,
 		timeout:  s.Timeout,
 		// The context each question gets bounds its requests.
 		http: &http.Client{},
@@ -79,7 +84,7 @@ func NewModel(s Settings) (*Model, error) {
 	}
 	if strings.TrimSpace(s.ExtraBody) != "" {
 		if err := json.Unmarshal([]byte(s.ExtraBody), &m.extra); err != nil {
-			return nil, fmt.Errorf("ASK_EXTRA_BODY is not a JSON object: %w", err)
+			return nil, fmt.Errorf("the extra request fields are not a JSON object: %w", err)
 		}
 	}
 	return m, nil
@@ -98,7 +103,7 @@ func (m *Model) Host() string {
 
 // External says the server is outside the institute, so what the model reads leaves the machine.
 // Such a model only ever reads synthetic data (Service.run).
-func (m *Model) External() bool { return !isLocalEndpoint(m.endpoint) }
+func (m *Model) External() bool { return !m.internal && !isLocalEndpoint(m.endpoint) }
 
 // isLocalEndpoint says whether an endpoint is inside the institute: a loopback or private address,
 // or a host name with no dots. Anything else, or anything unreadable, counts as outside, so the

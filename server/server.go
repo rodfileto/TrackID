@@ -30,6 +30,7 @@ import (
 	"github.com/rodfileto/trackid/internal/env"
 	"github.com/rodfileto/trackid/internal/queue"
 	"github.com/rodfileto/trackid/internal/web"
+	"github.com/rodfileto/trackid/llm"
 	"github.com/rodfileto/trackid/notifications"
 	"github.com/rodfileto/trackid/realtime"
 	"github.com/rodfileto/trackid/reports"
@@ -159,27 +160,30 @@ func Run(options Options) error {
 		geocoder = geocode.NewLayered(db, nominatim)
 	}
 
-	// The assist lab's drafter: a local model that drafts registrations from uploaded files. Left
+	// The assist lab's drafter: a model that drafts registrations from uploaded files. Left
 	// unconfigured, the lab still extracts text but cannot draft.
 	var assistDrafter assist.Drafter
-	if configuration.AssistEndpoint != "" && configuration.AssistModel != "" {
-		assistDrafter = assist.NewOpenAIClientWithOptions(configuration.AssistEndpoint, configuration.AssistModel, assist.DefaultOccurrenceTypes, assist.OpenAIOptions{APIKey: configuration.AssistAPIKey, Timeout: configuration.AssistTimeout})
+	var assistModel string
+	if r, ok := configuration.Models.For(llm.AssistDraft); ok {
+		assistDrafter = assist.NewOpenAIClientWithOptions(r.BaseURL, r.Model, assist.DefaultOccurrenceTypes, assist.OpenAIOptions{APIKey: r.APIKey, Timeout: configuration.AssistTimeout})
+		assistModel = r.Model
 	} else {
-		log.Printf("ASSIST_ENDPOINT/ASSIST_MODEL not configured; the assist lab will not draft")
+		log.Printf("ASSIST_ENDPOINT not configured; the assist lab will not draft")
 	}
 
 	// The AI mode's model. A configuration that makes no sense leaves it off, and says so, rather
 	// than stopping the rest of the application.
-	askModel, err := ask.NewModel(ask.Settings{
-		Endpoint: configuration.AskEndpoint, Model: configuration.AskModel, APIKey: configuration.AskAPIKey,
-		ExtraBody: configuration.AskExtraBody, Timeout: configuration.AskTimeout,
-	})
-	if err != nil {
+	var askModel *ask.Model
+	if r, ok := configuration.Models.For(llm.Ask); !ok {
+		log.Printf("ASSIST_ENDPOINT not configured; the AI mode is off")
+	} else if m, err := ask.NewModel(ask.Settings{
+		Endpoint: r.BaseURL, Model: r.Model, APIKey: r.APIKey, ExtraBody: r.ExtraJSON(),
+		Internal: r.Internal, Timeout: configuration.AskTimeout,
+	}); err != nil {
 		configuration.Unavailable("the AI mode is off: %v", err)
-	} else if askModel == nil {
-		log.Printf("ASK_ENDPOINT/ASK_MODEL not configured; the AI mode is off")
 	} else {
-		log.Printf("AI mode: model %s at %s (external: %t)", askModel.Name(), askModel.Host(), askModel.External())
+		askModel = m
+		log.Printf("AI mode: model %s at %s (external: %t)", m.Name(), m.Host(), m.External())
 	}
 
 	signals, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -235,7 +239,7 @@ func Run(options Options) error {
 		ReportRenderer:  reportRenderer(),
 		WordcraftWebDir: os.Getenv("WORDCRAFT_WEB_DIR"),
 		AssistDrafter:   assistDrafter,
-		AssistModel:     configuration.AssistModel,
+		AssistModel:     assistModel,
 		AskModel:        askModel,
 		VideoLab:        videoLab,
 		TrustedProxies:  configuration.TrustedProxies,
