@@ -60,6 +60,10 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- **The occurrence type `DAMAGE`** (dano, art. 163 of the Código Penal; migration 031), in the `OTHER` group, as
+  ISP-RJ's classification has no category for it. A depredated agency or a broken ATM had to be `UNDETERMINED`, or
+  was forced into a theft or a robbery. `assist.DefaultOccurrenceTypes`, the drafter's offline list, now also holds
+  `UNDETERMINED`, which it lacked, and a test keeps it in step with the migrations.
 - **A location of precision `JURISDICTION`** (migration 030, `occurrences.PrecisionJurisdiction`): the municipality of the
   unit investigating an occurrence imported with no place, not where it happened. The occurrence keeps a municipality
   and a state, but the occurrence map, the searches by distance, the nearby locations offered for reuse, the AI mode's

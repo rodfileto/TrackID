@@ -28,7 +28,7 @@ var (
 	placePrecisions    = []string{"EXACT", "GEOCODED", "STREET", "NEIGHBOURHOOD", "MUNICIPALITY"}
 )
 
-// DefaultOccurrenceTypes is the occurrence_types seed (db/migrations/003_occurrences.sql), for
+// DefaultOccurrenceTypes is the occurrence_types table as the migrations leave it, for
 // contexts without a database: the manual-testing assist lab, which drafts without touching the
 // case tables. The worker and the review flow fetch the same list live from the table; this copy
 // exists only so a draft can be proposed and checked where there is no database at all.
@@ -40,7 +40,9 @@ var DefaultOccurrenceTypes = []string{
 	"VEHICLE_THEFT", "STREET_THEFT", "PUBLIC_TRANSPORT_THEFT", "PHONE_THEFT", "BICYCLE_THEFT", "OTHER_THEFT",
 	"FRAUD", "IDENTITY_FRAUD",
 	"DRUG_POSSESSION", "DRUG_TRAFFICKING",
+	"DAMAGE",
 	"MISSING_PERSON", "BODY_FOUND", "SKELETAL_REMAINS_FOUND", "UNIDENTIFIED_LIVING_PERSON", "DISASTER_VICTIM",
+	"UNDETERMINED",
 }
 
 // Coerce normalizes a model's draft and strips what the registration path would refuse, so the

@@ -661,7 +661,8 @@
     "SKELETAL_REMAINS_FOUND": "Skeletal remains found",
     "UNIDENTIFIED_LIVING_PERSON": "Unidentified living person",
     "DISASTER_VICTIM": "Disaster victim",
-    "UNDETERMINED": "Undetermined"
+    "UNDETERMINED": "Undetermined",
+    "DAMAGE": "Damage"
   },
   "occurrenceGroup": {
     "LETHAL": "Lethal",

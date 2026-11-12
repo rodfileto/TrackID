@@ -238,6 +238,7 @@ var typeLabels = map[string]string{
 	"STREET_THEFT": "furto a transeunte", "PUBLIC_TRANSPORT_THEFT": "furto em coletivo", "PHONE_THEFT": "furto de celular",
 	"BICYCLE_THEFT": "furto de bicicleta", "OTHER_THEFT": "outros furtos", "FRAUD": "estelionato",
 	"IDENTITY_FRAUD": "falsa identidade / documento falso", "DRUG_POSSESSION": "posse de drogas", "DRUG_TRAFFICKING": "tráfico de drogas",
+	"DAMAGE":         "dano",
 	"MISSING_PERSON": "pessoa desaparecida", "BODY_FOUND": "encontro de cadáver", "SKELETAL_REMAINS_FOUND": "encontro de ossada",
 	"UNIDENTIFIED_LIVING_PERSON": "pessoa viva não identificada", "DISASTER_VICTIM": "vítima de desastre", "UNDETERMINED": "não determinado",
 }
