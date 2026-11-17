@@ -62,6 +62,18 @@ func Coerce(d Draft, occurrenceTypes []string) Draft {
 	out.Request.Input.CitedInquiry = strings.TrimSpace(d.Request.Input.CitedInquiry)
 	out.Request.Input.Notes = strings.TrimSpace(d.Request.Input.Notes)
 	out.Request.Questions = nonEmpty(d.Request.Questions)
+	out.Request.Input.References = nil
+	for i, r := range d.Request.Input.References {
+		label, number := strings.TrimSpace(r.Label), strings.TrimSpace(r.Number)
+		if number == "" {
+			continue
+		}
+		if !slices.Contains(referenceLabels, label) {
+			addUnsure(&out, "references["+itoa(i)+"]")
+			continue
+		}
+		out.Request.Input.References = append(out.Request.Input.References, requests.Reference{Label: label, Number: number})
+	}
 
 	out.Request.CaseType = coerceEnum(d.Request.CaseType, []string{caseTypeCriminal, caseTypeCivil}, &out, "caseType")
 

@@ -170,6 +170,11 @@ func Run(options Options) error {
 	} else {
 		log.Printf("ASSIST_ENDPOINT not configured; the assist lab will not draft")
 	}
+	// The OCR model reads images and scanned PDFs sent with a request, for the draft.
+	var assistOCR assist.Reader
+	if r, ok := configuration.Models.For(llm.OCR); ok {
+		assistOCR = assist.NewOCRClient(r.BaseURL, r.Model, r.APIKey, configuration.AssistTimeout)
+	}
 
 	// The AI mode's model. A configuration that makes no sense leaves it off, and says so, rather
 	// than stopping the rest of the application.
@@ -240,6 +245,7 @@ func Run(options Options) error {
 		WordcraftWebDir: os.Getenv("WORDCRAFT_WEB_DIR"),
 		AssistDrafter:   assistDrafter,
 		AssistModel:     assistModel,
+		AssistOCR:       assistOCR,
 		AskModel:        askModel,
 		VideoLab:        videoLab,
 		TrustedProxies:  configuration.TrustedProxies,

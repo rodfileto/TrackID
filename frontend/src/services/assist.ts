@@ -8,12 +8,55 @@ import { getToken } from "./auth";
 export interface AssistInfo {
   enabled: boolean;
   model: string;
+  /** Whether an OCR model reads images and scanned PDFs. */
+  ocr?: boolean;
+  /** The reference labels a draft fills (an ePol task), registered by the organization. */
+  referenceLabels?: string[];
 }
+
+export type AssistKind = "document" | "evidence";
 
 export interface AssistDocument {
   name: string;
   sha256: string;
   text: string;
+  contentType?: string;
+  /** A document says what is asked; an evidence is material to examine. Empty is a document. */
+  kind?: AssistKind;
+  /** The text was read from an image by the OCR model. */
+  ocr?: boolean;
+}
+
+/** A drafted occurrence, as the server writes occurrences.CreateInput (Go's field names). */
+export interface DraftedOccurrence {
+  Types?: string[];
+  Attempted?: boolean | null;
+  OccurredFrom?: string;
+  Status?: string;
+  Description?: string;
+  Agency?: string;
+  AgencyNumber?: string;
+  InquiryNumber?: string;
+  OffenderCount?: number | null;
+  VictimCount?: number | null;
+  Place?: { Lon?: number; Lat?: number; Precision?: string; Name?: string; Address?: string; Neighbourhood?: string; PlaceType?: string };
+}
+
+/** A drafted request (requests.RegisterInput). */
+export interface DraftedRequest {
+  authority?: string;
+  documentReference?: string;
+  documentDate?: string;
+  receivedOn?: string;
+  dueOn?: string;
+  citedReference?: string;
+  citedInquiryNumber?: string;
+  notes?: string;
+  questions?: string[] | null;
+  references?: { label: string; number: string }[] | null;
+  Occurrence?: DraftedOccurrence | null;
+  CaseType?: string;
+  Cases?: { task?: string; description?: string }[] | null;
 }
 
 export interface AssistUsage {
@@ -24,7 +67,7 @@ export interface AssistUsage {
 }
 
 export interface AssistDraft {
-  request: unknown;
+  request: DraftedRequest;
   unsure?: string[];
   reasoning?: string;
   usage?: AssistUsage;

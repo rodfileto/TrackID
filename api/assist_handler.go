@@ -24,29 +24,37 @@ const assistLabMaxBytes = 40 << 20
 type AssistLab struct {
 	drafter assist.Drafter
 	model   string
+	ocr     assist.Reader
 }
 
 // NewAssistLab returns an assist lab. drafter is nil when no local model is configured.
-func NewAssistLab(drafter assist.Drafter, model string) *AssistLab {
-	return &AssistLab{drafter: drafter, model: model}
+func NewAssistLab(drafter assist.Drafter, model string, ocr assist.Reader) *AssistLab {
+	return &AssistLab{drafter: drafter, model: model, ocr: ocr}
 }
 
 // InfoHandler says whether drafting is configured and with what model.
 func (lab *AssistLab) InfoHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"enabled": lab.drafter != nil, "model": lab.model})
+		c.JSON(http.StatusOK, gin.H{"enabled": lab.drafter != nil, "model": lab.model, "ocr": lab.ocr != nil,
+			"referenceLabels": assist.ReferenceLabels()})
 	}
 }
 
-// ExtractHandler reads one uploaded file and returns its document: the extracted text for a PDF or
-// plain text, empty for an image or scan.
+// ExtractHandler reads one uploaded file and returns its document: the text of a PDF or plain text,
+// and of an image or a scanned PDF through the OCR model when there is one, with whether it is a
+// document or an evidence (assist.ReadDocument).
 func (lab *AssistLab) ExtractHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		data, filename, ok := readUploadedFile(c)
 		if !ok {
 			return
 		}
-		c.JSON(http.StatusOK, assist.ExtractDocument(filename, data))
+		doc, err := assist.ReadDocument(c.Request.Context(), lab.ocr, filename, data)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "the OCR model could not read " + filename + ": " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, doc)
 	}
 }
 

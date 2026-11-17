@@ -61,6 +61,8 @@ type Dependencies struct {
 	VideoLab *video.Lab
 	// AssistModel is the model name behind AssistDrafter, shown by the assist lab's info endpoint.
 	AssistModel string
+	// AssistOCR reads images and scanned PDFs for a draft (llm.OCR); nil reads them as having no text.
+	AssistOCR assist.Reader
 	// AskModel answers the AI mode's questions (ask package); nil means questions return 503.
 	AskModel *ask.Model
 	// Teams tells users of their notifications in Microsoft Teams (teams package). Nil means Teams is off: the
@@ -199,7 +201,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	protected.GET("videolab/jobs/:id/frame", videoLab.FrameHandler())
 	// The assist lab: draft a registration from uploaded files, nothing stored, nothing written to
 	// the database (a manual-testing surface for the local model).
-	assistLab := NewAssistLab(deps.AssistDrafter, deps.AssistModel)
+	assistLab := NewAssistLab(deps.AssistDrafter, deps.AssistModel, deps.AssistOCR)
 	protected.GET("assist", assistLab.InfoHandler())
 	protected.POST("assist/extract", assistLab.ExtractHandler())
 	protected.POST("assist/draft", assistLab.DraftHandler())

@@ -197,6 +197,9 @@ func systemPrompt(occurrenceTypes []string) string {
 	b.WriteString("  \"citedInquiryNumber\": \"the inquiry (inquérito/IPL) number it cites, or empty\",\n")
 	b.WriteString("  \"notes\": \"anything else worth keeping, or empty\",\n")
 	b.WriteString("  \"questions\": [\"the quesitos, in order\"],\n")
+	if labels := referenceLabels; len(labels) > 0 {
+		b.WriteString("  \"references\": [{\"label\": \"one of: " + strings.Join(labels, ", ") + "\", \"number\": \"the number as written\"}],\n")
+	}
 	b.WriteString("  \"caseType\": \"CRIMINAL or CIVIL or empty\",\n")
 	b.WriteString("  \"occurrence\": {\n")
 	b.WriteString("    \"types\": [\"occurrence type codes\",],\n")
@@ -230,6 +233,15 @@ func systemPrompt(occurrenceTypes []string) string {
 	b.WriteString("  \"unsure\": [\"the fields you are not confident about, by name\"],\n")
 	b.WriteString("  \"reasoning\": \"a short note on what you found and did not find\"\n")
 	b.WriteString("}\n\n")
+	if len(referenceLabels) > 0 {
+		b.WriteString("A request often arrives as a task in the institute's own system rather than as an ofício: ")
+		b.WriteString("put such numbers in \"references\" with exactly one of the labels above, and when there is no ofício, ")
+		b.WriteString("leave \"documentReference\" empty rather than repeating the task's number there.\n\n")
+	}
+	b.WriteString("Some files may be evidence images (photos of faces, camera frames, identity photos) rather than documents: ")
+	b.WriteString("you are told only their names and how many there are. Use them to choose the exam: images of faces call for ")
+	b.WriteString("FACIAL_COMPARISON when the request names a person or sends a reference photo to compare with, else FACIAL_REVIEW. ")
+	b.WriteString("Never describe or guess what an image shows.\n\n")
 	b.WriteString("Allowed occurrence types: ")
 	b.WriteString(strings.Join(occurrenceTypes, ", "))
 	b.WriteString(".\n\n")
@@ -257,14 +269,33 @@ func userPrompt(docs []Document, instructions string) string {
 		b.WriteString(instructions)
 		b.WriteString("\n\n")
 	}
-	if len(docs) == 0 {
+	var documents, evidences []Document
+	for _, d := range docs {
+		if d.Kind == KindEvidence {
+			evidences = append(evidences, d)
+		} else {
+			documents = append(documents, d)
+		}
+	}
+	if len(evidences) > 0 {
+		b.WriteString("## Evidence images\n\n")
+		b.WriteString(fmt.Sprintf("%d evidence image(s) sent with the request:\n", len(evidences)))
+		for _, d := range evidences {
+			b.WriteString("- " + d.Name + "\n")
+		}
+		b.WriteString("\n")
+	}
+	if len(documents) == 0 {
 		b.WriteString("## Documents\n\n(none: draft from the operator's instructions alone)\n")
 		return b.String()
 	}
 	b.WriteString("## Documents\n\nHere are the documents, in order:\n\n")
-	for _, d := range docs {
+	for _, d := range documents {
 		b.WriteString("### ")
 		b.WriteString(d.Name)
+		if d.OCR {
+			b.WriteString(" (read by OCR from an image: it may misread a digit)")
+		}
 		b.WriteString("\n")
 		if d.Text == "" {
 			b.WriteString("(no readable text)\n")

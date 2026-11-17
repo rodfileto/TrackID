@@ -20,6 +20,8 @@ import { parseReferences, receiveMaterial, receiveRequestDocument, registerReque
 import { extension } from "../extensions";
 import { addVestige, getCaseOrigins, type CaseOrigins, type ReportMode } from "../services/collections";
 import FileDropzone from "../components/common/FileDropzone";
+import RequestAssistPanel, { type ReadFile } from "../components/assist/RequestAssistPanel";
+import type { AssistDraft, DraftedOccurrence } from "../services/assist";
 import { DOCUMENT_FILES, MATERIAL_FILES } from "../components/common/fileTypes";
 
 const inputClass =
@@ -128,6 +130,56 @@ export default function RegisterRequest() {
       ...draft,
       agencyNumber: draft.agencyNumber || form.citedReference.trim(),
       inquiryNumber: draft.inquiryNumber || form.citedInquiryNumber.trim(),
+    });
+  }
+
+  // Fills the form from the AI's draft: only what it found, never clearing what is there. Its documents
+  // become the request's document, its evidences the first case's material.
+  function applyDraft(d: AssistDraft, files: ReadFile[]) {
+    const r = d.request;
+    const fill = (current: string, drafted?: string) => (drafted && drafted.trim() !== "" ? drafted.trim() : current);
+    const byField = new Map(referenceFields.map((f) => [f.label, f]));
+    const fieldValues = { ...referenceValues };
+    const otherReferences: string[] = [];
+    for (const ref of r.references ?? []) {
+      if (byField.has(ref.label)) fieldValues[ref.label] = ref.number;
+      else otherReferences.push(`${ref.label}: ${ref.number}`);
+    }
+    setReferenceValues(fieldValues);
+    const next = {
+      ...form,
+      authority: fill(form.authority, r.authority),
+      documentReference: fill(form.documentReference, r.documentReference),
+      documentDate: fill(form.documentDate, r.documentDate),
+      receivedOn: fill(form.receivedOn, r.receivedOn),
+      dueOn: fill(form.dueOn, r.dueOn),
+      citedReference: fill(form.citedReference, r.citedReference),
+      citedInquiryNumber: fill(form.citedInquiryNumber, r.citedInquiryNumber),
+      notes: fill(form.notes, r.notes),
+      questions: (r.questions ?? []).length > 0 ? (r.questions ?? []).join("\n") : form.questions,
+      references: [form.references.trim(), ...otherReferences].filter(Boolean).join("\n"),
+    };
+    setForm(next);
+
+    if (r.Occurrence) {
+      setMode("create");
+      setChosen(null);
+      setDraft(occurrenceFromDraft(r.Occurrence, draft));
+    } else if (next.citedReference.trim() || next.citedInquiryNumber.trim()) {
+      setMode("lookup");
+      setChosen(null);
+      searchOccurrences(next.citedReference.trim() || next.citedInquiryNumber.trim()).then(setMatches).catch(() => setMatches([]));
+    } else if (r.CaseType) {
+      setMode("none");
+      setCaseType(r.CaseType);
+    }
+
+    const evidences = files.filter((f) => f.doc.kind === "evidence").map((f) => f.file);
+    setDocuments([...documents, ...files.filter((f) => f.doc.kind !== "evidence").map((f) => f.file)]);
+    const drafted = (r.Cases ?? []).map((c) => ({ ...newRow(), task: c.task ?? "", description: c.description ?? "" }));
+    setRows((current) => {
+      const base = drafted.length > 0 && current.every((x) => !x.existing && x.task === "" && x.description === "" && x.files.length === 0) ? drafted : current;
+      return base.map((x, i) => (i === 0 ? { ...x, files: [...x.files, ...evidences] } : x));
     });
   }
 
@@ -274,6 +326,7 @@ export default function RegisterRequest() {
       <PageMeta title={`${t("requests.new")} | TrackID`} description={t("requests.newDesc")} />
       <PageBreadcrumb pageTitle={t("requests.new")} />
       <form onSubmit={submit} className="space-y-6">
+        <RequestAssistPanel onDraft={applyDraft} />
         <ComponentCard title={t("requests.requestCard")} desc={t("requests.requestCardDesc")}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {referenceFields.map((f) => (
@@ -530,4 +583,32 @@ export default function RegisterRequest() {
       </form>
     </>
   );
+}
+
+/** The drafted occurrence over the form's: what the draft has replaces what the form has. */
+function occurrenceFromDraft(o: DraftedOccurrence, current: OccurrenceDraft): OccurrenceDraft {
+  const p = o.Place ?? {};
+  const located = (p.Lon ?? 0) !== 0 || (p.Lat ?? 0) !== 0;
+  const date = o.OccurredFrom && !o.OccurredFrom.startsWith("0001-") ? o.OccurredFrom.slice(0, 16) : "";
+  return {
+    ...current,
+    chosen: o.Types && o.Types.length > 0 ? o.Types : current.chosen,
+    occurredFrom: date || current.occurredFrom,
+    attempted: o.Attempted ?? current.attempted,
+    status: o.Status || current.status,
+    description: o.Description || current.description,
+    agency: o.Agency || current.agency,
+    agencyNumber: o.AgencyNumber || current.agencyNumber,
+    inquiryNumber: o.InquiryNumber || current.inquiryNumber,
+    offenderCount: o.OffenderCount != null ? String(o.OffenderCount) : current.offenderCount,
+    victimCount: o.VictimCount != null ? String(o.VictimCount) : current.victimCount,
+    place: {
+      ...current.place,
+      ...(located ? { lon: p.Lon, lat: p.Lat, precision: p.Precision || "GEOCODED" } : {}),
+      name: p.Name || current.place.name,
+      address: p.Address || current.place.address,
+      neighbourhood: p.Neighbourhood || current.place.neighbourhood,
+      placeType: p.PlaceType || current.place.placeType,
+    },
+  };
 }

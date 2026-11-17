@@ -1031,6 +1031,25 @@
     },
     "indirect": "Indirect link"
   },
+  "assistRequest": {
+    "title": "Fill with AI",
+    "desc": "Add the ePol task or ofício (text, PDF or a picture of it) and the evidence images. Images and scanned pages are read by the OCR model. Each file is marked document or evidence: check it before filling. Only documents fill the form; evidences go to the first case as material.",
+    "descNoOcr": "Add the ePol task or ofício and the evidence images. No OCR model is configured, so images are not read: they are taken as evidence. Only documents fill the form; evidences go to the first case as material.",
+    "reading": "Reading {{file}} ({{done}} of {{total}})…",
+    "chars": "{{count}} characters",
+    "noText": "no text",
+    "ocr": "read by OCR",
+    "kind": "What {{file}} is",
+    "kindDocument": "Document",
+    "kindEvidence": "Evidence",
+    "instructions": "Instructions (optional)",
+    "instructionsPlaceholder": "e.g. received today; the second file is the suspect's photo",
+    "fill": "Fill the form",
+    "drafting": "Filling…",
+    "draftingHint": "The model may take a minute.",
+    "filled": "Form filled. Check every field before registering.",
+    "unsure": "Check especially: {{fields}}"
+  },
   "requests": {
     "document": "The request's document (ePol task, ofício)",
     "documentHint": "Kept with each case the request opens; it is not an evidence. The material to examine goes with each case below.",

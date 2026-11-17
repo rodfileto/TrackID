@@ -1031,6 +1031,25 @@
     },
     "indirect": "Vínculo indireto"
   },
+  "assistRequest": {
+    "title": "Preencher com IA",
+    "desc": "Adicione a tarefa ePol ou o ofício (texto, PDF ou foto) e as imagens de evidência. Imagens e páginas digitalizadas são lidas pelo modelo de OCR. Cada arquivo é marcado como documento ou evidência: confira antes de preencher. Só os documentos preenchem o formulário; as evidências vão para o primeiro caso como material.",
+    "descNoOcr": "Adicione a tarefa ePol ou o ofício e as imagens de evidência. Não há modelo de OCR configurado, então as imagens não são lidas: são tomadas como evidência. Só os documentos preenchem o formulário; as evidências vão para o primeiro caso como material.",
+    "reading": "Lendo {{file}} ({{done}} de {{total}})…",
+    "chars": "{{count}} caracteres",
+    "noText": "sem texto",
+    "ocr": "lido por OCR",
+    "kind": "O que é {{file}}",
+    "kindDocument": "Documento",
+    "kindEvidence": "Evidência",
+    "instructions": "Instruções (opcional)",
+    "instructionsPlaceholder": "ex.: recebida hoje; o segundo arquivo é a foto do suspeito",
+    "fill": "Preencher o formulário",
+    "drafting": "Preenchendo…",
+    "draftingHint": "O modelo pode levar um minuto.",
+    "filled": "Formulário preenchido. Confira cada campo antes de registrar.",
+    "unsure": "Confira principalmente: {{fields}}"
+  },
   "requests": {
     "document": "Documento da requisição (tarefa ePol, ofício)",
     "documentHint": "Guardado em cada caso que a requisição abre; não é evidência. O material a examinar vai em cada caso, abaixo.",

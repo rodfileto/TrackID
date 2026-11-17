@@ -39,7 +39,26 @@ type Document struct {
 	Name   string `json:"name"`
 	SHA256 string `json:"sha256"`
 	Text   string `json:"text"`
+	// ContentType is what the bytes are, as detected.
+	ContentType string `json:"contentType,omitempty"`
+	// Kind is KindDocument or KindEvidence (ReadDocument); empty is a document. Only documents'
+	// text drafts the request; evidences are counted, for the exam to ask.
+	Kind string `json:"kind,omitempty"`
+	// OCR says the text was read from the image by the OCR model, which can misread.
+	OCR bool `json:"ocr,omitempty"`
 }
+
+// referenceLabels are the reference numbers a draft may fill (requests.Reference labels), such as an
+// organization's task system: RegisterReferenceLabels.
+var referenceLabels []string
+
+// RegisterReferenceLabels names the numbers a request arrives under in the organization's own
+// systems (an ePol task, a SEI process), for the draft to fill as references with exactly these
+// labels. Call it before serving.
+func RegisterReferenceLabels(labels ...string) { referenceLabels = append([]string(nil), labels...) }
+
+// ReferenceLabels returns the registered labels.
+func ReferenceLabels() []string { return append([]string(nil), referenceLabels...) }
 
 // StagedFile is one uploaded file held in object storage under a draft prefix, before any case
 // exists to hold it. UploadDraftFile writes it; the worker's Extract downloads it back.

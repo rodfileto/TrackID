@@ -27,6 +27,10 @@ type draftJSON struct {
 	CitedInquiry      string   `json:"citedInquiryNumber"`
 	Notes             string   `json:"notes"`
 	Questions         []string `json:"questions"`
+	References        []struct {
+		Label  string `json:"label"`
+		Number string `json:"number"`
+	} `json:"references"`
 
 	CaseType   string           `json:"caseType"`
 	Occurrence *draftOccurrence `json:"occurrence"`
@@ -90,6 +94,9 @@ func (d draftJSON) register() Draft {
 		},
 		CaseType: d.CaseType,
 		Cases:    make([]requests.CaseInput, 0, len(d.Cases)),
+	}
+	for _, r := range d.References {
+		req.Input.References = append(req.Input.References, requests.Reference{Label: r.Label, Number: r.Number})
 	}
 	for _, c := range d.Cases {
 		req.Cases = append(req.Cases, requests.CaseInput{Task: c.Task, Description: c.Description})
