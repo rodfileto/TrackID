@@ -19,8 +19,8 @@ FROM biometric_cases
 WHERE case_year = sqlc.arg(case_year)::int4;
 
 -- name: CreateBiometricCase :one
-INSERT INTO biometric_cases (case_id, case_type, modality, description, case_year, case_number)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO biometric_cases (case_id, case_type, modality, description, case_year, case_number, unit_id)
+VALUES ($1, $2, $3, $4, $5, $6, COALESCE(sqlc.narg(unit_id)::bigint, default_case_unit()))
 RETURNING id, case_id, case_type, modality, description;
 
 -- name: GetBiometricCaseByCaseID :one
@@ -340,3 +340,7 @@ ORDER BY v.case_file_id;
 -- name: SetEvidenceVideoSource :execrows
 UPDATE case_evidences SET source_video_file_id = $2, source_timestamp_ms = $3, source_frame = $4, updated_at = NOW()
 WHERE case_file_id = $1;
+
+-- name: DefaultCaseUnit :one
+-- The unit a new case goes to when its creator has none: the one receiving new cases.
+SELECT default_case_unit()::bigint AS unit_id;

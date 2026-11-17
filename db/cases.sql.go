@@ -30,8 +30,8 @@ func (q *Queries) CountCaseTracesByCaseFile(ctx context.Context, caseFileID sql.
 }
 
 const createBiometricCase = `-- name: CreateBiometricCase :one
-INSERT INTO biometric_cases (case_id, case_type, modality, description, case_year, case_number)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO biometric_cases (case_id, case_type, modality, description, case_year, case_number, unit_id)
+VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7::bigint, default_case_unit()))
 RETURNING id, case_id, case_type, modality, description
 `
 
@@ -42,6 +42,7 @@ type CreateBiometricCaseParams struct {
 	Description string        `db:"description" json:"description"`
 	CaseYear    sql.NullInt32 `db:"case_year" json:"case_year"`
 	CaseNumber  sql.NullInt32 `db:"case_number" json:"case_number"`
+	UnitID      sql.NullInt64 `db:"unit_id" json:"unit_id"`
 }
 
 type CreateBiometricCaseRow struct {
@@ -60,6 +61,7 @@ func (q *Queries) CreateBiometricCase(ctx context.Context, arg CreateBiometricCa
 		arg.Description,
 		arg.CaseYear,
 		arg.CaseNumber,
+		arg.UnitID,
 	)
 	var i CreateBiometricCaseRow
 	err := row.Scan(
@@ -163,6 +165,18 @@ func (q *Queries) CreateCodificationPoint(ctx context.Context, arg CreateCodific
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const defaultCaseUnit = `-- name: DefaultCaseUnit :one
+SELECT default_case_unit()::bigint AS unit_id
+`
+
+// The unit a new case goes to when its creator has none: the one receiving new cases.
+func (q *Queries) DefaultCaseUnit(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, defaultCaseUnit)
+	var unit_id int64
+	err := row.Scan(&unit_id)
+	return unit_id, err
 }
 
 const deleteCaseFile = `-- name: DeleteCaseFile :execrows

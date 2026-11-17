@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rodfileto/trackid/db"
+	"github.com/rodfileto/trackid/organizations"
 )
 
 // ValidationError is a case-creation error caused by bad input (missing or
@@ -24,6 +25,46 @@ type CreateInput struct {
 	CaseType    string
 	Modality    string
 	Description string
+	// CreatedBy is the user creating the case, 0 when none. Their unit on the day (organizations.UnitOn)
+	// becomes the case's unit and is what a Numbering sees; without one the case goes to the unit that
+	// receives new cases.
+	CreatedBy int64
+}
+
+// NewCase is what a Numbering is given to number a case about to be created.
+type NewCase struct {
+	Modality string // FACIAL or FINGERPRINT
+	Year     int
+	// UnitID is the unit the case will belong to: the creator's, else the one receiving new cases.
+	UnitID int64
+}
+
+// Number is a new case's identifier. Year and Number fill case_year and case_number, which are unique
+// together: a Numbering whose own scheme counts differently (per unit, say) leaves both nil.
+type Number struct {
+	CaseID string
+	Year   *int32
+	Number *int32
+}
+
+// Numbering numbers a new case inside its transaction. It may read q to count, and returns
+// ValidationError for a case it cannot number. A concurrent create can take the same CaseID; the
+// whole transaction is then retried (IsDuplicateNumber).
+type Numbering func(ctx context.Context, q *db.Queries, c NewCase) (Number, error)
+
+var numbering Numbering = defaultNumbering
+
+// RegisterNumbering replaces how cases are numbered, "2026.0001" by default (an organization numbers
+// by its own scheme, as PF does). Call it before serving.
+func RegisterNumbering(n Numbering) { numbering = n }
+
+func defaultNumbering(ctx context.Context, q *db.Queries, c NewCase) (Number, error) {
+	maxNumber, err := q.MaxCaseNumberForYear(ctx, int32(c.Year))
+	if err != nil {
+		return Number{}, fmt.Errorf("cases: read max case number: %w", err)
+	}
+	year, number := int32(c.Year), maxNumber+1
+	return Number{CaseID: fmt.Sprintf("%04d.%04d", year, number), Year: &year, Number: &number}, nil
 }
 
 // maxNumberingAttempts bounds how many times Create retries when a concurrent
@@ -86,21 +127,37 @@ func CreateWith(ctx context.Context, q *db.Queries, input CreateInput) (Case, in
 		return Case{}, 0, ValidationError("description is required")
 	}
 
-	year := time.Now().Year()
-	maxNumber, err := q.MaxCaseNumberForYear(ctx, int32(year))
-	if err != nil {
-		return Case{}, 0, fmt.Errorf("cases: read max case number: %w", err)
+	now := time.Now()
+	var unit sql.NullInt64
+	if input.CreatedBy != 0 {
+		placed, err := organizations.UnitOn(ctx, q, input.CreatedBy, now)
+		if err != nil {
+			return Case{}, 0, err
+		}
+		if placed != nil {
+			unit = sql.NullInt64{Int64: placed.UnitID, Valid: true}
+		}
 	}
-	number := maxNumber + 1
-	caseID := fmt.Sprintf("%04d.%04d", year, number)
+	if !unit.Valid {
+		id, err := q.DefaultCaseUnit(ctx)
+		if err != nil {
+			return Case{}, 0, fmt.Errorf("cases: unit receiving new cases: %w", err)
+		}
+		unit = sql.NullInt64{Int64: id, Valid: true}
+	}
+	number, err := numbering(ctx, q, NewCase{Modality: modality, Year: now.Year(), UnitID: unit.Int64})
+	if err != nil {
+		return Case{}, 0, err
+	}
 
 	row, err := q.CreateBiometricCase(ctx, db.CreateBiometricCaseParams{
-		CaseID:      caseID,
+		CaseID:      number.CaseID,
 		CaseType:    caseType,
 		Modality:    modality,
 		Description: description,
-		CaseYear:    sql.NullInt32{Int32: int32(year), Valid: true},
-		CaseNumber:  sql.NullInt32{Int32: number, Valid: true},
+		CaseYear:    nullInt32(number.Year),
+		CaseNumber:  nullInt32(number.Number),
+		UnitID:      unit,
 	})
 	if err != nil {
 		return Case{}, 0, fmt.Errorf("cases: create biometric case: %w", err)
@@ -112,5 +169,14 @@ func CreateWith(ctx context.Context, q *db.Queries, input CreateInput) (Case, in
 // (case_year, case_number) index — the signature of a concurrent create that
 // raced for the same number.
 func IsDuplicateNumber(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "biometric_cases_year_number_key")
+	return err != nil && strings.Contains(err.Error(), "biometric_cases_year_number_key") || strings.Contains(err.Error(), "biometric_cases_case_id_key")
 }
+
+func nullInt32(v *int32) sql.NullInt32 {
+	if v == nil {
+		return sql.NullInt32{}
+	}
+	return sql.NullInt32{Int32: *v, Valid: true}
+}
+
+// IsDuplicateNumber also matches a case_id taken concurrently.

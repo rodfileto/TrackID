@@ -264,7 +264,7 @@ func register(ctx context.Context, sqlDB *sql.DB, in RegisterInput, registeredBy
 	if description == "" {
 		description = "Exame de local"
 	}
-	c, caseRowID, err := cases.CreateWith(ctx, q, cases.CreateInput{CaseType: natures[0], Modality: "FINGERPRINT", Description: description})
+	c, caseRowID, err := cases.CreateWith(ctx, q, cases.CreateInput{CaseType: natures[0], Modality: "FINGERPRINT", Description: description, CreatedBy: registeredBy})
 	var cErr cases.ValidationError
 	if errors.As(err, &cErr) {
 		return Registered{}, ValidationError(cErr.Error())

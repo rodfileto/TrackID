@@ -336,7 +336,7 @@ func register(ctx context.Context, sqlDB *sql.DB, in RegisterInput, f fields, re
 			if err != nil {
 				return Registered{}, ValidationError(err.Error())
 			}
-			c, id, err := cases.CreateWith(ctx, q, cases.CreateInput{CaseType: nature, Modality: string(task.Modality()), Description: ci.Description})
+			c, id, err := cases.CreateWith(ctx, q, cases.CreateInput{CaseType: nature, Modality: string(task.Modality()), Description: ci.Description, CreatedBy: registeredBy})
 			var vErr cases.ValidationError
 			if errors.As(err, &vErr) {
 				return Registered{}, ValidationError(vErr.Error())
