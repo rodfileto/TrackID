@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ComponentCard from "../common/ComponentCard";
 import FileDropzone from "../common/FileDropzone";
+import FileThumbnail from "../common/FileThumbnail";
 import Label from "../form/Label";
 import { DOCUMENT_FILES } from "../common/fileTypes";
 import {
@@ -87,6 +88,7 @@ export default function RequestAssistPanel({ onDraft }: Props) {
         <ul className="divide-y divide-gray-100 text-sm dark:divide-white/[0.05]">
           {files.map((f, i) => (
             <li key={`${f.doc.sha256}-${i}`} className="flex flex-wrap items-center gap-3 py-2 text-gray-700 dark:text-gray-300">
+              <FileThumbnail file={f.file} />
               <span className="min-w-0 flex-1 truncate">{f.file.name}</span>
               <span className="text-theme-xs text-gray-500 dark:text-gray-400">
                 {f.doc.text ? t("assistRequest.chars", { count: f.doc.text.length }) : t("assistRequest.noText")}

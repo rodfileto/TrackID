@@ -20,6 +20,7 @@ import { parseReferences, receiveMaterial, receiveRequestDocument, registerReque
 import { extension } from "../extensions";
 import { addVestige, getCaseOrigins, type CaseOrigins, type ReportMode } from "../services/collections";
 import FileDropzone from "../components/common/FileDropzone";
+import FileThumbnail from "../components/common/FileThumbnail";
 import RequestAssistPanel, { type ReadFile } from "../components/assist/RequestAssistPanel";
 import type { AssistDraft, DraftedOccurrence } from "../services/assist";
 import { DOCUMENT_FILES, MATERIAL_FILES } from "../components/common/fileTypes";
@@ -352,8 +353,9 @@ export default function RegisterRequest() {
             {documents.length > 0 && (
               <ul className="mt-2 divide-y divide-gray-100 text-sm dark:divide-white/[0.05]">
                 {documents.map((file, f) => (
-                  <li key={`${file.name}-${f}`} className="flex items-center justify-between gap-3 py-1.5 text-gray-700 dark:text-gray-300">
-                    <span className="truncate">{file.name}</span>
+                  <li key={`${file.name}-${f}`} className="flex items-center gap-3 py-1.5 text-gray-700 dark:text-gray-300">
+                    <FileThumbnail file={file} />
+                    <span className="min-w-0 flex-1 truncate">{file.name}</span>
                     <button type="button" className="shrink-0 text-error-500 hover:underline"
                       onClick={() => setDocuments(documents.filter((_, j) => j !== f))}>
                       {t("common.remove")}
