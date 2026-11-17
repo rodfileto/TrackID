@@ -1032,6 +1032,11 @@
     "indirect": "Indirect link"
   },
   "requests": {
+    "document": "The request's document (ePol task, ofício)",
+    "documentHint": "Kept with each case the request opens; it is not an evidence. The material to examine goes with each case below.",
+    "documentError": "Could not keep {{file}}: {{error}}",
+    "or": " or ",
+    "documents": "Request document",
     "missingOccurrence": "Occurrence: pick one of the results, register a new one, or say there is none",
     "caseN": "Case {{n}}",
     "missingTitle": "To register, still missing:",

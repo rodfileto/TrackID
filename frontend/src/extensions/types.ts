@@ -15,6 +15,19 @@ export interface ExtensionNavItem {
   requires?: "admin" | "coordinator" | "intelligence" | "persons";
 }
 
+/**
+ * A number a request arrives under in the organization's own systems (an ePol task, a SEI process),
+ * asked for as a field of its own on the request form and kept as a reference with this label.
+ * identifies: the request may go by it alone, when its document has no number of its own.
+ */
+export interface RequestReferenceField {
+  label: string;
+  /** Translation key of the field's name; the label itself when absent. */
+  name?: string;
+  placeholder?: string;
+  identifies?: boolean;
+}
+
 export interface Extension {
   routes: ExtensionRoute[];
   navItems: ExtensionNavItem[];
@@ -31,6 +44,8 @@ export interface Extension {
   casePanels?: ComponentType<CasePanelProps>[];
   personPanels?: ComponentType<PersonPanelProps>[];
   clusterPanels?: ComponentType<ClusterPanelProps>[];
+  /** Fields of the request form for the organization's own reference numbers, first in the form. */
+  requestReferences?: RequestReferenceField[];
 }
 
 export interface CasePanelProps {

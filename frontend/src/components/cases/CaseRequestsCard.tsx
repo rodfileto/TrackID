@@ -19,6 +19,7 @@ import { formatReferences, parseReferences,
   receiveMaterial,
   listCaseRequests,
   setTraceRole,
+  requestDocumentUrl,
   type CaseRequest,
   type CaseRequestInput,
   type MaterialTrace,
@@ -256,6 +257,17 @@ export default function CaseRequestsCard({
   }
   useEffect(load, [load, refreshKey]);
 
+  // Opens a request document in a new tab; the URL is freed once the tab has it.
+  async function openDocument(fileId: number) {
+    try {
+      const url = await requestDocumentUrl(caseId, fileId);
+      window.open(url, "_blank", "noopener");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   /** Coordinator: receive more files a request sent in, into this case. */
   async function receive(requestId: number, files: File[]) {
     setReceiving(requestId);
@@ -347,6 +359,18 @@ export default function CaseRequestsCard({
                   <li key={i}>{q}</li>
                 ))}
               </ol>
+            )}
+            {r.documents.length > 0 && (
+              <ul className="mt-2 space-y-0.5 text-theme-xs text-gray-500 dark:text-gray-400">
+                {r.documents.map((d) => (
+                  <li key={d.id}>
+                    {t("requests.documents")}:{" "}
+                    <button type="button" className="text-brand-500 hover:underline" onClick={() => void openDocument(d.id)}>
+                      {d.filename}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
             {r.files.length > 0 && (
               <ul className="mt-2 space-y-0.5 text-theme-xs text-gray-500 dark:text-gray-400">

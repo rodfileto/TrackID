@@ -1032,6 +1032,11 @@
     "indirect": "Vínculo indireto"
   },
   "requests": {
+    "document": "Documento da requisição (tarefa ePol, ofício)",
+    "documentHint": "Guardado em cada caso que a requisição abre; não é evidência. O material a examinar vai em cada caso, abaixo.",
+    "documentError": "Não foi possível guardar {{file}}: {{error}}",
+    "or": " ou ",
+    "documents": "Documento da requisição",
     "missingOccurrence": "Ocorrência: escolha um resultado, cadastre uma nova ou informe que não há",
     "caseN": "Caso {{n}}",
     "missingTitle": "Para registrar, ainda falta:",

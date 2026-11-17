@@ -167,3 +167,24 @@ UPDATE case_analyses SET case_request_id = $2 WHERE biometric_case_id = $1 AND c
 
 -- name: LatestCaseRequest :one
 SELECT case_request_id FROM case_request_cases WHERE biometric_case_id = $1 ORDER BY sequence DESC LIMIT 1;
+
+-- name: InsertRequestDocument :one
+-- The request's own document, kept with one of its cases. Sending the same bytes again keeps the one row.
+INSERT INTO case_files (biometric_case_id, category, media_type, hash_id, filename, storage_ref, content_type, size_bytes, case_request_id)
+VALUES (@biometric_case_id::bigint, 'request_document', @media_type::text, @hash_id::text, @filename::text, @storage_ref::text,
+        @content_type::text, @size_bytes::bigint, @case_request_id::bigint)
+ON CONFLICT (biometric_case_id, category, hash_id) DO UPDATE SET filename = EXCLUDED.filename, updated_at = NOW()
+RETURNING id, created_at;
+
+-- name: ListRequestDocuments :many
+SELECT f.id, f.case_request_id, f.filename, f.hash_id, f.content_type, f.size_bytes, f.created_at
+FROM case_files f
+JOIN biometric_cases bc ON bc.id = f.biometric_case_id
+WHERE bc.case_id = $1 AND f.category = 'request_document'
+ORDER BY f.id;
+
+-- name: GetRequestDocument :one
+SELECT f.storage_ref, f.content_type, f.filename
+FROM case_files f
+JOIN biometric_cases bc ON bc.id = f.biometric_case_id
+WHERE f.id = $1 AND bc.case_id = $2 AND f.category = 'request_document';

@@ -149,9 +149,11 @@ type Request struct {
 	CreatedAt         time.Time   `json:"createdAt"`
 	Questions         []string    `json:"questions"`
 	Files             []File      `json:"files"`
-	Cases             []CaseRef   `json:"cases"` // every case it opened or joined, this one included
-	Tasks             []string    `json:"tasks"` // the analyses it asked of this case, by type
-	References        []Reference `json:"references"`
+	// Documents are the request's own document -- its ePol task or ofício -- kept with this case.
+	Documents  []File      `json:"documents"`
+	Cases      []CaseRef   `json:"cases"` // every case it opened or joined, this one included
+	Tasks      []string    `json:"tasks"` // the analyses it asked of this case, by type
+	References []Reference `json:"references"`
 }
 
 // Occurrence is the occurrence a request was linked to, by its numbers.
@@ -859,6 +861,10 @@ func ListWith(ctx context.Context, q *db.Queries, caseID string) ([]Request, err
 	if err != nil {
 		return nil, err
 	}
+	documentRows, err := q.ListRequestDocuments(ctx, caseID)
+	if err != nil {
+		return nil, err
+	}
 	caseRows, err := q.ListCaseRequestCases(ctx, caseID)
 	if err != nil {
 		return nil, err
@@ -883,7 +889,7 @@ func ListWith(ctx context.Context, q *db.Queries, caseID string) ([]Request, err
 		req := Request{ID: r.ID, Sequence: r.Sequence, Authority: r.Authority, DocumentReference: r.DocumentReference,
 			ReceivedOn: r.ReceivedOn.Format(dateLayout), CitedReference: r.CitedReference.String,
 			CitedInquiry: r.CitedInquiryNumber.String, Notes: r.Notes.String,
-			RegisteredBy: r.RegisteredBy.String, CreatedAt: r.CreatedAt, Questions: []string{}, Files: []File{}, Cases: []CaseRef{}, Tasks: []string{}}
+			RegisteredBy: r.RegisteredBy.String, CreatedAt: r.CreatedAt, Questions: []string{}, Files: []File{}, Documents: []File{}, Cases: []CaseRef{}, Tasks: []string{}}
 		if r.RequestingUnitID.Valid {
 			req.RequestingUnitID = &r.RequestingUnitID.Int64
 		}
@@ -921,6 +927,12 @@ func ListWith(ctx context.Context, q *db.Queries, caseID string) ([]Request, err
 		for _, qr := range questionRows {
 			if qr.CaseRequestID == r.ID {
 				req.Questions = append(req.Questions, qr.Question)
+			}
+		}
+		for _, f := range documentRows {
+			if f.CaseRequestID.Valid && f.CaseRequestID.Int64 == r.ID {
+				req.Documents = append(req.Documents, File{ID: f.ID, Filename: f.Filename.String, SHA256: f.HashID.String,
+					ContentType: f.ContentType.String, SizeBytes: f.SizeBytes.Int64, AddedAt: f.CreatedAt})
 			}
 		}
 		for _, f := range fileRows {

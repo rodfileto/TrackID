@@ -195,6 +195,31 @@ func (q *Queries) GetOccurrenceNumbers(ctx context.Context, id int64) (GetOccurr
 	return i, err
 }
 
+const getRequestDocument = `-- name: GetRequestDocument :one
+SELECT f.storage_ref, f.content_type, f.filename
+FROM case_files f
+JOIN biometric_cases bc ON bc.id = f.biometric_case_id
+WHERE f.id = $1 AND bc.case_id = $2 AND f.category = 'request_document'
+`
+
+type GetRequestDocumentParams struct {
+	ID     int64  `db:"id" json:"id"`
+	CaseID string `db:"case_id" json:"case_id"`
+}
+
+type GetRequestDocumentRow struct {
+	StorageRef  sql.NullString `db:"storage_ref" json:"storage_ref"`
+	ContentType sql.NullString `db:"content_type" json:"content_type"`
+	Filename    sql.NullString `db:"filename" json:"filename"`
+}
+
+func (q *Queries) GetRequestDocument(ctx context.Context, arg GetRequestDocumentParams) (GetRequestDocumentRow, error) {
+	row := q.db.QueryRowContext(ctx, getRequestDocument, arg.ID, arg.CaseID)
+	var i GetRequestDocumentRow
+	err := row.Scan(&i.StorageRef, &i.ContentType, &i.Filename)
+	return i, err
+}
+
 const insertCaseRequest = `-- name: InsertCaseRequest :one
 
 INSERT INTO case_requests (authority, document_reference, document_date, received_on, due_on,
@@ -268,6 +293,47 @@ type InsertCaseRequestReferenceParams struct {
 func (q *Queries) InsertCaseRequestReference(ctx context.Context, arg InsertCaseRequestReferenceParams) error {
 	_, err := q.db.ExecContext(ctx, insertCaseRequestReference, arg.CaseRequestID, arg.Label, arg.Number)
 	return err
+}
+
+const insertRequestDocument = `-- name: InsertRequestDocument :one
+INSERT INTO case_files (biometric_case_id, category, media_type, hash_id, filename, storage_ref, content_type, size_bytes, case_request_id)
+VALUES ($1::bigint, 'request_document', $2::text, $3::text, $4::text, $5::text,
+        $6::text, $7::bigint, $8::bigint)
+ON CONFLICT (biometric_case_id, category, hash_id) DO UPDATE SET filename = EXCLUDED.filename, updated_at = NOW()
+RETURNING id, created_at
+`
+
+type InsertRequestDocumentParams struct {
+	BiometricCaseID int64  `db:"biometric_case_id" json:"biometric_case_id"`
+	MediaType       string `db:"media_type" json:"media_type"`
+	HashID          string `db:"hash_id" json:"hash_id"`
+	Filename        string `db:"filename" json:"filename"`
+	StorageRef      string `db:"storage_ref" json:"storage_ref"`
+	ContentType     string `db:"content_type" json:"content_type"`
+	SizeBytes       int64  `db:"size_bytes" json:"size_bytes"`
+	CaseRequestID   int64  `db:"case_request_id" json:"case_request_id"`
+}
+
+type InsertRequestDocumentRow struct {
+	ID        int64     `db:"id" json:"id"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
+
+// The request's own document, kept with one of its cases. Sending the same bytes again keeps the one row.
+func (q *Queries) InsertRequestDocument(ctx context.Context, arg InsertRequestDocumentParams) (InsertRequestDocumentRow, error) {
+	row := q.db.QueryRowContext(ctx, insertRequestDocument,
+		arg.BiometricCaseID,
+		arg.MediaType,
+		arg.HashID,
+		arg.Filename,
+		arg.StorageRef,
+		arg.ContentType,
+		arg.SizeBytes,
+		arg.CaseRequestID,
+	)
+	var i InsertRequestDocumentRow
+	err := row.Scan(&i.ID, &i.CreatedAt)
+	return i, err
 }
 
 const latestCaseRequest = `-- name: LatestCaseRequest :one
@@ -485,6 +551,55 @@ func (q *Queries) ListCaseRequests(ctx context.Context, caseID string) ([]ListCa
 			&i.InquiryNumber,
 			&i.Notes,
 			&i.RegisteredBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRequestDocuments = `-- name: ListRequestDocuments :many
+SELECT f.id, f.case_request_id, f.filename, f.hash_id, f.content_type, f.size_bytes, f.created_at
+FROM case_files f
+JOIN biometric_cases bc ON bc.id = f.biometric_case_id
+WHERE bc.case_id = $1 AND f.category = 'request_document'
+ORDER BY f.id
+`
+
+type ListRequestDocumentsRow struct {
+	ID            int64          `db:"id" json:"id"`
+	CaseRequestID sql.NullInt64  `db:"case_request_id" json:"case_request_id"`
+	Filename      sql.NullString `db:"filename" json:"filename"`
+	HashID        sql.NullString `db:"hash_id" json:"hash_id"`
+	ContentType   sql.NullString `db:"content_type" json:"content_type"`
+	SizeBytes     sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
+	CreatedAt     time.Time      `db:"created_at" json:"created_at"`
+}
+
+func (q *Queries) ListRequestDocuments(ctx context.Context, caseID string) ([]ListRequestDocumentsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRequestDocuments, caseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRequestDocumentsRow
+	for rows.Next() {
+		var i ListRequestDocumentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CaseRequestID,
+			&i.Filename,
+			&i.HashID,
+			&i.ContentType,
+			&i.SizeBytes,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

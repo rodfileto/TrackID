@@ -27,6 +27,8 @@ export interface CaseRequest {
   createdAt: string;
   questions: string[];
   files: { id: number; filename: string; sha256: string; contentType?: string; sizeBytes: number; addedAt: string }[];
+  /** The request's own document -- its ePol task or ofício -- kept with this case; not an evidence. */
+  documents: { id: number; filename: string; sha256: string; contentType?: string; sizeBytes: number; addedAt: string }[];
   /** Every case the request opened or joined, this one included. */
   cases: { caseId: string; modality: string }[];
   /** The analyses it asked of this case, by type. */
@@ -171,6 +173,28 @@ export async function receiveMaterial(caseId: string, requestId: number, file: F
     throw new Error(body.error ?? `Could not receive ${file.name}`);
   }
   return ((await response.json()) as { fileId: number }).fileId;
+}
+
+/** Coordinator: keep the request's own document (its ePol task or ofício) with one of its cases. */
+export async function receiveRequestDocument(caseId: string, requestId: number, file: File): Promise<void> {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await apiFetch(`${apiBaseUrl}/admin/cases/${encodeURIComponent(caseId)}/requests/${requestId}/document`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Could not keep ${file.name}`);
+  }
+}
+
+/** A request document of a case as an object URL; the caller revokes it. */
+export async function requestDocumentUrl(caseId: string, fileId: number): Promise<string> {
+  const response = await apiFetch(`${apiBaseUrl}/cases/${encodeURIComponent(caseId)}/request-documents/${fileId}`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return URL.createObjectURL(await response.blob());
 }
 
 /** Coordinator: register a later request on a case already open. */

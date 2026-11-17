@@ -16,10 +16,11 @@ import {
   type OccurrenceDraft,
 } from "../components/intelligence/occurrenceDraft";
 import { listOccurrenceTypes, searchOccurrences, type OccurrenceSummary, type OccurrenceType } from "../services/occurrences";
-import { parseReferences, receiveMaterial, registerRequest, type RegisterRequestInput } from "../services/requests";
+import { parseReferences, receiveMaterial, receiveRequestDocument, registerRequest, type RegisterRequestInput } from "../services/requests";
+import { extension } from "../extensions";
 import { addVestige, getCaseOrigins, type CaseOrigins, type ReportMode } from "../services/collections";
 import FileDropzone from "../components/common/FileDropzone";
-import { MATERIAL_FILES } from "../components/common/fileTypes";
+import { DOCUMENT_FILES, MATERIAL_FILES } from "../components/common/fileTypes";
 
 const inputClass =
   "h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90";
@@ -86,6 +87,10 @@ export default function RegisterRequest() {
   const [draft, setDraft] = useState<OccurrenceDraft>(emptyOccurrence);
   const [caseType, setCaseType] = useState("CIVIL");
   const [rows, setRows] = useState<CaseRow[]>([newRow(params.get("case") ?? "")]);
+  // The organization's own reference numbers (an ePol task), by label, and the request's own document.
+  const referenceFields = extension.requestReferences ?? [];
+  const [referenceValues, setReferenceValues] = useState<Record<string, string>>({});
+  const [documents, setDocuments] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
@@ -161,12 +166,18 @@ export default function RegisterRequest() {
     (r) => (r.task !== "" || formalizes(r)) && (r.existing ? r.caseId.trim() !== "" : r.description.trim() !== ""),
   );
   const occurrenceOK = mode === "none" || (mode === "lookup" && chosen !== null) || (mode === "create" && occurrenceReady(draft));
-  const ready = form.authority.trim() !== "" && form.documentReference.trim() !== "" && form.receivedOn !== "" && rowsReady && occurrenceOK;
+  // A request may go by an identifying reference alone (an ePol task) when its document has no number.
+  const identifying = referenceFields.find((f) => f.identifies && (referenceValues[f.label] ?? "").trim() !== "");
+  const documentOK = form.documentReference.trim() !== "" || identifying !== undefined;
+  const ready = form.authority.trim() !== "" && documentOK && form.receivedOn !== "" && rowsReady && occurrenceOK;
 
   // What stops the button, by name, so a disabled button is never a silent one.
   const missing: string[] = [];
   if (form.authority.trim() === "") missing.push(t("requests.authority"));
-  if (form.documentReference.trim() === "") missing.push(t("requests.documentReference"));
+  if (!documentOK) {
+    const names = referenceFields.filter((f) => f.identifies).map((f) => (f.name ? t(f.name) : f.label));
+    missing.push([t("requests.documentReference"), ...names].join(t("requests.or")));
+  }
   if (form.receivedOn === "") missing.push(t("requests.receivedOn"));
   if (mode === "lookup" && chosen === null) missing.push(t("requests.missingOccurrence"));
   if (mode === "create") {
@@ -188,7 +199,7 @@ export default function RegisterRequest() {
     try {
       const input: RegisterRequestInput = {
         authority: form.authority,
-        documentReference: form.documentReference,
+        documentReference: form.documentReference.trim() || (identifying ? `${identifying.label} ${referenceValues[identifying.label].trim()}` : ""),
         documentDate: form.documentDate || undefined,
         receivedOn: form.receivedOn,
         dueOn: form.dueOn || undefined,
@@ -196,7 +207,12 @@ export default function RegisterRequest() {
         citedInquiryNumber: form.citedInquiryNumber || undefined,
         notes: form.notes || undefined,
         questions: form.questions.split("\n").map((q) => q.trim()).filter(Boolean),
-        references: parseReferences(form.references),
+        references: [
+          ...referenceFields
+            .filter((f) => (referenceValues[f.label] ?? "").trim() !== "")
+            .map((f) => ({ label: f.label, number: referenceValues[f.label].trim() })),
+          ...parseReferences(form.references),
+        ],
         occurrenceId: mode === "lookup" ? chosen?.id : undefined,
         occurrence: mode === "create" ? occurrenceInput(draft, types) : undefined,
         caseType: mode === "none" ? caseType : undefined,
@@ -208,6 +224,17 @@ export default function RegisterRequest() {
       };
       const registered = await registerRequest(input);
       toast.success(t("requests.registered", { cases: registered.cases.map((c) => c.caseId).join(", ") }));
+
+      // The request's own document goes to every case it opened or joined: it is no evidence of any.
+      for (const caseId of new Set(registered.cases.map((c) => c.caseId))) {
+        for (const file of documents) {
+          try {
+            await receiveRequestDocument(caseId, registered.requestId, file);
+          } catch (err) {
+            toast.error(t("requests.documentError", { file: file.name, error: err instanceof Error ? err.message : String(err) }));
+          }
+        }
+      }
 
       // Each row's sealed items, then its files, go to the case it opened or joined (cases come back in
       // the rows' order).
@@ -249,12 +276,40 @@ export default function RegisterRequest() {
       <form onSubmit={submit} className="space-y-6">
         <ComponentCard title={t("requests.requestCard")} desc={t("requests.requestCardDesc")}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {referenceFields.map((f) => (
+              <div key={f.label}>
+                <Label htmlFor={`request-reference-${f.label}`} required={f.identifies && form.documentReference.trim() === ""}>
+                  {f.name ? t(f.name) : f.label}
+                </Label>
+                <input id={`request-reference-${f.label}`} className={inputClass} value={referenceValues[f.label] ?? ""} placeholder={f.placeholder}
+                  onChange={(e) => setReferenceValues({ ...referenceValues, [f.label]: e.target.value })} />
+              </div>
+            ))}
             {field("authority", "text", true)}
-            {field("documentReference", "text", true)}
+            {field("documentReference", "text", identifying === undefined)}
             {field("documentDate", "date")}
             {field("receivedOn", "date", true)}
             {field("dueOn", "date")}
             {field("notes")}
+          </div>
+          <div>
+            <Label htmlFor="request-document">{t("requests.document")}</Label>
+            <FileDropzone id="request-document" multiple variant="compact" accept={DOCUMENT_FILES}
+              onFiles={(files) => setDocuments([...documents, ...files])} />
+            {documents.length > 0 && (
+              <ul className="mt-2 divide-y divide-gray-100 text-sm dark:divide-white/[0.05]">
+                {documents.map((file, f) => (
+                  <li key={`${file.name}-${f}`} className="flex items-center justify-between gap-3 py-1.5 text-gray-700 dark:text-gray-300">
+                    <span className="truncate">{file.name}</span>
+                    <button type="button" className="shrink-0 text-error-500 hover:underline"
+                      onClick={() => setDocuments(documents.filter((_, j) => j !== f))}>
+                      {t("common.remove")}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">{t("requests.documentHint")}</p>
           </div>
           <div>
             <Label htmlFor="request-references">{t("requests.references")}</Label>

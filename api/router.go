@@ -159,6 +159,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	coordination.POST("cases/:caseId/requests", CreateCaseRequestHandler(deps.DB))
 	coordination.POST("cases/:caseId/requests/:requestId/files", AttachRequestFilesHandler(deps.DB))
 	coordination.POST("cases/:caseId/requests/:requestId/material", ReceiveMaterialHandler(deps.DB, deps.Storage, deps.Queue))
+	coordination.POST("cases/:caseId/requests/:requestId/document", ReceiveRequestDocumentHandler(deps.DB, deps.Storage))
 	// Scene collections, vestiges and seals (docs/scene-collection-plan.md): the coordinator's routes,
 	// which need no analysis of the case; whoever works the case has the same under cases/:caseId.
 	coordination.GET("collections/awaiting", ListAwaitingCollectionsHandler(deps.DB))
@@ -232,6 +233,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	oneCase.GET("requests", ListCaseRequestsHandler(deps.DB))
 	oneCase.GET("material", ListCaseMaterialHandler(deps.DB))
 	oneCase.GET("collections", ListCaseOriginsHandler(deps.DB))
+	oneCase.GET("request-documents/:fileId", RequestDocumentHandler(deps.DB, deps.Storage))
 	oneCase.GET("collection-notes/:fileId", CollectionNoteFileHandler(deps.DB, deps.Storage))
 	oneCase.POST("collections/:collectionId/material", ReceiveCollectionMaterialHandler(deps.DB, deps.Storage, deps.Queue))
 	oneCase.POST("vestiges", AddVestigeHandler(deps.DB))
