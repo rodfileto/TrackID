@@ -29,6 +29,21 @@ interface Props {
 // location. The address search runs on the button only: the public Nominatim
 // forbids search-as-you-type. An address that names no city is looked up in the
 // one the map shows. Each address says where it came from and what to check.
+function formatCoords(lon: number, lat: number): string {
+  return `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+}
+
+/** Reads "lat, lon" (or "lat lon", or "lat; lon" when the decimals use commas); null when it is not a point on Earth. */
+function parseCoords(text: string): { lon: number; lat: number } | null {
+  const t = text.trim();
+  let parts = t.split(/\s*;\s*/);
+  if (parts.length !== 2) parts = t.includes(".") || !t.includes(",") ? t.split(/\s*[,\s]\s*/) : t.split(/\s+/);
+  if (parts.length !== 2) return null;
+  const [lat, lon] = parts.map((p) => (/^[-+]?\d+([.,]\d+)?$/.test(p) ? Number(p.replace(",", ".")) : NaN));
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return { lon, lat };
+}
+
 export default function LocationPicker({ value, onChange }: Props) {
   const { t } = useTranslation();
   const container = useRef<HTMLDivElement>(null);
@@ -43,6 +58,9 @@ export default function LocationPicker({ value, onChange }: Props) {
   const [nearby, setNearby] = useState<NearbyLocation[]>([]);
   const [message, setMessage] = useState("");
   const [chosen, setChosen] = useState<GeocodeResult | null>(null);
+  // The coordinates field: typed text, kept in step with the point on the map.
+  const [coords, setCoords] = useState("");
+  const [coordsError, setCoordsError] = useState(false);
 
   // A point chosen on the map or from a search: reverse-geocode a click, then
   // look for existing locations around it.
@@ -57,6 +75,8 @@ export default function LocationPicker({ value, onChange }: Props) {
       geocodeFlags: from?.flags,
     };
     latest.current.onChange(base);
+    setCoords(formatCoords(lon, lat));
+    setCoordsError(false);
     setMessage("");
     setChosen(null);
     try {
@@ -72,7 +92,8 @@ export default function LocationPicker({ value, onChange }: Props) {
         });
       }
     } catch {
-      setMessage(t("occurrenceForm.geocoderUnavailable"));
+      // The point stands; only its address could not be found (often the countryside).
+      setMessage(t("occurrenceForm.noAddressForPoint"));
     }
     nearbyLocations(lon, lat).then(setNearby).catch(() => setNearby([]));
   }
@@ -103,6 +124,12 @@ export default function LocationPicker({ value, onChange }: Props) {
     // choosePoint reads the latest props through a ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep the coordinates field in step with a point set from outside (a reused location).
+  useEffect(() => {
+    if (value.lon !== undefined && value.lat !== undefined) setCoords(formatCoords(value.lon, value.lat));
+    else setCoords("");
+  }, [value.lon, value.lat]);
 
   // Keep the marker on the chosen point.
   useEffect(() => {
@@ -137,6 +164,18 @@ export default function LocationPicker({ value, onChange }: Props) {
     } finally {
       setSearching(false);
     }
+  }
+
+  // A point typed as "lat, lon" (decimal point or comma), for places with no address.
+  function applyCoords() {
+    const point = parseCoords(coords);
+    if (!point) {
+      setCoordsError(true);
+      return;
+    }
+    map.current?.flyTo({ center: [point.lon, point.lat], zoom: Math.max(map.current.getZoom(), 15) });
+    setResults(null);
+    choosePoint(point.lon, point.lat);
   }
 
   function pickResult(r: GeocodeResult) {
@@ -221,6 +260,38 @@ export default function LocationPicker({ value, onChange }: Props) {
           )}
         </p>
       )}
+
+      <div className="flex flex-col gap-1">
+        <div className="flex gap-2">
+          <input
+            className={inputClass}
+            value={coords}
+            inputMode="decimal"
+            onChange={(e) => {
+              setCoords(e.target.value);
+              setCoordsError(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                applyCoords();
+              }
+            }}
+            placeholder={t("occurrenceForm.coordsPlaceholder")}
+            aria-label={t("occurrenceForm.coords")}
+            aria-invalid={coordsError}
+          />
+          <button
+            type="button"
+            onClick={applyCoords}
+            disabled={!coords.trim()}
+            className="h-11 shrink-0 rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.03]"
+          >
+            {t("occurrenceForm.useCoords")}
+          </button>
+        </div>
+        {coordsError && <p className="text-theme-xs text-error-600 dark:text-error-400">{t("occurrenceForm.coordsInvalid")}</p>}
+      </div>
 
       <div
         ref={container}
