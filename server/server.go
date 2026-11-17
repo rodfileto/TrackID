@@ -170,10 +170,29 @@ func Run(options Options) error {
 	} else {
 		log.Printf("ASSIST_ENDPOINT not configured; the assist lab will not draft")
 	}
-	// The OCR model reads images and scanned PDFs sent with a request, for the draft.
+	// Images and scanned PDFs sent with a request are read for the draft: by Tesseract when it is
+	// installed, which takes a second a page, and by the OCR model for what it reads poorly.
 	var assistOCR assist.Reader
+	var ocrModel assist.Reader
 	if r, ok := configuration.Models.For(llm.OCR); ok {
-		assistOCR = assist.NewOCRClient(r.BaseURL, r.Model, r.APIKey, configuration.AssistTimeout)
+		ocrModel = assist.NewOCRClient(r.BaseURL, r.Model, r.APIKey, configuration.AssistTimeout)
+	}
+	tesseract, haveTesseract := assist.NewTesseract("por")
+	switch mode := configuration.AssistOCR; {
+	case mode == "model":
+		assistOCR = ocrModel
+	case mode == "tesseract" && haveTesseract:
+		assistOCR = assist.Layered{First: tesseract}
+	case mode == "tesseract":
+		log.Printf("ASSIST_OCR=tesseract but the tesseract command is not installed; images will not be read")
+	case haveTesseract:
+		layered := assist.Layered{First: tesseract}
+		if ocrModel != nil {
+			layered.Then = ocrModel
+		}
+		assistOCR = layered
+	default:
+		assistOCR = ocrModel
 	}
 
 	// The AI mode's model. A configuration that makes no sense leaves it off, and says so, rather

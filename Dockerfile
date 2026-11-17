@@ -49,7 +49,7 @@ FROM debian:${DEBIAN_VERSION}-slim
 # built today carries them (the image scan in .github/workflows/images.yml fails on fixable ones).
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
-    && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg tzdata \
+    && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg tzdata tesseract-ocr tesseract-ocr-por poppler-utils \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --user-group --home-dir /app --no-create-home trackid
 

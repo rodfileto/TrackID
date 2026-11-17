@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/jpeg"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -52,6 +53,9 @@ func NewOCRClient(endpoint, model, apiKey string, timeout time.Duration) *OCRCli
 // several times that, which costs tokens and time and reads no better.
 const ocrMaxSide = 2200
 
+// ocrMaxTokens bounds the text read from one image: about two dense pages.
+const ocrMaxTokens = 4096
+
 // ocrPrompt is PaddleOCR-VL's task prompt for plain text recognition.
 const ocrPrompt = "OCR:"
 
@@ -61,9 +65,18 @@ func (c *OCRClient) Read(ctx context.Context, img []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	start := time.Now()
+	defer func() {
+		log.Printf("assist: OCR of a %d KB image (sent %d KB) took %s", len(img)>>10, len(jpg)>>10, time.Since(start).Round(100*time.Millisecond))
+	}()
 	body := map[string]any{
 		"model":       c.model,
 		"temperature": 0,
+		// A page of an ofício is under 2000 tokens. The cap stops a model that starts repeating
+		// itself, which otherwise writes until the server's limit and takes minutes.
+		"max_tokens": ocrMaxTokens,
+		// vLLM's sampling option against those loops; servers that do not know it ignore it.
+		"repetition_penalty": 1.05,
 		"messages": []map[string]any{{
 			"role": "user",
 			"content": []map[string]any{

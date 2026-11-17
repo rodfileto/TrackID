@@ -195,6 +195,17 @@ const questionsGuide = "\"questions\" is the most important field: what the expe
 	"Never make up quesitos beyond that, and never leave \"questions\" out when a document says what it asks for. " +
 	"The ask is also what tells you each case's task and description.\n\n"
 
+// authorityGuide keeps the requesting authority, a person, apart from the unit they sign for: the
+// model otherwise takes the unit's acronym path, the most visible line of a header or an ePol task.
+const authorityGuide = "\"authority\" is the person who requests the exam, not their unit. Take the title and name of whoever signs or " +
+	"requests (\"Delegado de Polícia Federal\", \"Delegada de Polícia\", \"Promotor de Justiça\", \"Juiz de Direito\", a solicitante in an ePol task), " +
+	"e.g. \"Delegado de Polícia Federal João da Silva\". " +
+	"In an ePol task the authority is the \"Delegado\" field (\"DPF FULANO\" means Delegado de Polícia Federal FULANO); " +
+	"the \"Servidor\" field (EPF, APF, AGF) is the clerk who handled the task, never the authority. " +
+	"A line of acronyms separated by slashes, such as DELEFAZ/DRPJ/SR/PF/MG, or a name like \"37ª Delegacia de Polícia\", is a unit: " +
+	"never put it in \"authority\" when a person is named; write it in \"notes\" as \"Unidade requisitante: DELEFAZ/DRPJ/SR/PF/MG\". " +
+	"Only when no person is named, put the unit in \"authority\" and list \"authority\" in \"unsure\".\n\n"
+
 // systemPrompt tells the model what a request, an occurrence and a case are, in the vocabulary of
 // the registration it is filling, and fixes the exact JSON it must return. The documents are
 // Brazilian ofícios, so the values it extracts are Portuguese, but the shape is this schema.
@@ -204,7 +215,7 @@ func systemPrompt(occurrenceTypes []string) string {
 	b.WriteString("The documents are Brazilian Portuguese ofícios; extract the fields below from their text. ")
 	b.WriteString("Return a single JSON object, nothing else, with this shape (the layout below is only to explain it):\n\n")
 	b.WriteString("{\n")
-	b.WriteString("  \"authority\": \"who asks, e.g. 37ª Delegacia de Polícia\",\n")
+	b.WriteString("  \"authority\": \"the person who asks: title and name, e.g. Delegado de Polícia Federal João da Silva (see below)\",\n")
 	b.WriteString("  \"documentReference\": \"the request's own number, e.g. Ofício nº 123/2026\",\n")
 	b.WriteString("  \"documentDate\": \"YYYY-MM-DD or empty\",\n")
 	b.WriteString("  \"receivedOn\": \"YYYY-MM-DD or empty\",\n")
@@ -250,6 +261,7 @@ func systemPrompt(occurrenceTypes []string) string {
 	b.WriteString("  \"reasoning\": \"a short note on what you found and did not find\"\n")
 	b.WriteString("}\n\n")
 	b.WriteString(questionsGuide)
+	b.WriteString(authorityGuide)
 	if len(referenceLabels) > 0 {
 		b.WriteString("A request often arrives as a task in the institute's own system rather than as an ofício: ")
 		b.WriteString("put such numbers in \"references\" with exactly one of the labels above, and when there is no ofício, ")

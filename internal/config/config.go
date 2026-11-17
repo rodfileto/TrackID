@@ -73,6 +73,10 @@ type Config struct {
 	// AssistTimeout bounds one draft (ASSIST_TIMEOUT, a Go duration such as "5m"); zero means
 	// assist.DefaultTimeout.
 	AssistTimeout time.Duration
+	// AssistOCR picks how images sent with a request are read (ASSIST_OCR): "auto", the default,
+	// is Tesseract when installed and the OCR model for pages it reads poorly; "tesseract" and
+	// "model" use one alone.
+	AssistOCR string
 
 	// AskTimeout bounds one AI mode question (ASK_TIMEOUT); zero means ask.DefaultTimeout.
 	AskTimeout time.Duration
@@ -183,6 +187,7 @@ func Load() Config {
 		AssistAPIKey:   os.Getenv("ASSIST_API_KEY"),
 		AssistInternal: os.Getenv("ASSIST_INTERNAL") == "true",
 		AssistTimeout:  assistTimeout,
+		AssistOCR:      os.Getenv("ASSIST_OCR"),
 
 		AskTimeout: askTimeout,
 	}
