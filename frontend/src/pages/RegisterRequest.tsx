@@ -11,6 +11,7 @@ import OccurrenceFields from "../components/intelligence/OccurrenceFields";
 import {
   emptyOccurrence,
   occurrenceInput,
+  occurrenceMissing,
   occurrenceReady,
   type OccurrenceDraft,
 } from "../components/intelligence/occurrenceDraft";
@@ -95,7 +96,7 @@ export default function RegisterRequest() {
 
   const field = (key: keyof typeof form, type = "text", required = false) => (
     <div>
-      <Label htmlFor={`request-${key}`}>{t(`requests.${key}`)}</Label>
+      <Label htmlFor={`request-${key}`} required={required}>{t(`requests.${key}`)}</Label>
       <input id={`request-${key}`} type={type} required={required} className={inputClass} value={form[key]}
         onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
     </div>
@@ -161,6 +162,24 @@ export default function RegisterRequest() {
   );
   const occurrenceOK = mode === "none" || (mode === "lookup" && chosen !== null) || (mode === "create" && occurrenceReady(draft));
   const ready = form.authority.trim() !== "" && form.documentReference.trim() !== "" && form.receivedOn !== "" && rowsReady && occurrenceOK;
+
+  // What stops the button, by name, so a disabled button is never a silent one.
+  const missing: string[] = [];
+  if (form.authority.trim() === "") missing.push(t("requests.authority"));
+  if (form.documentReference.trim() === "") missing.push(t("requests.documentReference"));
+  if (form.receivedOn === "") missing.push(t("requests.receivedOn"));
+  if (mode === "lookup" && chosen === null) missing.push(t("requests.missingOccurrence"));
+  if (mode === "create") {
+    for (const m of occurrenceMissing(draft)) {
+      missing.push(m === "types" ? t("occurrenceForm.missingTypes") : t("occurrenceForm.description"));
+    }
+  }
+  rows.forEach((r, i) => {
+    const label = t("requests.caseN", { n: i + 1 });
+    if (r.task === "" && !formalizes(r)) missing.push(`${label}: ${t("requests.task")}`);
+    if (r.existing && r.caseId.trim() === "") missing.push(`${label}: ${t("requests.caseId")}`);
+    if (!r.existing && r.description.trim() === "") missing.push(`${label}: ${t("cases.columns.description")}`);
+  });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -330,19 +349,19 @@ export default function RegisterRequest() {
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div>
-                  <Label htmlFor={`case-task-${i}`}>{t("requests.task")}</Label>
+                  <Label htmlFor={`case-task-${i}`} required={!formalizes(row)}>{t("requests.task")}</Label>
                   <TaskSelect id={`case-task-${i}`} className={inputClass} value={row.task} optional={formalizes(row)}
                     onChange={(task) => setRow(i, { task })} />
                 </div>
                 {row.existing ? (
                   <div>
-                    <Label htmlFor={`case-id-${i}`}>{t("requests.caseId")}</Label>
+                    <Label htmlFor={`case-id-${i}`} required>{t("requests.caseId")}</Label>
                     <input id={`case-id-${i}`} className={inputClass} value={row.caseId} onChange={(e) => setRow(i, { caseId: e.target.value })} />
                   </div>
                 ) : (
                   <>
                     <div>
-                      <Label htmlFor={`case-description-${i}`}>{t("cases.columns.description")}</Label>
+                      <Label htmlFor={`case-description-${i}`} required>{t("cases.columns.description")}</Label>
                       <input id={`case-description-${i}`} className={inputClass} value={row.description}
                         placeholder={t("requests.descriptionPlaceholder")} onChange={(e) => setRow(i, { description: e.target.value })} />
                     </div>
@@ -433,6 +452,15 @@ export default function RegisterRequest() {
           </div>
         </ComponentCard>
 
+        {missing.length > 0 && (
+          <div className="rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-700 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-400" role="status">
+            <p className="font-medium">{t("requests.missingTitle")}</p>
+            <ul className="mt-1 list-inside list-disc">
+              {missing.map((m) => <li key={m}>{m}</li>)}
+            </ul>
+          </div>
+        )}
+        <p className="text-theme-xs text-gray-500 dark:text-gray-400"><span className="text-error-500">*</span> {t("common.requiredLegend")}</p>
         {error && <p className="text-sm text-error-500" role="alert">{error}</p>}
         {progress && <p className="text-sm text-gray-500 dark:text-gray-400">{progress}</p>}
         <div className="flex items-center justify-end gap-3">

@@ -10,6 +10,7 @@
     }
   },
   "common": {
+    "requiredLegend": "mandatory field",
     "logo": "Logo",
     "user": "User",
     "loading": "Loading...",
@@ -699,6 +700,8 @@
     "JURISDICTION": "The investigating unit's municipality"
   },
   "occurrenceForm": {
+    "typesRequired": "* Select at least one type.",
+    "missingTypes": "Occurrence: at least one type",
     "title": "New occurrence",
     "metaDescription": "Register an occurrence: what, when and where",
     "whatTitle": "What happened",
@@ -1029,6 +1032,9 @@
     "indirect": "Indirect link"
   },
   "requests": {
+    "missingOccurrence": "Occurrence: pick one of the results, register a new one, or say there is none",
+    "caseN": "Case {{n}}",
+    "missingTitle": "To register, still missing:",
     "references": "Other references, one per line (e.g. Process: 123/2026)",
     "searchReference": "Search by reference number",
     "search": "Search",

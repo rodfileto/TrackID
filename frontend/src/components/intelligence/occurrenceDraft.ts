@@ -59,5 +59,13 @@ export function occurrenceInput(d: OccurrenceDraft, types: OccurrenceType[]): Cr
 /** Whether the draft has what an occurrence requires: a type and a description. When and where may
  * not be known yet. */
 export function occurrenceReady(d: OccurrenceDraft): boolean {
-  return d.chosen.length > 0 && d.description.trim() !== "";
+  return occurrenceMissing(d).length === 0;
+}
+
+/** What the draft still lacks of what an occurrence requires. */
+export function occurrenceMissing(d: OccurrenceDraft): ("types" | "description")[] {
+  const missing: ("types" | "description")[] = [];
+  if (d.chosen.length === 0) missing.push("types");
+  if (d.description.trim() === "") missing.push("description");
+  return missing;
 }

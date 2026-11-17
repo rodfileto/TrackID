@@ -10,6 +10,7 @@
     }
   },
   "common": {
+    "requiredLegend": "campo obrigatório",
     "logo": "Logotipo",
     "user": "Usuário",
     "loading": "Carregando...",
@@ -699,6 +700,8 @@
     "JURISDICTION": "Município da unidade que investiga"
   },
   "occurrenceForm": {
+    "typesRequired": "* Selecione ao menos um tipo.",
+    "missingTypes": "Ocorrência: ao menos um tipo",
     "title": "Nova ocorrência",
     "metaDescription": "Registrar uma ocorrência: o quê, quando e onde",
     "whatTitle": "O que aconteceu",
@@ -1029,6 +1032,9 @@
     "indirect": "Vínculo indireto"
   },
   "requests": {
+    "missingOccurrence": "Ocorrência: escolha um resultado, cadastre uma nova ou informe que não há",
+    "caseN": "Caso {{n}}",
+    "missingTitle": "Para registrar, ainda falta:",
     "references": "Outras referências, uma por linha (ex.: Tarefa E-POL: 1234567/2026-1)",
     "searchReference": "Buscar por número de referência",
     "search": "Buscar",

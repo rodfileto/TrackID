@@ -71,6 +71,9 @@ export default function OccurrenceFields({
               );
             })}
           </div>
+          <p className={`text-theme-xs ${value.chosen.length === 0 ? "text-error-500" : "text-gray-500 dark:text-gray-400"}`}>
+            {t("occurrenceForm.typesRequired")}
+          </p>
           {nature && (
             <p className="text-theme-xs text-gray-500 dark:text-gray-400">
               {t(civil ? "occurrenceForm.natureCivil" : "occurrenceForm.natureCriminal")}
@@ -178,7 +181,7 @@ export default function OccurrenceFields({
             )}
           </div>
           <div>
-            <Label htmlFor="description">{t("occurrenceForm.description")}</Label>
+            <Label htmlFor="description" required>{t("occurrenceForm.description")}</Label>
             <textarea id="description" rows={4} required value={value.description} onChange={(e) => set({ description: e.target.value })}
               className="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" />
           </div>
