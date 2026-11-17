@@ -179,6 +179,22 @@ type chatResponse struct {
 	} `json:"error"`
 }
 
+// questionsGuide tells the model how to find what a request asks. The quesitos are what the laudo
+// answers, so they matter most, and they come in many forms: a headed list, a list after a phrase,
+// imperatives rather than questions, or no list at all, only the sentence that asks for the exam.
+const questionsGuide = "\"questions\" is the most important field: what the expert must answer in the report. Find it this way:\n" +
+	"1. Look for the quesitos: a section headed QUESITOS, QUESITAÇÃO or similar, or a list after a phrase such as " +
+	"\"responder aos seguintes quesitos\", \"solicita-se responder\", \"queira o perito responder\" or \"quesitos a serem respondidos\". " +
+	"Each numbered or lettered item (1., 1), 1º, I -, a)) is one question: copy it as written, without its number or letter, in order. " +
+	"Join an item that wraps across lines or pages into one; give each sub-item (a, b, c) as its own question, after its parent's text. " +
+	"A quesito may be a question (\"Há convergência...?\") or an order (\"Informar se...\", \"Esclarecer...\", \"Descrever...\"): both count.\n" +
+	"2. Quesitos may be in any of the documents, often at the end or in an annex (\"conforme quesitos anexos\"): read them all.\n" +
+	"3. If there are no listed quesitos, the request still asks for something: the sentence that says which exam is wanted and on what " +
+	"(\"solicito a realização de exame de comparação facial entre as imagens ... e a fotografia de ...\"), or an ePol task's description or objective. " +
+	"Give that ask as a single question, copied as written and trimmed to the ask itself, and list \"questions\" in \"unsure\".\n" +
+	"Never make up quesitos beyond that, and never leave \"questions\" out when a document says what it asks for. " +
+	"The ask is also what tells you each case's task and description.\n\n"
+
 // systemPrompt tells the model what a request, an occurrence and a case are, in the vocabulary of
 // the registration it is filling, and fixes the exact JSON it must return. The documents are
 // Brazilian ofícios, so the values it extracts are Portuguese, but the shape is this schema.
@@ -196,7 +212,7 @@ func systemPrompt(occurrenceTypes []string) string {
 	b.WriteString("  \"citedReference\": \"the occurrence (boletim) number it cites, or empty\",\n")
 	b.WriteString("  \"citedInquiryNumber\": \"the inquiry (inquérito/IPL) number it cites, or empty\",\n")
 	b.WriteString("  \"notes\": \"anything else worth keeping, or empty\",\n")
-	b.WriteString("  \"questions\": [\"the quesitos, in order\"],\n")
+	b.WriteString("  \"questions\": [\"the quesitos, one per item, in order (see below)\"],\n")
 	if labels := referenceLabels; len(labels) > 0 {
 		b.WriteString("  \"references\": [{\"label\": \"one of: " + strings.Join(labels, ", ") + "\", \"number\": \"the number as written\"}],\n")
 	}
@@ -233,6 +249,7 @@ func systemPrompt(occurrenceTypes []string) string {
 	b.WriteString("  \"unsure\": [\"the fields you are not confident about, by name\"],\n")
 	b.WriteString("  \"reasoning\": \"a short note on what you found and did not find\"\n")
 	b.WriteString("}\n\n")
+	b.WriteString(questionsGuide)
 	if len(referenceLabels) > 0 {
 		b.WriteString("A request often arrives as a task in the institute's own system rather than as an ofício: ")
 		b.WriteString("put such numbers in \"references\" with exactly one of the labels above, and when there is no ofício, ")
