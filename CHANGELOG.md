@@ -60,6 +60,9 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- **Panel-only operations.** `Extension.panelOnlyOperations` lists the slugs of operations whose page shows only
+  their panel, without the card with the operation's name, status, description and edit button.
+
 - **Permanent operations.** `Extension.permanentOperations` lists the slugs of operations that never close, such as a
   standing line of work; their page offers no "close". Hiding the button only keeps the page from offering it: a
   deployment that must forbid closing guards it in the database.

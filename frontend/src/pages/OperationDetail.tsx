@@ -61,6 +61,8 @@ export default function OperationDetail() {
   const panel = extension.operationPanels?.[slug];
   // A permanent operation is never closed, so the page doesn't offer it; reopening stays for one closed before.
   const permanent = extension.permanentOperations?.includes(slug) ?? false;
+  // A panel-only operation's page is its panel: no card with its details and edit button.
+  const panelOnly = Boolean(panel) && (extension.panelOnlyOperations?.includes(slug) ?? false);
 
   return (
     <>
@@ -74,61 +76,63 @@ export default function OperationDetail() {
       {error && <p className="mb-4 text-sm text-error-500">{error}</p>}
       {operation && (
         <div className="space-y-6">
-          <ComponentCard title={operation.name} desc={operation.slug}>
-            {editing ? (
-              <div className="space-y-4">
-                <label className="block text-sm text-gray-700 dark:text-gray-300">
-                  {t("operations.name")}
-                  <input className={`mt-1 ${operationInputClass}`} value={name} onChange={(e) => setName(e.target.value)} maxLength={200} />
-                </label>
-                <label className="block text-sm text-gray-700 dark:text-gray-300">
-                  {t("operations.description")}
-                  <textarea className={`mt-1 ${operationInputClass}`} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-                </label>
-                <div className="flex gap-2">
-                  <Button size="sm" disabled={busy || !name.trim()} onClick={() => save({ name, description })}>
-                    {t("operations.save")}
-                  </Button>
-                  <Button size="sm" variant="outline" disabled={busy} onClick={() => setEditing(false)}>
-                    {t("operations.cancel")}
-                  </Button>
+          {!panelOnly && (
+            <ComponentCard title={operation.name} desc={operation.slug}>
+              {editing ? (
+                <div className="space-y-4">
+                  <label className="block text-sm text-gray-700 dark:text-gray-300">
+                    {t("operations.name")}
+                    <input className={`mt-1 ${operationInputClass}`} value={name} onChange={(e) => setName(e.target.value)} maxLength={200} />
+                  </label>
+                  <label className="block text-sm text-gray-700 dark:text-gray-300">
+                    {t("operations.description")}
+                    <textarea className={`mt-1 ${operationInputClass}`} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+                  </label>
+                  <div className="flex gap-2">
+                    <Button size="sm" disabled={busy || !name.trim()} onClick={() => save({ name, description })}>
+                      {t("operations.save")}
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => setEditing(false)}>
+                      {t("operations.cancel")}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <Badge size="sm" color={operation.status === "ACTIVE" ? "success" : "light"}>
-                  {t(`operations.status.${operation.status}`)}
-                </Badge>
-                {operation.description && (
-                  <p className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">{operation.description}</p>
-                )}
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => {
-                      setName(operation.name);
-                      setDescription(operation.description);
-                      setEditing(true);
-                    }}
-                  >
-                    {t("operations.edit")}
-                  </Button>
-                  {!(permanent && operation.status === "ACTIVE") && (
+              ) : (
+                <div className="space-y-4">
+                  <Badge size="sm" color={operation.status === "ACTIVE" ? "success" : "light"}>
+                    {t(`operations.status.${operation.status}`)}
+                  </Badge>
+                  {operation.description && (
+                    <p className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">{operation.description}</p>
+                  )}
+                  <div className="flex gap-2">
                     <Button
                       size="sm"
                       variant="outline"
                       disabled={busy}
-                      onClick={() => save({ status: operation.status === "ACTIVE" ? "CLOSED" : "ACTIVE" })}
+                      onClick={() => {
+                        setName(operation.name);
+                        setDescription(operation.description);
+                        setEditing(true);
+                      }}
                     >
-                      {operation.status === "ACTIVE" ? t("operations.close") : t("operations.reopen")}
+                      {t("operations.edit")}
                     </Button>
-                  )}
+                    {!(permanent && operation.status === "ACTIVE") && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => save({ status: operation.status === "ACTIVE" ? "CLOSED" : "ACTIVE" })}
+                      >
+                        {operation.status === "ACTIVE" ? t("operations.close") : t("operations.reopen")}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </ComponentCard>
+              )}
+            </ComponentCard>
+          )}
           {panel}
         </div>
       )}

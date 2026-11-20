@@ -41,6 +41,11 @@ export interface Extension {
    */
   permanentOperations?: string[];
   /**
+   * Slugs of operations whose page shows only their panel, without the card with the operation's name, status,
+   * description and edit button: for a deployment whose panel is the operation's whole page.
+   */
+  panelOnlyOperations?: string[];
+  /**
    * Panels on a case's, a person's and a cluster's page, in this order, for intelligence analysts only.
    * Hiding them only keeps the page from offering what the server would refuse: a panel's routes must be
    * guarded themselves (api.RequireIntelligence), and it must show nothing when refused, as it will be for
