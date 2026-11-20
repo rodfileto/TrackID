@@ -36,6 +36,11 @@ export interface Extension {
   /** A panel on an intelligence operation's page, by the operation's slug. */
   operationPanels?: Record<string, ReactNode>;
   /**
+   * Slugs of operations that never close, such as a standing line of work: their page offers no "close". Hiding the
+   * button only keeps the page from offering it; a deployment that must forbid closing guards it in the database.
+   */
+  permanentOperations?: string[];
+  /**
    * Panels on a case's, a person's and a cluster's page, in this order, for intelligence analysts only.
    * Hiding them only keeps the page from offering what the server would refuse: a panel's routes must be
    * guarded themselves (api.RequireIntelligence), and it must show nothing when refused, as it will be for

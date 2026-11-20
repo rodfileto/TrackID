@@ -60,6 +60,10 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- **Permanent operations.** `Extension.permanentOperations` lists the slugs of operations that never close, such as a
+  standing line of work; their page offers no "close". Hiding the button only keeps the page from offering it: a
+  deployment that must forbid closing guards it in the database.
+
 - **A page can ask for a wider layout.** `useWideLayout()` (`context/LayoutWidthContext.tsx`) widens the
   signed-in layout's content from 2xl (1536px) to 3xl (2000px) while the calling component is shown, for a page or an
   extension's panel that places more side by side on large screens. Every other page keeps the 2xl width.

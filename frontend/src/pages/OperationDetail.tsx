@@ -59,6 +59,8 @@ export default function OperationDetail() {
   }
 
   const panel = extension.operationPanels?.[slug];
+  // A permanent operation is never closed, so the page doesn't offer it; reopening stays for one closed before.
+  const permanent = extension.permanentOperations?.includes(slug) ?? false;
 
   return (
     <>
@@ -113,14 +115,16 @@ export default function OperationDetail() {
                   >
                     {t("operations.edit")}
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => save({ status: operation.status === "ACTIVE" ? "CLOSED" : "ACTIVE" })}
-                  >
-                    {operation.status === "ACTIVE" ? t("operations.close") : t("operations.reopen")}
-                  </Button>
+                  {!(permanent && operation.status === "ACTIVE") && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => save({ status: operation.status === "ACTIVE" ? "CLOSED" : "ACTIVE" })}
+                    >
+                      {operation.status === "ACTIVE" ? t("operations.close") : t("operations.reopen")}
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
