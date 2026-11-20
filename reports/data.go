@@ -635,7 +635,7 @@ func reviewLeads(ctx context.Context, q *db.Queries, records []examination.Recor
 			if row.FeatureID == r.FeatureA && row.CounterpartID == r.FeatureB && row.Role != string(cluster.RoleSystem) &&
 				row.AnalysisType.String == string(analyses.FacialReview) {
 				chain = append(chain, cluster.ChainEntry{Role: cluster.Role(row.Role), Decision: cluster.Decision(row.Decision),
-					Analysis: row.CaseAnalysisID.Int64, AnalysisType: row.AnalysisType.String})
+					Analysis: row.CaseAnalysisID.Int64, AnalysisType: row.AnalysisType.String, Source: row.SystemSource.String})
 			}
 		}
 		if _, status, ok := cluster.DecidingRound(chain); ok {

@@ -228,3 +228,34 @@ func TestReviewed(t *testing.T) {
 		}
 	}
 }
+
+// Several systems on one pair: each one's latest decision counts, and they must agree.
+func TestDeriveEdgeStatusSeveralSystems(t *testing.T) {
+	const matcher, verifier = "FACE_AURAFACE_512", "findface-verify"
+	system := func(source string, d Decision) ChainEntry {
+		return ChainEntry{Role: RoleSystem, Decision: d, Source: source}
+	}
+	for _, tc := range []struct {
+		name  string
+		chain []ChainEntry
+		want  EdgeStatus
+	}{
+		{"both positive confirm", []ChainEntry{system(matcher, DecisionPositive), system(verifier, DecisionPositive)}, EdgeStatusConfirmed},
+		{"a second system's negative rejects a match", []ChainEntry{system(matcher, DecisionPositive), system(verifier, DecisionNegative)}, EdgeStatusRejected},
+		{"a second system's inconclusive holds a match back", []ChainEntry{system(matcher, DecisionPositive), system(verifier, DecisionInconclusive)}, EdgeStatusPendingReview},
+		{"a second system can't confirm what the matcher left pending", []ChainEntry{system(matcher, DecisionInconclusive), system(verifier, DecisionPositive)}, EdgeStatusPendingReview},
+		{"each system's latest decision counts", []ChainEntry{system(matcher, DecisionInconclusive), system(verifier, DecisionNegative), system(matcher, DecisionPositive), system(verifier, DecisionPositive)}, EdgeStatusConfirmed},
+		{"one system's decisions, the latest wins, as before", []ChainEntry{system(matcher, DecisionInconclusive), system(matcher, DecisionPositive)}, EdgeStatusConfirmed},
+		{"entries without a source are one system", []ChainEntry{{Role: RoleSystem, Decision: DecisionPositive}, {Role: RoleSystem, Decision: DecisionNegative}}, EdgeStatusRejected},
+		{"people still settle it over the systems", []ChainEntry{system(matcher, DecisionPositive), system(verifier, DecisionNegative),
+			{Role: RoleVerificator, Decision: DecisionPositive}, {Role: RoleReviewer, Decision: DecisionPositive}}, EdgeStatusConfirmed},
+	} {
+		if got, ok := DeriveEdgeStatus(tc.chain); !ok || got != tc.want {
+			t.Errorf("%s: got %s, want %s", tc.name, got, tc.want)
+		}
+	}
+	// A pair a second system rejected isn't confirmed by the systems, so it builds no cluster.
+	if Reviewed([]ChainEntry{system(matcher, DecisionPositive), system(verifier, DecisionPositive)}) {
+		t.Error("systems alone made a pair reviewed")
+	}
+}

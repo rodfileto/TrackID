@@ -320,7 +320,7 @@ func chainEntries(chain []db.ListBiometricDecisionsForFeaturesRow) []cluster.Cha
 	entries := make([]cluster.ChainEntry, len(chain))
 	for i, r := range chain {
 		entries[i] = cluster.ChainEntry{Role: cluster.Role(r.Role), Decision: cluster.Decision(r.Decision), Analysis: r.CaseAnalysisID.Int64,
-			AnalysisType: r.AnalysisType.String, Conclusion: cluster.Conclusion(r.Conclusion.String)}
+			AnalysisType: r.AnalysisType.String, Conclusion: cluster.Conclusion(r.Conclusion.String), Source: r.SystemSource.String}
 	}
 	return entries
 }

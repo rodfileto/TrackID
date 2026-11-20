@@ -278,7 +278,8 @@ func linkMembers(ctx context.Context, q *db.Queries, memberRows []db.ListCluster
 		}
 		k := [2]string{r.FeatureID, r.CounterpartID}
 		chains[k] = append(chains[k], cluster.ChainEntry{Role: cluster.Role(r.Role), Decision: cluster.Decision(r.Decision),
-			Analysis: r.CaseAnalysisID.Int64, AnalysisType: r.AnalysisType.String, Conclusion: cluster.Conclusion(r.Conclusion.String)})
+			Analysis: r.CaseAnalysisID.Int64, AnalysisType: r.AnalysisType.String, Conclusion: cluster.Conclusion(r.Conclusion.String),
+			Source: r.SystemSource.String})
 	}
 	strength := func(l cluster.Link) int {
 		switch {

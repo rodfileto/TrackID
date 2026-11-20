@@ -52,6 +52,9 @@ type ChainEntry struct {
 	AnalysisType string
 	// Conclusion is a comparison's level for the pair (Conclusion), empty elsewhere.
 	Conclusion Conclusion
+	// Source is the system that made a SYSTEM decision (biometric_decisions.system_source): the matcher, or another
+	// system that checked the pair, such as a deployment's own face verifier. Empty elsewhere.
+	Source string
 }
 
 // Counts reports whether e is part of round's chain: a SYSTEM decision, which counts in every
@@ -149,7 +152,10 @@ func DecidingRoundBy(chain []ChainEntry) (round int64, status EdgeStatus, settle
 //     comparison (the laudo states one level).
 //   - VERIFICATOR alone is always PENDING_REVIEW.
 //   - SYSTEM alone is CONFIRMED for a POSITIVE score, PENDING_REVIEW for
-//     INCONCLUSIVE, or REJECTED for an explicit NEGATIVE.
+//     INCONCLUSIVE, or REJECTED for an explicit NEGATIVE. When several systems decided the
+//     pair (Source), each one's latest decision counts and they must agree: any NEGATIVE
+//     rejects, else any INCONCLUSIVE leaves it pending, and only all POSITIVE confirms. A
+//     second system can so hold back or undo a match, never confirm one alone.
 func deriveRound(chain []ChainEntry) (status EdgeStatus, ok bool) {
 	status, _, ok = deriveRoundBy(chain)
 	return status, ok
@@ -159,12 +165,13 @@ func deriveRound(chain []ChainEntry) (status EdgeStatus, ok bool) {
 // INCONSISTENCE, REVIEWER (for a VERIFICATOR/REVIEWER pair), VERIFICATOR (alone, always pending)
 // or SYSTEM.
 func deriveRoundBy(chain []ChainEntry) (status EdgeStatus, settledBy Role, ok bool) {
-	var system, verificator, reviewer, inconsistence *Decision
+	var verificator, reviewer, inconsistence *Decision
 	var verificatorLevel, reviewerLevel Conclusion
+	systems := map[string]Decision{} // each system's latest decision; the chain is in decision order
 	for i := range chain {
 		switch chain[i].Role {
 		case RoleSystem:
-			system = &chain[i].Decision
+			systems[chain[i].Source] = chain[i].Decision
 		case RoleVerificator:
 			verificator = &chain[i].Decision
 			verificatorLevel = chain[i].Conclusion
@@ -189,10 +196,25 @@ func deriveRoundBy(chain []ChainEntry) (status EdgeStatus, settledBy Role, ok bo
 	if verificator != nil {
 		return EdgeStatusPendingReview, RoleVerificator, true
 	}
-	if system != nil {
-		return decisionOutcome(*system, EdgeStatusPendingReview), RoleSystem, true
+	if len(systems) > 0 {
+		return decisionOutcome(agreement(systems), EdgeStatusPendingReview), RoleSystem, true
 	}
 	return "", "", false
+}
+
+// agreement is what several systems' decisions on a pair come to: NEGATIVE if any says so, else INCONCLUSIVE if
+// any is, else POSITIVE.
+func agreement(systems map[string]Decision) Decision {
+	result := DecisionPositive
+	for _, d := range systems {
+		switch d {
+		case DecisionNegative:
+			return DecisionNegative
+		case DecisionInconclusive:
+			result = DecisionInconclusive
+		}
+	}
+	return result
 }
 
 func decisionOutcome(d Decision, inconclusive EdgeStatus) EdgeStatus {
@@ -241,7 +263,7 @@ func loadConfirmedPairs(ctx context.Context, sqlDB *sql.DB) ([]confirmedPair, er
 		chain := make([]ChainEntry, len(rowsForPair))
 		for i, r := range rowsForPair {
 			chain[i] = ChainEntry{Role: Role(r.Role), Decision: Decision(r.Decision), Analysis: r.CaseAnalysisID.Int64,
-				AnalysisType: r.AnalysisType.String, Conclusion: Conclusion(r.Conclusion.String)}
+				AnalysisType: r.AnalysisType.String, Conclusion: Conclusion(r.Conclusion.String), Source: r.SystemSource.String}
 		}
 		if _, status, ok := DecidingRound(chain); !ok || status != EdgeStatusConfirmed {
 			continue

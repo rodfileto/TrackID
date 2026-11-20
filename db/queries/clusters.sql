@@ -156,7 +156,7 @@ ORDER BY k.cluster_id, k.person_number, k.feature_id;
 -- name: ListDecisionsBetweenFeatures :many
 -- Every decision comparing two of the given features directly, oldest first.
 SELECT bd.feature_a_id, bd.feature_b_id, bd.role, bd.decision, bd.confidence, bd.threshold,
-    bd.case_analysis_id, ca.analysis_type, bd.conclusion
+    bd.case_analysis_id, ca.analysis_type, bd.conclusion, bd.system_source
 FROM biometric_decisions bd
 LEFT JOIN case_analyses ca ON ca.id = bd.case_analysis_id
 WHERE bd.feature_a_id = ANY(@feature_ids::text[]) AND bd.feature_b_id = ANY(@feature_ids::text[])

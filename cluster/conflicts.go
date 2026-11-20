@@ -222,7 +222,7 @@ func ListConflicts(ctx context.Context, sqlDB *sql.DB) ([]Conflict, error) {
 			c.chains[k] = chain
 		}
 		chain.entries = append(chain.entries, ChainEntry{Role: Role(d.Role), Decision: Decision(d.Decision), Analysis: d.CaseAnalysisID.Int64,
-			AnalysisType: d.AnalysisType.String, Conclusion: Conclusion(d.Conclusion.String)})
+			AnalysisType: d.AnalysisType.String, Conclusion: Conclusion(d.Conclusion.String), Source: d.SystemSource.String})
 		if d.Role == string(RoleSystem) && d.Confidence.Valid {
 			score := d.Confidence.Float64
 			chain.score = &score
@@ -744,7 +744,7 @@ func (c *conflictBuilder) fill(ctx context.Context, q *db.Queries, conflicts []C
 		}
 		k := [2]string{r.FeatureID, r.CounterpartID}
 		chains[k] = append(chains[k], ChainEntry{Role: Role(r.Role), Decision: Decision(r.Decision), Analysis: r.CaseAnalysisID.Int64,
-			AnalysisType: r.AnalysisType.String, Conclusion: Conclusion(r.Conclusion.String)})
+			AnalysisType: r.AnalysisType.String, Conclusion: Conclusion(r.Conclusion.String), Source: r.SystemSource.String})
 	}
 	status := map[int64]*Link{}
 	for k, chain := range chains {

@@ -627,7 +627,7 @@ func (q *Queries) ListConflictRecords(ctx context.Context, personNumbers []int64
 
 const listDecisionsBetweenFeatures = `-- name: ListDecisionsBetweenFeatures :many
 SELECT bd.feature_a_id, bd.feature_b_id, bd.role, bd.decision, bd.confidence, bd.threshold,
-    bd.case_analysis_id, ca.analysis_type, bd.conclusion
+    bd.case_analysis_id, ca.analysis_type, bd.conclusion, bd.system_source
 FROM biometric_decisions bd
 LEFT JOIN case_analyses ca ON ca.id = bd.case_analysis_id
 WHERE bd.feature_a_id = ANY($1::text[]) AND bd.feature_b_id = ANY($1::text[])
@@ -644,6 +644,7 @@ type ListDecisionsBetweenFeaturesRow struct {
 	CaseAnalysisID sql.NullInt64   `db:"case_analysis_id" json:"case_analysis_id"`
 	AnalysisType   sql.NullString  `db:"analysis_type" json:"analysis_type"`
 	Conclusion     sql.NullString  `db:"conclusion" json:"conclusion"`
+	SystemSource   sql.NullString  `db:"system_source" json:"system_source"`
 }
 
 // Every decision comparing two of the given features directly, oldest first.
@@ -666,6 +667,7 @@ func (q *Queries) ListDecisionsBetweenFeatures(ctx context.Context, featureIds [
 			&i.CaseAnalysisID,
 			&i.AnalysisType,
 			&i.Conclusion,
+			&i.SystemSource,
 		); err != nil {
 			return nil, err
 		}
