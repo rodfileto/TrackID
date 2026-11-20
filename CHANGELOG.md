@@ -60,6 +60,9 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- **A page can ask for a wider layout.** `useWideLayout()` (`context/LayoutWidthContext.tsx`) widens the
+  signed-in layout's content from 2xl (1536px) to 3xl (2000px) while the calling component is shown, for a page or an
+  extension's panel that places more side by side on large screens. Every other page keeps the 2xl width.
 - **Where a person or a cluster appears**, on its page: the occurrences of the cases it has traces in, as points or a
   heatmap (`GET /api/persons/:personId/occurrences`, `GET /api/clusters/:clusterId/occurrences`, intelligence only,
   the person's read logged). The card says how many cases have no occurrence and how many occurrences have no place to
