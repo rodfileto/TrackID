@@ -60,6 +60,9 @@ period; `0.x` patch releases fix defects without adding behaviour.
 
 ### Added
 
+- **The occurrence type `ARREST_WARRANT_SERVED`** (cumprimento de mandado de prisão; migration 033), in the `OTHER`
+  group: an arrest made on an open warrant, such as the BNMP's, which an operation records when a face recognition
+  system sighted its target and the police found them. Asked for by trackid-pf's Mitra operation.
 - **Panel-only operations.** `Extension.panelOnlyOperations` lists the slugs of operations whose page shows only
   their panel, without the card with the operation's name, status, description and edit button.
 

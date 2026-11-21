@@ -663,7 +663,8 @@
     "UNIDENTIFIED_LIVING_PERSON": "Unidentified living person",
     "DISASTER_VICTIM": "Disaster victim",
     "UNDETERMINED": "Undetermined",
-    "DAMAGE": "Damage"
+    "DAMAGE": "Damage",
+    "ARREST_WARRANT_SERVED": "Arrest warrant served"
   },
   "occurrenceGroup": {
     "LETHAL": "Lethal",
