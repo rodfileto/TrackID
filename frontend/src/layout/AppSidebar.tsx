@@ -136,13 +136,17 @@ const AppSidebar: React.FC = () => {
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>({});
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // A page inside a section lights its entry too: /cases/42 is under Biometric Cases.
+  // A page inside a section lights its entry too: /cases/42 is under Biometric Cases. Only the most specific entry
+  // lights, so /intelligence/operations/mitra lights its own menu and not Operations (a prefix of it) as well.
   const isActive = useCallback(
-    (path: string) =>
-      path === "/"
-        ? location.pathname === "/"
-        : location.pathname === path || location.pathname.startsWith(`${path}/`),
-    [location.pathname],
+    (path: string) => {
+      const under = (p: string) => (p === "/" ? location.pathname === "/" : location.pathname === p || location.pathname.startsWith(`${p}/`));
+      if (!under(path)) return false;
+      return !navSections.some((section) =>
+        section.items.some((nav) => [nav.path, ...(nav.subItems ?? []).map((s) => s.path)].some((other) => !!other && other.length > path.length && under(other))),
+      );
+    },
+    [location.pathname, navSections],
   );
 
   useEffect(() => {
