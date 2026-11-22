@@ -7,13 +7,19 @@ export interface ExtensionRoute {
   need?: "admin" | "coordinator" | "intelligence" | "persons";
 }
 
-/** A menu item an organization adds to the management section. */
+/** A menu item an organization adds to the sidebar, at the end of a section: management unless it names another. */
 export interface ExtensionNavItem {
   name: string;
-  path: string;
+  /** Optional when the item only opens a submenu. */
+  path?: string;
   icon: ReactNode;
   requires?: "admin" | "coordinator" | "intelligence" | "persons";
+  subItems?: { name: string; path: string; new?: boolean; soon?: boolean }[];
+  section?: NavSectionKey;
 }
+
+/** The sidebar's sections an extension can add to. */
+export type NavSectionKey = "casework" | "investigation" | "management";
 
 /**
  * A number a request arrives under in the organization's own systems (an ePol task, a SEI process),

@@ -22,6 +22,7 @@ import { useSidebar } from "../context/SidebarContext";
 import { useCurrentUser } from "../context/CurrentUserContext";
 import Brand from "../components/common/Brand";
 import { extension } from "../extensions";
+import type { NavSectionKey } from "../extensions/types";
 
 type NavItem = {
   name: string;
@@ -37,6 +38,10 @@ type NavSection = {
   title?: string;
   items: NavItem[];
 };
+
+// An extension's items for a section, at its end; those naming none go to management.
+const extensionItems = (section: NavSectionKey): NavItem[] =>
+  extension.navItems.filter((item) => (item.section ?? "management") === section);
 
 // Grouped by what the user is doing: working a case, investigating across cases, or running the
 // unit. The profile is in the header's user menu, not here.
@@ -68,6 +73,7 @@ const allNavSections: NavSection[] = [
           { name: "nav.labExamination", path: "/examinations/laboratory", soon: true },
         ],
       },
+      ...extensionItems("casework"),
     ],
   },
   {
@@ -86,6 +92,7 @@ const allNavSections: NavSection[] = [
           { name: "nav.newOccurrence", path: "/intelligence/occurrences/new" },
         ],
       },
+      ...extensionItems("investigation"),
     ],
   },
   {
@@ -95,7 +102,7 @@ const allNavSections: NavSection[] = [
       { icon: <TableIcon />, name: "nav.distribution", path: "/admin/distribution", requires: "coordinator" },
       { icon: <LockIcon />, name: "nav.users", path: "/admin/users", requires: "admin" },
       { icon: <GroupIcon />, name: "nav.organizations", path: "/admin/organizations", requires: "admin" },
-      ...extension.navItems,
+      ...extensionItems("management"),
     ],
   },
 ];
