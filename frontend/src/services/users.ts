@@ -48,6 +48,18 @@ export async function updateUserAccess(userId: number, access: Partial<UserAcces
   });
 }
 
+/** What an admin changes about an account besides its access; the username stays. */
+export type UserDetails = Pick<UserProfile, "first_name" | "last_name" | "staff_number" | "job_title">;
+
+/** Admin: set an account's name, staff number and job title. */
+export async function updateUserDetails(userId: number, details: UserDetails): Promise<UserProfile> {
+  return requestApi<UserProfile>(`/admin/users/${userId}/details`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(details),
+  });
+}
+
 /** Admin: replace an account's password. */
 export async function setUserPassword(userId: number, password: string): Promise<UserProfile> {
   return requestApi<UserProfile>(`/admin/users/${userId}/password`, {

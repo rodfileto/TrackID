@@ -19,7 +19,8 @@ FROM users
 ORDER BY last_name, first_name, id;
 
 -- name: UpdateUserAccess :one
--- Username, staff_number and email are not updatable: decisions name their decider by username.
+-- Username and email are not updatable: decisions name their decider by username. The staff number is
+-- UpdateUserProfile's.
 UPDATE users
 SET account_role = $2, examines_fingerprint = $3, examines_facial = $4, intelligence_analyst = $5, coordinator = $6,
     is_active = $7, updated_at = NOW()
@@ -32,6 +33,13 @@ UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1;
 -- name: UpdateUserDetails :one
 -- What a user may change about themselves (PATCH /api/me): their name and job title.
 UPDATE users SET first_name = $2, last_name = $3, job_title = $4, updated_at = NOW()
+WHERE id = $1
+RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at;
+
+-- name: UpdateUserProfile :one
+-- What an admin may change about an account besides its access (PUT /api/admin/users/{id}/details): the
+-- name, staff number and job title. The username stays (decisions name their decider by it).
+UPDATE users SET first_name = $2, last_name = $3, staff_number = $4, job_title = $5, updated_at = NOW()
 WHERE id = $1
 RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at;
 

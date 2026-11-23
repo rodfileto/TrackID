@@ -139,7 +139,8 @@ func (r *Repository) SetPassword(ctx context.Context, id int64, password string)
 }
 
 // Details are what users may change about themselves: their name and job title. Username, staff
-// number and email are fixed (decisions name their decider by username).
+// number and email are fixed for them (decisions name their decider by username); an admin changes
+// the staff number (UpdateProfile).
 type Details struct {
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
@@ -161,6 +162,42 @@ func (r *Repository) UpdateDetails(ctx context.Context, id int64, d Details) (Us
 	}
 	row, err := r.queries.UpdateUserDetails(ctx, db.UpdateUserDetailsParams{ID: id, FirstName: d.FirstName, LastName: d.LastName, JobTitle: d.JobTitle})
 	if err != nil {
+		return UserProfile{}, err
+	}
+	return profileFrom(db.GetUserByIDRow(row)), nil
+}
+
+// Profile is what an admin may change about an account besides its access: Details and the staff
+// number, which an account imported with a placeholder (an InfoBio user's) gets corrected to. The
+// last name may stay empty, as such an account was created with none.
+type Profile struct {
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
+	StaffNumber string `json:"staff_number"`
+	JobTitle    string `json:"job_title"`
+}
+
+// ErrInvalidProfile is returned for an empty first name or staff number, or a field over 100 characters.
+var ErrInvalidProfile = errors.New("first name and staff number are required, and no field may exceed 100 characters")
+
+// ErrStaffNumberTaken is returned when another account has the staff number.
+var ErrStaffNumberTaken = errors.New("staff number already exists")
+
+// UpdateProfile sets an account's name, staff number and job title, trimmed. Callers check the change
+// with CheckAccountChange first; it returns sql.ErrNoRows for an unknown id.
+func (r *Repository) UpdateProfile(ctx context.Context, id int64, p Profile) (UserProfile, error) {
+	p.FirstName, p.LastName = strings.TrimSpace(p.FirstName), strings.TrimSpace(p.LastName)
+	p.StaffNumber, p.JobTitle = strings.TrimSpace(p.StaffNumber), strings.TrimSpace(p.JobTitle)
+	if p.FirstName == "" || p.StaffNumber == "" ||
+		len(p.FirstName) > 100 || len(p.LastName) > 100 || len(p.StaffNumber) > 100 || len(p.JobTitle) > 100 {
+		return UserProfile{}, ErrInvalidProfile
+	}
+	row, err := r.queries.UpdateUserProfile(ctx, db.UpdateUserProfileParams{
+		ID: id, FirstName: p.FirstName, LastName: p.LastName, StaffNumber: p.StaffNumber, JobTitle: p.JobTitle})
+	if err != nil {
+		if strings.Contains(err.Error(), "users_staff_number_key") {
+			return UserProfile{}, ErrStaffNumberTaken
+		}
 		return UserProfile{}, err
 	}
 	return profileFrom(db.GetUserByIDRow(row)), nil

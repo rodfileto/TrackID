@@ -932,6 +932,11 @@
     }
   },
   "users": {
+    "edit": "Edit",
+    "editTitle": "Edit account",
+    "editDesc": "{{username}}'s details. The staff number is what signs in; the username doesn't change.",
+    "activateDesc": "Before activating {{username}}, check their details: an imported account may carry a placeholder staff number. The staff number is what signs in.",
+    "save": "Save",
     "title": "Users",
     "desc": "Accounts, their roles and capabilities",
     "accounts": "Accounts",

@@ -62,6 +62,20 @@ export interface Extension {
   clusterPanels?: ComponentType<ClusterPanelProps>[];
   /** Fields of the request form for the organization's own reference numbers, first in the form. */
   requestReferences?: RequestReferenceField[];
+  /**
+   * The organization's own fields on an account's edit dialog (Users), after core's, for admins: an id
+   * another system knows the account by, say. Each keeps its value and stores it through its own routes.
+   */
+  userFields?: ComponentType<UserFieldsProps>[];
+}
+
+export interface UserFieldsProps {
+  userId: number;
+  /**
+   * Hands the dialog what saves the field, called again whenever its value changes: the dialog calls the
+   * last one given after saving the account, and stays open, showing the error, if it throws.
+   */
+  onSave: (save: () => Promise<void>) => void;
 }
 
 export interface CasePanelProps {

@@ -517,7 +517,8 @@ type UpdateUserAccessRow struct {
 	AvatarUpdatedAt     sql.NullTime `db:"avatar_updated_at" json:"avatar_updated_at"`
 }
 
-// Username, staff_number and email are not updatable: decisions name their decider by username.
+// Username and email are not updatable: decisions name their decider by username. The staff number is
+// UpdateUserProfile's.
 func (q *Queries) UpdateUserAccess(ctx context.Context, arg UpdateUserAccessParams) (UpdateUserAccessRow, error) {
 	row := q.db.QueryRowContext(ctx, updateUserAccess,
 		arg.ID,
@@ -587,6 +588,67 @@ func (q *Queries) UpdateUserDetails(ctx context.Context, arg UpdateUserDetailsPa
 		arg.JobTitle,
 	)
 	var i UpdateUserDetailsRow
+	err := row.Scan(
+		&i.ID,
+		&i.FirstName,
+		&i.LastName,
+		&i.StaffNumber,
+		&i.JobTitle,
+		&i.Username,
+		&i.Email,
+		&i.AccountRole,
+		&i.ExaminesFingerprint,
+		&i.ExaminesFacial,
+		&i.IntelligenceAnalyst,
+		&i.Coordinator,
+		&i.IsActive,
+		&i.AvatarUpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserProfile = `-- name: UpdateUserProfile :one
+UPDATE users SET first_name = $2, last_name = $3, staff_number = $4, job_title = $5, updated_at = NOW()
+WHERE id = $1
+RETURNING id, first_name, last_name, staff_number, job_title, username, email, account_role, examines_fingerprint, examines_facial, intelligence_analyst, coordinator, is_active, avatar_updated_at
+`
+
+type UpdateUserProfileParams struct {
+	ID          int64  `db:"id" json:"id"`
+	FirstName   string `db:"first_name" json:"first_name"`
+	LastName    string `db:"last_name" json:"last_name"`
+	StaffNumber string `db:"staff_number" json:"staff_number"`
+	JobTitle    string `db:"job_title" json:"job_title"`
+}
+
+type UpdateUserProfileRow struct {
+	ID                  int64        `db:"id" json:"id"`
+	FirstName           string       `db:"first_name" json:"first_name"`
+	LastName            string       `db:"last_name" json:"last_name"`
+	StaffNumber         string       `db:"staff_number" json:"staff_number"`
+	JobTitle            string       `db:"job_title" json:"job_title"`
+	Username            string       `db:"username" json:"username"`
+	Email               string       `db:"email" json:"email"`
+	AccountRole         string       `db:"account_role" json:"account_role"`
+	ExaminesFingerprint bool         `db:"examines_fingerprint" json:"examines_fingerprint"`
+	ExaminesFacial      bool         `db:"examines_facial" json:"examines_facial"`
+	IntelligenceAnalyst bool         `db:"intelligence_analyst" json:"intelligence_analyst"`
+	Coordinator         bool         `db:"coordinator" json:"coordinator"`
+	IsActive            bool         `db:"is_active" json:"is_active"`
+	AvatarUpdatedAt     sql.NullTime `db:"avatar_updated_at" json:"avatar_updated_at"`
+}
+
+// What an admin may change about an account besides its access (PUT /api/admin/users/{id}/details): the
+// name, staff number and job title. The username stays (decisions name their decider by it).
+func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (UpdateUserProfileRow, error) {
+	row := q.db.QueryRowContext(ctx, updateUserProfile,
+		arg.ID,
+		arg.FirstName,
+		arg.LastName,
+		arg.StaffNumber,
+		arg.JobTitle,
+	)
+	var i UpdateUserProfileRow
 	err := row.Scan(
 		&i.ID,
 		&i.FirstName,

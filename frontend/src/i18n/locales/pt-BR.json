@@ -932,6 +932,11 @@
     }
   },
   "users": {
+    "edit": "Editar",
+    "editTitle": "Editar conta",
+    "editDesc": "Os dados de {{username}}. A matrícula é a que se usa para entrar; o usuário não muda.",
+    "activateDesc": "Antes de ativar {{username}}, confira os dados: uma conta importada pode trazer uma matrícula provisória. A matrícula é a que se usa para entrar.",
+    "save": "Salvar",
     "title": "Usuários",
     "desc": "Contas, perfis e capacidades",
     "accounts": "Contas",

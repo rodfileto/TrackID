@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import PageMeta from "../components/common/PageMeta";
@@ -10,6 +10,7 @@ import Badge from "../components/ui/badge/Badge";
 import Checkbox from "../components/form/input/Checkbox";
 import { Modal } from "../components/ui/modal";
 import { useCurrentUser } from "../context/CurrentUserContext";
+import { extension } from "../extensions";
 import type { UserProfile } from "../services/auth";
 import {
   createUser,
@@ -18,9 +19,11 @@ import {
   minPasswordLength,
   setUserPassword,
   updateUserAccess,
+  updateUserDetails,
   type AccountRole,
   type NewUser,
   type UserAccess,
+  type UserDetails,
 } from "../services/users";
 import {
   createAssignment,
@@ -64,8 +67,9 @@ const emptyUser = (): NewUser => ({
   coordinator: false,
 });
 
-/** Admin: every account, its role and capabilities, switched on and off in place; new accounts and
- * password resets. The server's auth.CheckAccountChange decides; the page only disables what it
+/** Admin: every account, its role and capabilities, switched on and off in place; new accounts, an
+ * account's name and staff number edited, and password resets. Activating an account opens its edit
+ * dialog, since an account made inactive (imported, say) may still carry a placeholder staff number. The server's auth.CheckAccountChange decides; the page only disables what it
  * would refuse: an ADMIN manages plain users, and nobody changes their own role or deactivates
  * themselves. */
 export default function Users() {
@@ -82,6 +86,7 @@ export default function Users() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [placing, setPlacing] = useState<UserProfile | null>(null);
+  const [editing, setEditing] = useState<{ user: UserProfile; activate: boolean } | null>(null);
 
   const isSuper = me?.account_role === "SUPER_ADMIN";
 
@@ -260,10 +265,21 @@ export default function Users() {
                         <Checkbox
                           checked={u.is_active}
                           disabled={locked || self}
-                          onChange={(checked) => void change(u, { is_active: checked })}
+                          onChange={(checked) =>
+                            checked ? setEditing({ user: u, activate: true }) : void change(u, { is_active: false })
+                          }
                         />
                       </TableCell>
-                      <TableCell className={cellClass}>
+                      <TableCell className={`${cellClass} whitespace-nowrap`}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mr-2"
+                          disabled={!manages(u)}
+                          onClick={() => setEditing({ user: u, activate: false })}
+                        >
+                          {t("users.edit")}
+                        </Button>
                         <Button
                           size="sm"
                           variant="outline"
@@ -351,6 +367,21 @@ export default function Users() {
         )}
       </Modal>
 
+      <Modal isOpen={!!editing} onClose={() => setEditing(null)} className="max-w-[700px] m-4">
+        {editing && (
+          <EditUser
+            user={editing.user}
+            activate={editing.activate}
+            self={editing.user.id === me?.id}
+            onSaved={(updated) => {
+              setUsers((list) => list?.map((x) => (x.id === updated.id ? updated : x)) ?? null);
+              setEditing(null);
+            }}
+            onClose={() => setEditing(null)}
+          />
+        )}
+      </Modal>
+
       <Modal isOpen={!!placing} onClose={() => setPlacing(null)} className="max-w-[900px] m-4">
         {placing && (
           <Places
@@ -388,6 +419,85 @@ export default function Users() {
         )}
       </Modal>
     </>
+  );
+}
+
+/** An account's name, staff number and job title, the organization's own fields (extension.userFields),
+ * and whether it is active; saved in that order, the dialog staying open on the first error. */
+function EditUser({ user, activate, self, onSaved, onClose }: {
+  user: UserProfile;
+  activate: boolean;
+  self: boolean;
+  onSaved: (user: UserProfile) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [details, setDetails] = useState<UserDetails>({
+    first_name: user.first_name,
+    last_name: user.last_name,
+    staff_number: user.staff_number,
+    job_title: user.job_title,
+  });
+  const [active, setActive] = useState(user.is_active || activate);
+  const [saving, setSaving] = useState(false);
+  const savers = useRef(new Map<number, () => Promise<void>>());
+  const fields = extension.userFields ?? [];
+  // One callback per field, made once, so a field handing its saver over in an effect doesn't loop.
+  const [onSaves] = useState(() => fields.map((_, i) => (save: () => Promise<void>) => savers.current.set(i, save)));
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      let updated = await updateUserDetails(user.id, details);
+      for (const save of savers.current.values()) await save();
+      if (active !== user.is_active) updated = await updateUserAccess(user.id, { is_active: active });
+      toast.success(t("users.saved", { username: updated.username }));
+      onSaved(updated);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("users.saveError"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={(event) => void submit(event)} className="p-6 lg:p-10">
+      <h4 className="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">{t("users.editTitle")}</h4>
+      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">
+        {t(activate ? "users.activateDesc" : "users.editDesc", { username: user.username })}
+      </p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {(["first_name", "last_name", "staff_number", "job_title"] as const).map((field) => (
+          <label key={field} className={labelClass}>
+            {t(`users.fields.${field}`)}
+            <input
+              required={field === "first_name" || field === "staff_number"}
+              autoFocus={activate && field === "staff_number"}
+              value={details[field]}
+              onChange={(event) => setDetails({ ...details, [field]: event.target.value })}
+              className={inputClass}
+            />
+          </label>
+        ))}
+        {fields.map((Field, i) => (
+          <Suspense key={i} fallback={null}>
+            <Field userId={user.id} onSave={onSaves[i]} />
+          </Suspense>
+        ))}
+      </div>
+      <div className="mt-5">
+        <Checkbox label={t("users.columns.active")} checked={active} disabled={self} onChange={setActive} />
+      </div>
+      <div className="mt-6 flex justify-end gap-3">
+        <Button type="button" size="sm" variant="outline" onClick={onClose}>
+          {t("users.cancel")}
+        </Button>
+        <Button type="submit" size="sm" disabled={saving}>
+          {t("users.save")}
+        </Button>
+      </div>
+    </form>
   );
 }
 

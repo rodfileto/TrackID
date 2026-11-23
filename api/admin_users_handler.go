@@ -133,6 +133,49 @@ func UpdateUserAccessHandler(repo *auth.Repository) gin.HandlerFunc {
 	}
 }
 
+// UpdateUserProfileHandler changes an account's name, staff number and job title (all sent, the last
+// name and job title may be empty). The same rules as changing its access apply.
+func UpdateUserProfileHandler(repo *auth.Repository) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		id, err := strconv.ParseInt(context.Param("userId"), 10, 64)
+		if err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+			return
+		}
+		var request auth.Profile
+		if err := context.ShouldBindJSON(&request); err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid user data"})
+			return
+		}
+		target, err := repo.FindByID(context.Request.Context(), id)
+		if errors.Is(err, sql.ErrNoRows) {
+			context.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load user"})
+			return
+		}
+		access := auth.Access{AccountRole: target.AccountRole, ExaminesFingerprint: target.ExaminesFingerprint, ExaminesFacial: target.ExaminesFacial,
+			IntelligenceAnalyst: target.IntelligenceAnalyst, Coordinator: target.Coordinator, IsActive: target.IsActive}
+		if err := auth.CheckAccountChange(currentUser(context), &target, access); err != nil {
+			accountChangeError(context, err)
+			return
+		}
+		user, err := repo.UpdateProfile(context.Request.Context(), id, request)
+		switch {
+		case errors.Is(err, auth.ErrInvalidProfile):
+			context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, auth.ErrStaffNumberTaken):
+			context.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case err != nil:
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not update user"})
+		default:
+			context.JSON(http.StatusOK, user)
+		}
+	}
+}
+
 type setPasswordRequest struct {
 	Password string `json:"password" binding:"required"`
 }

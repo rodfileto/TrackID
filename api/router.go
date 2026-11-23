@@ -131,6 +131,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	admin.GET("users", ListUsersHandler(authRepository))
 	admin.POST("users", CreateUserHandler(authRepository, deps.EmailDomain))
 	admin.PATCH("users/:userId", UpdateUserAccessHandler(authRepository))
+	admin.PUT("users/:userId/details", UpdateUserProfileHandler(authRepository))
 	admin.PUT("users/:userId/password", SetUserPasswordHandler(authRepository))
 	// Organizations, units and who works where (docs/organizations-plan.md): every admin manages units and
 	// assignments; only a SUPER_ADMIN, organizations.

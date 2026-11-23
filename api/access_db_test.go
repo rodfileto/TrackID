@@ -327,6 +327,66 @@ func TestSetUserPassword(t *testing.T) {
 	}
 }
 
+// TestUpdateUserProfile corrects an account's staff number through the router, as for an InfoBio user
+// imported with a placeholder: the new one signs in, a taken or empty one is refused, and an ADMIN may
+// not edit an admin.
+func TestUpdateUserProfile(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := testDB(t)
+	repo := auth.NewRepository(sqlDB)
+	user := func(username, staffNumber string, role auth.AccountRole) auth.UserProfile {
+		t.Helper()
+		u, err := repo.Create(ctx, auth.NewUser{FirstName: username, LastName: "Test", StaffNumber: staffNumber, JobTitle: "test",
+			Username: username, Password: "password1", Access: auth.Access{AccountRole: role, IsActive: true}}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	}
+	super := user("super", "super", auth.AccountRoleSuperAdmin)
+	admin := user("admin", "admin", auth.AccountRoleAdmin)
+	imported := user("imported", "INFOBIO-185", auth.AccountRoleUser)
+
+	router := NewRouter(Dependencies{DB: sqlDB, JWTSecret: testJWTSecret})
+	edit := func(actor, target auth.UserProfile, body string) int {
+		t.Helper()
+		token, err := IssueToken(actor, testJWTSecret)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/admin/users/%d/details", target.ID), strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer "+token)
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		return recorder.Code
+	}
+	for _, c := range []struct {
+		name          string
+		actor, target auth.UserProfile
+		body          string
+		want          int
+	}{
+		{"admin sets the real staff number", admin, imported, `{"first_name":"Ana","last_name":"","staff_number":" 12345 ","job_title":"Perita"}`, http.StatusOK},
+		{"taken", admin, imported, `{"first_name":"Ana","staff_number":"super"}`, http.StatusConflict},
+		{"empty staff number", admin, imported, `{"first_name":"Ana","staff_number":" "}`, http.StatusBadRequest},
+		{"admin edits an admin", admin, super, `{"first_name":"S","staff_number":"s2"}`, http.StatusForbidden},
+		{"user edits a user", imported, imported, `{"first_name":"Ana","staff_number":"999"}`, http.StatusForbidden},
+		{"super edits an admin", super, admin, `{"first_name":"Adm","last_name":"In","staff_number":"admin2","job_title":"x"}`, http.StatusOK},
+	} {
+		if got := edit(c.actor, c.target, c.body); got != c.want {
+			t.Errorf("%s: status %d, want %d", c.name, got, c.want)
+		}
+	}
+	got, err := repo.FindByStaffNumber(ctx, "12345")
+	if err != nil {
+		t.Fatalf("the new staff number finds no one: %v", err)
+	}
+	if p := got.Profile; p.ID != imported.ID || p.FirstName != "Ana" || p.LastName != "" || p.JobTitle != "Perita" || p.Username != "imported" {
+		t.Errorf("profile %+v", p)
+	}
+}
+
 // openTask opens an analysis of type typ on caseID, as routing a request to that task does
 // (analyses.OpenIn), with no request or coordinator.
 func openTask(t *testing.T, sqlDB *sql.DB, caseID string, typ analyses.Type) int64 {
