@@ -74,6 +74,12 @@ export interface Extension {
    * from React's lazy; the layout wraps each in Suspense.
    */
   globalComponents?: ComponentType[];
+  /**
+   * Buttons in the header, before the notifications' bell, on every signed-in page: an indicator the user should
+   * see wherever they are. Each renders nothing for someone it doesn't concern. One may come from React's lazy; the
+   * header wraps each in Suspense.
+   */
+  headerComponents?: ComponentType[];
 }
 
 export interface UserFieldsProps {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, useState } from "react";
 
 import { Link } from "react-router";
 import { useSidebar } from "../context/SidebarContext";
@@ -7,6 +7,7 @@ import LanguageSwitcher from "../components/common/LanguageSwitcher";
 import NotificationDropdown from "../components/header/NotificationDropdown";
 import UserDropdown from "../components/header/UserDropdown";
 import Brand from "../components/common/Brand";
+import { extension } from "../extensions";
 
 const AppHeader: React.FC = () => {
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
@@ -104,6 +105,12 @@ const AppHeader: React.FC = () => {
             <LanguageSwitcher />
             <ThemeToggleButton />
             {/* <!-- Dark Mode Toggler --> */}
+            {/* An extension's indicators (Extension.headerComponents), beside the notifications. */}
+            {extension.headerComponents?.map((Component, index) => (
+              <Suspense key={index} fallback={null}>
+                <Component />
+              </Suspense>
+            ))}
             <NotificationDropdown />
           </div>
           {/* <!-- User Area --> */}
