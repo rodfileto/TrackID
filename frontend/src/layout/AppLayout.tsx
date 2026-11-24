@@ -1,7 +1,9 @@
 import { SidebarProvider, useSidebar } from "../context/SidebarContext";
 import { PageMemoryProvider } from "../context/PageMemoryContext";
 import { LayoutWidthProvider, useLayoutWide } from "../context/LayoutWidthContext";
+import { Suspense } from "react";
 import { Outlet } from "react-router";
+import { extension } from "../extensions";
 import AppHeader from "./AppHeader";
 import Backdrop from "./Backdrop";
 import AppSidebar from "./AppSidebar";
@@ -27,6 +29,12 @@ const LayoutContent: React.FC = () => {
           <Outlet />
         </div>
       </div>
+      {/* An extension's app-wide parts (Extension.globalComponents): they outlive the page shown. */}
+      {extension.globalComponents?.map((Component, index) => (
+        <Suspense key={index} fallback={null}>
+          <Component />
+        </Suspense>
+      ))}
     </div>
   );
 };

@@ -67,6 +67,13 @@ export interface Extension {
    * another system knows the account by, say. Each keeps its value and stores it through its own routes.
    */
   userFields?: ComponentType<UserFieldsProps>[];
+  /**
+   * Rendered once on every signed-in page, outside the page itself, so it lives on while the user moves between
+   * pages: something that must reach the user wherever they are, such as an alert. It draws nothing of its own
+   * unless it means to (a floating banner, say), and must show nothing to someone it doesn't concern. One may come
+   * from React's lazy; the layout wraps each in Suspense.
+   */
+  globalComponents?: ComponentType[];
 }
 
 export interface UserFieldsProps {
