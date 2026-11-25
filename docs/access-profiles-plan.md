@@ -56,6 +56,7 @@ across all of them.
 | Deciding pairs | only their step, per `analyses.CanWork` | only if they also examine | only if they also examine | only if they also examine |
 | `admin/users` | no | no | no | yes |
 | `admin/distribution`, open comparison, reassign | no | no | yes | no |
+| The labs (`imageproc`, `facelab`, `videolab`, `assist`); casework menu (cases, my analyses, labs) | yes | yes | yes | no: an account with no capability (`RequireProfile`) |
 
 **Admin** is application management only: an admin with no other flag sees no case or person
 content; one who needs it also gets the flag for it.

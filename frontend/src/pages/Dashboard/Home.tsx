@@ -9,12 +9,13 @@ import { useCurrentUser } from "../../context/CurrentUserContext";
  * identities and case traces connect. */
 export default function Home() {
   const { t } = useTranslation();
-  const { user, isExaminer, isCoordinator } = useCurrentUser();
+  const { user, isExaminer, isCoordinator, can } = useCurrentUser();
+  const casework = can("profile");
   const links = [
     isExaminer && { to: "/analyses", label: t("nav.myAnalyses") },
-    { to: "/cases", label: t("nav.criminalCases") },
+    casework && { to: "/cases", label: t("nav.criminalCases") },
     isCoordinator && { to: "/requests", label: t("nav.requests") },
-    { to: "/image-lab", label: t("nav.imageLab") },
+    casework && { to: "/image-lab", label: t("nav.imageLab") },
   ].filter(Boolean) as { to: string; label: string }[];
   return (
     <>

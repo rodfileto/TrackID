@@ -185,6 +185,11 @@ func TestAccessProfiles(t *testing.T) {
 	// A case is opened from a request or from a scene a fingerprint examiner collected on call
 	// (TestSceneCollectionAccess covers the examiners).
 	allowed("/api/collections", post, coordinator)
+	// The labs are for anyone holding a capability, blind work or not; an admin with none is refused.
+	allowed("/api/imageproc", get, examiner, analyst, coordinator, blind)
+	allowed("/api/facelab", get, examiner, analyst, coordinator, blind)
+	allowed("/api/videolab", get, examiner, analyst, coordinator, blind)
+	allowed("/api/assist", get, examiner, analyst, coordinator, blind)
 	allowed("/api/admin/collections/awaiting", get, coordinator)
 	allowed("/api/cases/HELD", get, examiner, analyst, coordinator)
 	allowed("/api/cases/OTHER", get, analyst, coordinator)

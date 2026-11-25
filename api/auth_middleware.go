@@ -107,6 +107,19 @@ func RequireAdmin() gin.HandlerFunc {
 	}
 }
 
+// RequireProfile lets through a user holding any capability (auth.UserProfile.AnyCapability): the labs, which an
+// account with none -- an admin managing accounts, someone given only an organization's own role -- is not offered.
+// Blind work does not suspend them: they read nothing stored. It runs after ActiveUser.
+func RequireProfile() gin.HandlerFunc {
+	return func(context *gin.Context) {
+		if !currentUser(context).AnyCapability() {
+			context.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "a capability is required"})
+			return
+		}
+		context.Next()
+	}
+}
+
 // CurrentUser is the signed-in user, for an organization's own routes behind ActiveUser.
 func CurrentUser(context *gin.Context) auth.UserProfile { return currentUser(context) }
 

@@ -4,8 +4,8 @@ import { useCurrentUser, type Need } from "../../context/CurrentUserContext";
 
 /** A capability a page needs (docs/access-profiles-plan.md); "persons" is examiners and analysts,
  * "admin" account management, "scene" registering a scene examined on call (coordinators and
- * fingerprint examiners, docs/scene-collection-plan.md). */
-export type Capability = "admin" | "coordinator" | "intelligence" | "persons" | "scene";
+ * fingerprint examiners, docs/scene-collection-plan.md), "profile" any capability (casework and the labs). */
+export type Capability = "admin" | "coordinator" | "intelligence" | "persons" | "scene" | "profile";
 
 /** Shows its routes only to users with the capability, or the extension's grant, and a short
  * explanation to anyone else, so a direct link does not open a page whose every request the

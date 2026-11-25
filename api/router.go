@@ -172,40 +172,42 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	coordination.POST("cases/:caseId/vestiges/:vestigeId/seals/break", BreakSealHandler(deps.DB))
 	coordination.PUT("cases/:caseId/report-mode", SetReportModeHandler(deps.DB))
 	// The image lab: fingerprint processing tried on any image, nothing stored
-	// (docs/fingerprint-image-processing-plan.md). Every signed-in user may use it.
+	// (docs/fingerprint-image-processing-plan.md). The labs are for those holding a capability (RequireProfile).
+	labs := protected.Group("")
+	labs.Use(RequireProfile())
 	lab := NewImageLab(deps.Fingerprint)
-	protected.GET("imageproc", lab.InfoHandler())
-	protected.POST("imageproc/sources", lab.UploadHandler())
-	protected.POST("imageproc/estimate", lab.EstimateHandler())
-	protected.POST("imageproc/render", lab.RenderHandler())
-	protected.POST("imageproc/compare", lab.CompareHandler())
+	labs.GET("imageproc", lab.InfoHandler())
+	labs.POST("imageproc/sources", lab.UploadHandler())
+	labs.POST("imageproc/estimate", lab.EstimateHandler())
+	labs.POST("imageproc/render", lab.RenderHandler())
+	labs.POST("imageproc/compare", lab.CompareHandler())
 	// The face lab: a one-to-one facial comparison after FISWG on any two images, nothing stored
 	// (docs/facial-comparison-tool-plan.md).
 	faceLab := NewFaceLab(deps.FaceVision)
-	protected.GET("facelab", faceLab.FaceInfoHandler())
-	protected.POST("facelab/sources", faceLab.FaceUploadHandler())
-	protected.GET("facelab/sources/:id", faceLab.FaceSourceHandler())
-	protected.POST("facelab/render", faceLab.FaceRenderHandler())
-	protected.POST("facelab/quality", faceLab.FaceQualityHandler())
-	protected.POST("facelab/align", faceLab.FaceAlignHandler())
-	protected.POST("facelab/check", faceLab.FaceCheckHandler())
-	protected.POST("facelab/sheet", faceLab.FaceSheetHandler())
+	labs.GET("facelab", faceLab.FaceInfoHandler())
+	labs.POST("facelab/sources", faceLab.FaceUploadHandler())
+	labs.GET("facelab/sources/:id", faceLab.FaceSourceHandler())
+	labs.POST("facelab/render", faceLab.FaceRenderHandler())
+	labs.POST("facelab/quality", faceLab.FaceQualityHandler())
+	labs.POST("facelab/align", faceLab.FaceAlignHandler())
+	labs.POST("facelab/check", faceLab.FaceCheckHandler())
+	labs.POST("facelab/sheet", faceLab.FaceSheetHandler())
 	// The video lab: faces in any video, grouped by person, nothing stored
 	videoLab := NewVideoLab(deps.VideoLab)
 	if deps.VideoLab == nil {
 		videoLab = NewVideoLab(video.NewLab(nil))
 	}
-	protected.GET("videolab", videoLab.InfoHandler())
-	protected.POST("videolab/jobs", videoLab.UploadHandler())
-	protected.GET("videolab/jobs/:id", videoLab.JobHandler())
-	protected.DELETE("videolab/jobs/:id", videoLab.DeleteHandler())
-	protected.GET("videolab/jobs/:id/frame", videoLab.FrameHandler())
+	labs.GET("videolab", videoLab.InfoHandler())
+	labs.POST("videolab/jobs", videoLab.UploadHandler())
+	labs.GET("videolab/jobs/:id", videoLab.JobHandler())
+	labs.DELETE("videolab/jobs/:id", videoLab.DeleteHandler())
+	labs.GET("videolab/jobs/:id/frame", videoLab.FrameHandler())
 	// The assist lab: draft a registration from uploaded files, nothing stored, nothing written to
 	// the database (a manual-testing surface for the local model).
 	assistLab := NewAssistLab(deps.AssistDrafter, deps.AssistModel, deps.AssistOCR)
-	protected.GET("assist", assistLab.InfoHandler())
-	protected.POST("assist/extract", assistLab.ExtractHandler())
-	protected.POST("assist/draft", assistLab.DraftHandler())
+	labs.GET("assist", assistLab.InfoHandler())
+	labs.POST("assist/extract", assistLab.ExtractHandler())
+	labs.POST("assist/draft", assistLab.DraftHandler())
 	protected.GET("cases", ListCasesHandler(deps.DB))
 	// A case is opened by registering a request, or by registering a scene examined on call: nothing
 	// else (docs/scene-collection-plan.md).

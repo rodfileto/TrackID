@@ -61,6 +61,13 @@ func (p UserProfile) IntelligenceAccess() bool { return p.IsActive && p.Intellig
 // comparisons: they are a coordinator and their account is active.
 func (p UserProfile) Coordinates() bool { return p.IsActive && p.Coordinator }
 
+// AnyCapability reports whether the user holds any of the four capabilities on an active account: casework and its
+// tools are theirs. An account with none (an admin managing accounts, or someone given only an organization's own
+// role) has none of it.
+func (p UserProfile) AnyCapability() bool {
+	return p.IsActive && (p.ExaminesFingerprint || p.ExaminesFacial || p.IntelligenceAnalyst || p.Coordinator)
+}
+
 // Access is the part of a profile an admin can change.
 type Access struct {
 	AccountRole         AccountRole

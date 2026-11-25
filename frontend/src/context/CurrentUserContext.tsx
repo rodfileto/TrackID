@@ -9,8 +9,9 @@ import { corePreviewProfiles } from "./previewProfiles";
 // eslint-disable-next-line react-refresh/only-export-components
 export const previewProfiles: PreviewProfile[] = [...corePreviewProfiles, ...(extension.previewProfiles ?? [])];
 
-/** What a page or menu item is for: one of core's capabilities (RequireCapability), or a grant of the extension. */
-export type Need = ExtensionNeed | "scene";
+/** What a page or menu item is for: one of core's capabilities (RequireCapability), or a grant of the extension.
+ * "profile" is any capability: casework and its tools, which an account with none is not offered. */
+export type Need = ExtensionNeed | "scene" | "profile";
 
 /** What the signed-in user may do (docs/access-profiles-plan.md). The server decides; these only
  * keep the screens from offering what it would refuse. isAdmin is account management only. While
@@ -134,6 +135,8 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
           return isExaminer || isIntelligence;
         case "scene":
           return isCoordinator || isFingerprintExaminer;
+        case "profile":
+          return isExaminer || isIntelligence || isCoordinator;
       }
     },
     [active, grants, isAdmin, isCoordinator, isIntelligence, isExaminer, isFingerprintExaminer],

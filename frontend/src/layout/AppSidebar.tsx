@@ -53,13 +53,14 @@ const allNavSections: NavSection[] = [
   {
     title: "nav.sectionCasework",
     items: [
-      { icon: <FolderIcon />, name: "nav.criminalCases", path: "/cases" },
+      { icon: <FolderIcon />, name: "nav.criminalCases", path: "/cases", requires: "profile" },
       { icon: <TaskIcon />, name: "nav.sceneCollection", path: "/collections/new", requires: "scene" },
       { icon: <TaskIcon />, name: "nav.fieldNotes", path: "/field-notes", requires: "scene" },
-      { icon: <ListIcon />, name: "nav.myAnalyses", path: "/analyses" },
+      { icon: <ListIcon />, name: "nav.myAnalyses", path: "/analyses", requires: "profile" },
       {
         icon: <ShootingStarIcon />,
         name: "nav.labs",
+        requires: "profile",
         subItems: [
           { name: "nav.imageLab", path: "/image-lab" },
           { name: "nav.faceLab", path: "/face-lab" },
@@ -70,6 +71,7 @@ const allNavSections: NavSection[] = [
       {
         icon: <TaskIcon />,
         name: "nav.examinations",
+        requires: "profile",
         subItems: [
           { name: "nav.labExamination", path: "/examinations/laboratory", soon: true },
         ],

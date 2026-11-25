@@ -98,15 +98,18 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route index path="/" element={<Landing />} />
               <Route path="/profile" element={<UserProfiles />} />
-              <Route path="/cases" element={<CriminalCases />} />
-              <Route path="/cases/:caseId" element={<CaseDetailPage />} />
-              <Route path="/cases/:caseId/analyses/:analysisId" element={<AnalysisWorkspace />} />
-              <Route path="/analyses" element={<MyAnalyses />} />
-              <Route path="/image-lab" element={<ImageLab />} />
-              <Route path="/face-lab" element={<FaceLab />} />
-              <Route path="/video-lab" element={<VideoLab />} />
-              <Route path="/assist-lab" element={<AssistLab />} />
-              <Route path="/examinations/laboratory" element={<ComingSoon kind="laboratory" />} />
+              {/* Casework and its tools: for an account holding any capability. */}
+              <Route element={<RequireCapability need="profile" />}>
+                <Route path="/cases" element={<CriminalCases />} />
+                <Route path="/cases/:caseId" element={<CaseDetailPage />} />
+                <Route path="/cases/:caseId/analyses/:analysisId" element={<AnalysisWorkspace />} />
+                <Route path="/analyses" element={<MyAnalyses />} />
+                <Route path="/image-lab" element={<ImageLab />} />
+                <Route path="/face-lab" element={<FaceLab />} />
+                <Route path="/video-lab" element={<VideoLab />} />
+                <Route path="/assist-lab" element={<AssistLab />} />
+                <Route path="/examinations/laboratory" element={<ComingSoon kind="laboratory" />} />
+              </Route>
               <Route element={<RequireCapability need="coordinator" />}>
                 <Route path="/admin/distribution" element={<Distribution />} />
                 <Route path="/requests" element={<Requests />} />
