@@ -6,6 +6,7 @@ import { ThemeToggleButton } from "../components/common/ThemeToggleButton";
 import LanguageSwitcher from "../components/common/LanguageSwitcher";
 import NotificationDropdown from "../components/header/NotificationDropdown";
 import UserDropdown from "../components/header/UserDropdown";
+import PreviewSwitcher from "../components/header/PreviewSwitcher";
 import Brand from "../components/common/Brand";
 import { extension } from "../extensions";
 
@@ -101,6 +102,7 @@ const AppHeader: React.FC = () => {
           } items-center justify-between w-full gap-4 px-5 py-4 lg:flex shadow-theme-md lg:justify-end lg:px-0 lg:shadow-none`}
         >
           <div className="flex items-center gap-2 2xsm:gap-3">
+            <PreviewSwitcher />
             {/* <!-- Dark Mode Toggler --> */}
             <LanguageSwitcher />
             <ThemeToggleButton />

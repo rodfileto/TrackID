@@ -98,6 +98,19 @@ export interface Extension {
    * The page `/` opens for this user, given their grants, instead of core's Home; core's Home when it gives none.
    */
   home?: (grants: string[], user: UserProfile) => string | undefined;
+  /** Profiles an admin can preview the home page and menu as, after core's own: the extension's roles, say. */
+  previewProfiles?: PreviewProfile[];
+}
+
+/**
+ * A profile an admin previews `/` and the menu as (the header's "view as"): its capabilities, false when left out,
+ * and the extension's grants. Only the screens change; every request still goes as the admin.
+ */
+export interface PreviewProfile {
+  /** Translation key of its name. */
+  name: string;
+  access?: Partial<Pick<UserProfile, "examines_fingerprint" | "examines_facial" | "intelligence_analyst" | "coordinator">>;
+  grants?: string[];
 }
 
 export interface UserFieldsProps {

@@ -2427,5 +2427,20 @@
     "isolated_other": "{{count}} ocorrências isoladas não estão em área nenhuma.",
     "areasNote": "As áreas agrupam onde as ocorrências aconteceram. Nada dizem de onde alguém mora; onde o instituto é chamado a periciar as molda, e a comparação acima põe cada uma frente a todas as ocorrências.",
     "byMunicipality": "Por município"
+  },
+  "preview": {
+    "label": "Ver a página inicial e o menu como outro perfil",
+    "myself": "Ver como: eu",
+    "as": "Ver como: {{profile}}",
+    "banner": "Vendo como {{profile}}: o menu e esta página mostram o que esse perfil vê. As requisições seguem com a sua conta, então os dados são os seus.",
+    "landsHome": "Esse perfil abre nesta página inicial.",
+    "landsElsewhere": "Esse perfil abre em {{path}} em vez da página inicial. Ela não é mostrada aqui, pois seria lida com a sua conta.",
+    "profiles": {
+      "fingerprintExaminer": "perito em impressões digitais",
+      "facialExaminer": "perito em comparação facial",
+      "analyst": "analista de inteligência",
+      "coordinator": "coordenador",
+      "none": "sem perfil"
+    }
   }
 }

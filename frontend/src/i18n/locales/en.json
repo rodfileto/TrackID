@@ -2427,5 +2427,20 @@
     "isolated_other": "{{count}} isolated occurrences are in no area.",
     "areasNote": "Areas group where occurrences happened. They say nothing of where anyone lives; where the institute is asked to examine shapes them, and the comparison above sets each against all occurrences.",
     "byMunicipality": "By municipality"
+  },
+  "preview": {
+    "label": "View the home page and menu as another profile",
+    "myself": "View as: myself",
+    "as": "View as: {{profile}}",
+    "banner": "Previewing as {{profile}}: the menu and this page show what that profile is offered. Requests still go with your account, so the data is yours.",
+    "landsHome": "This profile opens on this home page.",
+    "landsElsewhere": "This profile opens on {{path}} instead of the home page. It isn't shown here, since it would be read with your account.",
+    "profiles": {
+      "fingerprintExaminer": "fingerprint examiner",
+      "facialExaminer": "facial examiner",
+      "analyst": "intelligence analyst",
+      "coordinator": "coordinator",
+      "none": "no profile"
+    }
   }
 }

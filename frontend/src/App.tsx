@@ -32,6 +32,7 @@ import Users from "./pages/Users";
 import Organizations from "./pages/Organizations";
 import { extension } from "./extensions";
 import { useCurrentUser } from "./context/CurrentUserContext";
+import { useTranslation } from "react-i18next";
 // A lazy page whose code fails to load -- the tab predates a new build or a dev-server
 // restart, so the chunk it asks for no longer exists -- reloads once to fetch the current
 // version, instead of leaving a blank screen. The flag stops a reload loop when the failure
@@ -62,13 +63,25 @@ const FieldNotes = lazyPage(() => import("./pages/FieldNotes"));
 import { useTheme } from "./context/ThemeContext";
 
 /** What `/` opens: the page the extension gives this user (Extension.home), or core's Home. Nothing while the
- * extension's grants are still being read, so the user doesn't see Home flash before being sent on. */
+ * extension's grants are still being read, so the user doesn't see Home flash before being sent on. While an admin
+ * previews a profile, it says where that profile would be sent rather than going there, since that page would read
+ * with the admin's own account. */
 function Landing() {
-  const { user, grants } = useCurrentUser();
-  if (!extension.home) return <Home />;
-  if (grants === null || !user) return null;
-  const home = extension.home(grants, user);
-  return home && home !== "/" ? <Navigate to={home} replace /> : <Home />;
+  const { t } = useTranslation();
+  const { user, grants, preview } = useCurrentUser();
+  if (grants === null || !user) return extension.home ? null : <Home />;
+  const home = extension.home?.(grants, user);
+  const elsewhere = home && home !== "/" ? home : undefined;
+  if (!preview) return elsewhere ? <Navigate to={elsewhere} replace /> : <Home />;
+  return (
+    <>
+      <div className="mb-4 rounded-2xl border border-warning-300 bg-warning-50 px-5 py-4 text-sm text-warning-800 dark:border-warning-500/40 dark:bg-warning-500/15 dark:text-warning-300">
+        <p className="font-medium">{t("preview.banner", { profile: t(preview.name) })}</p>
+        <p className="mt-1">{elsewhere ? t("preview.landsElsewhere", { path: elsewhere }) : t("preview.landsHome")}</p>
+      </div>
+      {!elsewhere && <Home />}
+    </>
+  );
 }
 
 export default function App() {
