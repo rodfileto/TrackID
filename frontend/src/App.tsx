@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router";
 import { Toaster } from "sonner";
 import SignIn from "./pages/AuthPages/SignIn";
 import NotFound from "./pages/OtherPage/NotFound";
@@ -31,6 +31,7 @@ import ComingSoon from "./pages/ComingSoon";
 import Users from "./pages/Users";
 import Organizations from "./pages/Organizations";
 import { extension } from "./extensions";
+import { useCurrentUser } from "./context/CurrentUserContext";
 // A lazy page whose code fails to load -- the tab predates a new build or a dev-server
 // restart, so the chunk it asks for no longer exists -- reloads once to fetch the current
 // version, instead of leaving a blank screen. The flag stops a reload loop when the failure
@@ -60,6 +61,16 @@ const VideoLab = lazyPage(() => import("./pages/VideoLab"));
 const FieldNotes = lazyPage(() => import("./pages/FieldNotes"));
 import { useTheme } from "./context/ThemeContext";
 
+/** What `/` opens: the page the extension gives this user (Extension.home), or core's Home. Nothing while the
+ * extension's grants are still being read, so the user doesn't see Home flash before being sent on. */
+function Landing() {
+  const { user, grants } = useCurrentUser();
+  if (!extension.home) return <Home />;
+  if (grants === null || !user) return null;
+  const home = extension.home(grants, user);
+  return home && home !== "/" ? <Navigate to={home} replace /> : <Home />;
+}
+
 export default function App() {
   const { theme } = useTheme();
 
@@ -72,7 +83,7 @@ export default function App() {
           {/* Dashboard Layout */}
           <Route element={<RequireAuth />}>
             <Route element={<AppLayout />}>
-              <Route index path="/" element={<Home />} />
+              <Route index path="/" element={<Landing />} />
               <Route path="/profile" element={<UserProfiles />} />
               <Route path="/cases" element={<CriminalCases />} />
               <Route path="/cases/:caseId" element={<CaseDetailPage />} />

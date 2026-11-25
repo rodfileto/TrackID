@@ -23,13 +23,14 @@ import { useCurrentUser } from "../context/CurrentUserContext";
 import Brand from "../components/common/Brand";
 import { extension } from "../extensions";
 import type { NavSectionKey } from "../extensions/types";
+import type { Need } from "../context/CurrentUserContext";
 
 type NavItem = {
   name: string;
   icon: React.ReactNode;
   path?: string;
-  /** Shown only to users with this capability (useCurrentUser); "persons" is examiners and analysts. */
-  requires?: "admin" | "coordinator" | "intelligence" | "persons" | "scene";
+  /** Shown only to users with this capability or grant (useCurrentUser's can); "persons" is examiners and analysts. */
+  requires?: Need;
   subItems?: { name: string; path: string; new?: boolean; soon?: boolean }[];
 };
 
@@ -110,25 +111,14 @@ const allNavSections: NavSection[] = [
 const AppSidebar: React.FC = () => {
   const { t } = useTranslation();
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
-  const { isAdmin, isExaminer, isIntelligence, isCoordinator, isFingerprintExaminer } = useCurrentUser();
+  const { can } = useCurrentUser();
   // A section whose every item the user cannot reach disappears, heading included.
   const navSections = useMemo(
     () =>
       allNavSections
-        .map((section) => ({
-          ...section,
-          items: section.items.filter(
-            (item) =>
-              !item.requires ||
-              (item.requires === "admin" && isAdmin) ||
-              (item.requires === "coordinator" && isCoordinator) ||
-              (item.requires === "intelligence" && isIntelligence) ||
-              (item.requires === "persons" && (isExaminer || isIntelligence)) ||
-              (item.requires === "scene" && (isCoordinator || isFingerprintExaminer)),
-          ),
-        }))
+        .map((section) => ({ ...section, items: section.items.filter((item) => !item.requires || can(item.requires)) }))
         .filter((section) => section.items.length > 0),
-    [isAdmin, isExaminer, isIntelligence, isCoordinator, isFingerprintExaminer],
+    [can],
   );
   const location = useLocation();
 

@@ -6,7 +6,8 @@
       "intelligence": "Esta página é para analistas de inteligência.",
       "persons": "A busca de pessoas é para peritos e analistas de inteligência.",
       "admin": "O gerenciamento de contas é para administradores.",
-      "scene": "O registro de local é para coordenadores e papiloscopistas."
+      "scene": "O registro de local é para coordenadores e papiloscopistas.",
+      "grant": "Esta página é para quem recebeu acesso a ela."
     }
   },
   "common": {

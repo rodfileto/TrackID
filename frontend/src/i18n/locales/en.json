@@ -6,7 +6,8 @@
       "intelligence": "This page is for intelligence analysts.",
       "persons": "Person search is for examiners and intelligence analysts.",
       "admin": "Managing accounts is for admins.",
-      "scene": "Registering a scene is for coordinators and fingerprint examiners."
+      "scene": "Registering a scene is for coordinators and fingerprint examiners.",
+      "grant": "This page is for those given access to it."
     }
   },
   "common": {

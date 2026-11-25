@@ -1,10 +1,17 @@
 import type { ComponentType, ReactNode } from "react";
+import type { UserProfile } from "../services/auth";
 
-/** A page an organization adds, shown to those with the capability when one is named. */
+/**
+ * Who a page or menu item is for: those with one of core's capabilities, or those the extension grants a name to
+ * (Extension.grants), whatever their capabilities.
+ */
+export type ExtensionNeed = "admin" | "coordinator" | "intelligence" | "persons" | { grant: string };
+
+/** A page an organization adds, shown to those with the capability or grant when one is named. */
 export interface ExtensionRoute {
   path: string;
   element: ReactNode;
-  need?: "admin" | "coordinator" | "intelligence" | "persons";
+  need?: ExtensionNeed;
 }
 
 /** A menu item an organization adds to the sidebar, at the end of a section: management unless it names another. */
@@ -13,7 +20,7 @@ export interface ExtensionNavItem {
   /** Optional when the item only opens a submenu. */
   path?: string;
   icon: ReactNode;
-  requires?: "admin" | "coordinator" | "intelligence" | "persons";
+  requires?: ExtensionNeed;
   subItems?: { name: string; path: string; new?: boolean; soon?: boolean }[];
   section?: NavSectionKey;
 }
@@ -80,6 +87,17 @@ export interface Extension {
    * header wraps each in Suspense.
    */
   headerComponents?: ComponentType[];
+  /**
+   * The names the extension grants the signed-in user, beyond core's capabilities: a role in the organization's own
+   * line of work, say. Read once after sign-in and kept with the current user; `{ grant }` in a route's `need` or an
+   * item's `requires` names one. As with capabilities, it only keeps the screens from offering what the server would
+   * refuse: the routes behind it must check the same themselves. A failure is taken as no grants.
+   */
+  grants?: () => Promise<string[]>;
+  /**
+   * The page `/` opens for this user, given their grants, instead of core's Home; core's Home when it gives none.
+   */
+  home?: (grants: string[], user: UserProfile) => string | undefined;
 }
 
 export interface UserFieldsProps {
