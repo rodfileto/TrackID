@@ -216,6 +216,15 @@ export default function OccurrenceMap() {
         {data?.truncated && (
           <p className="text-sm text-warning-600 dark:text-warning-400">{t("occurrenceMap.truncated")}</p>
         )}
+        {!hidden.has("ARREST") && (data?.unplacedByGroup?.ARREST ?? 0) > 0 && (
+          // Arrests on a warrant are placed where a camera sighted the person; many cameras have no coordinates yet.
+          <div className="rounded-xl border border-blue-light-200 bg-blue-light-50 p-4 text-sm text-gray-700 dark:border-blue-light-500/30 dark:bg-blue-light-500/10 dark:text-gray-300">
+            <p className="font-medium text-gray-800 dark:text-white/90">
+              {t("occurrenceMap.arrestsUnplaced.title", { count: data?.unplacedByGroup?.ARREST ?? 0 })}
+            </p>
+            <p className="mt-1">{t("occurrenceMap.arrestsUnplaced.body")}</p>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <div className="xl:col-span-2">

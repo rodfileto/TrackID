@@ -72,7 +72,7 @@ func occurrenceSchema() map[string]any {
 	from, to := period()
 	return map[string]any{
 		"types":             stringList("Occurrence type codes; an occurrence matches if it has any of them. Prefer groups for a general word such as 'roubo'."),
-		"groups":            stringList("Occurrence groups (LETHAL, PERSON, ROBBERY, THEFT, FRAUD, DRUGS, CIVIL, OTHER); an occurrence matches if any of its types is in one."),
+		"groups":            stringList("Occurrence groups (LETHAL, PERSON, ROBBERY, THEFT, FRAUD, DRUGS, CIVIL, ARREST, OTHER); an occurrence matches if any of its types is in one."),
 		"from":              from,
 		"to":                to,
 		"statuses":          map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": statuses}},

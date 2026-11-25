@@ -56,6 +56,8 @@ export interface OccurrenceMap {
   type: "FeatureCollection";
   features: OccurrenceFeature[];
   truncated: boolean;
+  /** Occurrences in the same bounds left off the map for having no place, by group. */
+  unplacedByGroup?: Record<string, number>;
 }
 
 export interface OccurrenceType {

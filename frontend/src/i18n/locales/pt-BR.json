@@ -620,7 +620,12 @@
     "showNone": "Nenhum",
     "newOccurrence": "Nova ocorrência",
     "geocodeSource": "Origem do endereço",
-    "geocodeCheck": "Conferir"
+    "geocodeCheck": "Conferir",
+    "arrestsUnplaced": {
+      "title_one": "{{count}} mandado de prisão cumprido não aparece no mapa",
+      "title_other": "{{count}} mandados de prisão cumpridos não aparecem no mapa",
+      "body": "O local de um mandado cumprido é o da câmera que avistou a pessoa, já que a prisão em si não tem endereço registrado. Ele fica fora do mapa quando essa câmera não tem coordenadas cadastradas, ou quando a prisão foi registrada no livro de plantão sem um avistamento. Assim que a câmera receber coordenadas, os mandados avistados por ela passam a aparecer."
+    }
   },
   "occurrenceType": {
     "HOMICIDE": "Homicídio doloso",
@@ -676,7 +681,8 @@
     "FRAUD": "Fraudes",
     "DRUGS": "Drogas",
     "CIVIL": "Identificação civil",
-    "OTHER": "Outros"
+    "OTHER": "Outros",
+    "ARREST": "Mandados cumpridos"
   },
   "occurrenceStatus": {
     "REGISTERED": "Registrada",

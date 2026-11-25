@@ -620,7 +620,12 @@
     "showNone": "None",
     "newOccurrence": "New occurrence",
     "geocodeSource": "Address source",
-    "geocodeCheck": "Check"
+    "geocodeCheck": "Check",
+    "arrestsUnplaced": {
+      "title_one": "{{count}} served warrant is not on the map",
+      "title_other": "{{count}} served warrants are not on the map",
+      "body": "A served warrant is placed at the camera that sighted the person, since the arrest itself has no recorded address. It stays off the map when that camera has no coordinates, or when the arrest was recorded in the duty book without a sighting. Once the camera gets coordinates, the warrants it sighted appear."
+    }
   },
   "occurrenceType": {
     "HOMICIDE": "Homicide",
@@ -676,7 +681,8 @@
     "FRAUD": "Fraud",
     "DRUGS": "Drugs",
     "CIVIL": "Civil identification",
-    "OTHER": "Other"
+    "OTHER": "Other",
+    "ARREST": "Warrants served"
   },
   "occurrenceStatus": {
     "REGISTERED": "Registered",

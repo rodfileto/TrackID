@@ -155,6 +155,19 @@ WHERE (sqlc.narg(occurred_after)::timestamptz IS NULL OR o.occurred_from >= sqlc
 ORDER BY o.occurred_from NULLS LAST, o.id
 LIMIT sqlc.arg(max_rows);
 
+-- name: CountUnplacedOccurrencesByGroup :many
+-- The occurrences ListOccurrencesForMap leaves out for having no place (none, or only a JURISDICTION), by the group of
+-- their first type as the map takes it, within the same bounds: what the map can't show.
+SELECT t.grp AS grp, count(*)::bigint AS count
+FROM occurrences o
+JOIN occurrence_types t ON t.code = (SELECT min(c.type_code) FROM occurrence_classifications c WHERE c.occurrence_id = o.id)
+LEFT JOIN locations l ON l.id = o.location_id
+WHERE (l.id IS NULL OR l.precision = 'JURISDICTION')
+  AND (sqlc.narg(occurred_after)::timestamptz IS NULL OR o.occurred_from >= sqlc.narg(occurred_after))
+  AND (sqlc.narg(occurred_before)::timestamptz IS NULL OR o.occurred_from < sqlc.narg(occurred_before))
+GROUP BY t.grp
+ORDER BY t.grp;
+
 -- name: ListOccurrencesForMapByCases :many
 -- ListOccurrencesForMap for the occurrences of some cases: where a person or a cluster appears, through the cases it has
 -- traces in. An occurrence with no place (or only its unit's municipality) is not here: PresenceCounts counts it.

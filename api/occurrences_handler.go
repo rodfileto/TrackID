@@ -85,6 +85,9 @@ type OccurrenceMapResponse struct {
 	Type      string              `json:"type"` // "FeatureCollection"
 	Features  []OccurrenceFeature `json:"features"`
 	Truncated bool                `json:"truncated"`
+	// UnplacedByGroup counts, by group, the occurrences in the same bounds that have no place, so the map can say what it
+	// doesn't show.
+	UnplacedByGroup map[string]int64 `json:"unplacedByGroup,omitempty"`
 }
 
 // OccurrenceMapHandler returns occurrences as GeoJSON points. ?year= keeps one (local) year;
@@ -124,7 +127,18 @@ func OccurrenceMapHandler(sqlDB *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not list occurrences"})
 			return
 		}
-		resp := OccurrenceMapResponse{Type: "FeatureCollection", Features: []OccurrenceFeature{}}
+		unplaced, err := q.CountUnplacedOccurrencesByGroup(ctx, db.CountUnplacedOccurrencesByGroupParams{
+			OccurredAfter: params.OccurredAfter, OccurredBefore: params.OccurredBefore})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not count occurrences without a place"})
+			return
+		}
+		resp := OccurrenceMapResponse{Type: "FeatureCollection", Features: []OccurrenceFeature{}, UnplacedByGroup: map[string]int64{}}
+		for _, u := range unplaced {
+			if len(groups) == 0 || groups[u.Grp] {
+				resp.UnplacedByGroup[u.Grp] = u.Count
+			}
+		}
 		if len(rows) > maxMapOccurrences {
 			rows, resp.Truncated = rows[:maxMapOccurrences], true
 		}

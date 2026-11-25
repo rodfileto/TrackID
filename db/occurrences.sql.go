@@ -74,6 +74,53 @@ func (q *Queries) CountPlacedOccurrencesNear(ctx context.Context, arg CountPlace
 	return column_1, err
 }
 
+const countUnplacedOccurrencesByGroup = `-- name: CountUnplacedOccurrencesByGroup :many
+SELECT t.grp AS grp, count(*)::bigint AS count
+FROM occurrences o
+JOIN occurrence_types t ON t.code = (SELECT min(c.type_code) FROM occurrence_classifications c WHERE c.occurrence_id = o.id)
+LEFT JOIN locations l ON l.id = o.location_id
+WHERE (l.id IS NULL OR l.precision = 'JURISDICTION')
+  AND ($1::timestamptz IS NULL OR o.occurred_from >= $1)
+  AND ($2::timestamptz IS NULL OR o.occurred_from < $2)
+GROUP BY t.grp
+ORDER BY t.grp
+`
+
+type CountUnplacedOccurrencesByGroupParams struct {
+	OccurredAfter  sql.NullTime `db:"occurred_after" json:"occurred_after"`
+	OccurredBefore sql.NullTime `db:"occurred_before" json:"occurred_before"`
+}
+
+type CountUnplacedOccurrencesByGroupRow struct {
+	Grp   string `db:"grp" json:"grp"`
+	Count int64  `db:"count" json:"count"`
+}
+
+// The occurrences ListOccurrencesForMap leaves out for having no place (none, or only a JURISDICTION), by the group of
+// their first type as the map takes it, within the same bounds: what the map can't show.
+func (q *Queries) CountUnplacedOccurrencesByGroup(ctx context.Context, arg CountUnplacedOccurrencesByGroupParams) ([]CountUnplacedOccurrencesByGroupRow, error) {
+	rows, err := q.db.QueryContext(ctx, countUnplacedOccurrencesByGroup, arg.OccurredAfter, arg.OccurredBefore)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountUnplacedOccurrencesByGroupRow
+	for rows.Next() {
+		var i CountUnplacedOccurrencesByGroupRow
+		if err := rows.Scan(&i.Grp, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createOccurrence = `-- name: CreateOccurrence :one
 INSERT INTO occurrences (
     occurrence_year, occurrence_seq, agency, occurrence_number, inquiry_number, location_id, occurred_from, occurred_to,

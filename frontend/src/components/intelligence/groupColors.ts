@@ -7,6 +7,7 @@ export const GROUP_COLORS: Record<string, string> = {
   FRAUD: "#7c3aed",
   DRUGS: "#0d9488",
   CIVIL: "#2563eb",
+  ARREST: "#16a34a",
 };
 
 export const OTHER_COLOR = "#6b7280";
